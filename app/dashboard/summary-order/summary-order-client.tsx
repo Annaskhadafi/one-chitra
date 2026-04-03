@@ -3,7 +3,7 @@
 import { Fragment, useMemo, useState } from "react"
 import * as XLSX from "xlsx"
 import type { DateRange } from "react-day-picker"
-import type { SummaryOrderDeliveryItem, SummaryOrderProductItem, SummaryOrderRow } from "@/lib/types"
+import type { SummaryOrderRow } from "@/lib/types"
 import { resolveUploadDocumentUrl } from "@/lib/upload-url"
 import { ScoreCard } from "@/components/score-card"
 import { getDelivery } from "@/app/actions/delivery"
@@ -124,132 +124,46 @@ function InfoBox({
     )
 }
 
-function ProductDetailCard({
-    detail,
-    compact = false,
-}: {
-    detail: SummaryOrderProductItem
-    compact?: boolean
-}) {
-    return (
-        <div className={`rounded-xl border bg-muted/20 p-3 ${compact ? "space-y-2" : "space-y-3"}`}>
-            <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                    <p className="text-sm font-medium">{detail.materialDescription || "Produk"}</p>
-                    <p className="font-mono text-xs text-muted-foreground">{detail.materialNumber || "-"}</p>
-                </div>
-                <Badge variant="outline">Qty</Badge>
-            </div>
-            <div className="grid grid-cols-2 gap-2 text-sm">
-                <div className="rounded-lg bg-background p-2">
-                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Order</p>
-                    <p className="font-semibold">{detail.orderedQty ?? "-"}</p>
-                </div>
-                <div className="rounded-lg bg-background p-2">
-                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Delivery</p>
-                    <p className="font-semibold">{detail.deliveredQty ?? "-"}</p>
-                </div>
-            </div>
-        </div>
-    )
-}
-
-function DeliveryDetailCard({
-    delivery,
-    compact = false,
-    onPreview,
-}: {
-    delivery: SummaryOrderDeliveryItem
-    compact?: boolean
-    onPreview?: (deliveryId: number) => void
-}) {
-    const scanDoUrl = resolveUploadDocumentUrl(delivery.scanDo)
-
-    return (
-        <div className={`rounded-xl border bg-muted/20 p-3 ${compact ? "space-y-2" : "space-y-3"}`}>
-            <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
-                    {delivery.deliveryNo ? (
-                        <button
-                            type="button"
-                            onClick={() => onPreview?.(delivery.deliveryId)}
-                            className="font-mono text-sm font-semibold text-blue-600 hover:underline"
-                        >
-                            {delivery.deliveryNo}
-                        </button>
-                    ) : (
-                        <p className="font-mono text-sm font-semibold">-</p>
-                    )}
-                    <p className="text-xs text-muted-foreground">{formatDate(delivery.dateDelivery)}</p>
-                </div>
-                <Badge variant={statusVariant(delivery.statusDelivery)}>{delivery.statusDelivery || "-"}</Badge>
-            </div>
-            <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
-                <InfoBox label="DO SAP" value={delivery.doSap || "-"} mono />
-                <InfoBox label="Invoice No" value={delivery.invoiceNo || "-"} mono />
-            </div>
-            <div className="flex flex-wrap gap-2">
-                {scanDoUrl ? (
-                    <a href={scanDoUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:underline">
-                        Open Scan DO
-                        <ExternalLink className="h-3.5 w-3.5" />
-                    </a>
-                ) : (
-                    <span className="text-xs text-muted-foreground">Scan DO belum tersedia</span>
-                )}
-            </div>
-        </div>
-    )
-}
-
 function SummaryDetailsSection({
     row,
-    compact = false,
-    onPreviewDelivery,
 }: {
     row: SummaryOrderRow
-    compact?: boolean
-    onPreviewDelivery?: (deliveryId: number) => void
 }) {
     return (
-        <div className="space-y-4">
-            <div className="rounded-2xl border bg-background/80 p-3 sm:p-4">
-                <div className="mb-3 flex items-center justify-between gap-2">
-                    <p className="text-sm font-semibold">Detail Product</p>
-                    <Badge variant="outline">{row.details.length} item</Badge>
-                </div>
-                <div className="space-y-2">
-                    {row.details.map((detail, detailIndex) => (
-                        <ProductDetailCard
-                            key={`${row.rowId}-detail-${detail.salesOrderItemId ?? detailIndex}`}
-                            detail={detail}
-                            compact={compact}
-                        />
-                    ))}
-                </div>
+        <div className="rounded-2xl border bg-background/80 p-3 sm:p-4">
+            <div className="mb-3 flex items-center justify-between gap-2">
+                <p className="text-sm font-semibold">Detail Product</p>
+                <Badge variant="outline">{row.details.length} item</Badge>
             </div>
-
-            <div className="rounded-2xl border bg-background/80 p-3 sm:p-4">
-                <div className="mb-3 flex items-center justify-between gap-2">
-                    <p className="text-sm font-semibold">Delivery / DO Monitoring / Billing</p>
-                    <Badge variant="outline">{row.deliveries.length} delivery</Badge>
-                </div>
-                {row.deliveries.length > 0 ? (
-                    <div className="space-y-2">
-                        {row.deliveries.map((delivery) => (
-                            <DeliveryDetailCard
-                                key={`${row.rowId}-delivery-${delivery.deliveryId}`}
-                                delivery={delivery}
-                                compact={compact}
-                                onPreview={onPreviewDelivery}
-                            />
-                        ))}
-                    </div>
-                ) : (
-                    <div className="rounded-xl border border-dashed bg-muted/30 p-3 text-sm text-muted-foreground">
-                        Belum ada delivery yang terhubung ke PO ini.
-                    </div>
-                )}
+            <div className="overflow-hidden rounded-xl border">
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead className="w-[60px]">No</TableHead>
+                            <TableHead>Product</TableHead>
+                            <TableHead>Material No</TableHead>
+                            <TableHead className="text-right">Qty Order</TableHead>
+                            <TableHead className="text-right">Qty Delivery</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {row.details.length > 0 ? row.details.map((detail, detailIndex) => (
+                            <TableRow key={`${row.rowId}-detail-${detail.salesOrderItemId ?? detailIndex}`}>
+                                <TableCell>{detailIndex + 1}</TableCell>
+                                <TableCell>{detail.materialDescription || "Produk"}</TableCell>
+                                <TableCell className="font-mono text-xs">{detail.materialNumber || "-"}</TableCell>
+                                <TableCell className="text-right">{detail.orderedQty ?? "-"}</TableCell>
+                                <TableCell className="text-right">{detail.deliveredQty ?? "-"}</TableCell>
+                            </TableRow>
+                        )) : (
+                            <TableRow>
+                                <TableCell colSpan={5} className="h-20 text-center text-sm text-muted-foreground">
+                                    Tidak ada detail product.
+                                </TableCell>
+                            </TableRow>
+                        )}
+                    </TableBody>
+                </Table>
             </div>
         </div>
     )
@@ -258,6 +172,7 @@ function SummaryDetailsSection({
 export function SummaryOrderClient({ data }: { data: SummaryOrderRow[] }) {
     const [search, setSearch] = useState("")
     const [salesFilter, setSalesFilter] = useState<string[]>([])
+    const [productFilter, setProductFilter] = useState<string[]>([])
     const [customerFilter, setCustomerFilter] = useState<string[]>([])
     const [categoryFilter, setCategoryFilter] = useState<string[]>([])
     const [deliveryStatusFilter, setDeliveryStatusFilter] = useState<string[]>([])
@@ -271,6 +186,15 @@ export function SummaryOrderClient({ data }: { data: SummaryOrderRow[] }) {
     const [isDeliveryPreviewOpen, setIsDeliveryPreviewOpen] = useState(false)
 
     const salesOptions = useMemo(() => dedupeOptions(data.map((row) => row.picSales)), [data])
+    const productOptions = useMemo(
+        () =>
+            dedupeOptions(
+                data.flatMap((row) =>
+                    row.details.flatMap((detail) => [detail.materialDescription, detail.materialNumber]),
+                ),
+            ),
+        [data],
+    )
     const customerOptions = useMemo(() => dedupeOptions(data.map((row) => row.customerName)), [data])
     const categoryOptions = useMemo(() => dedupeOptions(data.map((row) => row.categoryPo)), [data])
     const deliveryStatusOptions = useMemo(() => dedupeOptions(data.map((row) => row.statusDelivery)), [data])
@@ -298,6 +222,9 @@ export function SummaryOrderClient({ data }: { data: SummaryOrderRow[] }) {
             ].some((value) => value?.toLowerCase().includes(term))
 
             const matchesSales = salesFilter.length === 0 || salesFilter.includes(row.picSales ?? "")
+            const matchesProduct = productFilter.length === 0 || row.details.some((detail) =>
+                productFilter.includes(detail.materialDescription ?? "") || productFilter.includes(detail.materialNumber ?? ""),
+            )
             const matchesCustomer = customerFilter.length === 0 || customerFilter.includes(row.customerName ?? "")
             const matchesCategory = categoryFilter.length === 0 || categoryFilter.includes(row.categoryPo ?? "")
             const matchesDeliveryStatus = deliveryStatusFilter.length === 0 || deliveryStatusFilter.includes(row.statusDelivery ?? "")
@@ -325,9 +252,9 @@ export function SummaryOrderClient({ data }: { data: SummaryOrderRow[] }) {
                 }
             }
 
-            return matchesSearch && matchesSales && matchesCustomer && matchesCategory && matchesDeliveryStatus && matchesInvoiceStatus && matchesDateRange
+            return matchesSearch && matchesSales && matchesProduct && matchesCustomer && matchesCategory && matchesDeliveryStatus && matchesInvoiceStatus && matchesDateRange
         })
-    }, [categoryFilter, customerFilter, data, dateRange, deliveryStatusFilter, invoiceStatusFilter, salesFilter, search])
+    }, [categoryFilter, customerFilter, data, dateRange, deliveryStatusFilter, invoiceStatusFilter, productFilter, salesFilter, search])
 
     const scoreCards = useMemo(() => {
         return {
@@ -341,6 +268,7 @@ export function SummaryOrderClient({ data }: { data: SummaryOrderRow[] }) {
 
     const activeFilterCount = [
         salesFilter.length,
+        productFilter.length,
         customerFilter.length,
         categoryFilter.length,
         deliveryStatusFilter.length,
@@ -358,6 +286,7 @@ export function SummaryOrderClient({ data }: { data: SummaryOrderRow[] }) {
     const resetFilters = () => {
         setSearch("")
         setSalesFilter([])
+        setProductFilter([])
         setCustomerFilter([])
         setCategoryFilter([])
         setDeliveryStatusFilter([])
@@ -421,6 +350,7 @@ export function SummaryOrderClient({ data }: { data: SummaryOrderRow[] }) {
                 <CardContent className="space-y-4 p-4 pt-0 sm:p-5 sm:pt-0">
                     <div className="flex flex-wrap gap-2">
                         <DataTableFacetedFilter title="Sales" options={salesOptions} selectedValues={salesFilter} onFilterChange={setSalesFilter} />
+                        <DataTableFacetedFilter title="Product" options={productOptions} selectedValues={productFilter} onFilterChange={setProductFilter} />
                         <DataTableFacetedFilter title="Customer" options={customerOptions} selectedValues={customerFilter} onFilterChange={setCustomerFilter} />
                         <DataTableFacetedFilter title="Cat. PO" options={categoryOptions} selectedValues={categoryFilter} onFilterChange={setCategoryFilter} />
                         <DataTableFacetedFilter title="Status Delivery" options={deliveryStatusOptions} selectedValues={deliveryStatusFilter} onFilterChange={setDeliveryStatusFilter} />
@@ -538,7 +468,7 @@ export function SummaryOrderClient({ data }: { data: SummaryOrderRow[] }) {
                                     </div>
                                 </div>
 
-                                {isExpanded ? <SummaryDetailsSection row={row} compact onPreviewDelivery={(deliveryId) => void handlePreviewDelivery(deliveryId)} /> : null}
+                                {isExpanded ? <SummaryDetailsSection row={row} /> : null}
                             </CardContent>
                         </Card>
                     )
@@ -658,7 +588,7 @@ export function SummaryOrderClient({ data }: { data: SummaryOrderRow[] }) {
                                                             <p className="mt-1 text-sm">{row.remark || "-"}</p>
                                                         </div>
                                                     </div>
-                                                    <SummaryDetailsSection row={row} onPreviewDelivery={(deliveryId) => void handlePreviewDelivery(deliveryId)} />
+                                                    <SummaryDetailsSection row={row} />
                                                 </TableCell>
                                             </TableRow>
                                         ) : null}
