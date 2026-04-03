@@ -32,13 +32,13 @@ interface DashboardChartsProps {
 
 const YEAR_COLORS: Record<string, string> = {
     "2026": "#3b82f6",
-    "2025": "#3b82f6",
-    "2024": "#0052CC",
-    "2023": "#172B4D",
-    "2022": "#E21870",
-    "2021": "#6B778C",
-    "2020": "#F7A823",
-    "2019": "#A5ADBA"
+    "2025": "#f59e0b",
+    "2024": "#10b981",
+    "2023": "#8b5cf6",
+    "2022": "#ef4444",
+    "2021": "#14b8a6",
+    "2020": "#f97316",
+    "2019": "#64748b"
 };
 
 const renderLabel = (props: any) => {
@@ -124,9 +124,8 @@ export function DashboardCharts({ categoryStats, salesStats, monthlyStats, years
         const salesmen = Array.from(new Set(validSalesStats.map(s => s.salesman).filter(Boolean)));
         const data = salesmen.map((salesman) => {
             const trimmedSalesman = salesman!.trim();
-            const parts = trimmedSalesman.split(' ');
-            const middleName = parts.length > 1 ? parts.slice(0, -1).join(' ') : parts[parts.length - 1];
-            const row: Record<string, string | number> = { name: middleName };
+            const firstName = trimmedSalesman.split(/\s+/)[0] || trimmedSalesman;
+            const row: Record<string, string | number> = { name: firstName };
             sortedYears.forEach(year => {
                 row[year] = validSalesStats.find(s => s.salesman?.trim() === trimmedSalesman && s.year === year)?.revenue || 0;
             });
