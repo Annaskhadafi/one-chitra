@@ -1,7 +1,7 @@
 import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3"
 import { existsSync } from "fs"
 import { mkdir, readFile, unlink, writeFile } from "fs/promises"
-import { join, resolve } from "path"
+import { join } from "path"
 import { v7 as uuidv7 } from "uuid"
 
 import { extractUploadFilename } from "@/lib/upload-url"
@@ -37,6 +37,10 @@ let objectStorageClientCache: {
     cacheKey: string
     client: S3Client
 } | null = null
+
+function projectPath(...segments: string[]) {
+    return join(/* turbopackIgnore: true */ process.cwd(), ...segments)
+}
 
 function uniquePaths(paths: Array<string | null | undefined>) {
     const seen = new Set<string>()
@@ -338,7 +342,7 @@ export function getUploadWriteDir() {
         return DEFAULT_PRODUCTION_UPLOAD_DIR
     }
 
-    return resolve(process.cwd(), "public", "uploads")
+    return projectPath("public", "uploads")
 }
 
 async function saveUploadToLocalDisk(params: {
@@ -362,10 +366,10 @@ async function saveUploadToLocalDisk(params: {
 export function getUploadReadDirs() {
     return uniquePaths([
         getUploadWriteDir(),
-        resolve(process.cwd(), "uploads"),
-        resolve(process.cwd(), "..", "uploads"),
-        resolve(process.cwd(), "public", "uploads"),
-        resolve(process.cwd(), ".next", "standalone", "public", "uploads"),
+        projectPath("uploads"),
+        projectPath("..", "uploads"),
+        projectPath("public", "uploads"),
+        projectPath(".next", "standalone", "public", "uploads"),
         "/mnt/data/one-chitra/uploads",
         DEFAULT_PRODUCTION_UPLOAD_DIR,
         "/app/public/uploads",

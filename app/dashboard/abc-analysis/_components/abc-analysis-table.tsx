@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useState, useMemo } from "react"
-import { Search, AlertTriangle } from "lucide-react"
+import { Search, AlertTriangle, Download } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -13,16 +13,12 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select"
 import { ResponsiveTableWrapper } from "@/components/ui/responsive-table-wrapper"
+import { DataTableFacetedFilter } from "@/app/dashboard/billing/_components/data-table-faceted-filter"
 import { cn } from "@/lib/utils"
 import type { ABCProduct } from "@/lib/types"
+import { Button } from "@/components/ui/button"
+import * as XLSX from "xlsx"
 
 interface ABCAnalysisTableProps {
     data: ABCProduct[]
@@ -48,12 +44,18 @@ const classBadge: Record<"A" | "B" | "C", React.ReactNode> = {
 
 export function ABCAnalysisTable({ data }: ABCAnalysisTableProps) {
     const [search, setSearch] = useState("")
-    const [filterClass, setFilterClass] = useState("all")
-    const [filterCategory, setFilterCategory] = useState("all")
+    const [filterClasses, setFilterClasses] = useState<string[]>([])
+    const [filterCategories, setFilterCategories] = useState<string[]>([])
+    const [filterBrands, setFilterBrands] = useState<string[]>([])
 
     const categories = useMemo(() => {
         const cats = new Set(data.map((d) => d.category).filter(Boolean))
         return Array.from(cats).sort()
+    }, [data])
+
+    const brands = useMemo(() => {
+        const values = new Set(data.map((d) => d.brand).filter(Boolean))
+        return Array.from(values).sort() as string[]
     }, [data])
 
     const filtered = useMemo(() => {
@@ -64,11 +66,36 @@ export function ABCAnalysisTable({ data }: ABCAnalysisTableProps) {
                 row.materialNumber.toLowerCase().includes(q) ||
                 row.materialDescription?.toLowerCase().includes(q) ||
                 row.brand?.toLowerCase().includes(q)
-            const matchClass = filterClass === "all" || row.abcClass === filterClass
-            const matchCat = filterCategory === "all" || row.category === filterCategory
-            return matchSearch && matchClass && matchCat
+            const matchClass = filterClasses.length === 0 || filterClasses.includes(row.abcClass)
+            const matchCat = filterCategories.length === 0 || filterCategories.includes(row.category)
+            const matchBrand = filterBrands.length === 0 || filterBrands.includes(row.brand ?? "")
+            return matchSearch && matchClass && matchCat && matchBrand
         })
-    }, [data, search, filterClass, filterCategory])
+    }, [data, filterBrands, filterCategories, filterClasses, search])
+
+    const handleExportExcel = () => {
+        if (filtered.length === 0) {
+            return
+        }
+
+        const exportRows = filtered.map((row) => ({
+            "Class": row.abcClass,
+            "Material Number": row.materialNumber,
+            "Description": row.materialDescription ?? "",
+            "Category": row.category,
+            "Brand": row.brand ?? "",
+            "Total Movement Qty": row.totalMovementQty,
+            "Movement Count": row.totalMovementCount,
+            "Cumulative Percentage": row.cumulativePercentage,
+            "Current Stock": row.currentStock,
+            "Low Stock": row.isLowStock ? "Yes" : "No",
+        }))
+
+        const worksheet = XLSX.utils.json_to_sheet(exportRows)
+        const workbook = XLSX.utils.book_new()
+        XLSX.utils.book_append_sheet(workbook, worksheet, "ABC Analysis")
+        XLSX.writeFile(workbook, `abc-analysis-${new Date().toISOString().slice(0, 10)}.xlsx`)
+    }
 
     return (
         <div className="flex flex-col gap-4">
@@ -83,28 +110,31 @@ export function ABCAnalysisTable({ data }: ABCAnalysisTableProps) {
                         className="pl-9"
                     />
                 </div>
-                <Select value={filterClass} onValueChange={setFilterClass}>
-                    <SelectTrigger className="w-36">
-                        <SelectValue placeholder="Kelas" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">Semua Kelas</SelectItem>
-                        <SelectItem value="A">Kelas A</SelectItem>
-                        <SelectItem value="B">Kelas B</SelectItem>
-                        <SelectItem value="C">Kelas C</SelectItem>
-                    </SelectContent>
-                </Select>
-                <Select value={filterCategory} onValueChange={setFilterCategory}>
-                    <SelectTrigger className="w-48">
-                        <SelectValue placeholder="Kategori" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">Semua Kategori</SelectItem>
-                        {categories.map((c) => (
-                            <SelectItem key={c} value={c}>{c}</SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
+                <DataTableFacetedFilter
+                    title="Kelas"
+                    options={["A", "B", "C"]}
+                    selectedValues={filterClasses}
+                    onFilterChange={setFilterClasses}
+                    searchPlaceholder="Cari kelas..."
+                />
+                <DataTableFacetedFilter
+                    title="Kategori"
+                    options={categories}
+                    selectedValues={filterCategories}
+                    onFilterChange={setFilterCategories}
+                    searchPlaceholder="Cari kategori..."
+                />
+                <DataTableFacetedFilter
+                    title="Brand"
+                    options={brands}
+                    selectedValues={filterBrands}
+                    onFilterChange={setFilterBrands}
+                    searchPlaceholder="Cari brand..."
+                />
+                <Button variant="outline" onClick={handleExportExcel} className="gap-2">
+                    <Download className="h-4 w-4" />
+                    Export Excel
+                </Button>
             </div>
 
             {/* Table */}

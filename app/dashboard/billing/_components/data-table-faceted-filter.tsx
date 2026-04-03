@@ -24,6 +24,12 @@ interface DataTableFacetedFilterProps {
     options: string[]
     selectedValues: string[]
     onFilterChange: (values: string[]) => void
+    icon?: React.ReactNode
+    formatOption?: (value: string) => string
+    searchPlaceholder?: string
+    triggerClassName?: string
+    badgeClassName?: string
+    contentClassName?: string
 }
 
 export function DataTableFacetedFilter({
@@ -31,21 +37,31 @@ export function DataTableFacetedFilter({
     options,
     selectedValues,
     onFilterChange,
+    icon,
+    formatOption,
+    searchPlaceholder,
+    triggerClassName,
+    badgeClassName,
+    contentClassName,
 }: DataTableFacetedFilterProps) {
     const selectedValuesSet = new Set(selectedValues)
 
     return (
         <Popover>
             <PopoverTrigger asChild>
-                <Button variant="outline" size="sm" className="h-[36px] border-dashed">
-                    <PlusCircle className="mr-2 h-4 w-4" />
+                <Button
+                    variant="outline"
+                    size="sm"
+                    className={cn("h-[36px] border-dashed", triggerClassName)}
+                >
+                    {icon ?? <PlusCircle className="mr-2 h-4 w-4" />}
                     {title}
                     {selectedValuesSet.size > 0 && (
                         <>
                             <Separator orientation="vertical" className="mx-2 h-4" />
                             <Badge
                                 variant="secondary"
-                                className="rounded-sm px-1 font-normal lg:hidden"
+                                className={cn("rounded-sm px-1 font-normal lg:hidden", badgeClassName)}
                             >
                                 {selectedValuesSet.size}
                             </Badge>
@@ -53,7 +69,7 @@ export function DataTableFacetedFilter({
                                 {selectedValuesSet.size > 2 ? (
                                     <Badge
                                         variant="secondary"
-                                        className="rounded-sm px-1 font-normal"
+                                        className={cn("rounded-sm px-1 font-normal", badgeClassName)}
                                     >
                                         {selectedValuesSet.size} selected
                                     </Badge>
@@ -64,9 +80,9 @@ export function DataTableFacetedFilter({
                                             <Badge
                                                 variant="secondary"
                                                 key={option}
-                                                className="rounded-sm px-1 font-normal max-w-[120px] truncate"
+                                                className={cn("rounded-sm px-1 font-normal max-w-[120px] truncate", badgeClassName)}
                                             >
-                                                {option}
+                                                {formatOption ? formatOption(option) : option}
                                             </Badge>
                                         ))
                                 )}
@@ -75,9 +91,9 @@ export function DataTableFacetedFilter({
                     )}
                 </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-[300px] p-0" align="start">
+            <PopoverContent className={cn("w-[300px] p-0", contentClassName)} align="start">
                 <Command>
-                    <CommandInput placeholder={title} />
+                    <CommandInput placeholder={searchPlaceholder ?? title} />
                     <CommandList>
                         <CommandEmpty>No results found.</CommandEmpty>
                         <CommandGroup>
@@ -106,7 +122,7 @@ export function DataTableFacetedFilter({
                                         >
                                             <Check className={cn("h-4 w-4")} />
                                         </div>
-                                        <span>{option}</span>
+                                        <span>{formatOption ? formatOption(option) : option}</span>
                                     </CommandItem>
                                 )
                             })}

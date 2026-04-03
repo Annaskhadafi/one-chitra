@@ -18,13 +18,14 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Search, ArrowRight, Package, Calendar, ChevronUp, ChevronDown, Pencil, FileText } from "lucide-react"
+import { Search, ArrowRight, Package, Calendar, ChevronUp, ChevronDown, Pencil, FileText, Download } from "lucide-react"
 import { format } from "date-fns"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts"
 import { cn } from "@/lib/utils"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { getStockTransfers, updateStockTransferStatus } from "@/app/actions/stock-transfer"
 import { toast } from "sonner"
+import { DataTableFacetedFilter } from "@/app/dashboard/billing/_components/data-table-faceted-filter"
 import {
     useReactTable,
     getCoreRowModel,
@@ -39,6 +40,7 @@ import { Button } from "@/components/ui/button"
 import { useRef } from "react"
 import { EditTransferDialog } from "./edit-transfer-dialog"
 import { TransferPreviewDialog } from "./transfer-preview-dialog"
+import * as XLSX from "xlsx"
 
 interface TransferItem {
     id: number
@@ -124,7 +126,9 @@ export function StockTransferTable({ data: initialData }: { data: Transfer[] }) 
     })
 
     const [searchTerm, setSearchTerm] = useState("")
-    const [statusFilter, setStatusFilter] = useState("all")
+    const [statusFilter, setStatusFilter] = useState<string[]>([])
+    const [fromWarehouseFilter, setFromWarehouseFilter] = useState<string[]>([])
+    const [toWarehouseFilter, setToWarehouseFilter] = useState<string[]>([])
     const [sorting, setSorting] = useState<SortingState>([{ id: "transferDate", desc: true }])
     const [mounted, setMounted] = useState(false)
     const [editingTransfer, setEditingTransfer] = useState<Transfer | null>(null)
@@ -149,6 +153,31 @@ export function StockTransferTable({ data: initialData }: { data: Transfer[] }) 
             fill: STATUS_COLORS[status] || "hsl(var(--primary))",
         }))
     }, [transfers])
+
+    const fromWarehouseOptions = useMemo(
+        () => Array.from(new Set(transfers.map((transfer) => transfer.fromWarehouse.id.toString()))).map((value) => {
+            const match = transfers.find((transfer) => transfer.fromWarehouse.id.toString() === value)?.fromWarehouse
+            return { value, label: `${match?.description ?? "-"} (${match?.sloc ?? "-"})` }
+        }),
+        [transfers]
+    )
+
+    const toWarehouseOptions = useMemo(
+        () => Array.from(new Set(transfers.map((transfer) => transfer.toWarehouse.id.toString()))).map((value) => {
+            const match = transfers.find((transfer) => transfer.toWarehouse.id.toString() === value)?.toWarehouse
+            return { value, label: `${match?.description ?? "-"} (${match?.sloc ?? "-"})` }
+        }),
+        [transfers]
+    )
+
+    const filteredTransfers = useMemo(() => {
+        return transfers.filter((transfer) => {
+            const matchesStatus = statusFilter.length === 0 || statusFilter.includes(transfer.receivedStatus)
+            const matchesFromWarehouse = fromWarehouseFilter.length === 0 || fromWarehouseFilter.includes(transfer.fromWarehouse.id.toString())
+            const matchesToWarehouse = toWarehouseFilter.length === 0 || toWarehouseFilter.includes(transfer.toWarehouse.id.toString())
+            return matchesStatus && matchesFromWarehouse && matchesToWarehouse
+        })
+    }, [fromWarehouseFilter, statusFilter, toWarehouseFilter, transfers])
 
     const columns = useMemo<ColumnDef<Transfer>[]>(() => [
         {
@@ -336,7 +365,7 @@ export function StockTransferTable({ data: initialData }: { data: Transfer[] }) 
     ], [updateStatusMutation])
 
     const table = useReactTable({
-        data: transfers,
+        data: filteredTransfers,
         columns,
         state: {
             sorting,
@@ -356,11 +385,43 @@ export function StockTransferTable({ data: initialData }: { data: Transfer[] }) 
                 t.toWarehouse.sloc.toLowerCase().includes(term) ||
                 t.fromWarehouse.description?.toLowerCase().includes(term) ||
                 t.toWarehouse.description?.toLowerCase().includes(term) ||
-                t.notes?.toLowerCase().includes(term))
-            const matchesStatus = statusFilter === "all" || t.receivedStatus === statusFilter
-            return matchesSearch && matchesStatus
+                t.notes?.toLowerCase().includes(term) ||
+                t.delivery?.deliveryNumber?.toLowerCase().includes(term) ||
+                t.delivery?.salesOrder.customer.name?.toLowerCase().includes(term))
+            return matchesSearch
         }
     })
+
+    const exportRows = useMemo(() => table.getRowModel().rows.map((row) => {
+        const transfer = row.original
+        return {
+            "Reference": transfer.referenceNumber ?? "",
+            "Transfer Date": format(new Date(transfer.transferDate), "dd MMM yyyy"),
+            "From Warehouse": `${transfer.fromWarehouse.description ?? ""} (${transfer.fromWarehouse.sloc})`.trim(),
+            "To Warehouse": `${transfer.toWarehouse.description ?? ""} (${transfer.toWarehouse.sloc})`.trim(),
+            "Received Status": transfer.receivedStatus,
+            "Posting Document": transfer.postingDocumentNo ?? "",
+            "Batch No": transfer.batchNo ?? "",
+            "Delivery Number": transfer.delivery?.deliveryNumber ?? "",
+            "Customer": transfer.delivery?.salesOrder.customer.name ?? "",
+            "Item Count": transfer.items.length,
+            "Notes": transfer.notes ?? "",
+            "Created At": format(new Date(transfer.createdAt), "dd MMM yyyy HH:mm"),
+        }
+    }), [table])
+
+    const handleExportExcel = () => {
+        if (exportRows.length === 0) {
+            toast.error("Tidak ada data untuk diexport")
+            return
+        }
+
+        const worksheet = XLSX.utils.json_to_sheet(exportRows)
+        const workbook = XLSX.utils.book_new()
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Stock Transfers")
+        XLSX.writeFile(workbook, `stock-transfers-${new Date().toISOString().slice(0, 10)}.xlsx`)
+        toast.success("Export Excel berhasil")
+    }
 
     const parentRef = useRef<HTMLDivElement>(null)
     const { rows } = table.getRowModel()
@@ -425,7 +486,50 @@ export function StockTransferTable({ data: initialData }: { data: Transfer[] }) 
             )}
 
             {/* Filters */}
-            <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex flex-col gap-3">
+                <div className="flex flex-wrap gap-2">
+                    <DataTableFacetedFilter
+                        title="Status"
+                        options={["Scheduled", "Received", "Rejected"]}
+                        selectedValues={statusFilter}
+                        onFilterChange={setStatusFilter}
+                        searchPlaceholder="Cari status..."
+                    />
+                    <DataTableFacetedFilter
+                        title="From Warehouse"
+                        options={fromWarehouseOptions.map((option) => option.value)}
+                        selectedValues={fromWarehouseFilter}
+                        onFilterChange={setFromWarehouseFilter}
+                        formatOption={(value) => fromWarehouseOptions.find((option) => option.value === value)?.label ?? value}
+                        searchPlaceholder="Cari warehouse asal..."
+                        contentClassName="w-[320px]"
+                    />
+                    <DataTableFacetedFilter
+                        title="To Warehouse"
+                        options={toWarehouseOptions.map((option) => option.value)}
+                        selectedValues={toWarehouseFilter}
+                        onFilterChange={setToWarehouseFilter}
+                        formatOption={(value) => toWarehouseOptions.find((option) => option.value === value)?.label ?? value}
+                        searchPlaceholder="Cari warehouse tujuan..."
+                        contentClassName="w-[320px]"
+                    />
+                    <Button
+                        variant="outline"
+                        onClick={() => {
+                            setSearchTerm("")
+                            setStatusFilter([])
+                            setFromWarehouseFilter([])
+                            setToWarehouseFilter([])
+                        }}
+                    >
+                        Reset
+                    </Button>
+                    <Button variant="outline" onClick={handleExportExcel} className="gap-2">
+                        <Download className="h-4 w-4" />
+                        Export Excel
+                    </Button>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-3">
                 <div className="relative flex-1 max-w-sm">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-purple-500" />
                     <Input
@@ -435,17 +539,7 @@ export function StockTransferTable({ data: initialData }: { data: Transfer[] }) 
                         className="pl-10 border-purple-200 focus:border-purple-500 focus:ring-purple-500"
                     />
                 </div>
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <SelectTrigger className="w-[160px] border-blue-200 focus:border-blue-500 focus:ring-blue-500">
-                        <SelectValue placeholder="All Status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">All Status</SelectItem>
-                        <SelectItem value="Scheduled">Scheduled</SelectItem>
-                        <SelectItem value="Received">Received</SelectItem>
-                        <SelectItem value="Rejected">Rejected</SelectItem>
-                    </SelectContent>
-                </Select>
+                </div>
             </div>
 
             {/* Table */}
@@ -510,7 +604,7 @@ export function StockTransferTable({ data: initialData }: { data: Transfer[] }) 
                 {/* Footer Info */}
                 <div className="flex items-center justify-between text-xs bg-gradient-to-r from-blue-50 via-purple-50 to-pink-50 dark:from-blue-950/30 dark:via-purple-950/30 dark:to-pink-950/30 p-3 rounded-lg border-2 border-dashed border-purple-200 dark:border-purple-800">
                     <div className="flex gap-4 font-medium">
-                        <span className="text-blue-700 dark:text-blue-400">Total Records: <strong className="text-blue-900 dark:text-blue-300">{transfers.length}</strong></span>
+                        <span className="text-blue-700 dark:text-blue-400">Total Records: <strong className="text-blue-900 dark:text-blue-300">{filteredTransfers.length}</strong></span>
                         <span className="text-purple-700 dark:text-purple-400">Filtered: <strong className="text-purple-900 dark:text-purple-300">{table.getFilteredRowModel().rows.length}</strong></span>
                     </div>
                     <div className="text-pink-700 dark:text-pink-400 font-medium">

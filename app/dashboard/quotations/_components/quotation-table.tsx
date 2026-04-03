@@ -1,7 +1,8 @@
 "use client"
 
-import { useState, useMemo, useEffect, useCallback } from "react"
+import { useState, useMemo, useEffect, useCallback, type ElementType } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
+import type { DateRange } from "react-day-picker"
 import { cn } from "@/lib/utils"
 import { useMounted } from "@/hooks/use-mounted"
 import { SuccessAlertDialog } from "@/components/success-alert-dialog"
@@ -21,6 +22,16 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Calendar as DatePicker } from "@/components/ui/calendar"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import {
+    CommandDialog,
+    CommandEmpty,
+    CommandGroup,
+    CommandInput,
+    CommandItem,
+    CommandList,
+} from "@/components/ui/command"
 import {
     Select,
     SelectContent,
@@ -59,6 +70,7 @@ import { Search, Pencil, Trash2, Eye, FileText, Clock, CheckCircle, ArrowRightLe
 import { ProgressLoading } from "@/components/ui/progress-loading"
 import { ScoreCard } from "@/components/score-card"
 import { BulkActions } from "@/components/bulk-actions"
+import { DataTableFacetedFilter } from "@/app/dashboard/billing/_components/data-table-faceted-filter"
 import { usePermissions } from "@/hooks/use-permissions"
 import { toast } from "sonner"
 import Link from "next/link"
@@ -200,6 +212,25 @@ type QuotationSearchSuggestion = {
     grandTotal: number
     productSummary: string
     priority: number
+}
+
+type ProductSearchSuggestion = {
+    key: string
+    quotationId: number
+    quotationNumber: string
+    customerName: string
+    status: string
+    statusLabel: string
+    quotationDate: Date
+    productName: string
+    materialNumber: string
+    quantity: number
+}
+
+type SearchSelection = {
+    id: string
+    label: string
+    value: string
 }
 
 const statusVariants: Record<string, "default" | "secondary" | "destructive" | "outline" | "success" | "warning"> = {
@@ -427,6 +458,31 @@ function downloadExcelFile(rows: Record<string, string | number>[], filename: st
     return true
 }
 
+function MultiSelectFilter(props: {
+    title: string
+    icon: ElementType
+    selectedValues: string[]
+    options: Array<{ value: string; label: string }>
+    onChange: (values: string[]) => void
+    minWidthClassName?: string
+}) {
+    const { title, icon: Icon, selectedValues, options, onChange, minWidthClassName } = props
+
+    return (
+        <DataTableFacetedFilter
+            title={title}
+            icon={<Icon className="mr-2 h-3.5 w-3.5 text-muted-foreground" />}
+            options={options.map((option) => option.value)}
+            selectedValues={selectedValues}
+            onFilterChange={onChange}
+            formatOption={(value) => options.find((option) => option.value === value)?.label ?? value}
+            searchPlaceholder={`Cari ${title.toLowerCase()}...`}
+            triggerClassName={cn("h-9 justify-between gap-2", minWidthClassName || "min-w-[170px]")}
+            contentClassName="w-72"
+        />
+    )
+}
+
 /**
  * Wrapper component to avoid "No QueryClient set" error during SSR.
  */
@@ -442,6 +498,35 @@ export function QuotationTable(props: QuotationTableProps) {
     }
 
     return <QuotationTableInner {...props} />
+}
+
+function isDateWithinRange(dateValue: Date | string, range?: DateRange) {
+    if (!range?.from && !range?.to) {
+        return true
+    }
+
+    const date = new Date(dateValue)
+    if (Number.isNaN(date.getTime())) {
+        return false
+    }
+
+    if (range.from) {
+        const start = new Date(range.from)
+        start.setHours(0, 0, 0, 0)
+        if (date < start) {
+            return false
+        }
+    }
+
+    if (range.to) {
+        const end = new Date(range.to)
+        end.setHours(23, 59, 59, 999)
+        if (date > end) {
+            return false
+        }
+    }
+
+    return true
 }
 
 function QuotationTableInner({ data: initialData }: QuotationTableProps) {
@@ -544,19 +629,19 @@ function QuotationTableInner({ data: initialData }: QuotationTableProps) {
     const [sorting, setSorting] = useState<SortingState>([{ id: "quotationDate", desc: true }])
     const [activeTab, setActiveTab] = useState("quotations")
     const [globalFilter, setGlobalFilter] = useState("")
-    const [statusFilter, setStatusFilter] = useState("all")
-    const [userFilter, setUserFilter] = useState("all")
+    const [searchSelections, setSearchSelections] = useState<SearchSelection[]>([])
+    const [statusFilters, setStatusFilters] = useState<string[]>([])
+    const [userFilters, setUserFilters] = useState<string[]>([])
 
     // Set default user filter to current user once session is loaded
     useEffect(() => {
         if (currentUserId) {
-            setUserFilter(currentUserId)
+            setUserFilters((current) => (current.length > 0 ? current : [currentUserId]))
         }
     }, [currentUserId])
 
-    const [monthFilter, setMonthFilter] = useState("all")
-    const [yearFilter, setYearFilter] = useState("all")
-    const [customerFilter, setCustomerFilter] = useState("all")
+    const [customerFilters, setCustomerFilters] = useState<string[]>([])
+    const [quotationDateRange, setQuotationDateRange] = useState<DateRange | undefined>(undefined)
     const [rowSelection, setRowSelection] = useState({})
     const [previewQuotation, setPreviewQuotation] = useState<QuotationWithRelations | null>(null)
     const [isPreviewOpen, setIsPreviewOpen] = useState(false)
@@ -570,6 +655,7 @@ function QuotationTableInner({ data: initialData }: QuotationTableProps) {
     const [customerPoFileUrl, setCustomerPoFileUrl] = useState<string | null>(null)
     const [isCustomerPoPreviewOpen, setIsCustomerPoPreviewOpen] = useState(false)
     const [blockedDialog, setBlockedDialog] = useState<ActionBlockedDetails | null>(null)
+    const [isProductSearchOpen, setIsProductSearchOpen] = useState(false)
 
     // Extract unique users for filter
     const uniqueUsers = useMemo(() => {
@@ -594,32 +680,20 @@ function QuotationTableInner({ data: initialData }: QuotationTableProps) {
         return Array.from(customers.values()).sort((left, right) => left.name.localeCompare(right.name))
     }, [quotations])
 
-    // Generate years for filter
-    const availableYears = useMemo(() => {
-        const years = new Set<string>()
-        quotations.forEach(q => {
-            years.add(new Date(q.quotationDate).getFullYear().toString())
-        })
-        return Array.from(years).sort((a, b) => b.localeCompare(a))
-    }, [quotations])
-
-    const months = [
-        { value: "0", label: "January" },
-        { value: "1", label: "February" },
-        { value: "2", label: "March" },
-        { value: "3", label: "April" },
-        { value: "4", label: "May" },
-        { value: "5", label: "June" },
-        { value: "6", label: "July" },
-        { value: "7", label: "August" },
-        { value: "8", label: "September" },
-        { value: "9", label: "October" },
-        { value: "10", label: "November" },
-        { value: "11", label: "December" },
-    ]
-
     const normalizedSearchTerm = normalizeSearchText(globalFilter)
     const compactSearchTerm = compactSearchText(globalFilter)
+    const activeSearchTerms = useMemo(
+        () => [
+            ...searchSelections.map((selection) => ({
+                normalized: normalizeSearchText(selection.value),
+                compact: compactSearchText(selection.value),
+            })),
+            ...(normalizedSearchTerm
+                ? [{ normalized: normalizedSearchTerm, compact: compactSearchTerm }]
+                : []),
+        ].filter((term) => term.normalized),
+        [searchSelections, normalizedSearchTerm, compactSearchTerm]
+    )
 
     const quotationSearchIndex = useMemo(() => {
         return new Map<number, QuotationSearchIndexEntry>(
@@ -694,33 +768,38 @@ function QuotationTableInner({ data: initialData }: QuotationTableProps) {
 
     const baseFilteredQuotations = useMemo(() => {
         return quotations.filter((quotation) => {
-            const quotationDate = new Date(quotation.quotationDate)
-            const matchesStatus = statusFilter === "all" || quotation.status === statusFilter
-            const matchesUser = userFilter === "all" || quotation.createdBy === userFilter
-            const matchesMonth = monthFilter === "all" || quotationDate.getMonth().toString() === monthFilter
-            const matchesYear = yearFilter === "all" || quotationDate.getFullYear().toString() === yearFilter
-            const matchesCustomer = customerFilter === "all" || quotation.customer.id.toString() === customerFilter
+            const creatorId = quotation.createdByUser?.id || quotation.createdBy
+            const matchesStatus = statusFilters.length === 0 || statusFilters.includes(quotation.status)
+            const matchesUser = userFilters.length === 0 || userFilters.includes(creatorId)
+            const matchesCustomer = customerFilters.length === 0 || customerFilters.includes(quotation.customer.id.toString())
+            const matchesDate = isDateWithinRange(quotation.quotationDate, quotationDateRange)
 
-            if (!matchesStatus || !matchesUser || !matchesMonth || !matchesYear || !matchesCustomer) {
+            if (!matchesStatus || !matchesUser || !matchesCustomer || !matchesDate) {
                 return false
             }
 
             return true
         })
-    }, [quotations, statusFilter, userFilter, monthFilter, yearFilter, customerFilter])
+    }, [quotations, statusFilters, userFilters, customerFilters, quotationDateRange])
 
     const filteredQuotations = useMemo(() => {
+        if (activeSearchTerms.length === 0) {
+            return baseFilteredQuotations
+        }
+
         return baseFilteredQuotations.filter((quotation) => {
             const searchEntry = quotationSearchIndex.get(quotation.id)
 
-            return matchesSearchText(
-                searchEntry?.searchText || "",
-                searchEntry?.compactText || "",
-                normalizedSearchTerm,
-                compactSearchTerm
+            return activeSearchTerms.some((term) =>
+                matchesSearchText(
+                    searchEntry?.searchText || "",
+                    searchEntry?.compactText || "",
+                    term.normalized,
+                    term.compact
+                )
             )
         })
-    }, [baseFilteredQuotations, quotationSearchIndex, normalizedSearchTerm, compactSearchTerm])
+    }, [baseFilteredQuotations, quotationSearchIndex, activeSearchTerms])
 
     const searchSuggestions = useMemo<QuotationSearchSuggestion[]>(() => {
         if (!normalizedSearchTerm) {
@@ -1158,12 +1237,63 @@ function QuotationTableInner({ data: initialData }: QuotationTableProps) {
         })
     }, [filteredProductRows])
 
+    const productSearchSuggestions = useMemo<ProductSearchSuggestion[]>(() => {
+        return baseFilteredQuotations
+            .flatMap((quotation) =>
+                quotation.items.map((item) => ({
+                    key: `${quotation.id}-${item.id}`,
+                    quotationId: quotation.id,
+                    quotationNumber: quotation.quotationNumber || `QT-${quotation.id}`,
+                    customerName: quotation.customer.name,
+                    status: quotation.status,
+                    statusLabel: STATUS_LABELS[quotation.status] || quotation.status,
+                    quotationDate: new Date(quotation.quotationDate),
+                    productName:
+                        item.product?.materialDescription ||
+                        item.description ||
+                        item.longDescription ||
+                        "Unnamed product",
+                    materialNumber:
+                        item.product?.materialNumber ||
+                        item.product?.materialNumberCk ||
+                        "-",
+                    quantity: item.quantity,
+                }))
+            )
+            .sort((left, right) => right.quotationDate.getTime() - left.quotationDate.getTime())
+    }, [baseFilteredQuotations])
+
+    const addSearchSelection = (selection: SearchSelection) => {
+        setSearchSelections((current) =>
+            current.some((entry) => entry.id === selection.id)
+                ? current
+                : [...current, selection]
+        )
+        setGlobalFilter("")
+        setIsSearchFocused(false)
+    }
+
+    const removeSearchSelection = (selectionId: string) => {
+        setSearchSelections((current) => current.filter((entry) => entry.id !== selectionId))
+    }
+
     const toggleQuotationExpansion = (quotationId: number) => {
         setExpandedQuotationIds((current) =>
             current.includes(quotationId)
                 ? current.filter((id) => id !== quotationId)
                 : [...current, quotationId]
         )
+    }
+
+    const handleProductSearchSelect = (suggestion: ProductSearchSuggestion) => {
+        setActiveTab("quotations")
+        addSearchSelection({
+            id: `product-${suggestion.key}`,
+            label: `${suggestion.productName}${suggestion.materialNumber !== "-" ? ` (${suggestion.materialNumber})` : ""}`,
+            value: `${suggestion.quotationNumber} ${suggestion.materialNumber !== "-" ? suggestion.materialNumber : suggestion.productName}`,
+        })
+        setExpandedQuotationIds((current) => Array.from(new Set([...current, suggestion.quotationId])))
+        setIsProductSearchOpen(false)
     }
 
     const renderQuotationActions = useCallback((quotation: QuotationWithRelations, mobile = false) => {
@@ -1608,7 +1738,7 @@ function QuotationTableInner({ data: initialData }: QuotationTableProps) {
     // Use effect to handle filter changes correctly with TanStack table
     useEffect(() => {
         table.setGlobalFilter(globalFilter)
-    }, [statusFilter, userFilter, monthFilter, yearFilter, customerFilter, globalFilter, table])
+    }, [statusFilters, userFilters, customerFilters, quotationDateRange, globalFilter, table])
 
     useEffect(() => {
         setExpandedQuotationIds((current) => current.filter((id) => visibleQuotationIds.includes(id)))
@@ -1633,6 +1763,46 @@ function QuotationTableInner({ data: initialData }: QuotationTableProps) {
                 description={blockedDialog?.description || ""}
                 reasons={blockedDialog?.reasons || []}
             />
+            <CommandDialog
+                open={isProductSearchOpen}
+                onOpenChange={setIsProductSearchOpen}
+                title="Cari Product"
+                description="Cari product lalu buka quotation terkait dalam keadaan expand."
+                className="sm:max-w-2xl"
+            >
+                <CommandInput placeholder="Cari nama product, material number, customer, atau nomor quotation..." />
+                <CommandList>
+                    <CommandEmpty>Tidak ada product yang cocok.</CommandEmpty>
+                    <CommandGroup heading="Product Results">
+                        {productSearchSuggestions.map((suggestion) => (
+                            <CommandItem
+                                key={suggestion.key}
+                                value={`${suggestion.productName} ${suggestion.materialNumber} ${suggestion.customerName} ${suggestion.quotationNumber}`}
+                                onSelect={() => handleProductSearchSelect(suggestion)}
+                                className="items-start"
+                            >
+                                <div className="flex w-full items-start justify-between gap-3">
+                                    <div className="min-w-0 flex-1">
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <span className="font-medium text-foreground">{suggestion.productName}</span>
+                                            <Badge variant={statusVariants[suggestion.status] || "outline"}>
+                                                {suggestion.statusLabel}
+                                            </Badge>
+                                        </div>
+                                        <p className="mt-1 text-xs text-muted-foreground">
+                                            {suggestion.materialNumber !== "-" ? `${suggestion.materialNumber} • ` : ""}
+                                            Qty {suggestion.quantity} • {suggestion.customerName}
+                                        </p>
+                                        <p className="mt-1 text-xs text-muted-foreground">
+                                            {suggestion.quotationNumber} • {formatDate(suggestion.quotationDate)}
+                                        </p>
+                                    </div>
+                                </div>
+                            </CommandItem>
+                        ))}
+                    </CommandGroup>
+                </CommandList>
+            </CommandDialog>
             <Dialog open={Boolean(poDialogQuotation)} onOpenChange={(open) => !open && closePoDialog()}>
                 <DialogContent className="sm:max-w-md">
                     <DialogHeader>
@@ -2054,8 +2224,12 @@ function QuotationTableInner({ data: initialData }: QuotationTableProps) {
                                                 type="button"
                                                 onMouseDown={(event) => event.preventDefault()}
                                                 onClick={() => {
-                                                    setGlobalFilter(suggestion.quotationNumber)
-                                                    setIsSearchFocused(false)
+                                                    addSearchSelection({
+                                                        id: `quotation-${suggestion.quotationId}`,
+                                                        label: `${suggestion.quotationNumber} • ${suggestion.customerName}`,
+                                                        value: suggestion.quotationNumber,
+                                                    })
+                                                    setExpandedQuotationIds((current) => Array.from(new Set([...current, suggestion.quotationId])))
                                                 }}
                                                 className="w-full rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-accent/45"
                                             >
@@ -2099,95 +2273,88 @@ function QuotationTableInner({ data: initialData }: QuotationTableProps) {
                     </div>
 
                     <div className="flex flex-wrap gap-2">
-                        <Select value={statusFilter} onValueChange={setStatusFilter}>
-                            <SelectTrigger className="h-9 w-[130px]">
-                                <div className="flex items-center gap-2">
-                                    <Filter className="h-3.5 w-3.5 text-muted-foreground" />
-                                    <SelectValue placeholder="Status" />
-                                </div>
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">All Status</SelectItem>
-                                <SelectItem value="draft">Draft</SelectItem>
-                                <SelectItem value="sent">Sent</SelectItem>
-                                <SelectItem value="approved">Approved</SelectItem>
-                                <SelectItem value="rejected">Rejected</SelectItem>
-                                <SelectItem value="expired">Expired</SelectItem>
-                                <SelectItem value="converted">Converted</SelectItem>
-                            </SelectContent>
-                        </Select>
+                        <Button variant="outline" className="h-9 gap-2" onClick={() => setIsProductSearchOpen(true)}>
+                            <Search className="h-4 w-4" />
+                            Search Product
+                        </Button>
 
-                        <Select value={userFilter} onValueChange={setUserFilter}>
-                            <SelectTrigger className="h-9 w-fit min-w-[150px] gap-3">
-                                <div className="flex items-center gap-2">
-                                    <User className="h-3.5 w-3.5 text-muted-foreground" />
-                                    <SelectValue placeholder="Created By" />
-                                </div>
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">All Users</SelectItem>
-                                {uniqueUsers.map((user) => (
-                                    <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+                        <MultiSelectFilter
+                            title="Status"
+                            icon={Filter}
+                            selectedValues={statusFilters}
+                            onChange={setStatusFilters}
+                            minWidthClassName="min-w-[150px]"
+                            options={[
+                                { value: "draft", label: "Draft" },
+                                { value: "sent", label: "Sent" },
+                                { value: "approved", label: "Approved" },
+                                { value: "rejected", label: "Rejected" },
+                                { value: "expired", label: "Expired" },
+                                { value: "converted", label: "Converted" },
+                            ]}
+                        />
 
-                        <Select value={customerFilter} onValueChange={setCustomerFilter}>
-                            <SelectTrigger className="h-9 w-fit min-w-[170px] gap-3">
-                                <div className="flex items-center gap-2">
-                                    <ShoppingCart className="h-3.5 w-3.5 text-muted-foreground" />
-                                    <SelectValue placeholder="Customer" />
-                                </div>
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">All Customers</SelectItem>
-                                {uniqueCustomers.map((customer) => (
-                                    <SelectItem key={customer.id} value={customer.id.toString()}>{customer.name}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+                        <MultiSelectFilter
+                            title="Created By"
+                            icon={User}
+                            selectedValues={userFilters}
+                            onChange={setUserFilters}
+                            minWidthClassName="min-w-[180px]"
+                            options={uniqueUsers.map((user) => ({ value: user.id, label: user.name }))}
+                        />
 
-                        <Select value={monthFilter} onValueChange={setMonthFilter}>
-                            <SelectTrigger className="h-9 w-[130px]">
-                                <div className="flex items-center gap-2">
-                                    <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-                                    <SelectValue placeholder="Month" />
-                                </div>
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">All Months</SelectItem>
-                                {months.map((month) => (
-                                    <SelectItem key={month.value} value={month.value}>{month.label}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+                        <MultiSelectFilter
+                            title="Customer"
+                            icon={ShoppingCart}
+                            selectedValues={customerFilters}
+                            onChange={setCustomerFilters}
+                            minWidthClassName="min-w-[200px]"
+                            options={uniqueCustomers.map((customer) => ({ value: customer.id.toString(), label: customer.name }))}
+                        />
 
-                        <Select value={yearFilter} onValueChange={setYearFilter}>
-                            <SelectTrigger className="h-9 w-[110px]">
-                                <div className="flex items-center gap-2">
-                                    <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-                                    <SelectValue placeholder="Year" />
-                                </div>
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">All Years</SelectItem>
-                                {availableYears.map((year) => (
-                                    <SelectItem key={year} value={year}>{year}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <Button variant="outline" className="h-9 min-w-[220px] justify-between gap-2">
+                                    <span className="flex items-center gap-2 overflow-hidden">
+                                        <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                                        <span className="truncate">
+                                            {quotationDateRange?.from
+                                                ? quotationDateRange.to
+                                                    ? `${formatDate(quotationDateRange.from)} - ${formatDate(quotationDateRange.to)}`
+                                                    : `${formatDate(quotationDateRange.from)} - ...`
+                                                : "Date Range"}
+                                        </span>
+                                    </span>
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent align="start" className="w-auto p-0">
+                                <DatePicker
+                                    mode="range"
+                                    selected={quotationDateRange}
+                                    onSelect={setQuotationDateRange}
+                                    numberOfMonths={2}
+                                />
+                                {quotationDateRange?.from || quotationDateRange?.to ? (
+                                    <div className="border-t p-2">
+                                        <Button variant="ghost" size="sm" className="w-full" onClick={() => setQuotationDateRange(undefined)}>
+                                            Clear Date Range
+                                        </Button>
+                                    </div>
+                                ) : null}
+                            </PopoverContent>
+                        </Popover>
 
-                        {(statusFilter !== "all" || userFilter !== "all" || customerFilter !== "all" || monthFilter !== "all" || yearFilter !== "all" || globalFilter !== "") && (
+                        {(statusFilters.length > 0 || userFilters.length > 0 || customerFilters.length > 0 || quotationDateRange?.from || quotationDateRange?.to || globalFilter !== "" || searchSelections.length > 0) && (
                             <Button
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => {
-                                    setStatusFilter("all")
-                                    setUserFilter(currentUserId || "all")
-                                    setCustomerFilter("all")
-                                    setMonthFilter("all")
-                                    setYearFilter("all")
+                                    setStatusFilters([])
+                                    setUserFilters(currentUserId ? [currentUserId] : [])
+                                    setCustomerFilters([])
+                                    setQuotationDateRange(undefined)
                                     setGlobalFilter("")
+                                    setSearchSelections([])
                                 }}
                                 className="h-9 text-xs"
                             >
@@ -2196,6 +2363,23 @@ function QuotationTableInner({ data: initialData }: QuotationTableProps) {
                         )}
                     </div>
                 </div>
+
+                {searchSelections.length > 0 && (
+                    <div className="flex flex-wrap gap-2 rounded-lg border bg-card p-3">
+                        {searchSelections.map((selection) => (
+                            <Badge key={selection.id} variant="secondary" className="gap-2 px-3 py-1">
+                                <span className="max-w-[240px] truncate">{selection.label}</span>
+                                <button
+                                    type="button"
+                                    className="rounded-sm text-muted-foreground hover:text-foreground"
+                                    onClick={() => removeSearchSelection(selection.id)}
+                                >
+                                    <Trash2 className="h-3 w-3" />
+                                </button>
+                            </Badge>
+                        ))}
+                    </div>
+                )}
 
                 <TabsContent value="quotations" className="space-y-4">
                     {selectedIds.length > 0 && (

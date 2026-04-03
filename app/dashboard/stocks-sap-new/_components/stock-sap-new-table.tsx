@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useRef, useState, useEffect } from "react"
-import { Search, RefreshCcw, ChevronUp, ChevronDown, Box, AlertTriangle, TrendingUp, FilterX, Loader2 } from "lucide-react"
+import { Search, RefreshCcw, ChevronUp, ChevronDown, Box, AlertTriangle, TrendingUp, FilterX, Loader2, Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -48,6 +48,7 @@ import {
     flexRender,
     SortingState,
 } from "@tanstack/react-table"
+import * as XLSX from "xlsx"
 
 type StockSAPNewItem = {
     stockId: number
@@ -400,6 +401,34 @@ export function StockSAPNewTable({ defaultRate, warehouses }: StockSAPNewTablePr
         }
     }, [apiStats, parsedRate])
 
+    const handleExportExcel = () => {
+        if (data.length === 0) {
+            return
+        }
+
+        const exportRows = data.map((item) => ({
+            "Stock ID": item.stockId,
+            "Plant Code": item.plantCode,
+            "Plant Name": item.plantName,
+            "Material No": item.materialNo,
+            "Old Material No": item.oldMaterialNo,
+            "Material Description": item.materialDesc,
+            "Storage Location": normalizeSloc(item.storLoc),
+            "Storage Location Description": item.storLocDesc,
+            "Warehouse Type": getDerivedWarehouseType(item),
+            "Total Stock": safeNumber(item.totalStock),
+            "UoM": item.baseUnitOfMeasure,
+            "Value Stock": safeNumber(item.valueStock),
+            "Currency": item.currency,
+            "Updated At": item.updatedAt ?? item.extractedAt ?? "",
+        }))
+
+        const worksheet = XLSX.utils.json_to_sheet(exportRows)
+        const workbook = XLSX.utils.book_new()
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Stock SAP New")
+        XLSX.writeFile(workbook, `stock-sap-new-${new Date().toISOString().slice(0, 10)}.xlsx`)
+    }
+
     const rowVirtualizer = useVirtualizer({
         count: rows.length,
         getScrollElement: () => parentRef.current,
@@ -705,6 +734,10 @@ export function StockSAPNewTable({ defaultRate, warehouses }: StockSAPNewTablePr
                                 }}
                             />
                         </div>
+                        <Button variant="outline" onClick={handleExportExcel} className="gap-2">
+                            <Download className="h-4 w-4" />
+                            Export Excel
+                        </Button>
                     </div>
                 </div>
 

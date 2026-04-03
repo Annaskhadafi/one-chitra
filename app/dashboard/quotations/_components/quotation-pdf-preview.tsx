@@ -268,8 +268,7 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
 
         try {
             const { generateQuotationPdf } = await import("./quotation-pdf-generator")
-            await generateQuotationPdf(buildQuotationPdfPayload(quotation))
-            toast.success("PDF A4 berhasil dibuat")
+            await generateQuotationPdf(buildQuotationPdfPayload(quotation), { mergeAttachments: false })
         } catch (error) {
             console.error("Failed to download quotation preview PDF:", error)
             toast.error(error instanceof Error ? error.message : "Download PDF A4 gagal")

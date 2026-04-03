@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { DataTableFacetedFilter } from "@/app/dashboard/billing/_components/data-table-faceted-filter"
 import { 
     Search, 
     Download, 
@@ -46,6 +47,7 @@ import { VendorQuotationWithItems } from "@/types/vendor-quotation"
 import { VendorQuotationDetailDialog } from "./vendor-quotation-detail-dialog"
 import { VendorQuotationOcrBadge } from "./vendor-quotation-ocr-dialog"
 import { PoPreviewDialog } from "@/components/po-preview-dialog"
+import * as XLSX from "xlsx"
 
 interface VendorQuotationTableProps {
     data: VendorQuotationWithItems[]
@@ -56,6 +58,8 @@ interface VendorQuotationTableProps {
 export function VendorQuotationTable({ data, onDelete, onOpenOcr }: VendorQuotationTableProps) {
     const [sorting, setSorting] = useState<SortingState>([{ id: "quoteDate", desc: true }])
     const [searchInput, setSearchInput] = useState("")
+    const [ocrStatusFilter, setOcrStatusFilter] = useState<string[]>([])
+    const [vendorFilter, setVendorFilter] = useState<string[]>([])
     const [selectedQuotation, setSelectedQuotation] = useState<VendorQuotationWithItems | null>(null)
     const [isDetailOpen, setIsDetailOpen] = useState(false)
     const [expandedQuotationIds, setExpandedQuotationIds] = useState<Set<number>>(new Set())
@@ -161,14 +165,52 @@ export function VendorQuotationTable({ data, onDelete, onOpenOcr }: VendorQuotat
 
     const searchableData = useMemo(() => {
         const query = deferredGlobalFilter.trim().toLowerCase()
-        if (!query) {
-            return indexedQuotations.map(({ quotation }) => quotation)
+        return indexedQuotations
+            .filter(({ quotation, searchText }) => {
+                const matchesSearch = !query || searchText.includes(query)
+                const matchesOcrStatus = ocrStatusFilter.length === 0 || ocrStatusFilter.includes(quotation.ocrStatus)
+                const matchesVendor = vendorFilter.length === 0 || vendorFilter.includes(quotation.vendorName || "")
+                return matchesSearch && matchesOcrStatus && matchesVendor
+            })
+            .map(({ quotation }) => quotation)
+    }, [deferredGlobalFilter, indexedQuotations, ocrStatusFilter, vendorFilter])
+
+    const vendorOptions = useMemo(
+        () => Array.from(new Set(data.map((quotation) => quotation.vendorName).filter(Boolean))) as string[],
+        [data]
+    )
+
+    const exportRows = useMemo(() => searchableData.flatMap((quotation) => {
+        if (quotation.items.length === 0) {
+            return [{
+                "Nomor Quote": quotation.quoteNumber || "",
+                "Nama Vendor": quotation.vendorName || "",
+                "Tanggal Quote": quotation.quoteDate || "",
+                "OCR Status": quotation.ocrStatus || "",
+                "Item": "",
+                "Qty": "",
+                "Unit": "",
+                "Harga": "",
+                "Total": "",
+                "Remark": quotation.remark || "",
+                "File URL": quotation.fileUrl,
+            }]
         }
 
-        return indexedQuotations
-            .filter(({ searchText }) => searchText.includes(query))
-            .map(({ quotation }) => quotation)
-    }, [deferredGlobalFilter, indexedQuotations])
+        return quotation.items.map((item) => ({
+            "Nomor Quote": quotation.quoteNumber || "",
+            "Nama Vendor": quotation.vendorName || "",
+            "Tanggal Quote": quotation.quoteDate || "",
+            "OCR Status": quotation.ocrStatus || "",
+            "Item": item.itemName,
+            "Qty": item.qty,
+            "Unit": item.unit || "",
+            "Harga": item.unitPrice,
+            "Total": item.totalPrice,
+            "Remark": item.remark || quotation.remark || "",
+            "File URL": quotation.fileUrl,
+        }))
+    }), [searchableData])
 
     const quotationMetaById = useMemo(() => {
         const map = new Map<number, (typeof indexedQuotations)[number]>()
@@ -421,6 +463,17 @@ export function VendorQuotationTable({ data, onDelete, onOpenOcr }: VendorQuotat
         document.body.removeChild(link)
     }
 
+    const exportToExcel = () => {
+        if (exportRows.length === 0) {
+            return
+        }
+
+        const worksheet = XLSX.utils.json_to_sheet(exportRows)
+        const workbook = XLSX.utils.book_new()
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Vendor Quotations")
+        XLSX.writeFile(workbook, `vendor_quotations_${new Date().toISOString().split('T')[0]}.xlsx`)
+    }
+
     const getFilteredItems = (quotation: VendorQuotationWithItems) => {
         const searchTerm = itemSearchByQuotation[quotation.id]?.trim().toLowerCase() ?? ""
         if (!searchTerm) return quotation.items
@@ -460,11 +513,43 @@ export function VendorQuotationTable({ data, onDelete, onOpenOcr }: VendorQuotat
                     <p className="text-xs leading-relaxed text-muted-foreground">
                         Data pencarian perlu divalidasi kembali ke stock dan harga terbaru ke vendor untuk memastikan barang masih tersedia dan harga masih sama.
                     </p>
+                    <div className="flex flex-wrap gap-2">
+                        <DataTableFacetedFilter
+                            title="OCR Status"
+                            options={["pending", "completed", "failed"]}
+                            selectedValues={ocrStatusFilter}
+                            onFilterChange={setOcrStatusFilter}
+                            searchPlaceholder="Cari OCR status..."
+                        />
+                        <DataTableFacetedFilter
+                            title="Vendor"
+                            options={vendorOptions}
+                            selectedValues={vendorFilter}
+                            onFilterChange={setVendorFilter}
+                            searchPlaceholder="Cari vendor..."
+                            contentClassName="w-[320px]"
+                        />
+                        {(ocrStatusFilter.length > 0 || vendorFilter.length > 0) && (
+                            <Button
+                                variant="ghost"
+                                onClick={() => {
+                                    setOcrStatusFilter([])
+                                    setVendorFilter([])
+                                }}
+                            >
+                                Reset Filter
+                            </Button>
+                        )}
+                    </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
                     <Button variant="outline" onClick={exportToCsv} className="gap-2">
                         <Download className="h-4 w-4" />
                         Export CSV
+                    </Button>
+                    <Button variant="outline" onClick={exportToExcel} className="gap-2">
+                        <Download className="h-4 w-4" />
+                        Export Excel
                     </Button>
                     <Button onClick={() => onOpenOcr?.()} className="gap-2 bg-indigo-600 hover:bg-indigo-700">
                         <Plus className="h-4 w-4" />

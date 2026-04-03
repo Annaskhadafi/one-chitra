@@ -152,7 +152,66 @@ function downloadBlob(blob: Blob, filename: string) {
     URL.revokeObjectURL(url)
 }
 
-export async function generateQuotationPdf(quotation: QuotationPdfData) {
+let cachedLetterheadDataUrlPromise: Promise<string> | null = null
+
+async function blobToDataUrl(blob: Blob) {
+    return await new Promise<string>((resolve) => {
+        const reader = new FileReader()
+        reader.onloadend = () => resolve((reader.result as string) || "")
+        reader.readAsDataURL(blob)
+    })
+}
+
+async function getLetterheadDataUrl() {
+    if (!cachedLetterheadDataUrlPromise) {
+        cachedLetterheadDataUrlPromise = (async () => {
+            try {
+                const response = await fetch("/ChitraParatama_Stationery_Letterhead_jkt.jpg", { cache: "force-cache" })
+                if (!response.ok) {
+                    return ""
+                }
+
+                const blob = await response.blob()
+                const objectUrl = URL.createObjectURL(blob)
+
+                try {
+                    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+                        const nextImage = new Image()
+                        nextImage.onload = () => resolve(nextImage)
+                        nextImage.onerror = () => reject(new Error("Failed to decode letterhead image"))
+                        nextImage.src = objectUrl
+                    })
+
+                    const canvas = document.createElement("canvas")
+                    canvas.width = Math.max(1240, Math.round(image.naturalWidth * 0.65))
+                    canvas.height = Math.round((canvas.width / image.naturalWidth) * image.naturalHeight)
+
+                    const context = canvas.getContext("2d")
+                    if (!context) {
+                        return await blobToDataUrl(blob)
+                    }
+
+                    context.drawImage(image, 0, 0, canvas.width, canvas.height)
+                    return canvas.toDataURL("image/jpeg", 0.72)
+                } finally {
+                    URL.revokeObjectURL(objectUrl)
+                }
+            } catch (error) {
+                console.error("Failed to load letterhead image", error)
+                return ""
+            }
+        })()
+    }
+
+    return await cachedLetterheadDataUrlPromise
+}
+
+export async function generateQuotationPdf(
+    quotation: QuotationPdfData,
+    options?: {
+        mergeAttachments?: boolean
+    },
+) {
     try {
         const { default: jsPDF } = await import("jspdf")
         const autoTable = (await import("jspdf-autotable")).default
@@ -172,24 +231,13 @@ export async function generateQuotationPdf(quotation: QuotationPdfData) {
         const doc = new jsPDF({
             orientation: "portrait",
             unit: "mm",
-            format: "a4"
+            format: "a4",
+            compress: true,
+            putOnlyUsedFonts: true,
         })
 
-        // Load background image
-        let base64data = ""
-        try {
-            const response = await fetch("/ChitraParatama_Stationery_Letterhead_jkt.jpg")
-            if (response.ok) {
-                const blob = await response.blob()
-                base64data = await new Promise<string>((resolve) => {
-                    const reader = new FileReader()
-                    reader.onloadend = () => resolve(reader.result as string)
-                    reader.readAsDataURL(blob)
-                })
-            }
-        } catch (e) {
-            console.error("Failed to load letterhead image", e)
-        }
+        const shouldMergeAttachments = options?.mergeAttachments === true
+        const base64data = await getLetterheadDataUrl()
 
         // Add background to first page
         if (base64data) {
@@ -554,9 +602,13 @@ export async function generateQuotationPdf(quotation: QuotationPdfData) {
         const basePdfBytes = doc.output("arraybuffer")
         const outputFilename = `Quotation_${sanitizeFilenamePart(quotation.quotationNumber)}.pdf`
 
-        if (includedAttachments.length === 0 || includedAttachments.every((attachment) => !attachment.fileUrl)) {
+        if (!shouldMergeAttachments || includedAttachments.length === 0 || includedAttachments.every((attachment) => !attachment.fileUrl)) {
             downloadBlob(new Blob([basePdfBytes], { type: "application/pdf" }), outputFilename)
-            toast.success("PDF quotation berhasil didownload")
+            toast.success(
+                shouldMergeAttachments
+                    ? "PDF quotation berhasil didownload"
+                    : "PDF quotation berhasil didownload dengan ukuran lebih ringan",
+            )
             return
         }
 

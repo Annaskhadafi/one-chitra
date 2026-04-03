@@ -2,10 +2,11 @@
 
 import { db } from "@/db"
 import { salesRevenueSap } from "@/db/schema/sap"
-import { sql, and, isNotNull, or, notIlike, desc, asc } from "drizzle-orm"
+import { sql, and, isNotNull, or, notIlike, desc, asc, ilike } from "drizzle-orm"
 import { type SQL } from "drizzle-orm"
 
 export interface SalesDashboardFilters {
+    search?: string;
     years?: string[];
     months?: string[];
     salesman?: string[];
@@ -93,9 +94,24 @@ const groupRevenueSql = sql`
     END
 `;
 
+const areaCaseSql = sql`
+    CASE 
+        WHEN ${salesRevenueSap.plant} IN ('2001', '2002') THEN 'KALIMANTAN TIMUR'
+        WHEN ${salesRevenueSap.plant} = '3001' THEN 'KALIMANTAN SELATAN'
+        WHEN ${salesRevenueSap.plant} = '4001' THEN 'SUMATERA SELATAN'
+        WHEN ${salesRevenueSap.plant} = '5001' THEN 'SULAWESI'
+        WHEN ${salesRevenueSap.plant} = '1001' THEN 'JAWA BARAT'
+        WHEN ${salesRevenueSap.plant} = '6001' THEN 'PEKANBARU'
+        WHEN ${salesRevenueSap.plant} = '7001' THEN 'SANGATA'
+        WHEN ${salesRevenueSap.plant} = '8001' THEN 'KENDARI'
+        ELSE 'OTHER'
+    END
+`;
+
 export async function getSalesDashboardData(filters: SalesDashboardFilters = {}) {
     try {
         const {
+            search = "",
             years = [],
             months = [],
             salesman = [],
@@ -127,6 +143,16 @@ export async function getSalesDashboardData(filters: SalesDashboardFilters = {})
         if (customers.length > 0) filterArray.push(sql`${salesRevenueSap.customerName} IN ${customers}`);
         if (salesman.length > 0) filterArray.push(sql`${salesRevenueSap.salesman} IN ${salesman}`);
         if (revTypes.length > 0) filterArray.push(sql`TRIM(${salesRevenueSap.revType}) IN ${revTypes}`);
+        if (search.trim()) {
+            const searchPattern = `%${search.trim()}%`
+            filterArray.push(or(
+                ilike(salesRevenueSap.customerName, searchPattern),
+                ilike(salesRevenueSap.salesman, searchPattern),
+                ilike(salesRevenueSap.revType, searchPattern),
+                ilike(salesRevenueSap.plant, searchPattern),
+                sql`${areaCaseSql} ILIKE ${searchPattern}`
+            ))
+        }
 
         if (years.length > 0) {
             filterArray.push(or(...years.map(y => sql`EXTRACT(YEAR FROM ${salesRevenueSap.billingDate}) = ${Number(y)}`)));
@@ -206,28 +232,14 @@ export async function getSalesDashboardData(filters: SalesDashboardFilters = {})
             .where(finalWhere)
             .groupBy(sql`TRIM(${salesRevenueSap.revType})`, sql`EXTRACT(YEAR FROM ${salesRevenueSap.billingDate})`);
 
-        const areaCase = sql`
-            CASE 
-                WHEN ${salesRevenueSap.plant} IN ('2001', '2002') THEN 'KALIMANTAN TIMUR'
-                WHEN ${salesRevenueSap.plant} = '3001' THEN 'KALIMANTAN SELATAN'
-                WHEN ${salesRevenueSap.plant} = '4001' THEN 'SUMATERA SELATAN'
-                WHEN ${salesRevenueSap.plant} = '5001' THEN 'SULAWESI'
-                WHEN ${salesRevenueSap.plant} = '1001' THEN 'JAWA BARAT'
-                WHEN ${salesRevenueSap.plant} = '6001' THEN 'PEKANBARU'
-                WHEN ${salesRevenueSap.plant} = '7001' THEN 'SANGATA'
-                WHEN ${salesRevenueSap.plant} = '8001' THEN 'KENDARI'
-                ELSE 'OTHER'
-            END
-        `;
-
         const areaDataRaw = await db.select({
-            area: areaCase,
+            area: areaCaseSql,
             year: sql<string>`EXTRACT(YEAR FROM ${salesRevenueSap.billingDate})::text`,
             revenue: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInDocCurr}, 0))`
         })
             .from(salesRevenueSap)
             .where(finalWhere)
-            .groupBy(areaCase, sql`EXTRACT(YEAR FROM ${salesRevenueSap.billingDate})`);
+            .groupBy(areaCaseSql, sql`EXTRACT(YEAR FROM ${salesRevenueSap.billingDate})`);
 
         const monthlyDataRaw = await db.select({
             month: sql<string>`LPAD(EXTRACT(MONTH FROM ${salesRevenueSap.billingDate})::text, 2, '0')`,

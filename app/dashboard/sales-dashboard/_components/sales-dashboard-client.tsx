@@ -2,14 +2,11 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { getSalesDashboardData } from "@/app/actions/sales-dashboard"
+import { DataTableFacetedFilter } from "@/app/dashboard/billing/_components/data-table-faceted-filter"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { PivotTable } from "./pivot-table"
 import { DashboardCharts } from "./dashboard-charts"
-import {
-    SelectTrigger,
-    SelectValue
-} from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import {
     Search,
@@ -27,9 +24,6 @@ import {
     ChevronLeft,
     ChevronRight
 } from "lucide-react"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Badge } from "@/components/ui/badge"
 
 interface SalesDashboardClientProps {
     initialFilterOptions: {
@@ -57,7 +51,13 @@ export function SalesDashboardClient({ initialFilterOptions }: SalesDashboardCli
     const defaultYears = initialFilterOptions.years.includes(currentYear) ? [currentYear] : (initialFilterOptions.years.slice(0, 1));
     const defaultMonths = Array.from({ length: parseInt(currentMonth) }, (_, i) => (i + 1).toString().padStart(2, '0'));
 
+    const monthFormatter = useCallback((month: string) => {
+        const monthLabels = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+        return monthLabels[parseInt(month, 10) - 1] || month;
+    }, []);
+
     const [filters, setFilters] = useState({
+        search: "",
         years: defaultYears,
         months: defaultMonths,
         salesman: [] as string[],
@@ -69,10 +69,22 @@ export function SalesDashboardClient({ initialFilterOptions }: SalesDashboardCli
         sortByYear: '',
         sortOrder: 'desc' as 'asc' | 'desc'
     });
+    const [searchInput, setSearchInput] = useState("");
 
     const [data, setData] = useState<DashboardData | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
+    useEffect(() => {
+        const timeoutId = window.setTimeout(() => {
+            setFilters((prev) => (
+                prev.search === searchInput.trim()
+                    ? prev
+                    : { ...prev, search: searchInput.trim(), page: 1 }
+            ));
+        }, 300);
+
+        return () => window.clearTimeout(timeoutId);
+    }, [searchInput]);
 
     const fetchData = useCallback(async () => {
         setIsLoading(true);
@@ -88,7 +100,9 @@ export function SalesDashboardClient({ initialFilterOptions }: SalesDashboardCli
     }, [fetchData])
 
     const handleReset = () => {
+        setSearchInput("");
         setFilters({
+            search: "",
             years: defaultYears,
             months: defaultMonths,
             salesman: [],
@@ -102,15 +116,11 @@ export function SalesDashboardClient({ initialFilterOptions }: SalesDashboardCli
         });
     };
 
-    const toggleFilter = (key: keyof typeof filters, value: string) => {
-        setFilters(prev => {
-            const current = (prev[key] as string[]);
-            if (current.includes(value)) {
-                return { ...prev, [key]: current.filter(v => v !== value), page: 1 };
-            } else {
-                return { ...prev, [key]: [...current, value], page: 1 };
-            }
-        });
+    const updateMultiSelectFilter = (
+        key: "years" | "months" | "salesman" | "customers" | "revTypes" | "areas",
+        values: string[]
+    ) => {
+        setFilters((prev) => ({ ...prev, [key]: values, page: 1 }));
     };
 
     const handlePageChange = (newPage: number) => {
@@ -147,7 +157,9 @@ export function SalesDashboardClient({ initialFilterOptions }: SalesDashboardCli
                         <div className="relative w-96">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                             <Input
-                                placeholder="Search..."
+                                value={searchInput}
+                                onChange={(event) => setSearchInput(event.target.value)}
+                                placeholder="Cari customer, salesman, rev. type, atau area..."
                                 className="pl-10 h-10 border-slate-200 focus:ring-blue-500 rounded-lg"
                             />
                         </div>
@@ -176,7 +188,7 @@ export function SalesDashboardClient({ initialFilterOptions }: SalesDashboardCli
                         icon={<Calendar className="h-4 w-4" />}
                         options={initialFilterOptions.years}
                         selected={filters.years}
-                        onToggle={(val) => toggleFilter('years', val)}
+                        onFilterChange={(values) => updateMultiSelectFilter('years', values)}
                         primary
                     />
 
@@ -185,12 +197,9 @@ export function SalesDashboardClient({ initialFilterOptions }: SalesDashboardCli
                         icon={<Calendar className="h-4 w-4" />}
                         options={initialFilterOptions.months}
                         selected={filters.months}
-                        onToggle={(val) => toggleFilter('months', val)}
+                        onFilterChange={(values) => updateMultiSelectFilter('months', values)}
                         primary
-                        formatOption={(m) => {
-                            const months = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
-                            return months[parseInt(m) - 1] || m;
-                        }}
+                        formatOption={monthFormatter}
                     />
 
                     <div className="h-8 w-[1px] bg-slate-200 mx-2" />
@@ -200,7 +209,7 @@ export function SalesDashboardClient({ initialFilterOptions }: SalesDashboardCli
                         icon={<User className="h-4 w-4 text-slate-500" />}
                         options={initialFilterOptions.salesmen}
                         selected={filters.salesman}
-                        onToggle={(val) => toggleFilter('salesman', val)}
+                        onFilterChange={(values) => updateMultiSelectFilter('salesman', values)}
                     />
 
                     <DropdownFilter
@@ -208,7 +217,7 @@ export function SalesDashboardClient({ initialFilterOptions }: SalesDashboardCli
                         icon={<Building2 className="h-4 w-4 text-slate-500" />}
                         options={initialFilterOptions.customers}
                         selected={filters.customers}
-                        onToggle={(val) => toggleFilter('customers', val)}
+                        onFilterChange={(values) => updateMultiSelectFilter('customers', values)}
                     />
 
                     <DropdownFilter
@@ -216,7 +225,7 @@ export function SalesDashboardClient({ initialFilterOptions }: SalesDashboardCli
                         icon={<LayoutGrid className="h-4 w-4 text-slate-500" />}
                         options={initialFilterOptions.revTypes}
                         selected={filters.revTypes}
-                        onToggle={(val) => toggleFilter('revTypes', val)}
+                        onFilterChange={(values) => updateMultiSelectFilter('revTypes', values)}
                     />
 
                     <DropdownFilter
@@ -224,7 +233,7 @@ export function SalesDashboardClient({ initialFilterOptions }: SalesDashboardCli
                         icon={<MapPin className="h-4 w-4 text-slate-500" />}
                         options={initialFilterOptions.areas}
                         selected={filters.areas}
-                        onToggle={(val) => toggleFilter('areas', val)}
+                        onFilterChange={(values) => updateMultiSelectFilter('areas', values)}
                     />
                 </div>
             </div>
@@ -330,50 +339,27 @@ export function SalesDashboardClient({ initialFilterOptions }: SalesDashboardCli
     );
 }
 
-function DropdownFilter({ label, icon, options, selected, onToggle, primary = false, formatOption }: {
+function DropdownFilter({ label, icon, options, selected, onFilterChange, primary = false, formatOption }: {
     label: string,
     icon: React.ReactNode,
     options: string[],
     selected: string[],
-    onToggle: (val: string) => void,
+    onFilterChange: (values: string[]) => void,
     primary?: boolean,
     formatOption?: (val: string) => string
 }) {
     return (
-        <Popover>
-            <PopoverTrigger asChild>
-                <Button
-                    variant="outline"
-                    className={`h-11 px-4 gap-2 border-slate-200 rounded-lg justify-between min-w-[140px] ${primary ? 'bg-[#0052CC] text-white border-none hover:bg-[#0047b3] hover:text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
-                >
-                    <div className="flex items-center gap-2">
-                        {icon}
-                        <span className="font-medium text-sm whitespace-nowrap">{label}</span>
-                    </div>
-                    {selected.length > 0 && (
-                        <Badge variant="secondary" className="ml-1 h-5 min-w-[20px] px-1 bg-white text-[#0052CC] border-none font-bold">
-                            {selected.length}
-                        </Badge>
-                    )}
-                    <ChevronDown className={`h-4 w-4 opacity-70 ${primary ? 'text-white' : 'text-slate-400'}`} />
-                </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-64 p-2" align="start">
-                <div className="max-h-80 overflow-y-auto space-y-1">
-                    {options.map((option) => (
-                        <div key={option} className="flex items-center space-x-2 p-2 hover:bg-slate-50 rounded-md cursor-pointer" onClick={() => onToggle(option)}>
-                            <Checkbox
-                                id={`filter-${option}`}
-                                checked={selected.includes(option)}
-                                onCheckedChange={() => onToggle(option)}
-                            />
-                            <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer w-full">
-                                {formatOption ? formatOption(option) : option}
-                            </label>
-                        </div>
-                    ))}
-                </div>
-            </PopoverContent>
-        </Popover>
+        <DataTableFacetedFilter
+            title={label}
+            icon={icon}
+            options={options}
+            selectedValues={selected}
+            onFilterChange={onFilterChange}
+            formatOption={formatOption}
+            searchPlaceholder={`Cari ${label.toLowerCase()}...`}
+            triggerClassName={`h-11 min-w-[140px] justify-between rounded-lg border-slate-200 px-4 ${primary ? "border-none bg-[#0052CC] text-white hover:bg-[#0047b3] hover:text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}
+            badgeClassName={primary ? "border-none bg-white font-bold text-[#0052CC]" : ""}
+            contentClassName="w-72"
+        />
     );
 }

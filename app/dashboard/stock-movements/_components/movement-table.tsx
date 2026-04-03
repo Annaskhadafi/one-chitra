@@ -2,9 +2,10 @@
 
 import * as React from "react"
 import { useState, useMemo, useRef } from "react"
-import { Search, History, ChevronUp, ChevronDown, RotateCcw, Box, ArrowDown, ArrowUp, ArrowRightLeft, Trash2 } from "lucide-react"
+import { Search, History, ChevronUp, ChevronDown, RotateCcw, Box, ArrowDown, ArrowUp, ArrowRightLeft, Trash2, Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { DataTableFacetedFilter } from "@/app/dashboard/billing/_components/data-table-faceted-filter"
 import { usePermissions } from "@/hooks/use-permissions"
 import { clearStockMovements } from "@/app/actions/stock-movement"
 import { toast } from "sonner"
@@ -36,6 +37,7 @@ import {
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { format } from "date-fns"
 import type { Warehouse } from "@/lib/types"
+import * as XLSX from "xlsx"
 
 interface StockMovementWithRelations {
     id: number
@@ -99,11 +101,19 @@ const SOURCE_LABELS: Record<string, string> = {
 export function MovementTable({ data, warehouses }: MovementTableProps) {
     const [globalFilter, setGlobalFilter] = useState("")
     const [sorting, setSorting] = useState<SortingState>([{ id: "createdAt", desc: true }])
-    const [filterType, setFilterType] = useState("all")
-    const [filterSource, setFilterSource] = useState("all")
-    const [filterWarehouse, setFilterWarehouse] = useState("all")
+    const [filterTypes, setFilterTypes] = useState<string[]>([])
+    const [filterSources, setFilterSources] = useState<string[]>([])
+    const [filterWarehouses, setFilterWarehouses] = useState<string[]>([])
     const { permissions } = usePermissions()
     const isAdmin = permissions.includes("admin") || permissions.includes("superuser") || permissions.includes("admin:view")
+
+    const warehouseOptions = useMemo(
+        () => warehouses.map((warehouse) => ({
+            value: warehouse.id.toString(),
+            label: `${warehouse.description} (${warehouse.sloc})`,
+        })),
+        [warehouses]
+    )
 
     const handleClearLogs = async () => {
         if (!confirm("Apakah Anda yakin ingin menghapus SELURUH log pergerakan stok? Aksi ini tidak dapat dibatalkan.")) {
@@ -234,13 +244,13 @@ export function MovementTable({ data, warehouses }: MovementTableProps) {
 
     const filteredData = useMemo(() => {
         return data.filter((item) => {
-            const matchesType = filterType === "all" || item.type === filterType
+            const matchesType = filterTypes.length === 0 || filterTypes.includes(item.type)
             const itemSource = item.source ?? "OTHER"
-            const matchesSource = filterSource === "all" || itemSource === filterSource
-            const matchesWarehouse = filterWarehouse === "all" || item.warehouseId.toString() === filterWarehouse
+            const matchesSource = filterSources.length === 0 || filterSources.includes(itemSource)
+            const matchesWarehouse = filterWarehouses.length === 0 || filterWarehouses.includes(item.warehouseId.toString())
             return matchesType && matchesSource && matchesWarehouse
         })
-    }, [data, filterType, filterSource, filterWarehouse])
+    }, [data, filterTypes, filterSources, filterWarehouses])
 
     const table = useReactTable({
         data: filteredData,
@@ -273,6 +283,48 @@ export function MovementTable({ data, warehouses }: MovementTableProps) {
     })
 
     const { rows } = table.getRowModel()
+    const exportRows = useMemo(() => rows.map((row) => {
+        const item = row.original
+        const warehouseLabel = item.warehouse
+            ? `${item.warehouse.description ?? ""} (${item.warehouse.sloc})`.trim()
+            : "-"
+        const fromLabel = item.fromWarehouse
+            ? `${item.fromWarehouse.description ?? ""} (${item.fromWarehouse.sloc})`.trim()
+            : "-"
+        const toLabel = item.toWarehouse
+            ? `${item.toWarehouse.description ?? ""} (${item.toWarehouse.sloc})`.trim()
+            : "-"
+
+        return {
+            "Date Time": format(new Date(item.createdAt), "dd MMM yyyy HH:mm"),
+            "Type": TYPE_CONFIG[item.type]?.label ?? item.type,
+            "Source": SOURCE_LABELS[item.source ?? "OTHER"] ?? item.source ?? "OTHER",
+            "Material Number": item.product?.materialNumber ?? "",
+            "Material Description": item.product?.materialDescription ?? "",
+            "Warehouse": warehouseLabel,
+            "Customer": item.customer?.name ?? "",
+            "From Warehouse": fromLabel,
+            "To Warehouse": toLabel,
+            "Quantity": item.quantity,
+            "Reference": item.referenceNumber ?? "",
+            "Recorded By": item.recordedByUser?.name ?? "System",
+            "Notes": item.notes ?? "",
+        }
+    }), [rows])
+
+    const handleExportExcel = () => {
+        if (exportRows.length === 0) {
+            toast.error("Tidak ada data untuk diexport")
+            return
+        }
+
+        const worksheet = XLSX.utils.json_to_sheet(exportRows)
+        const workbook = XLSX.utils.book_new()
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Stock Movements")
+        XLSX.writeFile(workbook, `stock-movements-${new Date().toISOString().slice(0, 10)}.xlsx`)
+        toast.success("Export Excel berhasil")
+    }
+
     const parentRef = useRef<HTMLDivElement>(null)
     const rowVirtualizer = useVirtualizer({
         count: rows.length,
@@ -306,58 +358,55 @@ export function MovementTable({ data, warehouses }: MovementTableProps) {
 
                 <div className="w-full md:w-[200px] space-y-1.5">
                     <label className="text-sm font-medium">Movement Type</label>
-                    <Select value={filterType} onValueChange={setFilterType}>
-                        <SelectTrigger>
-                            <SelectValue placeholder="All Types" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">All Types</SelectItem>
-                            {Object.entries(TYPE_CONFIG).map(([key, config]) => (
-                                <SelectItem key={key} value={key}>{config.label}</SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
+                    <DataTableFacetedFilter
+                        title="Movement Type"
+                        options={Object.keys(TYPE_CONFIG)}
+                        selectedValues={filterTypes}
+                        onFilterChange={setFilterTypes}
+                        formatOption={(value) => TYPE_CONFIG[value]?.label ?? value}
+                        searchPlaceholder="Cari movement type..."
+                        contentClassName="w-[260px]"
+                    />
                 </div>
 
                 <div className="w-full md:w-[220px] space-y-1.5">
                     <label className="text-sm font-medium">Source</label>
-                    <Select value={filterSource} onValueChange={setFilterSource}>
-                        <SelectTrigger>
-                            <SelectValue placeholder="All Sources" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">All Sources</SelectItem>
-                            {Object.entries(SOURCE_LABELS).map(([key, label]) => (
-                                <SelectItem key={key} value={key}>{label}</SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
+                    <DataTableFacetedFilter
+                        title="Source"
+                        options={Object.keys(SOURCE_LABELS)}
+                        selectedValues={filterSources}
+                        onFilterChange={setFilterSources}
+                        formatOption={(value) => SOURCE_LABELS[value] ?? value}
+                        searchPlaceholder="Cari source..."
+                        contentClassName="w-[280px]"
+                    />
                 </div>
 
                 <div className="w-full md:w-[250px] space-y-1.5">
                     <label className="text-sm font-medium">Warehouse</label>
-                    <Select value={filterWarehouse} onValueChange={setFilterWarehouse}>
-                        <SelectTrigger>
-                            <SelectValue placeholder="All Warehouses" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">All Warehouses</SelectItem>
-                            {warehouses.map(w => (
-                                <SelectItem key={w.id} value={w.id.toString()}>
-                                    {w.description} ({w.sloc})
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
+                    <DataTableFacetedFilter
+                        title="Warehouse"
+                        options={warehouseOptions.map((option) => option.value)}
+                        selectedValues={filterWarehouses}
+                        onFilterChange={setFilterWarehouses}
+                        formatOption={(value) => warehouseOptions.find((option) => option.value === value)?.label ?? value}
+                        searchPlaceholder="Cari warehouse..."
+                        contentClassName="w-[320px]"
+                    />
                 </div>
 
                 <Button variant="outline" onClick={() => {
                     setGlobalFilter("")
-                    setFilterType("all")
-                    setFilterSource("all")
-                    setFilterWarehouse("all")
+                    setFilterTypes([])
+                    setFilterSources([])
+                    setFilterWarehouses([])
                 }}>
                     Reset Filters
+                </Button>
+
+                <Button variant="outline" onClick={handleExportExcel} className="flex items-center gap-2">
+                    <Download className="h-4 w-4" />
+                    Export Excel
                 </Button>
 
                 {isAdmin && (

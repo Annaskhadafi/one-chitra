@@ -7,17 +7,21 @@ import {
     ChevronDown,
     ChevronRight,
     Clock3,
+    Download,
     ExternalLink,
     ImageIcon,
     Maximize2,
     Minimize2,
     PackageOpen,
     Plus,
+    Search,
 } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { DataTableFacetedFilter } from "@/app/dashboard/billing/_components/data-table-faceted-filter";
 import {
     Table,
     TableBody,
@@ -26,6 +30,7 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
+import * as XLSX from "xlsx";
 
 type GoodReceiveManualItem = {
     id: number;
@@ -140,9 +145,76 @@ function ItemDetailsTable({ items, poNumber }: { items: GoodReceiveManualItem[];
 }
 
 export function GoodReceiveManualTable({ data }: { data: GoodReceiveManualRow[] }) {
-    const expandableIds = useMemo(
-        () => data.filter((item) => item.items.length > 0).map((item) => item.id),
+    const [search, setSearch] = useState("");
+    const [supplierFilters, setSupplierFilters] = useState<string[]>([]);
+    const [deliveryTypeFilters, setDeliveryTypeFilters] = useState<string[]>([]);
+    const [createdByFilters, setCreatedByFilters] = useState<string[]>([]);
+    const [warehouseFilters, setWarehouseFilters] = useState<string[]>([]);
+
+    const supplierOptions = useMemo(
+        () => Array.from(new Set(data.map((item) => item.supplier).filter(Boolean))).sort(),
         [data],
+    );
+    const createdByOptions = useMemo(
+        () => Array.from(new Set(data.map((item) => item.createdBy).filter(Boolean))).sort(),
+        [data],
+    );
+    const warehouseOptions = useMemo(
+        () =>
+            Array.from(
+                new Set(
+                    data.flatMap((item) =>
+                        item.items.map((detail) =>
+                            `${detail.warehouseSloc}${detail.warehouseDescription ? ` - ${detail.warehouseDescription}` : ""}`,
+                        ),
+                    ),
+                ),
+            ).sort(),
+        [data],
+    );
+
+    const filteredData = useMemo(() => {
+        const query = search.trim().toLowerCase();
+
+        return data.filter((item) => {
+            const matchesSearch =
+                !query ||
+                item.supplier.toLowerCase().includes(query) ||
+                item.poNumber.toLowerCase().includes(query) ||
+                item.referenceDocument?.toLowerCase().includes(query) ||
+                item.createdBy.toLowerCase().includes(query) ||
+                item.items.some((detail) =>
+                    [
+                        detail.materialNumber,
+                        detail.materialDescription ?? "",
+                        detail.notes ?? "",
+                        detail.warehouseSloc,
+                        detail.warehouseDescription ?? "",
+                    ]
+                        .join(" ")
+                        .toLowerCase()
+                        .includes(query),
+                );
+
+            const matchesSupplier = supplierFilters.length === 0 || supplierFilters.includes(item.supplier);
+            const matchesDeliveryType =
+                deliveryTypeFilters.length === 0 || deliveryTypeFilters.includes(item.deliveryType);
+            const matchesCreatedBy = createdByFilters.length === 0 || createdByFilters.includes(item.createdBy);
+            const matchesWarehouse =
+                warehouseFilters.length === 0 ||
+                item.items.some((detail) =>
+                    warehouseFilters.includes(
+                        `${detail.warehouseSloc}${detail.warehouseDescription ? ` - ${detail.warehouseDescription}` : ""}`,
+                    ),
+                );
+
+            return matchesSearch && matchesSupplier && matchesDeliveryType && matchesCreatedBy && matchesWarehouse;
+        });
+    }, [createdByFilters, data, deliveryTypeFilters, search, supplierFilters, warehouseFilters]);
+
+    const expandableIds = useMemo(
+        () => filteredData.filter((item) => item.items.length > 0).map((item) => item.id),
+        [filteredData],
     );
     const [expandedIds, setExpandedIds] = useState<number[]>([]);
 
@@ -157,6 +229,55 @@ export function GoodReceiveManualTable({ data }: { data: GoodReceiveManualRow[] 
 
     const toggleAll = () => {
         setExpandedIds(isAllExpanded ? [] : expandableIds);
+    };
+
+    const handleExportExcel = () => {
+        if (filteredData.length === 0) {
+            return;
+        }
+
+        const exportRows = filteredData.flatMap((item) => {
+            if (item.items.length === 0) {
+                return [
+                    {
+                        "Receive Date": format(new Date(item.receiveDate), "dd MMM yyyy"),
+                        "Supplier": item.supplier,
+                        "PO Number": item.poNumber,
+                        "Delivery Type": item.deliveryType,
+                        "Reference Document": item.referenceDocument ?? "",
+                        "Created By": item.createdBy,
+                        "Gap SLA": formatGapSla(item.gapSlaDays),
+                        "Created At": format(new Date(item.createdAt), "dd MMM yyyy HH:mm"),
+                        "Material Number": "",
+                        "Material Description": "",
+                        "Warehouse": "",
+                        "Qty GR": 0,
+                        "Item Notes": "",
+                    },
+                ];
+            }
+
+            return item.items.map((detail) => ({
+                "Receive Date": format(new Date(item.receiveDate), "dd MMM yyyy"),
+                "Supplier": item.supplier,
+                "PO Number": item.poNumber,
+                "Delivery Type": item.deliveryType,
+                "Reference Document": item.referenceDocument ?? "",
+                "Created By": item.createdBy,
+                "Gap SLA": formatGapSla(item.gapSlaDays),
+                "Created At": format(new Date(item.createdAt), "dd MMM yyyy HH:mm"),
+                "Material Number": detail.materialNumber,
+                "Material Description": detail.materialDescription ?? "",
+                "Warehouse": `${detail.warehouseSloc}${detail.warehouseDescription ? ` - ${detail.warehouseDescription}` : ""}`,
+                "Qty GR": detail.quantity,
+                "Item Notes": detail.notes ?? "",
+            }));
+        });
+
+        const worksheet = XLSX.utils.json_to_sheet(exportRows);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Good Receive Manual");
+        XLSX.writeFile(workbook, `good-receive-manual-${new Date().toISOString().slice(0, 10)}.xlsx`);
     };
 
     if (data.length === 0) {
@@ -183,21 +304,89 @@ export function GoodReceiveManualTable({ data }: { data: GoodReceiveManualRow[] 
 
     return (
         <div className="rounded-xl overflow-hidden">
-            <div className="flex items-center justify-end border-b px-4 py-3">
-                <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={toggleAll}
-                    disabled={expandableIds.length === 0}
-                >
-                    {isAllExpanded ? <Minimize2 className="mr-2 h-4 w-4" /> : <Maximize2 className="mr-2 h-4 w-4" />}
-                    {isAllExpanded ? "Collapse all" : "Expand all"}
-                </Button>
+            <div className="border-b px-4 py-4 space-y-3">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="relative w-full lg:max-w-md">
+                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                            value={search}
+                            onChange={(event) => setSearch(event.target.value)}
+                            placeholder="Cari PO, supplier, ref doc, creator, atau material..."
+                            className="pl-9"
+                        />
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                        <Button type="button" variant="outline" size="sm" onClick={handleExportExcel}>
+                            <Download className="mr-2 h-4 w-4" />
+                            Export Excel
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={toggleAll}
+                            disabled={expandableIds.length === 0}
+                        >
+                            {isAllExpanded ? <Minimize2 className="mr-2 h-4 w-4" /> : <Maximize2 className="mr-2 h-4 w-4" />}
+                            {isAllExpanded ? "Collapse all" : "Expand all"}
+                        </Button>
+                    </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                    <DataTableFacetedFilter
+                        title="Supplier"
+                        options={supplierOptions}
+                        selectedValues={supplierFilters}
+                        onFilterChange={setSupplierFilters}
+                        searchPlaceholder="Cari supplier..."
+                        contentClassName="w-[320px]"
+                    />
+                    <DataTableFacetedFilter
+                        title="Delivery Type"
+                        options={["Partial", "Complete"]}
+                        selectedValues={deliveryTypeFilters}
+                        onFilterChange={setDeliveryTypeFilters}
+                        searchPlaceholder="Cari delivery type..."
+                    />
+                    <DataTableFacetedFilter
+                        title="Created By"
+                        options={createdByOptions}
+                        selectedValues={createdByFilters}
+                        onFilterChange={setCreatedByFilters}
+                        searchPlaceholder="Cari creator..."
+                        contentClassName="w-[320px]"
+                    />
+                    <DataTableFacetedFilter
+                        title="Warehouse"
+                        options={warehouseOptions}
+                        selectedValues={warehouseFilters}
+                        onFilterChange={setWarehouseFilters}
+                        searchPlaceholder="Cari warehouse..."
+                        contentClassName="w-[320px]"
+                    />
+                    {(search || supplierFilters.length > 0 || deliveryTypeFilters.length > 0 || createdByFilters.length > 0 || warehouseFilters.length > 0) ? (
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                                setSearch("");
+                                setSupplierFilters([]);
+                                setDeliveryTypeFilters([]);
+                                setCreatedByFilters([]);
+                                setWarehouseFilters([]);
+                                setExpandedIds([]);
+                            }}
+                        >
+                            Reset
+                        </Button>
+                    ) : null}
+                </div>
             </div>
 
             <div className="md:hidden divide-y">
-                {data.map((item) => {
+                {filteredData.map((item) => {
                     const expanded = isExpanded(item.id);
                     const hasItems = item.items.length > 0;
 
@@ -299,7 +488,7 @@ export function GoodReceiveManualTable({ data }: { data: GoodReceiveManualRow[] 
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {data.map((item) => {
+                        {filteredData.map((item) => {
                             const expanded = isExpanded(item.id);
                             const hasItems = item.items.length > 0;
 
@@ -373,6 +562,10 @@ export function GoodReceiveManualTable({ data }: { data: GoodReceiveManualRow[] 
                         })}
                     </TableBody>
                 </Table>
+            </div>
+
+            <div className="border-t px-4 py-3 text-xs text-muted-foreground">
+                Menampilkan {filteredData.length} dari {data.length} record good receive manual.
             </div>
         </div>
     );

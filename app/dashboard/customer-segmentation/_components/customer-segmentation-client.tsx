@@ -14,11 +14,13 @@ import {
     RefreshCw,
     ArrowUpRight,
     ArrowUpDown,
-    Wand2
+    Wand2,
+    Download
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { DataTableFacetedFilter } from "@/app/dashboard/billing/_components/data-table-faceted-filter"
 import {
     Table,
     TableBody,
@@ -57,6 +59,7 @@ import { useQuery } from "@tanstack/react-query"
 import Fuse from "fuse.js"
 import { FleetDetailSheet, type FleetItem } from "./fleet-detail-sheet"
 import { CustomerHistorySheet } from "./customer-history-sheet"
+import * as XLSX from "xlsx"
 
 // --- Konfigurasi Segmen ---
 const SEGMENT_CONFIG: Record<string, { color: string; description: string }> = {
@@ -93,7 +96,7 @@ interface Stats {
 export function CustomerSegmentationClient() {
     const [rawData, setRawData] = useState<CustomerRFMAggregate[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
-    const [filterSegment, setFilterSegment] = useState('All');
+    const [filterSegments, setFilterSegments] = useState<string[]>([]);
     const [loading, setLoading] = useState(true);
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
@@ -421,10 +424,33 @@ export function CustomerSegmentationClient() {
     ], [getMatchingFleets, handleFleetClick, handleHistoryClick])
 
     const filteredData = useMemo(() => {
-        const data = filterSegment === 'All' ? rfmData : rfmData.filter(d => d.segment === filterSegment);
+        const data = filterSegments.length === 0 ? rfmData : rfmData.filter(d => filterSegments.includes(d.segment));
         // Sort by revenue (monetary) descending by default
         return data.sort((a, b) => b.monetary - a.monetary);
-    }, [rfmData, filterSegment]);
+    }, [filterSegments, rfmData]);
+
+    const handleExportExcel = () => {
+        const exportRows = table.getRowModel().rows.map((row) => {
+            const customer = row.original
+            return {
+                "Customer": customer.name,
+                "Segment": customer.segment,
+                "Recency Score": customer.r,
+                "Frequency Score": customer.f,
+                "Monetary Score": customer.m,
+                "Frequency": customer.frequency,
+                "Revenue": customer.monetary,
+                "Last Transaction": new Date(customer.lastDate).toLocaleDateString("id-ID"),
+                "First Purchase": new Date(customer.globalFirstDate).toLocaleDateString("id-ID"),
+                "Recency Days": customer.recency,
+            }
+        })
+
+        const worksheet = XLSX.utils.json_to_sheet(exportRows)
+        const workbook = XLSX.utils.book_new()
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Customer Segmentation")
+        XLSX.writeFile(workbook, `customer-segmentation-${new Date().toISOString().slice(0, 10)}.xlsx`)
+    }
 
     const table = useReactTable({
         data: filteredData,
@@ -649,16 +675,19 @@ export function CustomerSegmentationClient() {
                                     onChange={(e) => setSearchTerm(e.target.value)}
                                 />
                             </div>
-                            <select
-                                className="flex h-10 w-full md:w-auto items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                                value={filterSegment}
-                                onChange={(e) => setFilterSegment(e.target.value)}
-                            >
-                                <option value="All">Semua Segmen</option>
-                                {Object.keys(SEGMENT_CONFIG).map(s => (
-                                    <option key={s} value={s}>{s}</option>
-                                ))}
-                            </select>
+                            <DataTableFacetedFilter
+                                title="Segmen"
+                                options={Object.keys(SEGMENT_CONFIG)}
+                                selectedValues={filterSegments}
+                                onFilterChange={setFilterSegments}
+                                searchPlaceholder="Cari segmen..."
+                                triggerClassName="h-10 w-full md:w-[220px] justify-between"
+                                contentClassName="w-[300px]"
+                            />
+                            <Button variant="outline" className="gap-2" onClick={handleExportExcel}>
+                                <Download className="h-4 w-4" />
+                                Export Excel
+                            </Button>
                         </div>
                     </div>
                 </CardHeader>
