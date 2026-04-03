@@ -6,6 +6,8 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { EprIntegrasiClient } from "./epr-integrasi-client";
 import { getOcrStatusMap } from "@/app/actions/vendor-quotation";
 
+export const revalidate = 300;
+
 const VIEW_ID = "2354";
 const VIEW_URL = `https://proc-share.com/wp-json/gravityview/v1/views/${VIEW_ID}`;
 const ENTRIES_URL = `https://proc-share.com/wp-json/gravityview/v1/views/${VIEW_ID}/entries.json?limit=0`;
@@ -42,9 +44,18 @@ type GrManualRow = {
     createdBy: string;
 };
 
+function extractRawDateValue(value: unknown) {
+    if (typeof value === "string") return value;
+    if (Array.isArray(value) && typeof value[0] === "string") return value[0];
+    return null;
+}
+
 async function fetchJsonWithNestedString<T>(url: string): Promise<T> {
     try {
-        const response = await fetch(url, { cache: "no-store", headers: { Accept: "application/json" } });
+        const response = await fetch(url, {
+            next: { revalidate },
+            headers: { Accept: "application/json" },
+        });
         if (!response.ok) {
             throw new Error(`Request failed with status ${response.status}`);
         }
@@ -65,22 +76,16 @@ async function fetchJsonWithNestedString<T>(url: string): Promise<T> {
     }
 }
 
-function isDateRequiredFrom2026(value: any) {
-    let rawValue: string | null = null;
-    if (typeof value === "string") rawValue = value;
-    else if (Array.isArray(value) && typeof value[0] === "string") rawValue = value[0];
-    
+function isDateRequiredFrom2026(value: unknown) {
+    const rawValue = extractRawDateValue(value);
     if (!rawValue) return false;
     const date = new Date(rawValue);
     if (Number.isNaN(date.getTime())) return false;
     return date >= MIN_DATE_REQUIRED;
 }
 
-function getDateRequiredTimestamp(value: any) {
-    let rawValue: string | null = null;
-    if (typeof value === "string") rawValue = value;
-    else if (Array.isArray(value) && typeof value[0] === "string") rawValue = value[0];
-
+function getDateRequiredTimestamp(value: unknown) {
+    const rawValue = extractRawDateValue(value);
     if (!rawValue) return 0;
     const date = new Date(rawValue);
     if (Number.isNaN(date.getTime())) return 0;

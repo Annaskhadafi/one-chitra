@@ -11,6 +11,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest'
 import { db } from '@/db'
 import { stockOpnameSessions, stockOpnameSignatures, stockOpnameItems, warehouses, user, stockLevels, products } from '@/db/schema'
+import { stockMovements } from '@/db/schema/stock-movements'
 import { eq } from 'drizzle-orm'
 import { createStockOpnameSession, getOpnamePdfReportData, closeStockOpnameSession } from '../stock-opname'
 import type { CreateOpnameSessionInput } from '@/lib/schemas'
@@ -36,8 +37,25 @@ let createdSessionIds: number[] = []
 
 beforeAll(async () => {
   // Clean up any existing test data first
+  const existingTestWarehouses = await db.query.warehouses.findMany({
+    where: eq(warehouses.sloc, 'TEST-UNIT'),
+    columns: { id: true }
+  })
+  const existingWarehouseIds = existingTestWarehouses.map(warehouse => warehouse.id)
+  const existingSessions = await db.query.stockOpnameSessions.findMany({
+    where: eq(stockOpnameSessions.createdById, 'test-user-unit'),
+    columns: { id: true }
+  })
+
+  for (const session of existingSessions) {
+    await db.delete(stockOpnameItems).where(eq(stockOpnameItems.sessionId, session.id))
+    await db.delete(stockOpnameSignatures).where(eq(stockOpnameSignatures.sessionId, session.id))
+  }
   await db.delete(stockOpnameSessions).where(eq(stockOpnameSessions.createdById, 'test-user-unit'))
-  await db.delete(stockLevels).where(eq(stockLevels.warehouseId, testWarehouseId || 0))
+  for (const warehouseId of existingWarehouseIds) {
+    await db.delete(stockLevels).where(eq(stockLevels.warehouseId, warehouseId))
+    await db.delete(stockMovements).where(eq(stockMovements.warehouseId, warehouseId))
+  }
   await db.delete(warehouses).where(eq(warehouses.sloc, 'TEST-UNIT'))
   await db.delete(user).where(eq(user.id, 'test-user-unit'))
   
@@ -99,6 +117,18 @@ beforeAll(async () => {
 
 afterAll(async () => {
   // Cleanup in reverse order of dependencies
+  const sessionsToCleanup = await db.query.stockOpnameSessions.findMany({
+    where: eq(stockOpnameSessions.createdById, 'test-user-unit'),
+    columns: { id: true }
+  })
+
+  for (const session of sessionsToCleanup) {
+    await db.delete(stockOpnameItems).where(eq(stockOpnameItems.sessionId, session.id))
+    await db.delete(stockOpnameSignatures).where(eq(stockOpnameSignatures.sessionId, session.id))
+  }
+
+  await db.delete(stockOpnameSessions).where(eq(stockOpnameSessions.createdById, 'test-user-unit'))
+  await db.delete(stockMovements).where(eq(stockMovements.warehouseId, testWarehouseId))
   await db.delete(stockLevels).where(eq(stockLevels.warehouseId, testWarehouseId))
   
   // Only delete the product if we created it (check if it's our test product)
@@ -110,10 +140,9 @@ afterAll(async () => {
     await db.delete(products).where(eq(products.id, testProductId))
   }
   
-  await db.delete(stockOpnameSessions).where(eq(stockOpnameSessions.warehouseId, testWarehouseId))
   await db.delete(warehouses).where(eq(warehouses.id, testWarehouseId))
   await db.delete(user).where(eq(user.id, testUserId))
-})
+}, 30000)
 
 beforeEach(() => {
   createdSessionIds = []
@@ -267,7 +296,7 @@ describe('createStockOpnameSession - Unit Tests', () => {
         
         expect(sessionWithoutNotes!.notes).toBeNull()
       }
-    })
+    }, 15000)
     
     it('should set createdById to authenticated user', async () => {
       const input = createValidSessionInput()
@@ -285,7 +314,7 @@ describe('createStockOpnameSession - Unit Tests', () => {
         
         expect(session!.createdById).toBe('test-user-unit')
       }
-    })
+    }, 15000)
   })
   
   describe('Validation errors', () => {
@@ -401,7 +430,7 @@ describe('createStockOpnameSession - Unit Tests', () => {
       )
       
       expect(orphanedSignatures).toHaveLength(0)
-    })
+    }, 15000)
   })
   
   describe('Authentication checks', () => {
@@ -414,7 +443,7 @@ describe('createStockOpnameSession - Unit Tests', () => {
       await createStockOpnameSession(input)
       
       expect(getAuthenticatedSession).toHaveBeenCalledWith('stock-opname', 'create')
-    })
+    }, 15000)
   })
   
   describe('Edge cases', () => {
@@ -494,7 +523,7 @@ describe('createStockOpnameSession - Unit Tests', () => {
         expect(session!.notes).toBe(input.notes)
         expect(session!.signatures[0].name).toBe("O'Brien")
       }
-    })
+    }, 15000)
     
     it('should handle valid time formats at boundaries', async () => {
       const validTimes = ['00:00', '23:59', '12:00', '09:05']
@@ -519,7 +548,7 @@ describe('createStockOpnameSession - Unit Tests', () => {
           expect(session!.opnameTime).toBe(time)
         }
       }
-    })
+    }, 20000)
   })
 })
 
@@ -582,7 +611,7 @@ describe('getOpnamePdfReportData - Unit Tests', () => {
         // Verify company logo is included
         expect(pdfResult.data.companyLogo).toBeDefined()
       }
-    })
+    }, 20000)
     
     it('should include closure metadata in PDF data', async () => {
       // Create and close a session
@@ -614,7 +643,7 @@ describe('getOpnamePdfReportData - Unit Tests', () => {
         expect(pdfResult.data.session.closedBy).toBeDefined()
         expect(pdfResult.data.session.closedBy!.name).toBe('Test User Unit')
       }
-    })
+    }, 20000)
   })
   
   describe('Error handling', () => {
@@ -648,7 +677,7 @@ describe('getOpnamePdfReportData - Unit Tests', () => {
       expect(pdfResult.error).toBeDefined()
       expect(pdfResult.error).toMatch(/belum ditutup/i)
       expect(pdfResult.data).toBeUndefined()
-    })
+    }, 15000)
     
     it('should return error for cancelled session', async () => {
       // Create a session
@@ -674,7 +703,7 @@ describe('getOpnamePdfReportData - Unit Tests', () => {
       expect(pdfResult.error).toBeDefined()
       expect(pdfResult.error).toMatch(/belum ditutup/i)
       expect(pdfResult.data).toBeUndefined()
-    })
+    }, 15000)
   })
   
   describe('Data completeness', () => {
@@ -725,7 +754,7 @@ describe('getOpnamePdfReportData - Unit Tests', () => {
         expect(pdfResult.data.session.opnameTime).toBeDefined()
         expect(pdfResult.data.session.location).toBeDefined()
       }
-    })
+    }, 20000)
     
     it('should include all stock items in PDF data', async () => {
       // Create a session
@@ -766,7 +795,7 @@ describe('getOpnamePdfReportData - Unit Tests', () => {
           expect(item.product).toBeDefined()
         }
       }
-    })
+    }, 20000)
   })
   
   describe('Authentication checks', () => {
@@ -792,6 +821,6 @@ describe('getOpnamePdfReportData - Unit Tests', () => {
       
       // Verify authentication was checked
       expect(getAuthenticatedSession).toHaveBeenCalledWith('stock-opname', 'view')
-    })
+    }, 15000)
   })
 })

@@ -9,7 +9,7 @@ import { eq, sql, desc, and, ilike, or, gte, lte, lt, gt, inArray, asc } from "d
 import { getAuthenticatedSession } from "@/lib/rbac"
 import { getFleetList } from "./fleet"
 import { revalidatePath } from "next/cache"
-import { calculateMovingAverage } from "@/lib/ai-utils"
+import { calculateAccuracy, calculateMovingAverage } from "@/lib/ai-utils"
 import { salesRevenueCountableQty } from "@/lib/sales-revenue-sql"
 
 const GROQ_API_KEY = "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";
@@ -29,6 +29,7 @@ const nonCancelledSalesRevenueCondition = sql`upper(trim(coalesce(${salesRevenue
 const DEFAULT_LEAD_TIME_DAYS = 21
 const MONTHS_OF_HISTORY = 24
 const FORECAST_MONTHS = 6
+const BULK_PREDICTION_DELAY_MS = process.env.NODE_ENV === "test" ? 0 : 2000
 
 const SERVICE_LEVEL_Z_SCORES: Record<number, number> = {
     90: 1.28,
@@ -261,6 +262,14 @@ const addDaysToDate = (date: Date, days: number) => {
     const nextDate = new Date(date)
     nextDate.setDate(nextDate.getDate() + days)
     return nextDate
+}
+
+const wait = async (milliseconds: number) => {
+    if (milliseconds <= 0) {
+        return
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, milliseconds))
 }
 
 const serializeDateValue = (value: string | Date | null | undefined) => {
@@ -604,7 +613,7 @@ export async function getRecentPredictions(filters?: PredictionFilters): Promise
         };
     } catch (error) {
         console.error("Failed to fetch predictions:", error);
-    return { success: false, error: "Failed to fetch MAGIC predictions" };
+        return { success: false, error: "Failed to fetch AI predictions" };
     }
 }
 
@@ -2738,7 +2747,7 @@ export async function processBulkPredictions(
 
                         // Add delay before next iteration (Requirement 4.6)
                         if (i < materialNumbers.length - 1) {
-                            await new Promise(resolve => setTimeout(resolve, 2000));
+                            await wait(BULK_PREDICTION_DELAY_MS);
                         }
                         continue;
                     }
@@ -2782,7 +2791,7 @@ export async function processBulkPredictions(
 
             // Add 2-second delay between requests to avoid rate limiting (Requirement 4.6)
             if (i < materialNumbers.length - 1) {
-                await new Promise(resolve => setTimeout(resolve, 2000));
+                await wait(BULK_PREDICTION_DELAY_MS);
             }
         }
 
@@ -2990,7 +2999,7 @@ export async function exportToExcel(filters?: {
         const typeLabel = filters?.predictionType && filters.predictionType !== 'ALL'
             ? filters.predictionType
             : 'All';
-  const filename = `MAGIC_Forecast_${typeLabel}_${timestamp}.xlsx`;
+        const filename = `AI_Forecast_${typeLabel}_${timestamp}.xlsx`;
 
         return {
             success: true,
@@ -3101,10 +3110,10 @@ export async function updateMLSettings(settings: {
         };
 
     } catch (error) {
-  console.error("Failed to update MAGIC settings:", error);
-  return {
-    success: false,
-    error: error instanceof Error ? error.message : "Failed to update MAGIC settings"
+        console.error("Failed to update AI settings:", error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Failed to update AI settings"
         };
     }
 }
@@ -3122,7 +3131,7 @@ export async function testMLSettings(testSettings: {
         await getAuthenticatedSession("inventory", "edit");
 
         // Use a simple test prompt
-    const testPrompt = `Anda adalah MAGIC Analis Inventory. Berikan rekomendasi singkat untuk produk test.
+        const testPrompt = `Anda adalah AI Analis Inventory. Berikan rekomendasi singkat untuk produk test.
 
 Format Response Anda HARUS valid JSON saja:
 {
@@ -3176,10 +3185,10 @@ Format Response Anda HARUS valid JSON saja:
         };
 
     } catch (error) {
-    console.error("Failed to test MAGIC settings:", error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to test MAGIC settings"
+        console.error("Failed to test AI settings:", error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Failed to test AI settings"
         };
     }
 }
@@ -3214,14 +3223,14 @@ export async function resetMLSettings(updatedBy: string) {
 
         return {
             success: true,
-      message: 'MAGIC settings reset to defaults'
+            message: 'AI settings reset to defaults'
         };
 
     } catch (error) {
-    console.error("Failed to reset MAGIC settings:", error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to reset MAGIC settings"
+        console.error("Failed to reset AI settings:", error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Failed to reset AI settings"
         };
     }
 }
@@ -3464,7 +3473,7 @@ export async function exportToPDF(filters?: {
         const typeLabel = filters?.predictionType && filters.predictionType !== 'ALL'
             ? filters.predictionType
             : 'All';
-  const filename = `MAGIC_Forecast_${typeLabel}_${dateStamp}.pdf`;
+        const filename = `AI_Forecast_${typeLabel}_${dateStamp}.pdf`;
 
         return {
             success: true,
@@ -3684,53 +3693,49 @@ export async function updateComparisonData() {
             );
 
         let updatedCount = 0;
+        const chunkSize = process.env.NODE_ENV === "test" ? 25 : 10;
 
-        // Update each prediction with actual sales data
-        for (const prediction of predictions) {
-            // Calculate date range for actual sales
-            // Look at sales data from prediction date to 30 days after
-            const predictionDate = prediction.createdAt;
-            const endDate = new Date(predictionDate);
-            endDate.setDate(endDate.getDate() + 30);
+        for (let startIndex = 0; startIndex < predictions.length; startIndex += chunkSize) {
+            const chunk = predictions.slice(startIndex, startIndex + chunkSize);
 
-            // Query actual sales from SAP for this product in the time period
-            // Convert dates to string format for comparison with date column
-            const predictionDateStr = predictionDate.toISOString().split('T')[0];
-            const endDateStr = endDate.toISOString().split('T')[0];
+            const chunkResults = await Promise.all(chunk.map(async (prediction) => {
+                const predictionDate = prediction.createdAt;
+                const endDate = new Date(predictionDate);
+                endDate.setDate(endDate.getDate() + 30);
 
-            const salesResult = await db
-                .select({
-                    totalQty: sql<number>`COALESCE(SUM(${salesRevenueCountableQty}), 0)`,
-                })
-                .from(salesRevenueSap)
-                .where(
-                    and(
-                        eq(salesRevenueSap.materialNo, prediction.productCode),
-                        sql`${salesRevenueSap.billingDate} >= ${predictionDateStr}::date`,
-                        sql`${salesRevenueSap.billingDate} <= ${endDateStr}::date`
-                    )
+                const predictionDateStr = predictionDate.toISOString().split('T')[0];
+                const endDateStr = endDate.toISOString().split('T')[0];
+
+                const salesResult = await db
+                    .select({
+                        totalQty: sql<number>`COALESCE(SUM(${salesRevenueCountableQty}), 0)`,
+                    })
+                    .from(salesRevenueSap)
+                    .where(
+                        and(
+                            eq(salesRevenueSap.materialNo, prediction.productCode),
+                            sql`${salesRevenueSap.billingDate} >= ${predictionDateStr}::date`,
+                            sql`${salesRevenueSap.billingDate} <= ${endDateStr}::date`
+                        )
+                    );
+
+                const actualSales = Number(salesResult[0]?.totalQty || 0);
+                const accuracyPercentage = Number(
+                    calculateAccuracy(prediction.recommendedStock, actualSales).toFixed(2)
                 );
 
-            const actualSales = Number(salesResult[0]?.totalQty || 0);
+                await db
+                    .update(aiInventoryPredictions)
+                    .set({
+                        actualSales,
+                        accuracyPercentage,
+                    })
+                    .where(eq(aiInventoryPredictions.id, prediction.id));
 
-            // Calculate accuracy percentage
-            let accuracyPercentage: number | null = null;
-            if (actualSales > 0) {
-                const predicted = prediction.recommendedStock;
-                const variance = Math.abs((predicted - actualSales) / actualSales * 100);
-                accuracyPercentage = Math.max(0, 100 - variance);
-            }
+                return 1;
+            }));
 
-            // Update the prediction with actual sales and accuracy
-            await db
-                .update(aiInventoryPredictions)
-                .set({
-                    actualSales,
-                    accuracyPercentage: accuracyPercentage !== null ? Number(accuracyPercentage.toFixed(2)) : null,
-                })
-                .where(eq(aiInventoryPredictions.id, prediction.id));
-
-            updatedCount++;
+            updatedCount += chunkResults.reduce((sum, item) => sum + item, 0);
         }
 
         return {

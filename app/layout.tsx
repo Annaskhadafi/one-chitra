@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono, Parkinsans } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Providers } from "@/components/providers";
 import "./globals.css";
@@ -14,9 +15,41 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-const parkinsans = Parkinsans({
+const parkinsans = localFont({
   variable: "--font-parkinsans",
-  subsets: ["latin"],
+  display: "swap",
+  src: [
+    {
+      path: "./fonts/parkinsans/Parkinsans-300.ttf",
+      weight: "300",
+      style: "normal",
+    },
+    {
+      path: "./fonts/parkinsans/Parkinsans-400.ttf",
+      weight: "400",
+      style: "normal",
+    },
+    {
+      path: "./fonts/parkinsans/Parkinsans-500.ttf",
+      weight: "500",
+      style: "normal",
+    },
+    {
+      path: "./fonts/parkinsans/Parkinsans-600.ttf",
+      weight: "600",
+      style: "normal",
+    },
+    {
+      path: "./fonts/parkinsans/Parkinsans-700.ttf",
+      weight: "700",
+      style: "normal",
+    },
+    {
+      path: "./fonts/parkinsans/Parkinsans-800.ttf",
+      weight: "800",
+      style: "normal",
+    },
+  ],
 });
 
 export const viewport: Viewport = {

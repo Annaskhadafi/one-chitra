@@ -24,6 +24,10 @@ export function getDateRange(days: number): { start: Date; end: Date } {
  * @returns Accuracy percentage (0-100)
  */
 export function calculateAccuracy(predicted: number, actual: number): number {
+    if (!Number.isFinite(predicted) || !Number.isFinite(actual)) {
+        return 0
+    }
+
     if (actual === 0) {
         // If actual is 0, return 0% accuracy if predicted > 0, else 100%
         return predicted === 0 ? 100 : 0

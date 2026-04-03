@@ -5,12 +5,17 @@ import { Truck } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
 import { AutoCloseSidebar } from "@/components/auto-close-sidebar"
 
+export const dynamic = "force-dynamic"
+
 export default async function LogisticsCostsPage() {
     const data = await getLogisticsCosts()
-    const deliverySettlementLookup = await getLatestSettlementByDeliveryIds(data.flatMap((item) => item.deliveryIds ?? []))
-    const tripSettlementLookup = await getLatestSettlementByFleetTripIds(
-        data.filter((item) => item.entryType === "trip").map((item) => item.id),
-    )
+    const [deliverySettlementLookup, tripSettlementLookup] = await Promise.all([
+        getLatestSettlementByDeliveryIds(data.flatMap((item) => item.deliveryIds ?? [])),
+        getLatestSettlementByFleetTripIds(
+            data.filter((item) => item.entryType === "trip").map((item) => item.id),
+        ),
+    ])
+
     const enrichedData = data.map((item) => {
         const settlement = item.entryType === "trip"
             ? tripSettlementLookup[item.id]

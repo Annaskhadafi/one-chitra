@@ -5,12 +5,24 @@ import { db } from "@/db"
 import { roles, permissions, rolePermissions } from "@/db/schema"
 import { eq } from "drizzle-orm"
 
-export async function checkPermission(resource: string, action: 'view' | 'create' | 'edit' | 'delete') {
-    let session;
+type AuthSession = NonNullable<Awaited<ReturnType<typeof auth.api.getSession>>>
+
+async function getSessionFromRequestContext(): Promise<AuthSession | null> {
+    return auth.api.getSession({
+        headers: await headers()
+    })
+}
+
+export async function checkPermission(
+    resource: string,
+    action: 'view' | 'create' | 'edit' | 'delete',
+    existingSession?: AuthSession | null,
+) {
+    let session = existingSession;
     try {
-        session = await auth.api.getSession({
-            headers: await headers()
-        })
+        if (!session) {
+            session = await getSessionFromRequestContext()
+        }
     } catch (e) {
         if (process.env.NODE_ENV !== "production") {
             console.log("Permission check skipped: No request context detected (running in script)");
@@ -55,11 +67,9 @@ export async function checkPermission(resource: string, action: 'view' | 'create
  * Returns the current user session if authenticated and has permission, otherwise throws error.
  */
 export async function getAuthenticatedSession(resource?: string, action?: 'view' | 'create' | 'edit' | 'delete') {
-    let session;
+    let session: AuthSession | null;
     try {
-        session = await auth.api.getSession({
-            headers: await headers()
-        })
+        session = await getSessionFromRequestContext()
     } catch (e) {
         if (process.env.NODE_ENV !== "production") {
             console.log("Session lookup fallback for build/scripts");
@@ -73,7 +83,7 @@ export async function getAuthenticatedSession(resource?: string, action?: 'view'
     }
 
     if (resource && action) {
-        await checkPermission(resource, action)
+        await checkPermission(resource, action, session)
     }
 
     return session

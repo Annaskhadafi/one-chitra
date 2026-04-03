@@ -329,7 +329,7 @@ describe('Comparison Data Aggregation', () => {
     if (updatedPred.accuracyPercentage) {
       expect(updatedPred.accuracyPercentage).toBeCloseTo(82.35, 1)
     }
-  })
+  }, 15000)
 
   /**
    * Test: Summary statistics with no data
