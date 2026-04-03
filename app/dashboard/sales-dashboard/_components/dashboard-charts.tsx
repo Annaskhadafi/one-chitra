@@ -120,13 +120,15 @@ export function DashboardCharts({ categoryStats, salesStats, monthlyStats, years
 
     // Prepare Salesman Data
     const salesChartData = useMemo(() => {
-        const salesmen = Array.from(new Set(salesStats.map(s => s.salesman).filter(Boolean)));
+        const validSalesStats = salesStats.filter(s => s.salesman && s.salesman.trim());
+        const salesmen = Array.from(new Set(validSalesStats.map(s => s.salesman).filter(Boolean)));
         const data = salesmen.map((salesman) => {
-            const parts = salesman!.split(' ');
+            const trimmedSalesman = salesman!.trim();
+            const parts = trimmedSalesman.split(' ');
             const middleName = parts.length > 1 ? parts.slice(0, -1).join(' ') : parts[parts.length - 1];
             const row: Record<string, string | number> = { name: middleName };
             sortedYears.forEach(year => {
-                row[year] = salesStats.find(s => s.salesman === salesman && s.year === year)?.revenue || 0;
+                row[year] = validSalesStats.find(s => s.salesman?.trim() === trimmedSalesman && s.year === year)?.revenue || 0;
             });
             return row;
         });
@@ -183,11 +185,11 @@ export function DashboardCharts({ categoryStats, salesStats, monthlyStats, years
                 <CardHeader className="pb-2">
                     <CardTitle className="text-sm font-bold text-center text-[#172B4D] uppercase">Revenue by Sales Name</CardTitle>
                 </CardHeader>
-                <CardContent className="h-[400px]">
+                <CardContent className="h-[450px]">
                     <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={salesChartData} barGap={2}>
+                        <BarChart data={salesChartData} barGap={2} margin={{ top: 20, right: 30, bottom: 80, left: 20 }}>
                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
-                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: '#64748B' }} />
+                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: '#64748B' }} angle={-45} textAnchor="end" interval={0} />
                             <YAxis tickFormatter={formatRevenue} axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748B' }} />
                             <Tooltip formatter={(val: number) => formatRevenue(val)} cursor={{ fill: '#F1F5F9' }} />
                             <Legend verticalAlign="top" iconType="rect" iconSize={10} wrapperStyle={{ fontSize: '10px', paddingTop: '0px', paddingBottom: '20px' }} />

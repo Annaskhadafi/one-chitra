@@ -294,13 +294,13 @@ export async function getSalesDashboardData(filters: SalesDashboardFilters = {})
             .groupBy(sql`TRIM(${salesRevenueSap.revType})`, sql`EXTRACT(YEAR FROM ${salesRevenueSap.billingDate})`);
 
         const salesDataRaw = await db.select({
-            salesman: salesRevenueSap.salesman,
+            salesman: sql<string>`TRIM(${salesRevenueSap.salesman})`,
             year: sql<string>`EXTRACT(YEAR FROM ${salesRevenueSap.billingDate})::text`,
             revenue: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInDocCurr}, 0))`
         })
             .from(salesRevenueSap)
             .where(finalWhere)
-            .groupBy(salesRevenueSap.salesman, sql`EXTRACT(YEAR FROM ${salesRevenueSap.billingDate})`);
+            .groupBy(sql`TRIM(${salesRevenueSap.salesman})`, sql`EXTRACT(YEAR FROM ${salesRevenueSap.billingDate})`);
 
         const monthlyDataRaw = await db.select({
             month: sql<string>`LPAD(EXTRACT(MONTH FROM ${salesRevenueSap.billingDate})::text, 2, '0')`,
