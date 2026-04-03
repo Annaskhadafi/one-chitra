@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { getSalesDashboardData } from "@/app/actions/sales-dashboard"
+import { getSalesDashboardData, getSalesDashboardDynamicFilters } from "@/app/actions/sales-dashboard"
 import { DataTableFacetedFilter } from "@/app/dashboard/billing/_components/data-table-faceted-filter"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -41,7 +41,7 @@ interface DashboardData {
     customerOrder: { customerName: string | null; totalRevenue: number }[];
     totalCustomers: number;
     categoryStats: { category: string | null; year: string; revenue: number }[];
-    areaStats: { area: string | null; year: string; revenue: number }[];
+    salesStats: { salesman: string | null; year: string; revenue: number }[];
     monthlyStats: { month: string; year: string; revenue: number }[];
 }
 
@@ -70,6 +70,10 @@ export function SalesDashboardClient({ initialFilterOptions }: SalesDashboardCli
         sortOrder: 'desc' as 'asc' | 'desc'
     });
     const [searchInput, setSearchInput] = useState("");
+    const [dynamicFilterOptions, setDynamicFilterOptions] = useState({
+        customers: initialFilterOptions.customers,
+        salesmen: initialFilterOptions.salesmen,
+    });
 
     const [data, setData] = useState<DashboardData | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -99,8 +103,52 @@ export function SalesDashboardClient({ initialFilterOptions }: SalesDashboardCli
         fetchData()
     }, [fetchData])
 
+    useEffect(() => {
+        let isActive = true;
+
+        const fetchDynamicFilters = async () => {
+            const result = await getSalesDashboardDynamicFilters(filters);
+            if (!isActive || !result.success || !result.data) {
+                return;
+            }
+
+            setDynamicFilterOptions({
+                customers: result.data.customers,
+                salesmen: result.data.salesmen,
+            });
+        };
+
+        fetchDynamicFilters();
+
+        return () => {
+            isActive = false;
+        };
+    }, [filters]);
+
+    useEffect(() => {
+        setFilters((prev) => {
+            const nextSalesman = prev.salesman.filter((value) => dynamicFilterOptions.salesmen.includes(value));
+            const nextCustomers = prev.customers.filter((value) => dynamicFilterOptions.customers.includes(value));
+
+            if (nextSalesman.length === prev.salesman.length && nextCustomers.length === prev.customers.length) {
+                return prev;
+            }
+
+            return {
+                ...prev,
+                salesman: nextSalesman,
+                customers: nextCustomers,
+                page: 1,
+            };
+        });
+    }, [dynamicFilterOptions]);
+
     const handleReset = () => {
         setSearchInput("");
+        setDynamicFilterOptions({
+            customers: initialFilterOptions.customers,
+            salesmen: initialFilterOptions.salesmen,
+        });
         setFilters({
             search: "",
             years: defaultYears,
@@ -207,7 +255,7 @@ export function SalesDashboardClient({ initialFilterOptions }: SalesDashboardCli
                     <DropdownFilter
                         label="Salesman"
                         icon={<User className="h-4 w-4 text-slate-500" />}
-                        options={initialFilterOptions.salesmen}
+                        options={dynamicFilterOptions.salesmen}
                         selected={filters.salesman}
                         onFilterChange={(values) => updateMultiSelectFilter('salesman', values)}
                     />
@@ -215,7 +263,7 @@ export function SalesDashboardClient({ initialFilterOptions }: SalesDashboardCli
                     <DropdownFilter
                         label="Customer N..."
                         icon={<Building2 className="h-4 w-4 text-slate-500" />}
-                        options={initialFilterOptions.customers}
+                        options={dynamicFilterOptions.customers}
                         selected={filters.customers}
                         onFilterChange={(values) => updateMultiSelectFilter('customers', values)}
                     />
@@ -247,9 +295,9 @@ export function SalesDashboardClient({ initialFilterOptions }: SalesDashboardCli
                             ...item,
                             category: item.category ?? undefined,
                         }))}
-                        areaStats={data.areaStats.map((item) => ({
+                        salesStats={data.salesStats.map((item) => ({
                             ...item,
-                            area: item.area ?? undefined,
+                            salesman: item.salesman ?? undefined,
                         }))}
                         monthlyStats={data.monthlyStats}
                         years={filters.years}

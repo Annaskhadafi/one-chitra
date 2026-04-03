@@ -19,6 +19,11 @@ export interface SalesDashboardFilters {
     sortOrder?: 'asc' | 'desc';
 }
 
+type SalesDashboardFilterKey = keyof Pick<
+    SalesDashboardFilters,
+    "search" | "years" | "months" | "salesman" | "customers" | "revTypes" | "areas"
+>;
+
 export async function getSalesDashboardFilters() {
     try {
         const baseWhere = and(
@@ -70,9 +75,9 @@ export async function getSalesDashboardFilters() {
         return {
             success: true,
             data: {
-                customers: customers.map(c => c.v).filter(Boolean),
-                salesmen: salesmen.map(s => s.v).filter(Boolean),
-                revTypes: revTypes.map(r => r.v?.trim()).filter(Boolean),
+                customers: customers.map(c => c.v).filter((value): value is string => Boolean(value)),
+                salesmen: salesmen.map(s => s.v).filter((value): value is string => Boolean(value)),
+                revTypes: revTypes.map(r => r.v?.trim()).filter((value): value is string => Boolean(value)),
                 areas: uniqueAreas,
                 years: Array.from(years).sort().reverse(),
                 months: Array.from(months).sort(),
@@ -108,6 +113,110 @@ const areaCaseSql = sql`
     END
 `;
 
+function buildSalesDashboardWhere(
+    filters: SalesDashboardFilters = {},
+    excludeKeys: SalesDashboardFilterKey[] = []
+) {
+    const {
+        search = "",
+        years = [],
+        months = [],
+        salesman = [],
+        customers = [],
+        revTypes = [],
+        areas = [],
+    } = filters;
+
+    const filterArray: (SQL | undefined)[] = [
+        and(
+            isNotNull(salesRevenueSap.billingDate),
+            or(
+                sql`${salesRevenueSap.customerName} IS NULL`,
+                and(
+                    notIlike(salesRevenueSap.customerName, '%Chitra Paratama Singapore Branch%'),
+                    notIlike(salesRevenueSap.customerName, '%Transitetyre B.V%'),
+                    notIlike(salesRevenueSap.customerName, '%TRANSITYRE B.V%')
+                )
+            )
+        )
+    ];
+
+    if (!excludeKeys.includes("customers") && customers.length > 0) {
+        filterArray.push(sql`${salesRevenueSap.customerName} IN ${customers}`);
+    }
+    if (!excludeKeys.includes("salesman") && salesman.length > 0) {
+        filterArray.push(sql`${salesRevenueSap.salesman} IN ${salesman}`);
+    }
+    if (!excludeKeys.includes("revTypes") && revTypes.length > 0) {
+        filterArray.push(sql`TRIM(${salesRevenueSap.revType}) IN ${revTypes}`);
+    }
+    if (!excludeKeys.includes("search") && search.trim()) {
+        const searchPattern = `%${search.trim()}%`;
+        filterArray.push(or(
+            ilike(salesRevenueSap.customerName, searchPattern),
+            ilike(salesRevenueSap.salesman, searchPattern),
+            ilike(salesRevenueSap.revType, searchPattern),
+            ilike(salesRevenueSap.plant, searchPattern),
+            sql`${areaCaseSql} ILIKE ${searchPattern}`
+        ));
+    }
+    if (!excludeKeys.includes("years") && years.length > 0) {
+        filterArray.push(or(...years.map(y => sql`EXTRACT(YEAR FROM ${salesRevenueSap.billingDate}) = ${Number(y)}`)));
+    }
+    if (!excludeKeys.includes("months") && months.length > 0) {
+        filterArray.push(or(...months.map(m => sql`EXTRACT(MONTH FROM ${salesRevenueSap.billingDate}) = ${Number(m)}`)));
+    }
+    if (!excludeKeys.includes("areas") && areas.length > 0) {
+        filterArray.push(
+            or(
+                ...areas.map((area) => sql`
+                    CASE 
+                        WHEN ${salesRevenueSap.plant} IN ('2001', '2002') THEN 'KALIMANTAN TIMUR'
+                        WHEN ${salesRevenueSap.plant} = '3001' THEN 'KALIMANTAN SELATAN'
+                        WHEN ${salesRevenueSap.plant} = '4001' THEN 'SUMATERA SELATAN'
+                        WHEN ${salesRevenueSap.plant} = '5001' THEN 'SULAWESI'
+                        WHEN ${salesRevenueSap.plant} = '1001' THEN 'JAWA BARAT'
+                        WHEN ${salesRevenueSap.plant} = '6001' THEN 'PEKANBARU'
+                        WHEN ${salesRevenueSap.plant} = '7001' THEN 'SANGATA'
+                        WHEN ${salesRevenueSap.plant} = '8001' THEN 'KENDARI'
+                        ELSE 'OTHER'
+                    END = ${area}
+                `)
+            )
+        );
+    }
+
+    return and(...filterArray);
+}
+
+export async function getSalesDashboardDynamicFilters(filters: SalesDashboardFilters = {}) {
+    try {
+        const [customers, salesmen] = await Promise.all([
+            db
+                .selectDistinct({ v: salesRevenueSap.customerName })
+                .from(salesRevenueSap)
+                .where(buildSalesDashboardWhere(filters, ["customers"]))
+                .orderBy(salesRevenueSap.customerName),
+            db
+                .selectDistinct({ v: salesRevenueSap.salesman })
+                .from(salesRevenueSap)
+                .where(buildSalesDashboardWhere(filters, ["salesman"]))
+                .orderBy(salesRevenueSap.salesman),
+        ]);
+
+        return {
+            success: true,
+            data: {
+                customers: customers.map((row) => row.v).filter((value): value is string => Boolean(value)),
+                salesmen: salesmen.map((row) => row.v).filter((value): value is string => Boolean(value)),
+            },
+        };
+    } catch (error) {
+        console.error("Failed to fetch dynamic sales dashboard filters:", error);
+        return { success: false, error: "Failed to fetch dynamic sales dashboard filters" };
+    }
+}
+
 export async function getSalesDashboardData(filters: SalesDashboardFilters = {}) {
     try {
         const {
@@ -125,63 +234,15 @@ export async function getSalesDashboardData(filters: SalesDashboardFilters = {})
         } = filters;
 
         const offset = (page - 1) * pageSize;
-
-        const filterArray: (SQL | undefined)[] = [
-            and(
-                isNotNull(salesRevenueSap.billingDate),
-                or(
-                    sql`${salesRevenueSap.customerName} IS NULL`,
-                    and(
-                        notIlike(salesRevenueSap.customerName, '%Chitra Paratama Singapore Branch%'),
-                        notIlike(salesRevenueSap.customerName, '%Transitetyre B.V%'),
-                        notIlike(salesRevenueSap.customerName, '%TRANSITYRE B.V%')
-                    )
-                )
-            )
-        ];
-
-        if (customers.length > 0) filterArray.push(sql`${salesRevenueSap.customerName} IN ${customers}`);
-        if (salesman.length > 0) filterArray.push(sql`${salesRevenueSap.salesman} IN ${salesman}`);
-        if (revTypes.length > 0) filterArray.push(sql`TRIM(${salesRevenueSap.revType}) IN ${revTypes}`);
-        if (search.trim()) {
-            const searchPattern = `%${search.trim()}%`
-            filterArray.push(or(
-                ilike(salesRevenueSap.customerName, searchPattern),
-                ilike(salesRevenueSap.salesman, searchPattern),
-                ilike(salesRevenueSap.revType, searchPattern),
-                ilike(salesRevenueSap.plant, searchPattern),
-                sql`${areaCaseSql} ILIKE ${searchPattern}`
-            ))
-        }
-
-        if (years.length > 0) {
-            filterArray.push(or(...years.map(y => sql`EXTRACT(YEAR FROM ${salesRevenueSap.billingDate}) = ${Number(y)}`)));
-        }
-        if (months.length > 0) {
-            filterArray.push(or(...months.map(m => sql`EXTRACT(MONTH FROM ${salesRevenueSap.billingDate}) = ${Number(m)}`)));
-        }
-
-        if (areas.length > 0) {
-            filterArray.push(
-                or(
-                    ...areas.map((area) => sql`
-                        CASE 
-                            WHEN ${salesRevenueSap.plant} IN ('2001', '2002') THEN 'KALIMANTAN TIMUR'
-                            WHEN ${salesRevenueSap.plant} = '3001' THEN 'KALIMANTAN SELATAN'
-                            WHEN ${salesRevenueSap.plant} = '4001' THEN 'SUMATERA SELATAN'
-                            WHEN ${salesRevenueSap.plant} = '5001' THEN 'SULAWESI'
-                            WHEN ${salesRevenueSap.plant} = '1001' THEN 'JAWA BARAT'
-                            WHEN ${salesRevenueSap.plant} = '6001' THEN 'PEKANBARU'
-                            WHEN ${salesRevenueSap.plant} = '7001' THEN 'SANGATA'
-                            WHEN ${salesRevenueSap.plant} = '8001' THEN 'KENDARI'
-                            ELSE 'OTHER'
-                        END = ${area}
-                    `)
-                )
-            );
-        }
-
-        const finalWhere = and(...filterArray);
+        const finalWhere = buildSalesDashboardWhere({
+            search,
+            years,
+            months,
+            salesman,
+            customers,
+            revTypes,
+            areas,
+        });
 
         // 1. Get Top Customers with Pagination and Sorting
         // First, get the list of customers and their total revenue for sorting
@@ -232,14 +293,14 @@ export async function getSalesDashboardData(filters: SalesDashboardFilters = {})
             .where(finalWhere)
             .groupBy(sql`TRIM(${salesRevenueSap.revType})`, sql`EXTRACT(YEAR FROM ${salesRevenueSap.billingDate})`);
 
-        const areaDataRaw = await db.select({
-            area: areaCaseSql,
+        const salesDataRaw = await db.select({
+            salesman: salesRevenueSap.salesman,
             year: sql<string>`EXTRACT(YEAR FROM ${salesRevenueSap.billingDate})::text`,
             revenue: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInDocCurr}, 0))`
         })
             .from(salesRevenueSap)
             .where(finalWhere)
-            .groupBy(areaCaseSql, sql`EXTRACT(YEAR FROM ${salesRevenueSap.billingDate})`);
+            .groupBy(salesRevenueSap.salesman, sql`EXTRACT(YEAR FROM ${salesRevenueSap.billingDate})`);
 
         const monthlyDataRaw = await db.select({
             month: sql<string>`LPAD(EXTRACT(MONTH FROM ${salesRevenueSap.billingDate})::text, 2, '0')`,
@@ -257,7 +318,7 @@ export async function getSalesDashboardData(filters: SalesDashboardFilters = {})
                 customerOrder: paginatedCustomers, // To maintain sorting on frontend
                 totalCustomers: totalCount,
                 categoryStats: categoryDataRaw,
-                areaStats: areaDataRaw,
+                salesStats: salesDataRaw,
                 monthlyStats: monthlyDataRaw
             }
         };
