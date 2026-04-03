@@ -1,106 +1,93 @@
 import { db } from "@/db";
 import { goodReceiveManual } from "@/db/schema";
-import { stockMovements } from "@/db/schema/stock-movements";
+import { goodReceiveManualItems } from "@/db/schema/good-receive-manual";
 import { user } from "@/db/schema/auth";
-import { desc, eq, and, sql } from "drizzle-orm";
-import { Button } from "@/components/ui/button";
+import { products } from "@/db/schema/products";
+import { stockMovements } from "@/db/schema/stock-movements";
+import { warehouses } from "@/db/schema/warehouses";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Plus, PackageOpen, CheckCircle2, Clock3, Inbox, ExternalLink, ImageIcon } from "lucide-react";
+import { CheckCircle2, Clock3, Inbox, Plus } from "lucide-react";
 import Link from "next/link";
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { format } from "date-fns";
-
-function VendorDoViewer({ url }: { url: string | null }) {
-    if (!url) {
-        return <span className="text-muted-foreground/50">—</span>;
-    }
-
-    const isPdf = /\.pdf($|\?)/i.test(url);
-
-    return (
-        <Dialog>
-            <div className="flex items-center gap-2">
-                <DialogTrigger asChild>
-                    <Button type="button" variant="outline" size="sm">
-                        <ImageIcon className="mr-2 h-3.5 w-3.5" />
-                        View DO
-                    </Button>
-                </DialogTrigger>
-                <Button type="button" variant="ghost" size="icon" asChild className="h-8 w-8">
-                    <a href={url} target="_blank" rel="noreferrer" aria-label="Open DO Vendor in new tab">
-                        <ExternalLink className="h-4 w-4" />
-                    </a>
-                </Button>
-            </div>
-            <DialogContent className="sm:max-w-4xl h-[85vh] p-0 overflow-hidden flex flex-col">
-                <DialogHeader className="px-6 pt-6 pb-2">
-                    <DialogTitle>Foto DO Vendor</DialogTitle>
-                </DialogHeader>
-                <div className="flex-1 px-6 pb-6">
-                    {isPdf ? (
-                        <iframe src={url} title="Vendor DO Preview" className="h-full w-full rounded-md border bg-white" />
-                    ) : (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={url} alt="Foto DO Vendor" className="h-full w-full rounded-md border object-contain bg-white" />
-                    )}
-                </div>
-            </DialogContent>
-        </Dialog>
-    );
-}
+import { GoodReceiveManualTable } from "./_components/good-receive-manual-table";
 
 export default async function GoodReceiveManualPage() {
-    const data = await db
-        .select({
-            id: goodReceiveManual.id,
-            supplier: goodReceiveManual.supplier,
-            poNumber: goodReceiveManual.poNumber,
-            receiveDate: goodReceiveManual.receiveDate,
-            deliveryType: goodReceiveManual.deliveryType,
-            referenceDocument: goodReceiveManual.referenceDocument,
-            vendorDoUrl: goodReceiveManual.vendorDoUrl,
-            createdAt: goodReceiveManual.createdAt,
-            createdBy: sql<string>`COALESCE(STRING_AGG(DISTINCT COALESCE(${user.name}, 'Unknown'), ', '), '-')`,
-            gapSlaDays: sql<number>`(${goodReceiveManual.createdAt}::date - ${goodReceiveManual.receiveDate}::date)`,
-        })
-        .from(goodReceiveManual)
-        .leftJoin(
-            stockMovements,
-            and(
-                eq(stockMovements.type, "GR_MANUAL"),
-                sql`${stockMovements.referenceNumber} LIKE ('PO: ' || ${goodReceiveManual.poNumber} || ' Item:%')`,
-                sql`DATE(${stockMovements.createdAt}) = DATE(${goodReceiveManual.createdAt})`
+    const [headerRows, detailRows] = await Promise.all([
+        db
+            .select({
+                id: goodReceiveManual.id,
+                supplier: goodReceiveManual.supplier,
+                poNumber: goodReceiveManual.poNumber,
+                receiveDate: goodReceiveManual.receiveDate,
+                deliveryType: goodReceiveManual.deliveryType,
+                referenceDocument: goodReceiveManual.referenceDocument,
+                vendorDoUrl: goodReceiveManual.vendorDoUrl,
+                createdAt: goodReceiveManual.createdAt,
+                createdBy: sql<string>`COALESCE(STRING_AGG(DISTINCT COALESCE(${user.name}, 'Unknown'), ', '), '-')`,
+                gapSlaDays: sql<number>`(${goodReceiveManual.createdAt}::date - ${goodReceiveManual.receiveDate}::date)`,
+            })
+            .from(goodReceiveManual)
+            .leftJoin(
+                stockMovements,
+                and(
+                    eq(stockMovements.type, "GR_MANUAL"),
+                    sql`${stockMovements.referenceNumber} LIKE ('PO: ' || ${goodReceiveManual.poNumber} || ' Item:%')`,
+                    sql`DATE(${stockMovements.createdAt}) = DATE(${goodReceiveManual.createdAt})`,
+                ),
             )
-        )
-        .leftJoin(user, eq(user.id, stockMovements.recordedBy))
-        .groupBy(
-            goodReceiveManual.id,
-            goodReceiveManual.supplier,
-            goodReceiveManual.poNumber,
-            goodReceiveManual.receiveDate,
-            goodReceiveManual.deliveryType,
-            goodReceiveManual.referenceDocument,
-            goodReceiveManual.vendorDoUrl,
-            goodReceiveManual.createdAt,
-        )
-        .orderBy(desc(goodReceiveManual.receiveDate), desc(goodReceiveManual.createdAt));
+            .leftJoin(user, eq(user.id, stockMovements.recordedBy))
+            .groupBy(
+                goodReceiveManual.id,
+                goodReceiveManual.supplier,
+                goodReceiveManual.poNumber,
+                goodReceiveManual.receiveDate,
+                goodReceiveManual.deliveryType,
+                goodReceiveManual.referenceDocument,
+                goodReceiveManual.vendorDoUrl,
+                goodReceiveManual.createdAt,
+            )
+            .orderBy(desc(goodReceiveManual.receiveDate), desc(goodReceiveManual.createdAt)),
+        db
+            .select({
+                headerId: goodReceiveManualItems.headerId,
+                id: goodReceiveManualItems.id,
+                quantity: goodReceiveManualItems.quantity,
+                notes: goodReceiveManualItems.notes,
+                materialNumber: products.materialNumber,
+                materialDescription: products.materialDescription,
+                warehouseSloc: warehouses.sloc,
+                warehouseDescription: warehouses.description,
+            })
+            .from(goodReceiveManualItems)
+            .innerJoin(products, eq(products.id, goodReceiveManualItems.productId))
+            .innerJoin(warehouses, eq(warehouses.id, goodReceiveManualItems.warehouseId))
+            .orderBy(desc(goodReceiveManualItems.id)),
+    ]);
+
+    const detailsByHeaderId = new Map<number, typeof detailRows>();
+    for (const detail of detailRows) {
+        if (Number(detail.quantity) <= 0) {
+            continue;
+        }
+
+        const current = detailsByHeaderId.get(detail.headerId) ?? [];
+        current.push(detail);
+        detailsByHeaderId.set(detail.headerId, current);
+    }
+
+    const data = headerRows.map((row) => ({
+        ...row,
+        items: detailsByHeaderId.get(row.id) ?? [],
+    }));
 
     const totalComplete = data.filter((d) => d.deliveryType === "Complete").length;
     const totalPartial = data.filter((d) => d.deliveryType === "Partial").length;
 
     return (
         <div className="space-y-5 p-4 sm:space-y-6 sm:p-6">
-            {/* Page Header */}
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="space-y-1">
                     <div className="flex flex-wrap items-center gap-2 sm:gap-3">
@@ -121,7 +108,6 @@ export default async function GoodReceiveManualPage() {
                 </Button>
             </div>
 
-            {/* Stat Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <Card className="border-0 shadow-sm bg-gradient-to-br from-indigo-50 to-indigo-100/50 dark:from-indigo-950/40 dark:to-indigo-900/20">
                     <CardHeader className="flex flex-row items-center justify-between pb-2 pt-4 px-5">
@@ -157,150 +143,9 @@ export default async function GoodReceiveManualPage() {
 
             <Separator />
 
-            {/* Data Table */}
             <Card className="shadow-sm border">
-                <div className="rounded-xl overflow-hidden">
-                    {data.length === 0 ? (
-                        <div className="h-64 flex items-center justify-center">
-                            <div className="flex flex-col items-center gap-3 py-8 text-center px-4">
-                                <div className="rounded-full bg-muted p-4">
-                                    <PackageOpen className="h-8 w-8 text-muted-foreground" />
-                                </div>
-                                <div>
-                                    <p className="font-semibold text-foreground">No records found</p>
-                                    <p className="text-sm text-muted-foreground mt-1">Get started by creating your first good receive entry.</p>
-                                </div>
-                                <Button asChild variant="outline" size="sm" className="mt-2">
-                                    <Link href="/dashboard/good-receive-manual/create">
-                                        <Plus className="mr-2 h-3 w-3" />
-                                        Create First Record
-                                    </Link>
-                                </Button>
-                            </div>
-                        </div>
-                    ) : (
-                        <>
-                            <div className="md:hidden divide-y">
-                                {data.map((item) => (
-                                    <div key={item.id} className="p-4 space-y-2">
-                                        <div className="flex items-center justify-between gap-2">
-                                            <span className="font-mono text-[11px] bg-muted px-2 py-1 rounded break-all">{item.poNumber}</span>
-                                            <Badge
-                                                variant="outline"
-                                                className={
-                                                    item.deliveryType === "Complete"
-                                                        ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400"
-                                                        : "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-400"
-                                                }
-                                            >
-                                                {item.deliveryType === "Complete" ? (
-                                                    <CheckCircle2 className="mr-1 h-3 w-3" />
-                                                ) : (
-                                                    <Clock3 className="mr-1 h-3 w-3" />
-                                                )}
-                                                {item.deliveryType}
-                                            </Badge>
-                                        </div>
-                                        <p className="text-sm font-medium break-words">{item.supplier}</p>
-                                        <div className="grid grid-cols-2 gap-2 text-xs">
-                                            <div>
-                                                <p className="text-muted-foreground">Receive Date</p>
-                                                <p className="font-medium">{format(new Date(item.receiveDate), "dd MMM yyyy")}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-muted-foreground">Created</p>
-                                                <p className="font-medium">{format(new Date(item.createdAt), "dd MMM yyyy HH:mm")}</p>
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <p className="text-[11px] text-muted-foreground">Created By</p>
-                                            <p className="text-xs font-medium break-words">{item.createdBy || "-"}</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-[11px] text-muted-foreground">Gap SLA</p>
-                                            <p className="text-xs font-medium">{formatGapSla(item.gapSlaDays)}</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-[11px] text-muted-foreground">Ref. Doc</p>
-                                            <p className="text-xs font-mono break-all">{item.referenceDocument || "—"}</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-[11px] text-muted-foreground">Foto DO Vendor</p>
-                                            <div className="mt-1">
-                                                <VendorDoViewer url={item.vendorDoUrl} />
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-
-                            <div className="hidden md:block">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow className="bg-muted/50 hover:bg-muted/50">
-                                            <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground w-[130px]">Receive Date</TableHead>
-                                            <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Supplier</TableHead>
-                                            <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">PO Number</TableHead>
-                                            <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Delivery Type</TableHead>
-                                            <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Ref. Doc</TableHead>
-                                            <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Foto DO Vendor</TableHead>
-                                            <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Created By</TableHead>
-                                            <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Gap SLA</TableHead>
-                                            <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right">Created At</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {data.map((item) => (
-                                            <TableRow key={item.id} className="hover:bg-muted/40 transition-colors">
-                                                <TableCell className="font-medium text-sm">
-                                                    {format(new Date(item.receiveDate), "dd MMM yyyy")}
-                                                </TableCell>
-                                                <TableCell className="text-sm">{item.supplier}</TableCell>
-                                                <TableCell>
-                                                    <span className="font-mono text-xs bg-muted px-2 py-1 rounded">{item.poNumber}</span>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Badge
-                                                        variant="outline"
-                                                        className={
-                                                            item.deliveryType === "Complete"
-                                                                ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400"
-                                                                : "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-400"
-                                                        }
-                                                    >
-                                                        {item.deliveryType === "Complete" ? (
-                                                            <CheckCircle2 className="mr-1 h-3 w-3" />
-                                                        ) : (
-                                                            <Clock3 className="mr-1 h-3 w-3" />
-                                                        )}
-                                                        {item.deliveryType}
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell className="text-sm text-muted-foreground font-mono text-xs">
-                                                    {item.referenceDocument || <span className="text-muted-foreground/50">—</span>}
-                                                </TableCell>
-                                                <TableCell>
-                                                    <VendorDoViewer url={item.vendorDoUrl} />
-                                                </TableCell>
-                                                <TableCell className="text-sm">{item.createdBy || "-"}</TableCell>
-                                                <TableCell className="text-sm">{formatGapSla(item.gapSlaDays)}</TableCell>
-                                                <TableCell className="text-right text-xs text-muted-foreground">
-                                                    {format(new Date(item.createdAt), "dd MMM yyyy HH:mm")}
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            </div>
-                        </>
-                    )}
-                </div>
+                <GoodReceiveManualTable data={data} />
             </Card>
         </div>
     );
-}
-
-function formatGapSla(value: number | null | undefined) {
-    if (value == null || !Number.isFinite(Number(value))) return "-"
-    return `${Number(value).toLocaleString("id-ID")} Hari`
 }
