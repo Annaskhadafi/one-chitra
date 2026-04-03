@@ -11,6 +11,9 @@ export const metadata = {
     title: "Revenue vs Forecast Dashboard - One Chitra",
 }
 
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+
 export default async function RevenueForecastPage({ searchParams }: { searchParams: Promise<{ period?: string }> }) {
     const params = await searchParams;
     const period = params.period || format(new Date(), 'MM.yyyy')

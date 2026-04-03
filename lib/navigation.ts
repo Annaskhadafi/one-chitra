@@ -301,6 +301,11 @@ export const navigationConfig: NavSection[] = [
                         resource: "quotations",
                     },
                     {
+                        title: "Sales Dashboard",
+                        url: "/dashboard/sales-dashboard",
+                        resource: "sales-dashboard",
+                    },
+                    {
                         title: "Sales Order Summary",
                         url: "/dashboard/summary-order",
                         resource: "sales-order-summary",
@@ -343,11 +348,6 @@ export const navigationConfig: NavSection[] = [
                 icon: BarChart3,
                 resource: "reports-analytics",
                 items: [
-                    {
-                        title: "Sales Dashboard",
-                        url: "/dashboard/sales-dashboard",
-                        resource: "sales-dashboard",
-                    },
                     {
                         title: "Dashboard R49 Tire",
                         url: "/dashboard/r49-dashboard",

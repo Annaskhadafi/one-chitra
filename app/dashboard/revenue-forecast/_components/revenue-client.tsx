@@ -1,11 +1,11 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { useRef, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { Download } from "lucide-react"
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell, Legend } from "recharts"
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell, Legend, LabelList } from "recharts"
 
 interface TargetData { revenue: number; forecast: number }
 
@@ -46,6 +46,38 @@ const pct = (r: number, f: number) => f > 0 ? Math.min((r / f) * 100, 999) : 0
 const pctColor = (p: number) => p >= 100 ? "text-green-600" : p >= 80 ? "text-blue-600" : p >= 50 ? "text-amber-500" : "text-red-500"
 
 const PIE_COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#14b8a6']
+
+const renderAchievementLabel = (props: {
+    x?: number | string
+    y?: number | string
+    width?: number | string
+    value?: number | string
+    payload?: { revenue?: number; forecast?: number }
+}) => {
+    const { x = 0, y = 0, width = 0, payload } = props
+    const safeX = typeof x === "number" ? x : Number(x) || 0
+    const safeY = typeof y === "number" ? y : Number(y) || 0
+    const safeWidth = typeof width === "number" ? width : Number(width) || 0
+    const revenue = Number(payload?.revenue ?? 0)
+    const forecast = Number(payload?.forecast ?? 0)
+    if (!forecast || !Number.isFinite(forecast)) return null
+
+    const achievement = pct(revenue, forecast)
+
+    return (
+        <text
+            x={safeX + safeWidth / 2}
+            y={safeY - 18}
+            textAnchor="middle"
+            fill="#64748b"
+            fillOpacity="0.5"
+            fontSize={10}
+            fontWeight={600}
+        >
+            {achievement.toFixed(1)}%
+        </text>
+    )
+}
 
 // Mini horizontal gauge bar
 function MiniGauge({
@@ -341,6 +373,53 @@ export function RevenueClient({ initialData, selectedPeriod, inventoryData, isEx
     const dashboardRef = useRef<HTMLDivElement>(null)
     const [isExportingJpg, setIsExportingJpg] = useState(false)
     const { targets, materials, revTypes, matGroups, ytdChart } = initialData
+    const periodOptions = useMemo(() => {
+        const now = new Date()
+        const currentYear = now.getFullYear()
+        const currentMonth = now.getMonth() + 1
+        const selectedYear = selectedPeriod.includes(".")
+            ? Number(selectedPeriod.split(".")[1])
+            : Number(selectedPeriod)
+        const selectedMonth = selectedPeriod.includes(".")
+            ? Number(selectedPeriod.split(".")[0])
+            : null
+        const startYear = 2025
+        const maxYear = Math.max(currentYear, Number.isFinite(selectedYear) ? selectedYear : currentYear)
+        const monthLabels = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"]
+        const options: Array<{ value: string; label: string }> = []
+
+        for (let year = maxYear; year >= startYear; year -= 1) {
+            options.push({
+                value: String(year),
+                label: `Yearly ${year}`,
+            })
+
+            const maxMonthForYear = year < currentYear
+                ? 12
+                : Math.max(currentMonth, year === selectedYear && selectedMonth ? selectedMonth : 0)
+
+            for (let month = maxMonthForYear; month >= 1; month -= 1) {
+                options.push({
+                    value: `${String(month).padStart(2, "0")}.${year}`,
+                    label: `${monthLabels[month - 1]} ${year}`,
+                })
+            }
+        }
+
+        if (!options.some((option) => option.value === selectedPeriod)) {
+            options.unshift({
+                value: selectedPeriod,
+                label: selectedPeriod.includes(".") ? selectedPeriod : `Yearly ${selectedPeriod}`,
+            })
+        }
+
+        return options
+    }, [selectedPeriod])
+
+    const handlePeriodChange = (value: string) => {
+        router.push(`/dashboard/revenue-forecast?period=${encodeURIComponent(value)}`)
+        router.refresh()
+    }
 
     const handleExportJPG = async () => {
         if (!dashboardRef.current) return
@@ -379,7 +458,14 @@ export function RevenueClient({ initialData, selectedPeriod, inventoryData, isEx
     const ytdFormatted = ytdChart.map(y => {
         const [mm] = y.name.split(".")
         const monthIdx = parseInt(mm, 10) - 1
-        return { name: MONTHS_SHORT[monthIdx] ?? y.name, revenue: y.revenue, forecast: 'forecast' in y ? y.forecast : 0 }
+        const forecast = 'forecast' in y ? y.forecast : 0
+        const revenue = y.revenue
+        return {
+            name: MONTHS_SHORT[monthIdx] ?? y.name,
+            revenue,
+            forecast,
+            achievementPct: pct(revenue, forecast),
+        }
     })
 
     return (
@@ -421,18 +507,16 @@ export function RevenueClient({ initialData, selectedPeriod, inventoryData, isEx
                     </Button>
                     <div className="flex items-center gap-2 export-button-hide">
                         <span className="text-xs font-bold">Period:</span>
-                        <Select defaultValue={selectedPeriod} onValueChange={v => router.push(`/dashboard/revenue-forecast?period=${v}`)}>
+                        <Select value={selectedPeriod} onValueChange={handlePeriodChange}>
                             <SelectTrigger className="w-[160px] h-8 text-xs border-primary/30 font-bold">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="2025">Yearly 2025</SelectItem>
-                                <SelectItem value="2026">Yearly 2026</SelectItem>
-                                <SelectItem value="01.2025">Jan 2025</SelectItem>
-                                <SelectItem value="02.2025">Feb 2025</SelectItem>
-                                <SelectItem value="01.2026">Jan 2026</SelectItem>
-                                <SelectItem value="02.2026">Feb 2026</SelectItem>
-                                <SelectItem value="03.2026">Mar 2026</SelectItem>
+                                {periodOptions.map((option) => (
+                                    <SelectItem key={option.value} value={option.value}>
+                                        {option.label}
+                                    </SelectItem>
+                                ))}
                             </SelectContent>
                         </Select>
                     </div>
@@ -636,8 +720,51 @@ export function RevenueClient({ initialData, selectedPeriod, inventoryData, isEx
                 </div>
                 <div className="p-4 h-[260px]">
                     <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={ytdFormatted.length > 0 ? ytdFormatted : [{ name: '-', revenue: 0, forecast: 0 }]} margin={{ top: 24, right: 20, left: 40, bottom: 5 }}>
-                            <XAxis dataKey="name" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+                        <BarChart
+                            data={ytdFormatted.length > 0 ? ytdFormatted : [{ name: '-', revenue: 0, forecast: 0 }]}
+                            margin={{ top: 28, right: 20, left: 40, bottom: 5 }}
+                            barCategoryGap="28%"
+                            barGap={8}
+                        >
+                            <XAxis
+                                dataKey="name"
+                                tickLine={false}
+                                axisLine={false}
+                                height={48}
+                                tick={(props) => {
+                                    const { x = 0, y = 0, payload } = props
+                                    const current = ytdFormatted.find((item) => item.name === payload.value)
+                                    return (
+                                        <g transform={`translate(${x},${y})`}>
+                                            <text
+                                                x={0}
+                                                y={0}
+                                                dy={10}
+                                                textAnchor="middle"
+                                                fill="#475569"
+                                                fontSize={11}
+                                                fontWeight={700}
+                                            >
+                                                {payload.value}
+                                            </text>
+                                            {current ? (
+                                                <text
+                                                    x={0}
+                                                    y={0}
+                                                    dy={26}
+                                                    textAnchor="middle"
+                                                    fill="#64748b"
+                                                    fontSize={10}
+                                                    fontWeight={800}
+                                                    fillOpacity="0.8"
+                                                >
+                                                    {current.achievementPct.toFixed(1)}%
+                                                </text>
+                                            ) : null}
+                                        </g>
+                                    )
+                                }}
+                            />
                             <YAxis hide />
                             <Tooltip
                                 formatter={(v: number, name: string) => [fmt(v), name.charAt(0).toUpperCase() + name.slice(1)]}
@@ -655,7 +782,9 @@ export function RevenueClient({ initialData, selectedPeriod, inventoryData, isEx
                             <Bar dataKey="revenue" name="Revenue" fill="#a5b4fc" radius={[6, 6, 0, 0]}
                                 isAnimationActive={!isExporting}
                                 label={{ position: 'top', formatter: (v: number) => fmt(v), fontSize: 9, fill: '#64748b' }}
-                            />
+                            >
+                                <LabelList dataKey="revenue" content={renderAchievementLabel} />
+                            </Bar>
                         </BarChart>
                     </ResponsiveContainer>
                 </div>

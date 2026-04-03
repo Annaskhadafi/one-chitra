@@ -192,14 +192,26 @@ export async function fetchDashboardRevenueForecast(filters: DashboardRevenueFil
     }).from(salesRevenueSap).where(baseFilter).groupBy(salesRevenueSap.revType);
 
     const revTypeTable = revTypeData
-        .filter(r => {
-            const type = (r.type || "").toUpperCase();
-            return type === 'REPAIR' || type === 'SERVICE' || type === 'RETREAD';
-        })
+        .filter(r => Boolean(r.type?.trim()))
         .map(r => ({
-            type: r.type || "Unknown",
+            type: r.type?.trim() || "Unknown",
             total: Number(r.total)
-        })).sort((a, b) => b.total - a.total);
+        }));
+
+    const revTypeMap = new Map(
+        revTypeTable.map((item) => [item.type.toUpperCase(), item.total])
+    );
+
+    const pinnedRevTypes = ["TRADING", "REPAIR", "SERVICE", "RETREAD"].map((type) => ({
+        type,
+        total: revTypeMap.get(type) ?? 0,
+    }));
+
+    const extraRevTypes = revTypeTable
+        .filter((item) => !["TRADING", "REPAIR", "SERVICE", "RETREAD"].includes(item.type.toUpperCase()))
+        .sort((a, b) => b.total - a.total);
+
+    const finalRevTypeTable = [...pinnedRevTypes, ...extraRevTypes];
 
     // ─── I. Product Accessories Detail ─────────────────────────────────────
     const matGrp1Data = await db.select({
@@ -262,6 +274,18 @@ export async function fetchDashboardRevenueForecast(filters: DashboardRevenueFil
         .orderBy(sql`SUM(COALESCE(${salesRevenueSap.revenueInLocCurr}, 0)) DESC`)
         .limit(5);
 
+    const yearlyChartData = isYearlyView
+        ? [{
+            name: periodStr,
+            revenue: revenueConsolidate,
+            forecast: forecastConsolidate,
+        }]
+        : ytdData.map(y => ({
+            name: y.month,
+            revenue: Number(y.rev),
+            forecast: forecastMap.get(y.month || "") || 0,
+        }))
+
     return {
         success: true,
         data: {
@@ -294,9 +318,9 @@ export async function fetchDashboardRevenueForecast(filters: DashboardRevenueFil
                 customerName: c.customerName || "Unknown",
                 revenueInLocCurr: Number(c.revenueInLocCurr || 0)
             })),
-            revTypes: revTypeTable,
+            revTypes: finalRevTypeTable,
             matGroups: matGrp1Data.map(m => ({ desc: m.desc || "Unknown", revenue: Number(m.total) })),
-            ytdChart: ytdData.map(y => ({ name: y.month, revenue: Number(y.rev), forecast: forecastMap.get(y.month || "") || 0 }))
+            ytdChart: yearlyChartData
         }
     };
 }
