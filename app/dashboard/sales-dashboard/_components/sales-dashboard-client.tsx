@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, Fragment } from "react"
 import { getSalesDashboardData, getSalesDashboardDynamicFilters } from "@/app/actions/sales-dashboard"
 import { DataTableFacetedFilter } from "@/app/dashboard/billing/_components/data-table-faceted-filter"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -29,7 +29,8 @@ import {
     Users,
     UserRound,
     Trophy,
-    TrendingUp
+    TrendingUp,
+    ShieldCheck
 } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
@@ -68,6 +69,32 @@ interface DashboardData {
         customerCount: number;
         contributionPct: number;
         lastBillingDate: string | null;
+        topProducts: {
+            materialDescription: string | null;
+            customerName: string | null;
+            lastMonth: string | null;
+            revenue: number;
+            grossProfit: number;
+            marginPct: number;
+            qty: number;
+        }[];
+    }[];
+    topCustomers: {
+        customerName: string | null;
+        revenue: number;
+        grossProfit: number;
+        marginPct: number;
+        qty: number;
+        salesmanCount: number;
+        contributionPct: number;
+        lastBillingDate: string | null;
+        topProducts: {
+            materialDescription: string | null;
+            revenue: number;
+            grossProfit: number;
+            marginPct: number;
+            qty: number;
+        }[];
     }[];
 }
 
@@ -309,6 +336,11 @@ export function SalesDashboardClient({ initialFilterOptions }: SalesDashboardCli
                         selected={filters.areas}
                         onFilterChange={(values) => updateMultiSelectFilter('areas', values)}
                     />
+
+                    <div className="ml-auto inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700">
+                        <ShieldCheck className="h-4 w-4" />
+                        Logic aligned with Revenue vs Forecast
+                    </div>
                 </div>
             </div>
 
@@ -389,6 +421,22 @@ export function SalesDashboardClient({ initialFilterOptions }: SalesDashboardCli
                         </CardHeader>
                         <CardContent className="p-0">
                             <TopSalesmenTable rows={data.topSalesmen} />
+                        </CardContent>
+                    </Card>
+                )}
+
+                {data && (
+                    <Card className="border-none shadow-md overflow-hidden rounded-xl">
+                        <CardHeader className="bg-gradient-to-r from-[#0f766e] to-[#14b8a6] py-4 text-white flex flex-row items-center justify-between">
+                            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                                <Users className="h-4 w-4" /> Top Customer Performance
+                            </CardTitle>
+                            <div className="text-xs opacity-90">
+                                Menampilkan 10 customer terbesar dari filter aktif
+                            </div>
+                        </CardHeader>
+                        <CardContent className="p-0">
+                            <TopCustomersTable rows={data.topCustomers} />
                         </CardContent>
                     </Card>
                 )}
@@ -557,8 +605,21 @@ function TopSalesmenTable({
         customerCount: number;
         contributionPct: number;
         lastBillingDate: string | null;
+        topProducts: {
+            materialDescription: string | null;
+            customerName: string | null;
+            lastMonth: string | null;
+            revenue: number;
+            grossProfit: number;
+            marginPct: number;
+            qty: number;
+        }[];
     }[];
 }) {
+    const [expandedRows, setExpandedRows] = useState<number[]>([]);
+    const [page, setPage] = useState(1);
+    const pageSize = 10;
+
     if (rows.length === 0) {
         return (
             <div className="py-12 text-center text-sm text-slate-500">
@@ -566,6 +627,16 @@ function TopSalesmenTable({
             </div>
         );
     }
+
+    const toggleRow = (rowIndex: number) => {
+        setExpandedRows((prev) =>
+            prev.includes(rowIndex)
+                ? prev.filter((index) => index !== rowIndex)
+                : [...prev, rowIndex]
+        );
+    };
+    const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+    const paginatedRows = rows.slice((page - 1) * pageSize, page * pageSize);
 
     return (
         <div className="overflow-x-auto">
@@ -580,42 +651,327 @@ function TopSalesmenTable({
                         <TableHead className="text-right">Qty</TableHead>
                         <TableHead className="text-right">Customer</TableHead>
                         <TableHead className="text-right">Contribution</TableHead>
+                        <TableHead className="text-center">Detail</TableHead>
                         <TableHead className="text-right">Last Billing</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {rows.map((row, index) => (
-                        <TableRow key={`${row.salesman}-${index}`}>
-                            <TableCell className="text-center font-semibold text-[#0052CC]">#{index + 1}</TableCell>
-                            <TableCell className="font-semibold text-[#172B4D]">{row.salesman || "-"}</TableCell>
-                            <TableCell className="text-right">{formatCurrencyCompact(row.revenue)}</TableCell>
-                            <TableCell className="text-right">{formatCurrencyCompact(row.grossProfit)}</TableCell>
-                            <TableCell className="text-right">{formatPercent(row.marginPct)}</TableCell>
-                            <TableCell className="text-right">{formatNumberCompact(row.qty)}</TableCell>
-                            <TableCell className="text-right">{formatNumberCompact(row.customerCount)}</TableCell>
-                            <TableCell className="text-right">{formatPercent(row.contributionPct)}</TableCell>
-                            <TableCell className="text-right">{formatDateLabel(row.lastBillingDate)}</TableCell>
-                        </TableRow>
-                    ))}
+                    {paginatedRows.map((row, index) => {
+                        const absoluteIndex = (page - 1) * pageSize + index;
+                        const isExpanded = expandedRows.includes(absoluteIndex);
+
+                        return (
+                            <Fragment key={`${row.salesman}-${absoluteIndex}`}>
+                                <TableRow key={`${row.salesman}-${absoluteIndex}`}>
+                                    <TableCell className="text-center font-semibold text-[#0052CC]">#{absoluteIndex + 1}</TableCell>
+                                    <TableCell className="font-semibold text-[#172B4D]">{row.salesman || "-"}</TableCell>
+                                    <TableCell className="text-right">{formatCurrencyCompact(row.revenue)}</TableCell>
+                                    <TableCell className="text-right">{formatCurrencyCompact(row.grossProfit)}</TableCell>
+                                    <TableCell className="text-right">{formatPercent(row.marginPct)}</TableCell>
+                                    <TableCell className="text-right">{formatNumberCompact(row.qty)}</TableCell>
+                                    <TableCell className="text-right">{formatNumberCompact(row.customerCount)}</TableCell>
+                                    <TableCell className="text-right">{formatPercent(row.contributionPct)}</TableCell>
+                                    <TableCell className="text-center">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="h-8 rounded-full px-3 text-xs"
+                                            onClick={() => toggleRow(absoluteIndex)}
+                                        >
+                                            {isExpanded ? "Tutup" : "Detail"}
+                                        </Button>
+                                    </TableCell>
+                                    <TableCell className="text-right">{formatDateLabel(row.lastBillingDate)}</TableCell>
+                                </TableRow>
+                                {isExpanded && (
+                                    <TableRow className="bg-slate-50/70">
+                                        <TableCell colSpan={10} className="px-6 py-4">
+                                            <div className="mb-3 flex items-center justify-between">
+                                                <div className="text-sm font-semibold text-[#172B4D]">
+                                                    Detail Product {row.salesman || "-"}
+                                                </div>
+                                                <div className="text-xs text-slate-500">
+                                                    Total {row.topProducts.length} product
+                                                </div>
+                                            </div>
+                                            {row.topProducts.length > 0 ? (
+                                                <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                                                    <Table>
+                                                        <TableHeader>
+                                                            <TableRow className="bg-slate-100/80">
+                                                                <TableHead className="w-16 text-center">No</TableHead>
+                                                                <TableHead>Product</TableHead>
+                                                                <TableHead>Customer</TableHead>
+                                                                <TableHead>Bulan Terakhir</TableHead>
+                                                                <TableHead className="text-right">Qty</TableHead>
+                                                                <TableHead className="text-right">Gross Profit</TableHead>
+                                                                <TableHead className="text-right">Margin %</TableHead>
+                                                                <TableHead className="text-right">Revenue</TableHead>
+                                                            </TableRow>
+                                                        </TableHeader>
+                                                        <TableBody>
+                                                            {row.topProducts.map((product, productIndex) => (
+                                                                <TableRow key={`${row.salesman}-${absoluteIndex}-${product.materialDescription}-${productIndex}`}>
+                                                                    <TableCell className="text-center text-xs text-slate-500">{productIndex + 1}</TableCell>
+                                                                    <TableCell className="text-xs font-medium text-[#172B4D]">
+                                                                        {product.materialDescription || "-"}
+                                                                    </TableCell>
+                                                                    <TableCell className="text-xs">{product.customerName || "-"}</TableCell>
+                                                                    <TableCell className="text-xs">{formatMonthLabel(product.lastMonth)}</TableCell>
+                                                                    <TableCell className="text-right text-xs">{formatNumberCompact(product.qty)}</TableCell>
+                                                                    <TableCell className="text-right text-xs">{formatCurrencyCompact(product.grossProfit)}</TableCell>
+                                                                    <TableCell className="text-right text-xs">{formatPercent(product.marginPct)}</TableCell>
+                                                                    <TableCell className="text-right text-xs">{formatCurrencyCompact(product.revenue)}</TableCell>
+                                                                </TableRow>
+                                                            ))}
+                                                        </TableBody>
+                                                    </Table>
+                                                </div>
+                                            ) : (
+                                                <span className="text-xs text-slate-400">Belum ada detail product.</span>
+                                            )}
+                                        </TableCell>
+                                    </TableRow>
+                                )}
+                            </Fragment>
+                        );
+                    })}
                 </TableBody>
             </Table>
+            <TablePagination
+                page={page}
+                totalPages={totalPages}
+                totalItems={rows.length}
+                label="salesman"
+                onPageChange={(nextPage) => {
+                    setPage(nextPage);
+                    setExpandedRows([]);
+                }}
+            />
+        </div>
+    );
+}
+
+function TopCustomersTable({
+    rows,
+}: {
+    rows: {
+        customerName: string | null;
+        revenue: number;
+        grossProfit: number;
+        marginPct: number;
+        qty: number;
+        salesmanCount: number;
+        contributionPct: number;
+        lastBillingDate: string | null;
+        topProducts: {
+            materialDescription: string | null;
+            revenue: number;
+            grossProfit: number;
+            marginPct: number;
+            qty: number;
+        }[];
+    }[];
+}) {
+    const [expandedRows, setExpandedRows] = useState<number[]>([]);
+    const [page, setPage] = useState(1);
+    const pageSize = 10;
+
+    if (rows.length === 0) {
+        return (
+            <div className="py-12 text-center text-sm text-slate-500">
+                Belum ada data customer untuk filter yang dipilih.
+            </div>
+        );
+    }
+
+    const toggleRow = (rowIndex: number) => {
+        setExpandedRows((prev) =>
+            prev.includes(rowIndex)
+                ? prev.filter((index) => index !== rowIndex)
+                : [...prev, rowIndex]
+        );
+    };
+    const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+    const paginatedRows = rows.slice((page - 1) * pageSize, page * pageSize);
+
+    return (
+        <div className="overflow-x-auto">
+            <Table>
+                <TableHeader>
+                    <TableRow className="bg-slate-50">
+                        <TableHead className="w-16 text-center">Rank</TableHead>
+                        <TableHead>Customer Name</TableHead>
+                        <TableHead className="text-right">Revenue</TableHead>
+                        <TableHead className="text-right">Gross Profit</TableHead>
+                        <TableHead className="text-right">Margin %</TableHead>
+                        <TableHead className="text-right">Qty</TableHead>
+                        <TableHead className="text-right">Salesman</TableHead>
+                        <TableHead className="text-right">Contribution</TableHead>
+                        <TableHead className="text-center">Detail</TableHead>
+                        <TableHead className="text-right">Last Billing</TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {paginatedRows.map((row, index) => {
+                        const absoluteIndex = (page - 1) * pageSize + index;
+                        const isExpanded = expandedRows.includes(absoluteIndex);
+
+                        return (
+                            <Fragment key={`${row.customerName}-${absoluteIndex}`}>
+                                <TableRow>
+                                    <TableCell className="text-center font-semibold text-teal-700">#{absoluteIndex + 1}</TableCell>
+                                    <TableCell className="font-semibold text-[#172B4D]">{row.customerName || "-"}</TableCell>
+                                    <TableCell className="text-right">{formatCurrencyCompact(row.revenue)}</TableCell>
+                                    <TableCell className="text-right">{formatCurrencyCompact(row.grossProfit)}</TableCell>
+                                    <TableCell className="text-right">{formatPercent(row.marginPct)}</TableCell>
+                                    <TableCell className="text-right">{formatNumberCompact(row.qty)}</TableCell>
+                                    <TableCell className="text-right">{formatNumberCompact(row.salesmanCount)}</TableCell>
+                                    <TableCell className="text-right">{formatPercent(row.contributionPct)}</TableCell>
+                                    <TableCell className="text-center">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="h-8 rounded-full px-3 text-xs"
+                                            onClick={() => toggleRow(absoluteIndex)}
+                                        >
+                                            {isExpanded ? "Tutup" : "Detail"}
+                                        </Button>
+                                    </TableCell>
+                                    <TableCell className="text-right">{formatDateLabel(row.lastBillingDate)}</TableCell>
+                                </TableRow>
+                                {isExpanded && (
+                                    <TableRow className="bg-teal-50/40">
+                                        <TableCell colSpan={10} className="px-6 py-4">
+                                            <div className="mb-3 flex items-center justify-between">
+                                                <div className="text-sm font-semibold text-[#134e4a]">
+                                                    Detail Product {row.customerName || "-"}
+                                                </div>
+                                                <div className="text-xs text-slate-500">
+                                                    Total {row.topProducts.length} product
+                                                </div>
+                                            </div>
+                                            {row.topProducts.length > 0 ? (
+                                                <div className="overflow-hidden rounded-lg border border-teal-100 bg-white">
+                                                    <Table>
+                                                        <TableHeader>
+                                                            <TableRow className="bg-teal-50/80">
+                                                                <TableHead className="w-16 text-center">No</TableHead>
+                                                                <TableHead>Product</TableHead>
+                                                                <TableHead className="text-right">Qty</TableHead>
+                                                                <TableHead className="text-right">Gross Profit</TableHead>
+                                                                <TableHead className="text-right">Margin %</TableHead>
+                                                                <TableHead className="text-right">Revenue</TableHead>
+                                                            </TableRow>
+                                                        </TableHeader>
+                                                        <TableBody>
+                                                            {row.topProducts.map((product, productIndex) => (
+                                                                <TableRow key={`${row.customerName}-${absoluteIndex}-${product.materialDescription}-${productIndex}`}>
+                                                                    <TableCell className="text-center text-xs text-slate-500">{productIndex + 1}</TableCell>
+                                                                    <TableCell className="text-xs font-medium text-[#134e4a]">
+                                                                        {product.materialDescription || "-"}
+                                                                    </TableCell>
+                                                                    <TableCell className="text-right text-xs">{formatNumberCompact(product.qty)}</TableCell>
+                                                                    <TableCell className="text-right text-xs">{formatCurrencyCompact(product.grossProfit)}</TableCell>
+                                                                    <TableCell className="text-right text-xs">{formatPercent(product.marginPct)}</TableCell>
+                                                                    <TableCell className="text-right text-xs">{formatCurrencyCompact(product.revenue)}</TableCell>
+                                                                </TableRow>
+                                                            ))}
+                                                        </TableBody>
+                                                    </Table>
+                                                </div>
+                                            ) : (
+                                                <span className="text-xs text-slate-400">Belum ada detail product.</span>
+                                            )}
+                                        </TableCell>
+                                    </TableRow>
+                                )}
+                            </Fragment>
+                        );
+                    })}
+                </TableBody>
+            </Table>
+            <TablePagination
+                page={page}
+                totalPages={totalPages}
+                totalItems={rows.length}
+                label="customer"
+                onPageChange={(nextPage) => {
+                    setPage(nextPage);
+                    setExpandedRows([]);
+                }}
+            />
+        </div>
+    );
+}
+
+function TablePagination({
+    page,
+    totalPages,
+    totalItems,
+    label,
+    onPageChange,
+}: {
+    page: number;
+    totalPages: number;
+    totalItems: number;
+    label: string;
+    onPageChange: (page: number) => void;
+}) {
+    if (totalItems <= 10) {
+        return null;
+    }
+
+    return (
+        <div className="flex items-center justify-between border-t border-slate-100 bg-white px-4 py-3">
+            <p className="text-sm text-slate-500">
+                Menampilkan <span className="font-semibold">{Math.min((page - 1) * 10 + 1, totalItems)}</span>-
+                <span className="font-semibold">{Math.min(page * 10, totalItems)}</span> dari{" "}
+                <span className="font-semibold">{totalItems}</span> {label}
+            </p>
+            <div className="flex items-center gap-2">
+                <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8"
+                    onClick={() => onPageChange(Math.max(1, page - 1))}
+                    disabled={page === 1}
+                >
+                    <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <span className="text-sm font-medium text-slate-600">
+                    {page} / {totalPages}
+                </span>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8"
+                    onClick={() => onPageChange(Math.min(totalPages, page + 1))}
+                    disabled={page === totalPages}
+                >
+                    <ChevronRight className="h-4 w-4" />
+                </Button>
+            </div>
         </div>
     );
 }
 
 function formatCurrencyCompact(value: number) {
-    if (Math.abs(value) >= 1_000_000_000_000) return `${(value / 1_000_000_000_000).toFixed(1)} T`;
-    if (Math.abs(value) >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(1)} M`;
-    if (Math.abs(value) >= 1_000_000) return `${(value / 1_000_000).toFixed(0)} jt`;
-    return new Intl.NumberFormat("id-ID", { maximumFractionDigits: 0 }).format(value);
+    const safeValue = Number.isFinite(value) ? value : 0;
+    if (Math.abs(safeValue) >= 1_000_000_000_000) return `${(safeValue / 1_000_000_000_000).toFixed(1)} T`;
+    if (Math.abs(safeValue) >= 1_000_000_000) return `${(safeValue / 1_000_000_000).toFixed(1)} M`;
+    if (Math.abs(safeValue) >= 1_000_000) return `${(safeValue / 1_000_000).toFixed(0)} jt`;
+    return new Intl.NumberFormat("id-ID", { maximumFractionDigits: 0 }).format(safeValue);
 }
 
 function formatNumberCompact(value: number) {
-    return new Intl.NumberFormat("id-ID", { maximumFractionDigits: 0 }).format(value);
+    const safeValue = Number.isFinite(value) ? value : 0;
+    return new Intl.NumberFormat("id-ID", { maximumFractionDigits: 0 }).format(safeValue);
 }
 
 function formatPercent(value: number) {
-    return `${new Intl.NumberFormat("id-ID", { maximumFractionDigits: 1 }).format(value)}%`;
+    const safeValue = Number.isFinite(value) ? value : 0;
+    return `${new Intl.NumberFormat("id-ID", { maximumFractionDigits: 1 }).format(safeValue)}%`;
 }
 
 function formatDateLabel(value: string | null) {
@@ -627,4 +983,11 @@ function formatDateLabel(value: string | null) {
         month: "short",
         year: "numeric",
     }).format(date);
+}
+
+function formatMonthLabel(value: string | null) {
+    if (!value) return "-";
+    const monthLabels = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+    const monthIndex = Number(value) - 1;
+    return monthLabels[monthIndex] || value;
 }

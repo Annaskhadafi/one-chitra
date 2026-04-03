@@ -4,6 +4,7 @@ import { db } from "@/db"
 import { salesRevenueSap } from "@/db/schema/sap"
 import { sql, and, isNotNull, or, notIlike, desc, asc, ilike } from "drizzle-orm"
 import { type SQL } from "drizzle-orm"
+import { salesRevenueCountableQty } from "@/lib/sales-revenue-sql"
 
 export interface SalesDashboardFilters {
     search?: string;
@@ -30,11 +31,13 @@ export async function getSalesDashboardFilters() {
             isNotNull(salesRevenueSap.billingDate),
             or(
                 sql`${salesRevenueSap.customerName} IS NULL`,
-                and(
-                    notIlike(salesRevenueSap.customerName, '%Chitra Paratama Singapore Branch%'),
-                    notIlike(salesRevenueSap.customerName, '%Transitetyre B.V%')
-                )
-            )
+                notIlike(salesRevenueSap.customerName, '%Chitra Paratama Singapore Branch%')
+            ),
+            notIlike(salesRevenueSap.customer, '%ITC008%'),
+            notIlike(salesRevenueSap.customer, '%1000289A%'),
+            notIlike(salesRevenueSap.customerName, '%Chitra Paratama%'),
+            notIlike(salesRevenueSap.customerName, '%Transityre b.v%'),
+            notIlike(salesRevenueSap.customerName, '%TRANSITYRE B.V%')
         );
 
         const [customers, salesmen, revTypes, plants] = await Promise.all([
@@ -132,12 +135,13 @@ function buildSalesDashboardWhere(
             isNotNull(salesRevenueSap.billingDate),
             or(
                 sql`${salesRevenueSap.customerName} IS NULL`,
-                and(
-                    notIlike(salesRevenueSap.customerName, '%Chitra Paratama Singapore Branch%'),
-                    notIlike(salesRevenueSap.customerName, '%Transitetyre B.V%'),
-                    notIlike(salesRevenueSap.customerName, '%TRANSITYRE B.V%')
-                )
-            )
+                notIlike(salesRevenueSap.customerName, '%Chitra Paratama Singapore Branch%')
+            ),
+            notIlike(salesRevenueSap.customer, '%ITC008%'),
+            notIlike(salesRevenueSap.customer, '%1000289A%'),
+            notIlike(salesRevenueSap.customerName, '%Chitra Paratama%'),
+            notIlike(salesRevenueSap.customerName, '%Transityre b.v%'),
+            notIlike(salesRevenueSap.customerName, '%TRANSITYRE B.V%')
         )
     ];
 
@@ -246,7 +250,7 @@ export async function getSalesDashboardData(filters: SalesDashboardFilters = {})
 
         const grossProfitSql = sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInDocCurr}, 0) - COALESCE(${salesRevenueSap.costOfSales}, 0))`;
         const totalRevenueSql = sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInDocCurr}, 0))`;
-        const totalQtySql = sql<number>`SUM(COALESCE(${salesRevenueSap.qty}, 0))`;
+        const totalQtySql = sql<number>`SUM(${salesRevenueCountableQty})`;
 
         // 1. Get Top Customers with Pagination and Sorting
         const orderExpr = sortByYear
@@ -293,15 +297,16 @@ export async function getSalesDashboardData(filters: SalesDashboardFilters = {})
             monthlyDataRaw,
             summaryResult,
             topSalesmenRaw,
+            topCustomersRaw,
         ] = await Promise.all([
             db.select({
-                category: sql<string>`TRIM(${salesRevenueSap.revType})`,
+                category: sql<string>`${groupRevenueSql}`,
                 year: sql<string>`EXTRACT(YEAR FROM ${salesRevenueSap.billingDate})::text`,
                 revenue: totalRevenueSql
             })
                 .from(salesRevenueSap)
                 .where(finalWhere)
-                .groupBy(sql`TRIM(${salesRevenueSap.revType})`, sql`EXTRACT(YEAR FROM ${salesRevenueSap.billingDate})`),
+                .groupBy(groupRevenueSql, sql`EXTRACT(YEAR FROM ${salesRevenueSap.billingDate})`),
             db.select({
                 salesman: sql<string>`TRIM(${salesRevenueSap.salesman})`,
                 year: sql<string>`EXTRACT(YEAR FROM ${salesRevenueSap.billingDate})::text`,
@@ -339,9 +344,108 @@ export async function getSalesDashboardData(filters: SalesDashboardFilters = {})
                 .from(salesRevenueSap)
                 .where(finalWhere)
                 .groupBy(sql`TRIM(${salesRevenueSap.salesman})`)
-                .orderBy(desc(totalRevenueSql))
-                .limit(10),
+                .orderBy(desc(totalRevenueSql)),
+            db.select({
+                customerName: salesRevenueSap.customerName,
+                revenue: totalRevenueSql,
+                grossProfit: grossProfitSql,
+                qty: totalQtySql,
+                salesmanCount: sql<number>`COUNT(DISTINCT ${salesRevenueSap.salesman})`,
+                lastBillingDate: sql<string>`MAX(${salesRevenueSap.billingDate})::text`,
+            })
+                .from(salesRevenueSap)
+                .where(finalWhere)
+                .groupBy(salesRevenueSap.customerName)
+                .orderBy(desc(totalRevenueSql)),
         ]);
+
+        const topSalesmanNames = topSalesmenRaw
+            .map((row) => row.salesman?.trim())
+            .filter((value): value is string => Boolean(value));
+        const topCustomerNames = topCustomersRaw
+            .map((row) => row.customerName?.trim())
+            .filter((value): value is string => Boolean(value));
+
+        const topSalesmenProductRows = topSalesmanNames.length > 0
+            ? await db.select({
+                salesman: sql<string>`TRIM(${salesRevenueSap.salesman})`,
+                materialDescription: salesRevenueSap.materialDescription,
+                customerName: salesRevenueSap.customerName,
+                lastMonth: sql<string>`TO_CHAR(MAX(${salesRevenueSap.billingDate}), 'MM')`,
+                revenue: totalRevenueSql,
+                grossProfit: grossProfitSql,
+                qty: totalQtySql,
+            })
+                .from(salesRevenueSap)
+                .where(and(finalWhere, sql`TRIM(${salesRevenueSap.salesman}) IN ${topSalesmanNames}`))
+                .groupBy(
+                    sql`TRIM(${salesRevenueSap.salesman})`,
+                    salesRevenueSap.materialDescription,
+                    salesRevenueSap.customerName
+                )
+                .orderBy(sql`TRIM(${salesRevenueSap.salesman})`, desc(totalRevenueSql))
+            : [];
+
+        const topProductsBySalesman = new Map<string, {
+            materialDescription: string | null;
+            customerName: string | null;
+            lastMonth: string | null;
+            revenue: number;
+            grossProfit: number;
+            marginPct: number;
+            qty: number;
+        }[]>();
+        const topCustomerProductRows = topCustomerNames.length > 0
+            ? await db.select({
+                customerName: salesRevenueSap.customerName,
+                materialDescription: salesRevenueSap.materialDescription,
+                revenue: totalRevenueSql,
+                grossProfit: grossProfitSql,
+                qty: totalQtySql,
+            })
+                .from(salesRevenueSap)
+                .where(and(finalWhere, sql`${salesRevenueSap.customerName} IN ${topCustomerNames}`))
+                .groupBy(salesRevenueSap.customerName, salesRevenueSap.materialDescription)
+                .orderBy(salesRevenueSap.customerName, desc(totalRevenueSql))
+            : [];
+
+        topSalesmenProductRows.forEach((row) => {
+            const salesmanName = row.salesman?.trim();
+            if (!salesmanName) return;
+            const currentRows = topProductsBySalesman.get(salesmanName) || [];
+            currentRows.push({
+                materialDescription: row.materialDescription,
+                customerName: row.customerName,
+                lastMonth: row.lastMonth,
+                revenue: Number(row.revenue) || 0,
+                grossProfit: Number(row.grossProfit) || 0,
+                marginPct: (Number(row.revenue) || 0) > 0 ? ((Number(row.grossProfit) || 0) / (Number(row.revenue) || 0)) * 100 : 0,
+                qty: Number(row.qty) || 0,
+            });
+            topProductsBySalesman.set(salesmanName, currentRows);
+        });
+        const topProductsByCustomer = new Map<string, {
+            materialDescription: string | null;
+            revenue: number;
+            grossProfit: number;
+            marginPct: number;
+            qty: number;
+        }[]>();
+
+        topCustomerProductRows.forEach((row) => {
+            const customerName = row.customerName?.trim();
+            if (!customerName) return;
+            const currentRows = topProductsByCustomer.get(customerName) || [];
+            if (currentRows.length >= 3) return;
+            currentRows.push({
+                materialDescription: row.materialDescription,
+                revenue: Number(row.revenue) || 0,
+                grossProfit: Number(row.grossProfit) || 0,
+                marginPct: (Number(row.revenue) || 0) > 0 ? ((Number(row.grossProfit) || 0) / (Number(row.revenue) || 0)) * 100 : 0,
+                qty: Number(row.qty) || 0,
+            });
+            topProductsByCustomer.set(customerName, currentRows);
+        });
 
         const summary = summaryResult[0] || {
             totalRevenue: 0,
@@ -366,6 +470,22 @@ export async function getSalesDashboardData(filters: SalesDashboardFilters = {})
                 customerCount: Number(row.customerCount) || 0,
                 contributionPct: totalRevenueAll > 0 ? (revenue / totalRevenueAll) * 100 : 0,
                 lastBillingDate: row.lastBillingDate,
+                topProducts: topProductsBySalesman.get(row.salesman?.trim() || "") || [],
+            };
+        });
+        const topCustomers = topCustomersRaw.map((row) => {
+            const revenue = Number(row.revenue) || 0;
+            const grossProfit = Number(row.grossProfit) || 0;
+            return {
+                customerName: row.customerName,
+                revenue,
+                grossProfit,
+                marginPct: revenue > 0 ? (grossProfit / revenue) * 100 : 0,
+                qty: Number(row.qty) || 0,
+                salesmanCount: Number(row.salesmanCount) || 0,
+                contributionPct: totalRevenueAll > 0 ? (revenue / totalRevenueAll) * 100 : 0,
+                lastBillingDate: row.lastBillingDate,
+                topProducts: topProductsByCustomer.get(row.customerName?.trim() || "") || [],
             };
         });
 
@@ -387,6 +507,7 @@ export async function getSalesDashboardData(filters: SalesDashboardFilters = {})
                 salesStats: salesDataRaw,
                 monthlyStats: monthlyDataRaw,
                 topSalesmen,
+                topCustomers,
             }
         };
     } catch (error) {
