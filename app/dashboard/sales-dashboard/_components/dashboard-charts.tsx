@@ -3,7 +3,9 @@
 import { useMemo } from "react"
 import {
     BarChart,
+    ComposedChart,
     Bar,
+    Line,
     XAxis,
     YAxis,
     CartesianGrid,
@@ -21,6 +23,7 @@ interface ChartData {
     month?: string;
     year: string;
     revenue: number;
+    grossProfit?: number;
 }
 
 interface DashboardChartsProps {
@@ -143,7 +146,9 @@ export function DashboardCharts({ categoryStats, salesStats, monthlyStats, years
             const monthNum = (idx + 1).toString().padStart(2, '0');
             const row: Record<string, string | number> = { name };
             sortedYears.forEach(year => {
-                row[year] = monthlyStats.find(s => s.month === monthNum && s.year === year)?.revenue || 0;
+                const match = monthlyStats.find(s => s.month === monthNum && s.year === year);
+                row[year] = match?.revenue || 0;
+                row[`${year}_profit`] = match?.grossProfit || 0;
             });
             return row;
         });
@@ -209,16 +214,28 @@ export function DashboardCharts({ categoryStats, salesStats, monthlyStats, years
                 </CardHeader>
                 <CardContent className="h-[450px]">
                     <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={monthlyChartData} barGap={2}>
+                        <ComposedChart data={monthlyChartData} barGap={2}>
                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
                             <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#64748B', fontWeight: 600 }} />
                             <YAxis tickFormatter={formatRevenue} axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#64748B' }} />
                             <Tooltip formatter={(val: number) => formatRevenue(val)} cursor={{ fill: '#F1F5F9' }} />
                             <Legend verticalAlign="top" iconType="rect" iconSize={12} wrapperStyle={{ fontSize: '12px', paddingBottom: '30px' }} />
                             {sortedYears.map(year => (
-                                <Bar key={year} dataKey={year} fill={YEAR_COLORS[year] || "#CBD5E1"} radius={[2, 2, 0, 0]} />
+                                <Bar key={`revenue-${year}`} dataKey={year} name={`Revenue ${year}`} fill={YEAR_COLORS[year] || "#CBD5E1"} radius={[2, 2, 0, 0]} />
                             ))}
-                        </BarChart>
+                            {sortedYears.map(year => (
+                                <Line
+                                    key={`profit-${year}`}
+                                    type="monotone"
+                                    dataKey={`${year}_profit`}
+                                    name={`Gross Profit ${year}`}
+                                    stroke={YEAR_COLORS[year] || "#CBD5E1"}
+                                    strokeWidth={2}
+                                    dot={{ r: 3, fill: YEAR_COLORS[year] || "#CBD5E1" }}
+                                    activeDot={{ r: 5 }}
+                                />
+                            ))}
+                        </ComposedChart>
                     </ResponsiveContainer>
                 </CardContent>
             </Card>

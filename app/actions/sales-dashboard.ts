@@ -244,8 +244,11 @@ export async function getSalesDashboardData(filters: SalesDashboardFilters = {})
             areas,
         });
 
+        const grossProfitSql = sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInDocCurr}, 0) - COALESCE(${salesRevenueSap.costOfSales}, 0))`;
+        const totalRevenueSql = sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInDocCurr}, 0))`;
+        const totalQtySql = sql<number>`SUM(COALESCE(${salesRevenueSap.qty}, 0))`;
+
         // 1. Get Top Customers with Pagination and Sorting
-        // First, get the list of customers and their total revenue for sorting
         const orderExpr = sortByYear
             ? sql`SUM(CASE WHEN EXTRACT(YEAR FROM ${salesRevenueSap.billingDate}) = ${Number(sortByYear)} THEN COALESCE(${salesRevenueSap.revenueInDocCurr}, 0) ELSE 0 END)`
             : sql`SUM(COALESCE(${salesRevenueSap.revenueInDocCurr}, 0))`;
@@ -284,32 +287,87 @@ export async function getSalesDashboardData(filters: SalesDashboardFilters = {})
         // 3. Category Stats for Charts (No changes needed if they use existing category field, 
         // but for parity with pivot, maybe charts should also use "Group Revenue"?)
         // Let's keep existing charts using revType as per previous screenshot unless asked.
-        const categoryDataRaw = await db.select({
-            category: sql<string>`TRIM(${salesRevenueSap.revType})`,
-            year: sql<string>`EXTRACT(YEAR FROM ${salesRevenueSap.billingDate})::text`,
-            revenue: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInDocCurr}, 0))`
-        })
-            .from(salesRevenueSap)
-            .where(finalWhere)
-            .groupBy(sql`TRIM(${salesRevenueSap.revType})`, sql`EXTRACT(YEAR FROM ${salesRevenueSap.billingDate})`);
+        const [
+            categoryDataRaw,
+            salesDataRaw,
+            monthlyDataRaw,
+            summaryResult,
+            topSalesmenRaw,
+        ] = await Promise.all([
+            db.select({
+                category: sql<string>`TRIM(${salesRevenueSap.revType})`,
+                year: sql<string>`EXTRACT(YEAR FROM ${salesRevenueSap.billingDate})::text`,
+                revenue: totalRevenueSql
+            })
+                .from(salesRevenueSap)
+                .where(finalWhere)
+                .groupBy(sql`TRIM(${salesRevenueSap.revType})`, sql`EXTRACT(YEAR FROM ${salesRevenueSap.billingDate})`),
+            db.select({
+                salesman: sql<string>`TRIM(${salesRevenueSap.salesman})`,
+                year: sql<string>`EXTRACT(YEAR FROM ${salesRevenueSap.billingDate})::text`,
+                revenue: totalRevenueSql
+            })
+                .from(salesRevenueSap)
+                .where(finalWhere)
+                .groupBy(sql`TRIM(${salesRevenueSap.salesman})`, sql`EXTRACT(YEAR FROM ${salesRevenueSap.billingDate})`),
+            db.select({
+                month: sql<string>`LPAD(EXTRACT(MONTH FROM ${salesRevenueSap.billingDate})::text, 2, '0')`,
+                year: sql<string>`EXTRACT(YEAR FROM ${salesRevenueSap.billingDate})::text`,
+                revenue: totalRevenueSql,
+                grossProfit: grossProfitSql,
+            })
+                .from(salesRevenueSap)
+                .where(finalWhere)
+                .groupBy(sql`EXTRACT(MONTH FROM ${salesRevenueSap.billingDate})`, sql`EXTRACT(YEAR FROM ${salesRevenueSap.billingDate})`),
+            db.select({
+                totalRevenue: totalRevenueSql,
+                grossProfit: grossProfitSql,
+                totalQty: totalQtySql,
+                activeCustomers: sql<number>`COUNT(DISTINCT ${salesRevenueSap.customerName})`,
+                activeSalesmen: sql<number>`COUNT(DISTINCT ${salesRevenueSap.salesman})`,
+            })
+                .from(salesRevenueSap)
+                .where(finalWhere),
+            db.select({
+                salesman: sql<string>`TRIM(${salesRevenueSap.salesman})`,
+                revenue: totalRevenueSql,
+                grossProfit: grossProfitSql,
+                qty: totalQtySql,
+                customerCount: sql<number>`COUNT(DISTINCT ${salesRevenueSap.customerName})`,
+                lastBillingDate: sql<string>`MAX(${salesRevenueSap.billingDate})::text`,
+            })
+                .from(salesRevenueSap)
+                .where(finalWhere)
+                .groupBy(sql`TRIM(${salesRevenueSap.salesman})`)
+                .orderBy(desc(totalRevenueSql))
+                .limit(10),
+        ]);
 
-        const salesDataRaw = await db.select({
-            salesman: sql<string>`TRIM(${salesRevenueSap.salesman})`,
-            year: sql<string>`EXTRACT(YEAR FROM ${salesRevenueSap.billingDate})::text`,
-            revenue: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInDocCurr}, 0))`
-        })
-            .from(salesRevenueSap)
-            .where(finalWhere)
-            .groupBy(sql`TRIM(${salesRevenueSap.salesman})`, sql`EXTRACT(YEAR FROM ${salesRevenueSap.billingDate})`);
-
-        const monthlyDataRaw = await db.select({
-            month: sql<string>`LPAD(EXTRACT(MONTH FROM ${salesRevenueSap.billingDate})::text, 2, '0')`,
-            year: sql<string>`EXTRACT(YEAR FROM ${salesRevenueSap.billingDate})::text`,
-            revenue: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInDocCurr}, 0))`
-        })
-            .from(salesRevenueSap)
-            .where(finalWhere)
-            .groupBy(sql`EXTRACT(MONTH FROM ${salesRevenueSap.billingDate})`, sql`EXTRACT(YEAR FROM ${salesRevenueSap.billingDate})`);
+        const summary = summaryResult[0] || {
+            totalRevenue: 0,
+            grossProfit: 0,
+            totalQty: 0,
+            activeCustomers: 0,
+            activeSalesmen: 0,
+        };
+        const marginPct = Number(summary.totalRevenue) > 0
+            ? (Number(summary.grossProfit) / Number(summary.totalRevenue)) * 100
+            : 0;
+        const totalRevenueAll = Number(summary.totalRevenue) || 0;
+        const topSalesmen = topSalesmenRaw.map((row) => {
+            const revenue = Number(row.revenue) || 0;
+            const grossProfit = Number(row.grossProfit) || 0;
+            return {
+                salesman: row.salesman,
+                revenue,
+                grossProfit,
+                marginPct: revenue > 0 ? (grossProfit / revenue) * 100 : 0,
+                qty: Number(row.qty) || 0,
+                customerCount: Number(row.customerCount) || 0,
+                contributionPct: totalRevenueAll > 0 ? (revenue / totalRevenueAll) * 100 : 0,
+                lastBillingDate: row.lastBillingDate,
+            };
+        });
 
         return {
             success: true,
@@ -317,9 +375,18 @@ export async function getSalesDashboardData(filters: SalesDashboardFilters = {})
                 pivotTable: nestedPivotData,
                 customerOrder: paginatedCustomers, // To maintain sorting on frontend
                 totalCustomers: totalCount,
+                summary: {
+                    totalRevenue: totalRevenueAll,
+                    grossProfit: Number(summary.grossProfit) || 0,
+                    marginPct,
+                    totalQty: Number(summary.totalQty) || 0,
+                    activeCustomers: Number(summary.activeCustomers) || 0,
+                    activeSalesmen: Number(summary.activeSalesmen) || 0,
+                },
                 categoryStats: categoryDataRaw,
                 salesStats: salesDataRaw,
-                monthlyStats: monthlyDataRaw
+                monthlyStats: monthlyDataRaw,
+                topSalesmen,
             }
         };
     } catch (error) {

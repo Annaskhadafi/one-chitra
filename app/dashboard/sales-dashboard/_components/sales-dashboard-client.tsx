@@ -22,8 +22,16 @@ import {
     MoreVertical,
     HelpCircle,
     ChevronLeft,
-    ChevronRight
+    ChevronRight,
+    DollarSign,
+    BadgePercent,
+    Boxes,
+    Users,
+    UserRound,
+    Trophy,
+    TrendingUp
 } from "lucide-react"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 interface SalesDashboardClientProps {
     initialFilterOptions: {
@@ -40,9 +48,27 @@ interface DashboardData {
     pivotTable: { customerName: string | null; groupRevenue: string; year: string; revenue: number }[];
     customerOrder: { customerName: string | null; totalRevenue: number }[];
     totalCustomers: number;
+    summary: {
+        totalRevenue: number;
+        grossProfit: number;
+        marginPct: number;
+        totalQty: number;
+        activeCustomers: number;
+        activeSalesmen: number;
+    };
     categoryStats: { category: string | null; year: string; revenue: number }[];
     salesStats: { salesman: string | null; year: string; revenue: number }[];
-    monthlyStats: { month: string; year: string; revenue: number }[];
+    monthlyStats: { month: string; year: string; revenue: number; grossProfit: number }[];
+    topSalesmen: {
+        salesman: string | null;
+        revenue: number;
+        grossProfit: number;
+        marginPct: number;
+        qty: number;
+        customerCount: number;
+        contributionPct: number;
+        lastBillingDate: string | null;
+    }[];
 }
 
 export function SalesDashboardClient({ initialFilterOptions }: SalesDashboardClientProps) {
@@ -288,6 +314,53 @@ export function SalesDashboardClient({ initialFilterOptions }: SalesDashboardCli
 
             {/* Main Content Sections */}
             <div className="flex flex-col gap-6">
+                {data?.summary && (
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+                        <SummaryCard
+                            title="Total Revenue"
+                            value={formatCurrencyCompact(data.summary.totalRevenue)}
+                            subtitle="Omzet sesuai filter aktif"
+                            icon={<DollarSign className="h-5 w-5" />}
+                            accent="blue"
+                        />
+                        <SummaryCard
+                            title="Gross Profit"
+                            value={formatCurrencyCompact(data.summary.grossProfit)}
+                            subtitle="Revenue dikurangi cost of sales"
+                            icon={<TrendingUp className="h-5 w-5" />}
+                            accent="emerald"
+                        />
+                        <SummaryCard
+                            title="Margin %"
+                            value={`${formatPercent(data.summary.marginPct)}`}
+                            subtitle="Persentase gross profit"
+                            icon={<BadgePercent className="h-5 w-5" />}
+                            accent="amber"
+                        />
+                        <SummaryCard
+                            title="Qty Sold"
+                            value={formatNumberCompact(data.summary.totalQty)}
+                            subtitle="Total quantity terjual"
+                            icon={<Boxes className="h-5 w-5" />}
+                            accent="violet"
+                        />
+                        <SummaryCard
+                            title="Active Customer"
+                            value={formatNumberCompact(data.summary.activeCustomers)}
+                            subtitle="Customer yang punya transaksi"
+                            icon={<Users className="h-5 w-5" />}
+                            accent="sky"
+                        />
+                        <SummaryCard
+                            title="Active Salesman"
+                            value={formatNumberCompact(data.summary.activeSalesmen)}
+                            subtitle="Salesman yang menghasilkan revenue"
+                            icon={<UserRound className="h-5 w-5" />}
+                            accent="rose"
+                        />
+                    </div>
+                )}
+
                 {/* Charts Section */}
                 {data && (
                     <DashboardCharts
@@ -302,6 +375,22 @@ export function SalesDashboardClient({ initialFilterOptions }: SalesDashboardCli
                         monthlyStats={data.monthlyStats}
                         years={filters.years}
                     />
+                )}
+
+                {data && (
+                    <Card className="border-none shadow-md overflow-hidden rounded-xl">
+                        <CardHeader className="bg-gradient-to-r from-[#0052CC] to-[#1d4ed8] py-4 text-white flex flex-row items-center justify-between">
+                            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                                <Trophy className="h-4 w-4" /> Top Salesman Performance
+                            </CardTitle>
+                            <div className="text-xs opacity-90">
+                                Menampilkan 10 salesman terbaik dari filter aktif
+                            </div>
+                        </CardHeader>
+                        <CardContent className="p-0">
+                            <TopSalesmenTable rows={data.topSalesmen} />
+                        </CardContent>
+                    </Card>
                 )}
 
                 {/* Pivot Table Section */}
@@ -410,4 +499,132 @@ function DropdownFilter({ label, icon, options, selected, onFilterChange, primar
             contentClassName="w-72"
         />
     );
+}
+
+function SummaryCard({
+    title,
+    value,
+    subtitle,
+    icon,
+    accent,
+}: {
+    title: string;
+    value: string;
+    subtitle: string;
+    icon: React.ReactNode;
+    accent: "blue" | "emerald" | "amber" | "violet" | "sky" | "rose";
+}) {
+    const accentStyles: Record<string, { gradient: string; bg: string }> = {
+        blue: { gradient: "from-blue-600 to-blue-500", bg: "bg-blue-50" },
+        emerald: { gradient: "from-emerald-600 to-emerald-500", bg: "bg-emerald-50" },
+        amber: { gradient: "from-amber-500 to-orange-500", bg: "bg-amber-50" },
+        violet: { gradient: "from-violet-600 to-violet-500", bg: "bg-violet-50" },
+        sky: { gradient: "from-sky-600 to-cyan-500", bg: "bg-sky-50" },
+        rose: { gradient: "from-rose-600 to-pink-500", bg: "bg-rose-50" },
+    };
+    const { gradient, bg } = accentStyles[accent];
+
+    return (
+        <Card className="border border-slate-100 shadow-sm rounded-xl overflow-hidden">
+            <CardContent className="p-5">
+                <div className="flex items-start justify-between gap-4">
+                    <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</p>
+                        <p className="mt-2 text-2xl font-bold text-[#172B4D]">{value}</p>
+                        <p className="mt-1 text-xs text-slate-500">{subtitle}</p>
+                    </div>
+                    <div className={`flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br ${gradient} text-white shadow-sm`}>
+                        {icon}
+                    </div>
+                </div>
+                <div className={`mt-4 h-2 rounded-full ${bg}`}>
+                    <div className={`h-2 w-2/3 rounded-full bg-gradient-to-r ${gradient}`} />
+                </div>
+            </CardContent>
+        </Card>
+    );
+}
+
+function TopSalesmenTable({
+    rows,
+}: {
+    rows: {
+        salesman: string | null;
+        revenue: number;
+        grossProfit: number;
+        marginPct: number;
+        qty: number;
+        customerCount: number;
+        contributionPct: number;
+        lastBillingDate: string | null;
+    }[];
+}) {
+    if (rows.length === 0) {
+        return (
+            <div className="py-12 text-center text-sm text-slate-500">
+                Belum ada data salesman untuk filter yang dipilih.
+            </div>
+        );
+    }
+
+    return (
+        <div className="overflow-x-auto">
+            <Table>
+                <TableHeader>
+                    <TableRow className="bg-slate-50">
+                        <TableHead className="w-16 text-center">Rank</TableHead>
+                        <TableHead>Sales Name</TableHead>
+                        <TableHead className="text-right">Revenue</TableHead>
+                        <TableHead className="text-right">Gross Profit</TableHead>
+                        <TableHead className="text-right">Margin %</TableHead>
+                        <TableHead className="text-right">Qty</TableHead>
+                        <TableHead className="text-right">Customer</TableHead>
+                        <TableHead className="text-right">Contribution</TableHead>
+                        <TableHead className="text-right">Last Billing</TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {rows.map((row, index) => (
+                        <TableRow key={`${row.salesman}-${index}`}>
+                            <TableCell className="text-center font-semibold text-[#0052CC]">#{index + 1}</TableCell>
+                            <TableCell className="font-semibold text-[#172B4D]">{row.salesman || "-"}</TableCell>
+                            <TableCell className="text-right">{formatCurrencyCompact(row.revenue)}</TableCell>
+                            <TableCell className="text-right">{formatCurrencyCompact(row.grossProfit)}</TableCell>
+                            <TableCell className="text-right">{formatPercent(row.marginPct)}</TableCell>
+                            <TableCell className="text-right">{formatNumberCompact(row.qty)}</TableCell>
+                            <TableCell className="text-right">{formatNumberCompact(row.customerCount)}</TableCell>
+                            <TableCell className="text-right">{formatPercent(row.contributionPct)}</TableCell>
+                            <TableCell className="text-right">{formatDateLabel(row.lastBillingDate)}</TableCell>
+                        </TableRow>
+                    ))}
+                </TableBody>
+            </Table>
+        </div>
+    );
+}
+
+function formatCurrencyCompact(value: number) {
+    if (Math.abs(value) >= 1_000_000_000_000) return `${(value / 1_000_000_000_000).toFixed(1)} T`;
+    if (Math.abs(value) >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(1)} M`;
+    if (Math.abs(value) >= 1_000_000) return `${(value / 1_000_000).toFixed(0)} jt`;
+    return new Intl.NumberFormat("id-ID", { maximumFractionDigits: 0 }).format(value);
+}
+
+function formatNumberCompact(value: number) {
+    return new Intl.NumberFormat("id-ID", { maximumFractionDigits: 0 }).format(value);
+}
+
+function formatPercent(value: number) {
+    return `${new Intl.NumberFormat("id-ID", { maximumFractionDigits: 1 }).format(value)}%`;
+}
+
+function formatDateLabel(value: string | null) {
+    if (!value) return "-";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return new Intl.DateTimeFormat("id-ID", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+    }).format(date);
 }
