@@ -311,6 +311,52 @@ async function resolveProductForStockLookup({
     })
 }
 
+async function resolveRelatedProductIdsForStockLookup({
+    productId,
+    materialNumber,
+}: {
+    productId?: number | null
+    materialNumber?: string | null
+}) {
+    const product = await resolveProductForStockLookup({ productId, materialNumber })
+    if (!product) {
+        return { product: null, productIds: [] as number[] }
+    }
+
+    const normalizedReferences = Array.from(
+        new Set(
+            [
+                product.materialNumber,
+                product.materialNumberCk,
+                product.oldMaterialNo,
+                materialNumber,
+            ]
+                .map((value) => value?.trim())
+                .filter((value): value is string => Boolean(value))
+        )
+    )
+
+    if (normalizedReferences.length === 0) {
+        return { product, productIds: [product.id] }
+    }
+
+    const referenceFilters = normalizedReferences.flatMap((reference) => ([
+        eq(products.materialNumber, reference),
+        eq(products.materialNumberCk, reference),
+        eq(products.oldMaterialNo, reference),
+    ]))
+
+    const relatedProducts = await db
+        .select({ id: products.id })
+        .from(products)
+        .where(or(...referenceFilters))
+
+    return {
+        product,
+        productIds: Array.from(new Set([product.id, ...relatedProducts.map((item) => item.id)])),
+    }
+}
+
 export async function getStockByMaterialNumber(materialNumber: string) {
     return getStockByProductReference({ materialNumber })
 }
@@ -323,28 +369,56 @@ export async function getStockByProductReference({
     materialNumber?: string | null
 }) {
     try {
-        const product = await resolveProductForStockLookup({
-            productId,
-            materialNumber,
-        })
-        
-        if (!product) {
-            return { success: false, error: "Product not found" }
-        }
+        return await db.transaction(async (tx) => {
+            await consolidateDuplicateStocks(tx)
 
-        const stocks = await db.query.stockLevels.findMany({
-            where: eq(stockLevels.productId, product.id),
-            with: {
-                warehouse: {
-                    columns: {
-                        sloc: true,
-                        description: true,
+            const { product, productIds } = await resolveRelatedProductIdsForStockLookup({
+                productId,
+                materialNumber,
+            })
+
+            if (!product || productIds.length === 0) {
+                return { success: false, error: "Product not found" }
+            }
+
+            const stocks = await tx.query.stockLevels.findMany({
+                where: inArray(stockLevels.productId, productIds),
+                with: {
+                    warehouse: {
+                        columns: {
+                            sloc: true,
+                            description: true,
+                        }
                     }
                 }
-            }
+            })
+
+            const aggregatedStocks = Array.from(
+                stocks.reduce((map, stock) => {
+                    const warehouseKey = `${stock.warehouseId}|${stock.warehouse?.sloc ?? ""}`
+                    const totalStock = Number(stock.totalStock || 0)
+                    const existing = map.get(warehouseKey)
+
+                    if (existing) {
+                        existing.totalStock += totalStock
+                        return map
+                    }
+
+                    map.set(warehouseKey, {
+                        warehouse: {
+                            sloc: stock.warehouse?.sloc || "",
+                            description: stock.warehouse?.description || null,
+                        },
+                        totalStock,
+                    })
+
+                    return map
+                }, new Map<string, { warehouse: { sloc: string; description: string | null }; totalStock: number }>())
+                .values()
+            )
+
+            return { success: true, data: aggregatedStocks }
         })
-        
-        return { success: true, data: stocks }
     } catch (error) {
         console.error("getStockByMaterialNumber error:", error)
         return { success: false, error: "Failed to fetch stock" }
