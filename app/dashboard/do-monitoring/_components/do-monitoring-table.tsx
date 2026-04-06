@@ -1,12 +1,12 @@
 "use client"
 
-import { useState, useMemo, useRef, useEffect } from "react"
+import { useState, useMemo, useRef } from "react"
 import { EditDoDialog } from "./edit-do-dialog"
 import { BulkDoOcrUploadDialog } from "./bulk-do-ocr-upload-dialog"
 import { ScanDoPreview } from "./scan-do-preview"
 import { SuccessAlertDialog } from "@/components/success-alert-dialog"
 import { DeliveryPdfPreview } from "../../deliveries/_components/delivery-pdf-preview"
-import { deleteDelivery, updateDoMonitoringFields, getDeliveries } from "@/app/actions/delivery"
+import { deleteDelivery, updateDoMonitoringFields, getDoMonitoringDeliveries } from "@/app/actions/delivery"
 import { batchSyncInvoiceFromBilling } from "@/app/actions/billing"
 import {
     Table,
@@ -76,6 +76,8 @@ export interface DeliveryWithRelations extends Delivery {
     createdByUser: User | null
     items: (DeliveryItem & { product: Product })[]
 }
+
+const DO_MONITORING_QUERY_KEY = ["do-monitoring-deliveries"] as const
 
 function getWarehouseLabel(warehouse: Warehouse | null | undefined) {
     if (!warehouse) return "-"
@@ -148,10 +150,11 @@ function getDateRangePreset(preset: string): { from: Date; to: Date } | null {
 
 export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRelations[] }) {
     const { data = initialData } = useQuery({
-        queryKey: ["deliveries"],
-        queryFn: () => getDeliveries(),
+        queryKey: DO_MONITORING_QUERY_KEY,
+        queryFn: () => getDoMonitoringDeliveries(),
         initialData: initialData,
         staleTime: 60 * 1000,
+        refetchOnWindowFocus: false,
     })
 
     const queryClient = useQueryClient()
@@ -204,11 +207,11 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
     const updateStatusMutation = useMutation({
         mutationFn: ({ id, status }: { id: number, status: string }) => updateDoMonitoringFields(id, { doStatus: getStoredDoStatus(status) }),
         onMutate: async ({ id, status }) => {
-            await queryClient.cancelQueries({ queryKey: ["deliveries"] })
-            const previousDeliveries = queryClient.getQueryData<DeliveryWithRelations[]>(["deliveries"])
+            await queryClient.cancelQueries({ queryKey: DO_MONITORING_QUERY_KEY })
+            const previousDeliveries = queryClient.getQueryData<DeliveryWithRelations[]>(DO_MONITORING_QUERY_KEY)
 
             if (previousDeliveries) {
-                queryClient.setQueryData<DeliveryWithRelations[]>(["deliveries"], (old) =>
+                queryClient.setQueryData<DeliveryWithRelations[]>(DO_MONITORING_QUERY_KEY, (old) =>
                     old?.map(d => d.id === id ? { ...d, doStatus: getStoredDoStatus(status) } : d)
                 )
             }
@@ -217,23 +220,23 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
         },
         onError: (err, variables, context) => {
             if (context?.previousDeliveries) {
-                queryClient.setQueryData(["deliveries"], context.previousDeliveries)
+                queryClient.setQueryData(DO_MONITORING_QUERY_KEY, context.previousDeliveries)
             }
             toast.error("Failed to update DO Status")
         },
         onSettled: () => {
-            queryClient.invalidateQueries({ queryKey: ["deliveries"] })
+            queryClient.invalidateQueries({ queryKey: DO_MONITORING_QUERY_KEY })
         },
     })
 
     const deleteMutation = useMutation({
         mutationFn: (id: number) => deleteDelivery(id),
         onMutate: async (id) => {
-            await queryClient.cancelQueries({ queryKey: ["deliveries"] })
-            const previousDeliveries = queryClient.getQueryData<DeliveryWithRelations[]>(["deliveries"])
+            await queryClient.cancelQueries({ queryKey: DO_MONITORING_QUERY_KEY })
+            const previousDeliveries = queryClient.getQueryData<DeliveryWithRelations[]>(DO_MONITORING_QUERY_KEY)
 
             if (previousDeliveries) {
-                queryClient.setQueryData<DeliveryWithRelations[]>(["deliveries"], (old) =>
+                queryClient.setQueryData<DeliveryWithRelations[]>(DO_MONITORING_QUERY_KEY, (old) =>
                     old?.filter(d => d.id !== id)
                 )
             }
@@ -242,12 +245,12 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
         },
         onError: (err, variables, context) => {
             if (context?.previousDeliveries) {
-                queryClient.setQueryData(["deliveries"], context.previousDeliveries)
+                queryClient.setQueryData(DO_MONITORING_QUERY_KEY, context.previousDeliveries)
             }
             toast.error("Failed to delete delivery")
         },
         onSettled: () => {
-            queryClient.invalidateQueries({ queryKey: ["deliveries"] })
+            queryClient.invalidateQueries({ queryKey: DO_MONITORING_QUERY_KEY })
         },
     })
 
@@ -675,7 +678,7 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
         try {
             const result = await batchSyncInvoiceFromBilling()
             if (result.success) {
-                queryClient.invalidateQueries({ queryKey: ["deliveries"] })
+                queryClient.invalidateQueries({ queryKey: DO_MONITORING_QUERY_KEY })
                 if (result.updated > 0) {
                     const partialInfo = result.partialMatched > 0
                         ? ` (${result.partialMatched} parsial via DO SAP)`

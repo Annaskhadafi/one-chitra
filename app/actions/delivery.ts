@@ -344,6 +344,67 @@ export async function getDeliveries() {
     return normalizeDeliveryOutput(mergeDeliveryRows(rows))
 }
 
+export async function getDoMonitoringDeliveries() {
+    noStore()
+    const rows = await db.query.deliveries.findMany({
+        with: {
+            salesOrder: {
+                with: {
+                    customer: true,
+                    items: true,
+                },
+            },
+            warehouse: true,
+            createdByUser: true,
+            items: {
+                with: {
+                    product: true,
+                },
+            },
+        },
+        orderBy: [desc(deliveries.createdAt)],
+    })
+
+    return normalizeDeliveryOutput(mergeDeliveryRows(rows))
+}
+
+export async function getDoMonitoringDeliveryOptions() {
+    noStore()
+    const rows = await db.query.deliveries.findMany({
+        columns: {
+            id: true,
+            deliveryNumber: true,
+            doSap: true,
+            invoiceNumber: true,
+        },
+        with: {
+            salesOrder: {
+                columns: {},
+                with: {
+                    customer: {
+                        columns: {
+                            name: true,
+                        },
+                    },
+                },
+            },
+        },
+        orderBy: [desc(deliveries.createdAt)],
+    })
+
+    return rows.map((delivery) => ({
+        id: delivery.id,
+        deliveryNumber: delivery.deliveryNumber,
+        doSap: delivery.doSap,
+        invoiceNumber: delivery.invoiceNumber,
+        salesOrder: {
+            customer: {
+                name: delivery.salesOrder?.customer?.name ?? null,
+            },
+        },
+    }))
+}
+
 export async function getDeliveryItemsFlat() {
     noStore()
     const allDeliveries = await db.query.deliveries.findMany({

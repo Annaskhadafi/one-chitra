@@ -1,4 +1,4 @@
-import { getDeliveries } from "@/app/actions/delivery"
+import { getDoMonitoringDeliveries } from "@/app/actions/delivery"
 import { DoMonitoringTable, type DeliveryWithRelations } from "./_components/do-monitoring-table"
 import { Truck, Clock, CheckCircle, DollarSign, FileX } from "lucide-react"
 import { ScoreCard } from "@/components/score-card"
@@ -24,7 +24,7 @@ function formatCurrency(value: number) {
 }
 
 export default async function DoMonitoringPage() {
-    const deliveriesData = await getDeliveries()
+    const deliveriesData = await getDoMonitoringDeliveries()
 
     const pendingCount = deliveriesData.filter(d => getDoMonitoringStatus(d) === "Pending").length
     const returnedCount = deliveriesData.filter(d => getDoMonitoringStatus(d) === "Return").length

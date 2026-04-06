@@ -130,7 +130,8 @@ export function EditDoDialog({
 
         if (res.success) {
             toast.success("DO Info updated successfully")
-            queryClient.invalidateQueries({ queryKey: ["deliveries"] })
+            queryClient.invalidateQueries({ queryKey: ["do-monitoring-deliveries"] })
+            queryClient.invalidateQueries({ queryKey: ["do-monitoring-upload-options"] })
             onOpenChange(false)
         } else {
             toast.error(res.error || "Failed to update DO Info")

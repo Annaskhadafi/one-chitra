@@ -3,7 +3,7 @@
 import Image from "next/image"
 import { useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { getDeliveries, updateDoMonitoringFields } from "@/app/actions/delivery"
+import { getDoMonitoringDeliveryOptions, updateDoMonitoringFields } from "@/app/actions/delivery"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -67,11 +67,15 @@ export function BulkDoOcrUploadDialog() {
     const [progress, setProgress] = useState(0)
     const [summary, setSummary] = useState<SaveSummary | null>(null)
     const [previewItemId, setPreviewItemId] = useState<string | null>(null)
+    const deliveryOptionsQueryKey = ["do-monitoring-upload-options"] as const
+    const doMonitoringQueryKey = ["do-monitoring-deliveries"] as const
 
     const { data: deliveries = [] } = useQuery({
-        queryKey: ["deliveries"],
-        queryFn: () => getDeliveries(),
+        queryKey: deliveryOptionsQueryKey,
+        queryFn: () => getDoMonitoringDeliveryOptions(),
+        enabled: open,
         staleTime: 60 * 1000,
+        refetchOnWindowFocus: false,
     })
 
     const deliveryOptions = useMemo(
@@ -222,11 +226,14 @@ export function BulkDoOcrUploadDialog() {
                     saved: false,
                 }
                 setFiles([...nextFiles])
-                setPreviewItemId((current) => current ?? nextFiles[index].id)
                 setProgress(Math.round(((index + 1) / nextFiles.length) * 100))
             }
 
             setProgress(100)
+            const firstUploadedFile = nextFiles.find((item) => item.fileUrl)
+            if (firstUploadedFile) {
+                setPreviewItemId((current) => current ?? firstUploadedFile.id)
+            }
             toast.success("Upload selesai. Review preview, lakukan manual matching, lalu klik Save.")
         } finally {
             setIsProcessing(false)
@@ -312,7 +319,8 @@ export function BulkDoOcrUploadDialog() {
                 totalReceived: candidateFiles.length,
             })
 
-            await queryClient.invalidateQueries({ queryKey: ["deliveries"] })
+            await queryClient.invalidateQueries({ queryKey: doMonitoringQueryKey })
+            await queryClient.invalidateQueries({ queryKey: deliveryOptionsQueryKey })
 
             toast.success(`${updatedCount} file berhasil disimpan`, {
                 description: unmatchedCount > 0 || duplicateCount > 0
@@ -351,6 +359,8 @@ export function BulkDoOcrUploadDialog() {
     const previewTargetDelivery = previewTargetDeliveryId
         ? deliveryOptions.find((delivery) => delivery.id === previewTargetDeliveryId) || null
         : null
+    const shouldRenderPreviewDocument = Boolean(previewUrl) && !isProcessing
+    const resolvedPreviewUrl = previewUrl ?? ""
 
     return (
         <Dialog open={open} onOpenChange={resetState}>
@@ -408,11 +418,11 @@ export function BulkDoOcrUploadDialog() {
                                         ) : null}
                                     </div>
                                     <div className="relative min-h-[640px] flex-1 bg-muted/20">
-                                        {previewUrl ? (
-                                            isUploadImageFile(previewUrl) || !previewUrl.toLowerCase().endsWith(".pdf") ? (
+                                        {shouldRenderPreviewDocument ? (
+                                            isUploadImageFile(resolvedPreviewUrl) || !resolvedPreviewUrl.toLowerCase().endsWith(".pdf") ? (
                                                 <div className="flex h-full items-center justify-center p-4">
                                                     <Image
-                                                        src={previewUrl}
+                                                        src={resolvedPreviewUrl}
                                                         alt={previewItem.file.name}
                                                         width={1200}
                                                         height={900}
@@ -422,16 +432,26 @@ export function BulkDoOcrUploadDialog() {
                                                 </div>
                                             ) : (
                                                 <iframe
-                                                    src={`${previewUrl}#toolbar=0&navpanes=0&scrollbar=1&view=FitH`}
+                                                    src={`${resolvedPreviewUrl}#toolbar=0&navpanes=0&scrollbar=1&view=FitH`}
                                                     className="absolute inset-0 h-full w-full border-0"
                                                     title={`Preview ${previewItem.file.name}`}
                                                 />
                                             )
                                         ) : (
                                             <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-muted-foreground">
-                                                <Eye className="h-8 w-8 opacity-40" />
-                                                <p className="text-sm font-medium">Dokumen belum siap dipreview</p>
-                                                <p className="text-xs">Pilih file PDF, lalu sistem akan upload dan menampilkan preview otomatis.</p>
+                                                {isProcessing ? (
+                                                    <>
+                                                        <Loader2 className="h-8 w-8 animate-spin opacity-60" />
+                                                        <p className="text-sm font-medium">Upload sedang berjalan</p>
+                                                        <p className="text-xs">Preview PDF ditunda dulu supaya bulk upload tidak terasa stuck.</p>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Eye className="h-8 w-8 opacity-40" />
+                                                        <p className="text-sm font-medium">Dokumen belum siap dipreview</p>
+                                                        <p className="text-xs">Pilih file PDF, lalu sistem akan upload dan menampilkan preview otomatis.</p>
+                                                    </>
+                                                )}
                                             </div>
                                         )}
                                     </div>
