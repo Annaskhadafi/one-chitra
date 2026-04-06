@@ -4,6 +4,7 @@ import Image from "next/image"
 import { useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { getDoMonitoringDeliveryOptions, updateDoMonitoringFields } from "@/app/actions/delivery"
+import { uploadFile } from "@/app/actions/upload"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -191,23 +192,19 @@ export function BulkDoOcrUploadDialog() {
                 const current = nextFiles[index]
                 nextFiles[index] = { ...current, status: "uploading", message: "Mengunggah dokumen..." }
                 setFiles([...nextFiles])
-                setProgress(Math.round((index / nextFiles.length) * 40))
+                const itemStartProgress = Math.max(5, Math.round((index / nextFiles.length) * 100))
+                setProgress(itemStartProgress)
 
                 const formData = new FormData()
                 formData.append("file", current.file)
 
-                const response = await fetch("/api/uploads", {
-                    method: "POST",
-                    body: formData,
-                })
-
-                const body = await response.json() as {
+                const body = await uploadFile(formData) as {
                     success?: boolean
                     error?: string
                     url?: string
                 }
 
-                if (!response.ok || !body.success || body?.error || !body.url) {
+                if (!body?.success || body.error || !body.url) {
                     nextFiles[index] = {
                         ...nextFiles[index],
                         status: "failed",
