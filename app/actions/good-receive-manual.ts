@@ -781,7 +781,7 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
                 if (!sourceLine) {
                     throw new Error(`PO Item ${item.poItem} tidak ditemukan di SAP untuk PO ${poNumber}`)
                 }
-                if (sourceLine.grProcessedDate) {
+                if (sourceLine.grProcessedDate && sourceLine.openQty <= 0) {
                     throw new Error(`PO Item ${item.poItem} sudah pernah di-GR`)
                 }
 
@@ -882,8 +882,7 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
                 if (entryMode === "po") {
                     const sourceLine = latestByPoItem.get(item.poItem)
                     const sapOpenQty = Number(sourceLine?.openQty ?? 0)
-                    const previousManualQty = manualReceivedByPoItem.get(`${poNumber}-${item.poItem}`) ?? 0
-                    const remainingQtyAfterSubmit = Math.max(0, sapOpenQty - previousManualQty - item.quantity)
+                    const remainingQtyAfterSubmit = Math.max(0, sapOpenQty - item.quantity)
 
                     const hasMe2lRow = sapRows.some((row) => row.item === item.poItem)
                     if (remainingQtyAfterSubmit <= 0 && hasMe2lRow) {
