@@ -53,6 +53,7 @@ export type EmailOptions = {
         content: Buffer | string
         contentType?: string
     }>
+    existingLogId?: string | null
     logMeta?: {
         templateId?: string | null
         templateCode?: string | null
@@ -180,6 +181,29 @@ async function writeEmailLog(params: {
     }
 }
 
+async function updateEmailLog(params: {
+    id: string
+    fromEmail?: string | null
+    status: "sent" | "failed" | "pending"
+    errorMessage?: string | null
+    sentAt?: Date | null
+}) {
+    try {
+        await ensureEmailManagementSchema()
+        await db
+            .update(emailLogs)
+            .set({
+                fromEmail: params.fromEmail ?? null,
+                status: params.status,
+                errorMessage: params.errorMessage ?? null,
+                sentAt: params.sentAt ?? null,
+            })
+            .where(eq(emailLogs.id, params.id))
+    } catch (error) {
+        console.error("[EMAIL] Failed to update email log:", error)
+    }
+}
+
 async function writePushNotificationLog(params: {
     to?: string | string[] | null
     cc?: string | string[] | null
@@ -212,6 +236,7 @@ async function dispatchTemplateMessage(args: {
         content: Buffer | string
         contentType?: string
     }>
+    existingLogId?: string | null
     channels: NotificationDeliveryChannel[]
     logMeta?: EmailOptions["logMeta"]
 }): Promise<DispatchTemplateResult> {
@@ -255,6 +280,7 @@ async function dispatchTemplateMessage(args: {
             actionUrl: args.actionUrl,
             replyTo: args.replyTo,
             attachments: args.attachments,
+            existingLogId: args.existingLogId,
             logMeta: args.logMeta,
         })
     }
@@ -431,20 +457,29 @@ export async function sendEmail(
 
     if (to.length === 0) {
         result = { success: false, error: "No recipient email provided" }
-        await writeEmailLog({
-            to: options.to,
-            cc: options.cc,
-            subject: options.subject,
-            html: options.html ?? null,
-            text: options.text ?? null,
-            actionUrl: options.actionUrl ?? null,
-            status: "failed",
-            errorMessage: result.error,
-            templateId: options.logMeta?.templateId ?? null,
-            templateCode: options.logMeta?.templateCode ?? null,
-            templateName: options.logMeta?.templateName ?? null,
-            deliveryChannel: "email",
-        })
+        if (options.existingLogId) {
+            await updateEmailLog({
+                id: options.existingLogId,
+                status: "failed",
+                errorMessage: result.error,
+                sentAt: null,
+            })
+        } else {
+            await writeEmailLog({
+                to: options.to,
+                cc: options.cc,
+                subject: options.subject,
+                html: options.html ?? null,
+                text: options.text ?? null,
+                actionUrl: options.actionUrl ?? null,
+                status: "failed",
+                errorMessage: result.error,
+                templateId: options.logMeta?.templateId ?? null,
+                templateCode: options.logMeta?.templateCode ?? null,
+                templateName: options.logMeta?.templateName ?? null,
+                deliveryChannel: "email",
+            })
+        }
         return result
     }
 
@@ -474,22 +509,32 @@ export async function sendEmail(
         result = { success: false, error: errorMessage }
     }
 
-    await writeEmailLog({
-        to,
-        cc,
-        fromEmail: smtpConfig?.fromEmail ?? config?.fromEmail ?? null,
-        subject: options.subject,
-        html: options.html ?? null,
-        text: options.text ?? null,
-        actionUrl: options.actionUrl ?? null,
-        status: result.success ? "sent" : "failed",
-        errorMessage: result.error ?? null,
-        sentAt: result.success ? new Date() : null,
-        templateId: options.logMeta?.templateId ?? null,
-        templateCode: options.logMeta?.templateCode ?? null,
-        templateName: options.logMeta?.templateName ?? null,
-        deliveryChannel: "email",
-    })
+    if (options.existingLogId) {
+        await updateEmailLog({
+            id: options.existingLogId,
+            fromEmail: smtpConfig?.fromEmail ?? config?.fromEmail ?? null,
+            status: result.success ? "sent" : "failed",
+            errorMessage: result.error ?? null,
+            sentAt: result.success ? new Date() : null,
+        })
+    } else {
+        await writeEmailLog({
+            to,
+            cc,
+            fromEmail: smtpConfig?.fromEmail ?? config?.fromEmail ?? null,
+            subject: options.subject,
+            html: options.html ?? null,
+            text: options.text ?? null,
+            actionUrl: options.actionUrl ?? null,
+            status: result.success ? "sent" : "failed",
+            errorMessage: result.error ?? null,
+            sentAt: result.success ? new Date() : null,
+            templateId: options.logMeta?.templateId ?? null,
+            templateCode: options.logMeta?.templateCode ?? null,
+            templateName: options.logMeta?.templateName ?? null,
+            deliveryChannel: "email",
+        })
+    }
 
     return result
 }
@@ -560,6 +605,7 @@ export async function sendSystemTemplatedEmailByCode(args: {
         content: Buffer | string
         contentType?: string
     }>
+    existingLogId?: string | null
     ignoreTemplateRecipients?: boolean
 }) {
     await ensureSystemEmailTemplates()
@@ -630,11 +676,82 @@ export async function sendSystemTemplatedEmailByCode(args: {
         actionUrl: resolvedActionUrl,
         channels: deliveryChannels,
         attachments: args.attachments,
+        existingLogId: args.existingLogId ?? null,
         logMeta: {
             templateId: "id" in template ? template.id : null,
             templateCode: "code" in template ? template.code : args.code,
             templateName: template.name,
         },
+    })
+}
+
+export async function queueSystemTemplatedEmailLog(args: {
+    code: SystemEmailTemplateCode
+    to?: string | string[]
+    cc?: string | string[]
+    data: TemplateData
+    customSubject?: string
+    ignoreTemplateRecipients?: boolean
+}) {
+    await ensureSystemEmailTemplates()
+
+    const activeTemplate = await getEmailTemplateByCode(args.code, true)
+    const starterTemplate = getSystemEmailTemplateDefinition(args.code)
+
+    if (!activeTemplate && !starterTemplate) {
+        return null
+    }
+
+    if (activeTemplate && activeTemplate.isActive === false) {
+        return null
+    }
+
+    const template = activeTemplate ?? starterTemplate
+    const templateType = activeTemplate?.type ?? starterTemplate?.type ?? "notification"
+    const normalizedData = normalizeSystemTemplateData(args.data)
+    const resolvedActionUrl = resolveActionUrlFromTemplateData(normalizedData)
+    const subjectSource = args.customSubject ?? template.subject
+    const htmlSource = template.htmlContent
+    const textSource = template.textContent ?? undefined
+    const ccEmails = isRevenueReportTemplateManagedByAutomation(args.code)
+        ? []
+        : ("ccEmails" in template ? (template.ccEmails ?? []) : [])
+    const templateRecipients = args.ignoreTemplateRecipients ? [] : await resolveUserEmailsFromRolesAndIds(
+        ("recipientRoles" in template ? (template.recipientRoles ?? []) : []) as string[],
+        ("recipientUserIds" in template ? (template.recipientUserIds ?? []) : []) as string[],
+    )
+    const deliveryChannels = "deliveryChannels" in template
+        ? normalizeDeliveryChannels(template.deliveryChannels, getDefaultDeliveryChannelsForTemplate({
+            code: args.code,
+            type: templateType,
+        }))
+        : getDefaultDeliveryChannelsForTemplate({
+            code: args.code,
+            type: templateType,
+        })
+
+    if (!deliveryChannels.includes("email")) {
+        return null
+    }
+
+    const to = [...normalizeEmailList(args.to), ...templateRecipients]
+    const cc = [...ccEmails, ...normalizeEmailList(args.cc)]
+    const subject = replaceTemplateVariables(subjectSource, normalizedData)
+    const html = replaceTemplateVariables(htmlSource, normalizedData)
+    const text = textSource ? replaceTemplateVariables(textSource, normalizedData) : undefined
+
+    return writeEmailLog({
+        to,
+        cc,
+        subject,
+        html,
+        text,
+        actionUrl: resolvedActionUrl ?? null,
+        status: "pending",
+        templateId: "id" in template ? template.id : null,
+        templateCode: "code" in template ? template.code : args.code,
+        templateName: template.name,
+        deliveryChannel: "email",
     })
 }
 

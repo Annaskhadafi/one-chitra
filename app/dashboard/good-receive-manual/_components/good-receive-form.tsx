@@ -165,7 +165,9 @@ export function GoodReceiveForm({
         try {
             const result = await createGoodReceiveManual(values)
             if (result.success) {
-                if (result.notification?.sent) {
+                if (result.notification?.queued) {
+                    toast.success("Good receive created successfully. Email notification is being processed in the background.")
+                } else if (result.notification?.sent) {
                     toast.success(`Good receive created successfully and email sent to ${result.notification.recipientCount ?? 0} recipient(s)`)
                 } else if (result.notification && !result.notification.sent) {
                     toast.warning(`Good receive saved, but email was not sent${result.notification.reason ? `: ${result.notification.reason}` : ""}`)

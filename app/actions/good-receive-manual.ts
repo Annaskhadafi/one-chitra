@@ -3,10 +3,11 @@
 import { db } from "@/db"
 import { goodReceiveManual, goodReceiveManualItems, stockLevels, me2lPurchDocsSap, products, warehouses, stockMovements, zvendorPoReportSap } from "@/db/schema"
 import { revalidatePath } from "next/cache"
+import { after } from "next/server"
 import { eq, and, or, desc, inArray, isNotNull, isNull, sql } from "drizzle-orm"
 import { recordStockMovement } from "./stock-movement"
 import { getAuthenticatedSession } from "@/lib/rbac"
-import { sendLoggedNotificationMessage, sendSystemTemplatedEmailByCode } from "@/lib/email"
+import { queueSystemTemplatedEmailLog, sendLoggedNotificationMessage, sendSystemTemplatedEmailByCode } from "@/lib/email"
 import { SYSTEM_EMAIL_TEMPLATE_CODES } from "@/lib/email-template-registry"
 import { readManagedUpload } from "@/lib/upload-storage"
 import { toCanonicalAppUrl } from "@/lib/app-url"
@@ -669,6 +670,222 @@ type ManualGoodReceiveNotificationPayload = {
     }>
 }
 
+type ManualGoodReceiveNotificationResult = {
+    sent: boolean
+    queued?: boolean
+    reason?: string
+    recipientCount?: number
+}
+
+type ManualGoodReceiveSalesPicNotificationResult = {
+    sent: boolean
+    queued?: boolean
+    reason?: string
+    recipient?: string
+}
+
+async function sendGoodReceiveManualEmailNotification(params: {
+    payload: ManualGoodReceiveNotificationPayload
+    notifyRoles?: string[]
+    notifyUserIds?: string[]
+    emailCcRecipients: string[]
+    recipients?: string[]
+    existingLogId?: string | null
+}): Promise<ManualGoodReceiveNotificationResult> {
+    const { payload, notifyRoles = [], notifyUserIds = [], emailCcRecipients, recipients: providedRecipients, existingLogId } = params
+
+    if (notifyRoles.length === 0 && notifyUserIds.length === 0 && emailCcRecipients.length === 0 && (!providedRecipients || providedRecipients.length === 0)) {
+        return { sent: false, reason: "Notifikasi email tidak dipilih" }
+    }
+
+    try {
+        const [resolvedRecipients, warehouse] = await Promise.all([
+            providedRecipients && providedRecipients.length > 0
+                ? Promise.resolve(providedRecipients)
+                : getNotificationRecipientEmails(notifyRoles, notifyUserIds),
+            db.query.warehouses.findFirst({
+                where: eq(warehouses.id, payload.warehouseId),
+                columns: {
+                    sloc: true,
+                    description: true,
+                },
+            }),
+        ])
+
+        if (resolvedRecipients.length === 0) {
+            return { sent: false, reason: "Tidak ada penerima notifikasi yang cocok", recipientCount: 0 }
+        }
+
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/+$/, "")
+        const detailPath = "/dashboard/good-receive-manual"
+        const detailUrl = baseUrl ? `${baseUrl}${detailPath}` : detailPath
+        const receiveDateText = new Date(payload.receiveDate).toLocaleDateString("id-ID", {
+            day: "2-digit",
+            month: "long",
+            year: "numeric",
+        })
+        const warehouseLabel = warehouse?.sloc
+            ? `${warehouse.sloc}${warehouse.description ? ` - ${warehouse.description}` : ""}`
+            : "-"
+        const vendorDoUrl = payload.vendorDoUrl?.trim() || ""
+        const vendorDoLink = vendorDoUrl
+            ? `<a href="${escapeHtml(vendorDoUrl)}" target="_blank" rel="noopener noreferrer">Lihat Foto DO Vendor</a>`
+            : "-"
+        const attachments: Array<{
+            filename: string
+            content: Buffer
+            contentType?: string
+        }> = []
+
+        if (vendorDoUrl) {
+            const vendorDoUpload = await readManagedUpload(vendorDoUrl)
+            if (vendorDoUpload) {
+                attachments.push({
+                    filename: vendorDoUpload.filename,
+                    content: vendorDoUpload.buffer,
+                    contentType: vendorDoUpload.contentType,
+                })
+            }
+        }
+
+        const { itemsTableRows, itemsTextRows } = buildGoodReceiveManualNotificationContent({
+            poNumber: payload.poNumber,
+            supplier: payload.supplier,
+            receiveDate: receiveDateText,
+            deliveryType: payload.deliveryType,
+            warehouseLabel,
+            referenceDocument: payload.referenceDocument,
+            vendorDoUrl,
+            detailUrl,
+            items: payload.items,
+        })
+
+        const emailResult = await sendSystemTemplatedEmailByCode({
+            code: SYSTEM_EMAIL_TEMPLATE_CODES.goodReceiveManualNotification,
+            to: resolvedRecipients,
+            cc: emailCcRecipients,
+            existingLogId,
+            data: {
+                poNumber: payload.poNumber,
+                supplier: payload.supplier,
+                receiveDate: receiveDateText,
+                deliveryType: payload.deliveryType,
+                warehouseLabel,
+                referenceDocument: payload.referenceDocument?.trim() || "-",
+                vendorDoLink,
+                vendorDoText: vendorDoUrl || "-",
+                detailUrl,
+                itemsTableRows,
+                itemsTextRows,
+            },
+            attachments,
+        })
+
+        if (!emailResult.success) {
+            console.error("Failed to send GR manual notification:", emailResult.error)
+            return { sent: false, reason: emailResult.error || "Gagal mengirim email", recipientCount: resolvedRecipients.length }
+        }
+
+        return { sent: true, recipientCount: resolvedRecipients.length }
+    } catch (notificationError) {
+        console.error("GR manual notification error:", notificationError)
+        return { sent: false, reason: "Terjadi error saat mengirim notifikasi email" }
+    }
+}
+
+async function sendGoodReceiveManualSalesPicNotification(params: {
+    payload: ManualGoodReceiveNotificationPayload
+    createdByLabel: string
+}): Promise<ManualGoodReceiveSalesPicNotificationResult> {
+    const { payload, createdByLabel } = params
+
+    try {
+        const eprRecipient = await findEprRecipientByPoNumber(payload.poNumber)
+
+        if (!eprRecipient) {
+            return {
+                sent: false,
+                reason: "PIC Sales EPR untuk PO ini tidak ditemukan",
+            }
+        }
+
+        const receiveDateText = new Date(payload.receiveDate).toLocaleDateString("id-ID", {
+            day: "2-digit",
+            month: "long",
+            year: "numeric",
+        })
+        const actionUrl = toCanonicalAppUrl(`/dashboard/epr-integrasi?search=${encodeURIComponent(payload.poNumber)}`)
+        const subject = `GR Manual sudah dibuat untuk PO ${payload.poNumber}`
+        const safePicName = escapeHtml(eprRecipient.picName)
+        const safePoNumber = escapeHtml(payload.poNumber)
+        const safeSupplier = escapeHtml(payload.supplier)
+        const safeReceiveDate = escapeHtml(receiveDateText)
+        const safeDeliveryType = escapeHtml(payload.deliveryType)
+        const safeCreatedBy = escapeHtml(createdByLabel)
+        const safePrNumber = escapeHtml(eprRecipient.prNumber)
+        const safeActionUrl = escapeHtml(actionUrl)
+
+        const html = `
+            <p>Halo ${safePicName},</p>
+            <p>GR Manual untuk PO <strong>${safePoNumber}</strong> sudah dibuat.</p>
+            <table style="border-collapse:collapse;margin:16px 0;">
+                <tr><td style="padding:4px 12px 4px 0;"><strong>PR No</strong></td><td style="padding:4px 0;">${safePrNumber}</td></tr>
+                <tr><td style="padding:4px 12px 4px 0;"><strong>PO Number</strong></td><td style="padding:4px 0;">${safePoNumber}</td></tr>
+                <tr><td style="padding:4px 12px 4px 0;"><strong>Supplier</strong></td><td style="padding:4px 0;">${safeSupplier}</td></tr>
+                <tr><td style="padding:4px 12px 4px 0;"><strong>Receive Date</strong></td><td style="padding:4px 0;">${safeReceiveDate}</td></tr>
+                <tr><td style="padding:4px 12px 4px 0;"><strong>Delivery Type</strong></td><td style="padding:4px 0;">${safeDeliveryType}</td></tr>
+                <tr><td style="padding:4px 12px 4px 0;"><strong>Dibuat Oleh</strong></td><td style="padding:4px 0;">${safeCreatedBy}</td></tr>
+            </table>
+            <p><a href="${safeActionUrl}" target="_blank" rel="noopener noreferrer">Buka EPR Integrasi untuk PO ini</a></p>
+        `
+        const text = [
+            `Halo ${eprRecipient.picName},`,
+            "",
+            `GR Manual untuk PO ${payload.poNumber} sudah dibuat.`,
+            `PR No: ${eprRecipient.prNumber}`,
+            `PO Number: ${payload.poNumber}`,
+            `Supplier: ${payload.supplier}`,
+            `Receive Date: ${receiveDateText}`,
+            `Delivery Type: ${payload.deliveryType}`,
+            `Dibuat Oleh: ${createdByLabel}`,
+            "",
+            `Buka EPR Integrasi: ${actionUrl}`,
+        ].join("\n")
+
+        const notificationSendResult = await sendLoggedNotificationMessage({
+            to: eprRecipient.recipientEmail,
+            subject,
+            html,
+            text,
+            actionUrl,
+            channels: ["push"],
+            logMeta: {
+                templateCode: "good-receive-manual-sales-pic",
+                templateName: "Good Receive Manual Sales PIC Notification",
+            },
+        })
+
+        if (!notificationSendResult.success) {
+            return {
+                sent: false,
+                reason: notificationSendResult.error || "Gagal mengirim notifikasi ke PIC Sales",
+                recipient: eprRecipient.recipientEmail,
+            }
+        }
+
+        return {
+            sent: true,
+            recipient: eprRecipient.recipientEmail,
+        }
+    } catch (salesPicNotificationError) {
+        console.error("GR manual sales PIC notification error:", salesPicNotificationError)
+        return {
+            sent: false,
+            reason: "Terjadi error saat mengirim notifikasi PIC Sales",
+        }
+    }
+}
+
 export async function createGoodReceiveManual(input: CreateGoodReceiveManualInput) {
     try {
         const session = await getAuthenticatedSession('good-receive-manual', 'create')
@@ -907,187 +1124,89 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
         revalidatePath("/dashboard/stock-movements")
         revalidatePath("/dashboard/epr-integrasi")
 
-        let notificationResult: { sent: boolean; reason?: string; recipientCount?: number } | null = null
+        const createdByLabel = session.user.name?.trim() || session.user.email || "System"
+        let queuedEmailLogId: string | null = null
+        let queuedRecipients: string[] = []
         if (notifyRoles.length > 0 || notifyUserIds.length > 0 || emailCcRecipients.length > 0) {
-            try {
-                const payload = notificationPayload
-                const [recipients, warehouse] = await Promise.all([
-                    getNotificationRecipientEmails(notifyRoles, notifyUserIds),
-                    db.query.warehouses.findFirst({
-                        where: eq(warehouses.id, payload.warehouseId),
-                        columns: {
-                            sloc: true,
-                            description: true,
-                        },
-                    }),
-                ])
-
-                if (recipients.length > 0) {
-                    const baseUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/+$/, "")
-                    const detailPath = "/dashboard/good-receive-manual"
-                    const detailUrl = baseUrl ? `${baseUrl}${detailPath}` : detailPath
-                    const receiveDateText = new Date(payload.receiveDate).toLocaleDateString("id-ID", {
-                        day: "2-digit",
-                        month: "long",
-                        year: "numeric",
-                    })
-                    const warehouseLabel = warehouse?.sloc
-                        ? `${warehouse.sloc}${warehouse.description ? ` - ${warehouse.description}` : ""}`
-                        : "-"
-                    const vendorDoUrl = payload.vendorDoUrl?.trim() || ""
-                    const vendorDoLink = vendorDoUrl
-                        ? `<a href="${escapeHtml(vendorDoUrl)}" target="_blank" rel="noopener noreferrer">Lihat Foto DO Vendor</a>`
-                        : "-"
-                    const attachments: Array<{
-                        filename: string
-                        content: Buffer
-                        contentType?: string
-                    }> = []
-
-                    if (vendorDoUrl) {
-                        const vendorDoUpload = await readManagedUpload(vendorDoUrl)
-                        if (vendorDoUpload) {
-                            attachments.push({
-                                filename: vendorDoUpload.filename,
-                                content: vendorDoUpload.buffer,
-                                contentType: vendorDoUpload.contentType,
-                            })
-                        }
-                    }
-
-                    const { itemsTableRows, itemsTextRows } = buildGoodReceiveManualNotificationContent({
-                        poNumber: payload.poNumber,
-                        supplier: payload.supplier,
+            const baseUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/+$/, "")
+            const detailPath = "/dashboard/good-receive-manual"
+            const detailUrl = baseUrl ? `${baseUrl}${detailPath}` : detailPath
+            const receiveDateText = new Date(notificationPayload.receiveDate).toLocaleDateString("id-ID", {
+                day: "2-digit",
+                month: "long",
+                year: "numeric",
+            })
+            const [warehouse, resolvedRecipients] = await Promise.all([
+                db.query.warehouses.findFirst({
+                    where: eq(warehouses.id, notificationPayload.warehouseId),
+                    columns: {
+                        sloc: true,
+                        description: true,
+                    },
+                }),
+                getNotificationRecipientEmails(notifyRoles, notifyUserIds),
+            ])
+            queuedRecipients = resolvedRecipients
+            const warehouseLabel = warehouse?.sloc
+                ? `${warehouse.sloc}${warehouse.description ? ` - ${warehouse.description}` : ""}`
+                : "-"
+            const vendorDoUrl = notificationPayload.vendorDoUrl?.trim() || ""
+            const vendorDoLink = vendorDoUrl
+                ? `<a href="${escapeHtml(vendorDoUrl)}" target="_blank" rel="noopener noreferrer">Lihat Foto DO Vendor</a>`
+                : "-"
+            const { itemsTableRows, itemsTextRows } = buildGoodReceiveManualNotificationContent({
+                poNumber: notificationPayload.poNumber,
+                supplier: notificationPayload.supplier,
+                receiveDate: receiveDateText,
+                deliveryType: notificationPayload.deliveryType,
+                warehouseLabel,
+                referenceDocument: notificationPayload.referenceDocument,
+                vendorDoUrl,
+                detailUrl,
+                items: notificationPayload.items,
+            })
+            if (resolvedRecipients.length > 0) {
+                const queuedLog = await queueSystemTemplatedEmailLog({
+                    code: SYSTEM_EMAIL_TEMPLATE_CODES.goodReceiveManualNotification,
+                    to: resolvedRecipients,
+                    cc: emailCcRecipients,
+                    data: {
+                        poNumber: notificationPayload.poNumber,
+                        supplier: notificationPayload.supplier,
                         receiveDate: receiveDateText,
-                        deliveryType: payload.deliveryType,
+                        deliveryType: notificationPayload.deliveryType,
                         warehouseLabel,
-                        referenceDocument: payload.referenceDocument,
-                        vendorDoUrl,
+                        referenceDocument: notificationPayload.referenceDocument?.trim() || "-",
+                        vendorDoLink,
+                        vendorDoText: vendorDoUrl || "-",
                         detailUrl,
-                        items: payload.items,
-                    })
-
-                    const emailResult = await sendSystemTemplatedEmailByCode({
-                        code: SYSTEM_EMAIL_TEMPLATE_CODES.goodReceiveManualNotification,
-                        to: recipients,
-                        cc: emailCcRecipients,
-                        data: {
-                            poNumber: payload.poNumber,
-                            supplier: payload.supplier,
-                            receiveDate: receiveDateText,
-                            deliveryType: payload.deliveryType,
-                            warehouseLabel,
-                            referenceDocument: payload.referenceDocument?.trim() || "-",
-                            vendorDoLink,
-                            vendorDoText: vendorDoUrl || "-",
-                            detailUrl,
-                            itemsTableRows,
-                            itemsTextRows,
-                        },
-                        attachments,
-                    })
-
-                    if (!emailResult.success) {
-                        console.error("Failed to send GR manual notification:", emailResult.error)
-                        notificationResult = { sent: false, reason: emailResult.error || "Gagal mengirim email", recipientCount: recipients.length }
-                    } else {
-                        notificationResult = { sent: true, recipientCount: recipients.length }
-                    }
-                } else {
-                    notificationResult = { sent: false, reason: "Tidak ada penerima notifikasi yang cocok", recipientCount: 0 }
-                }
-            } catch (notificationError) {
-                console.error("GR manual notification error:", notificationError)
-                notificationResult = { sent: false, reason: "Terjadi error saat mengirim notifikasi email" }
-            }
-        }
-
-        let salesPicNotificationResult: { sent: boolean; reason?: string; recipient?: string } | null = null
-        try {
-            const eprRecipient = await findEprRecipientByPoNumber(notificationPayload.poNumber)
-
-            if (!eprRecipient) {
-                salesPicNotificationResult = {
-                    sent: false,
-                    reason: "PIC Sales EPR untuk PO ini tidak ditemukan",
-                }
-            } else {
-                const receiveDateText = new Date(notificationPayload.receiveDate).toLocaleDateString("id-ID", {
-                    day: "2-digit",
-                    month: "long",
-                    year: "numeric",
-                })
-                const actionUrl = toCanonicalAppUrl(`/dashboard/epr-integrasi?search=${encodeURIComponent(notificationPayload.poNumber)}`)
-                const subject = `GR Manual sudah dibuat untuk PO ${notificationPayload.poNumber}`
-                const safePicName = escapeHtml(eprRecipient.picName)
-                const safePoNumber = escapeHtml(notificationPayload.poNumber)
-                const safeSupplier = escapeHtml(notificationPayload.supplier)
-                const safeReceiveDate = escapeHtml(receiveDateText)
-                const safeDeliveryType = escapeHtml(notificationPayload.deliveryType)
-                const safeCreatedBy = escapeHtml(session.user.name?.trim() || session.user.email || "System")
-                const safePrNumber = escapeHtml(eprRecipient.prNumber)
-                const safeActionUrl = escapeHtml(actionUrl)
-
-                const html = `
-                    <p>Halo ${safePicName},</p>
-                    <p>GR Manual untuk PO <strong>${safePoNumber}</strong> sudah dibuat.</p>
-                    <table style="border-collapse:collapse;margin:16px 0;">
-                        <tr><td style="padding:4px 12px 4px 0;"><strong>PR No</strong></td><td style="padding:4px 0;">${safePrNumber}</td></tr>
-                        <tr><td style="padding:4px 12px 4px 0;"><strong>PO Number</strong></td><td style="padding:4px 0;">${safePoNumber}</td></tr>
-                        <tr><td style="padding:4px 12px 4px 0;"><strong>Supplier</strong></td><td style="padding:4px 0;">${safeSupplier}</td></tr>
-                        <tr><td style="padding:4px 12px 4px 0;"><strong>Receive Date</strong></td><td style="padding:4px 0;">${safeReceiveDate}</td></tr>
-                        <tr><td style="padding:4px 12px 4px 0;"><strong>Delivery Type</strong></td><td style="padding:4px 0;">${safeDeliveryType}</td></tr>
-                        <tr><td style="padding:4px 12px 4px 0;"><strong>Dibuat Oleh</strong></td><td style="padding:4px 0;">${safeCreatedBy}</td></tr>
-                    </table>
-                    <p><a href="${safeActionUrl}" target="_blank" rel="noopener noreferrer">Buka EPR Integrasi untuk PO ini</a></p>
-                `
-                const text = [
-                    `Halo ${eprRecipient.picName},`,
-                    "",
-                    `GR Manual untuk PO ${notificationPayload.poNumber} sudah dibuat.`,
-                    `PR No: ${eprRecipient.prNumber}`,
-                    `PO Number: ${notificationPayload.poNumber}`,
-                    `Supplier: ${notificationPayload.supplier}`,
-                    `Receive Date: ${receiveDateText}`,
-                    `Delivery Type: ${notificationPayload.deliveryType}`,
-                    `Dibuat Oleh: ${session.user.name?.trim() || session.user.email || "System"}`,
-                    "",
-                    `Buka EPR Integrasi: ${actionUrl}`,
-                ].join("\n")
-
-                const notificationSendResult = await sendLoggedNotificationMessage({
-                    to: eprRecipient.recipientEmail,
-                    subject,
-                    html,
-                    text,
-                    actionUrl,
-                    channels: ["push"],
-                    logMeta: {
-                        templateCode: "good-receive-manual-sales-pic",
-                        templateName: "Good Receive Manual Sales PIC Notification",
+                        itemsTableRows,
+                        itemsTextRows,
                     },
                 })
-
-                if (!notificationSendResult.success) {
-                    salesPicNotificationResult = {
-                        sent: false,
-                        reason: notificationSendResult.error || "Gagal mengirim notifikasi ke PIC Sales",
-                        recipient: eprRecipient.recipientEmail,
-                    }
-                } else {
-                    salesPicNotificationResult = {
-                        sent: true,
-                        recipient: eprRecipient.recipientEmail,
-                    }
-                }
-            }
-        } catch (salesPicNotificationError) {
-            console.error("GR manual sales PIC notification error:", salesPicNotificationError)
-            salesPicNotificationResult = {
-                sent: false,
-                reason: "Terjadi error saat mengirim notifikasi PIC Sales",
+                queuedEmailLogId = queuedLog?.id ?? null
             }
         }
+        after(async () => {
+            await Promise.allSettled([
+                sendGoodReceiveManualEmailNotification({
+                    payload: notificationPayload,
+                    emailCcRecipients,
+                    recipients: queuedRecipients,
+                    existingLogId: queuedEmailLogId,
+                }),
+                sendGoodReceiveManualSalesPicNotification({
+                    payload: notificationPayload,
+                    createdByLabel,
+                }),
+            ])
+        })
+
+        const notificationQueued = notifyRoles.length > 0 || notifyUserIds.length > 0 || emailCcRecipients.length > 0
+        const notificationResult: ManualGoodReceiveNotificationResult | null = notificationQueued
+            ? { sent: false, queued: true }
+            : null
+        const salesPicNotificationResult: ManualGoodReceiveSalesPicNotificationResult = { sent: false, queued: true }
 
         return { success: true, notification: notificationResult, salesPicNotification: salesPicNotificationResult }
     } catch (error) {
