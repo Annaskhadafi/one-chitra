@@ -117,6 +117,12 @@ export function StockTable({ data: initialData, products, warehouses, defaultRat
         return stock * cost * rate
     }
 
+    const calculatePrice = (stock: number, costSap: string | null) => {
+        if (stock <= 0) return 0
+        const valuation = calculateValuation(stock, costSap)
+        return valuation / stock
+    }
+
     const columns = useMemo<ColumnDef<Stock>[]>(() => [
         {
             id: "select",
@@ -237,6 +243,18 @@ export function StockTable({ data: initialData, products, warehouses, defaultRat
                                 x{manualRate}
                             </span>
                         )}
+                    </div>
+                )
+            },
+        },
+        {
+            id: "price",
+            header: () => <div className="text-right">Price</div>,
+            cell: ({ row }) => {
+                const price = calculatePrice(row.original.totalStock, row.original.product?.costSap ?? null)
+                return (
+                    <div className="text-right font-mono">
+                        {formatCurrency(price)}
                     </div>
                 )
             },
@@ -458,6 +476,7 @@ export function StockTable({ data: initialData, products, warehouses, defaultRat
         const exportRows = filteredRows.map((row) => {
             const item = row.original
             const valuation = calculateValuation(item.totalStock, item.product?.costSap ?? null)
+            const price = calculatePrice(item.totalStock, item.product?.costSap ?? null)
 
             return {
                 Plant: item.product?.plant ?? "",
@@ -471,6 +490,7 @@ export function StockTable({ data: initialData, products, warehouses, defaultRat
                 "Actual Stock": item.totalStock,
                 "Min Stock": item.minStock ?? 0,
                 "Type Warehouse": item.warehouse?.type ?? "",
+                Price: Math.round(price),
                 Valuation: Math.round(valuation),
             }
         })

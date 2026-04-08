@@ -51,7 +51,7 @@ import {
 import { Card, CardContent } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
-import { ArrowLeft, Plus, Trash2, Save, Search, ChevronsUpDown, Check, Package, FileDown, Pencil, AlertTriangle, XCircle, Loader2, Calculator, Copy, Eye, EyeOff, Truck } from "lucide-react"
+import { ArrowLeft, Plus, Trash2, Save, Search, ChevronsUpDown, Check, Package, FileDown, Pencil, AlertTriangle, XCircle, Loader2, Calculator, Copy, Eye, EyeOff, Truck, BadgeDollarSign, DollarSign } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 import type { Customer, Product } from "@/lib/types"
@@ -165,6 +165,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
     const [isDeliveryPriceOpen, setIsDeliveryPriceOpen] = useState(false)
     const [isEvhsMasterPriceOpen, setIsEvhsMasterPriceOpen] = useState(false)
     const [showFloatingShortcuts, setShowFloatingShortcuts] = useState(false)
+    const [activeCalculatorItemIndex, setActiveCalculatorItemIndex] = useState<number | null>(null)
 
     // Form State
     const [quotationNumber, setQuotationNumber] = useState(initialData?.quotationNumber || "")
@@ -279,6 +280,24 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                     productId={stockReference.productId}
                     materialNo={stockReference.materialNo}
                 />
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 no-print"
+                    title="Cek Harga"
+                    onClick={() => {
+                        setActiveCalculatorItemIndex(items.findIndex((candidate) => candidate === item))
+                        const basePrice = resolveItemCostIdr(item, exchangeRate) || item.unitPrice || 0
+                        setCalculatorBasePrice(Math.round(basePrice))
+                        setCalculatorMargin(globalMargin)
+                        setCalculatorDiscountType("percent")
+                        setCalculatorDiscountValue(0)
+                        setIsCalculatorOpen(true)
+                    }}
+                >
+                    <DollarSign className="h-4 w-4" />
+                </Button>
             </>
         )
 
@@ -287,7 +306,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
         }
 
         return <div className="flex items-center">{content}</div>
-    }, [resolveProductReference])
+    }, [exchangeRate, globalMargin, items, resolveProductReference])
 
     // Add product
     const addProduct = useCallback(async (product: Product) => {
@@ -1113,7 +1132,10 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                                                         </div>
                                                     </div>
                                                     <div className="space-y-1">
-                                                        <Label className="text-xs text-muted-foreground">Price</Label>
+                                                        <Label className="flex items-center gap-1 text-xs text-muted-foreground">
+                                                            <BadgeDollarSign className="h-3.5 w-3.5 text-emerald-600" />
+                                                            Price
+                                                        </Label>
                                                         <Input
                                                             type="number"
                                                             min={0}
@@ -1158,7 +1180,12 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                                             <TableHead className="w-[50px] text-white"># Item</TableHead>
                                             <TableHead className="text-white">Description</TableHead>
                                             <TableHead className="w-[100px] text-white">Qty</TableHead>
-                                            <TableHead className="w-[200px] text-white">Price</TableHead>
+                                            <TableHead className="w-[200px] text-white">
+                                                <div className="flex items-center gap-1">
+                                                    <BadgeDollarSign className="h-3.5 w-3.5" />
+                                                    <span>Price</span>
+                                                </div>
+                                            </TableHead>
                                             <TableHead className="w-[120px] text-white">Tax</TableHead>
                                             <TableHead className="w-[140px] text-white">Amount</TableHead>
                                             <TableHead className="w-[60px] text-white">Action</TableHead>
@@ -1376,7 +1403,10 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                     />
 
                     <FloatingNavButton
-                        onClick={() => setIsCalculatorOpen(true)}
+                        onClick={() => {
+                            setActiveCalculatorItemIndex(null)
+                            setIsCalculatorOpen(true)
+                        }}
                         label="Kalkulator"
                         icon={<Calculator className="h-4 w-4" />}
                         position="middle-right"
@@ -1506,7 +1536,18 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                                 className="w-full border-emerald-200 text-emerald-700 hover:bg-emerald-50"
                                 onClick={() => {
                                     setGlobalMargin(calculatorMargin)
-                                    toast.success("Margin kalkulator diterapkan ke form quotation")
+                                    if (activeCalculatorItemIndex !== null) {
+                                        setItems((prev) => prev.map((entry, index) => (
+                                            index === activeCalculatorItemIndex
+                                                ? { ...entry, unitPrice: Math.round(calculatorFinalPrice) }
+                                                : entry
+                                        )))
+                                        toast.success("Price item berhasil diterapkan dari kalkulator")
+                                    } else {
+                                        toast.success("Margin kalkulator diterapkan ke form quotation")
+                                    }
+                                    setIsCalculatorOpen(false)
+                                    setActiveCalculatorItemIndex(null)
                                 }}
                             >
                                 Pakai Margin Ini di Form

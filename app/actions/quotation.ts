@@ -697,6 +697,7 @@ async function syncExpiredQuotations(shouldRevalidate = true) {
                 id: true,
                 status: true,
                 salesOrderId: true,
+                createdBy: true,
             },
         })
 
@@ -717,7 +718,12 @@ async function syncExpiredQuotations(shouldRevalidate = true) {
                     })
                     .where(eq(quotations.id, quotation.id))
 
-                await createNextRevision(tx, quotation.id, "system", "Quotation auto-expired after validity date passed")
+                await createNextRevision(
+                    tx,
+                    quotation.id,
+                    quotation.createdBy ?? null,
+                    "Quotation auto-expired after validity date passed",
+                )
                 expiredCount += 1
             }
 
