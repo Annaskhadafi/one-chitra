@@ -97,6 +97,7 @@ export function CustomerSegmentationClient() {
     const [rawData, setRawData] = useState<CustomerRFMAggregate[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterSegments, setFilterSegments] = useState<string[]>([]);
+    const [filterCustomers, setFilterCustomers] = useState<string[]>([]);
     const [loading, setLoading] = useState(true);
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
@@ -228,10 +229,25 @@ export function CustomerSegmentationClient() {
         });
     }, [rawData, startDate, endDate]);
 
+    const filteredData = useMemo(() => {
+        const data = rfmData.filter((customer) => {
+            const matchesSegment = filterSegments.length === 0 || filterSegments.includes(customer.segment);
+            const matchesCustomer = filterCustomers.length === 0 || filterCustomers.includes(customer.name);
+            return matchesSegment && matchesCustomer;
+        });
+
+        return [...data].sort((a, b) => b.monetary - a.monetary);
+    }, [filterCustomers, filterSegments, rfmData]);
+
+    const customerFilterOptions = useMemo(
+        () => [...new Set(rfmData.map((customer) => customer.name))].sort((a, b) => a.localeCompare(b, 'id-ID')),
+        [rfmData]
+    );
+
     const stats = useMemo<Stats>(() => {
-        if (rfmData.length === 0) return { totalRev: 0, totalCust: 0, pieData: [] };
-        const totalRev = rfmData.reduce((acc, curr) => acc + curr.monetary, 0);
-        const segmentCounts = rfmData.reduce((acc, curr) => {
+        if (filteredData.length === 0) return { totalRev: 0, totalCust: 0, pieData: [] };
+        const totalRev = filteredData.reduce((acc, curr) => acc + curr.monetary, 0);
+        const segmentCounts = filteredData.reduce((acc, curr) => {
             acc[curr.segment] = (acc[curr.segment] || 0) + 1;
             return acc;
         }, {} as Record<string, number>);
@@ -240,8 +256,8 @@ export function CustomerSegmentationClient() {
             value: segmentCounts[name] || 0,
             fill: SEGMENT_CONFIG[name].color
         })).filter(d => d.value > 0);
-        return { totalRev, totalCust: rfmData.length, pieData };
-    }, [rfmData]);
+        return { totalRev, totalCust: filteredData.length, pieData };
+    }, [filteredData]);
 
     // Fuzzy match customer name dengan fleet data
     const getMatchingFleets = React.useCallback((customerName: string) => {
@@ -423,12 +439,6 @@ export function CustomerSegmentationClient() {
         }
     ], [getMatchingFleets, handleFleetClick, handleHistoryClick])
 
-    const filteredData = useMemo(() => {
-        const data = filterSegments.length === 0 ? rfmData : rfmData.filter(d => filterSegments.includes(d.segment));
-        // Sort by revenue (monetary) descending by default
-        return data.sort((a, b) => b.monetary - a.monetary);
-    }, [filterSegments, rfmData]);
-
     const handleExportExcel = () => {
         const exportRows = table.getRowModel().rows.map((row) => {
             const customer = row.original
@@ -565,7 +575,7 @@ export function CustomerSegmentationClient() {
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">
-                            {rfmData.filter(d => d.segment === 'New Customer').length}
+                            {filteredData.filter(d => d.segment === 'New Customer').length}
                         </div>
                         <p className="text-xs text-muted-foreground">Pelanggan baru periode ini</p>
                     </CardContent>
@@ -631,7 +641,7 @@ export function CustomerSegmentationClient() {
                     <CardContent>
                         <div className="h-[300px] w-full">
                             <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={stats.pieData.sort((a, b) => b.value - a.value)}>
+                                <BarChart data={[...stats.pieData].sort((a, b) => b.value - a.value)}>
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                                     <XAxis
                                         dataKey="name"
@@ -683,6 +693,15 @@ export function CustomerSegmentationClient() {
                                 searchPlaceholder="Cari segmen..."
                                 triggerClassName="h-10 w-full md:w-[220px] justify-between"
                                 contentClassName="w-[300px]"
+                            />
+                            <DataTableFacetedFilter
+                                title="Customer"
+                                options={customerFilterOptions}
+                                selectedValues={filterCustomers}
+                                onFilterChange={setFilterCustomers}
+                                searchPlaceholder="Cari customer..."
+                                triggerClassName="h-10 w-full md:w-[260px] justify-between"
+                                contentClassName="w-[340px]"
                             />
                             <Button variant="outline" className="gap-2" onClick={handleExportExcel}>
                                 <Download className="h-4 w-4" />

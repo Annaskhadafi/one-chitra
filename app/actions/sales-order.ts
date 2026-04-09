@@ -1,7 +1,7 @@
 "use server"
 
 import { db } from "@/db"
-import { salesOrders, salesOrderItems, stockLevels, deliveries, deliveryItems, stockTransfers, user } from "@/db/schema"
+import { salesOrders, salesOrderItems, stockLevels, deliveries, deliveryItems, stockTransfers, user, warehouses, products } from "@/db/schema"
 import { eq, desc, inArray, sql, and, isNotNull, like } from "drizzle-orm"
 import { revalidatePath, unstable_noStore as noStore } from "next/cache"
 import { z } from "zod"
@@ -88,6 +88,21 @@ async function hasSalesPersonColumn() {
     }
 }
 
+async function getSalesOrderWarehouseStock(warehouseId: number, productId: number) {
+    const result = await db.select({
+        totalStock: sql<number>`COALESCE(SUM(${stockLevels.totalStock}), 0)`,
+    })
+        .from(stockLevels)
+        .innerJoin(warehouses, eq(stockLevels.warehouseId, warehouses.id))
+        .innerJoin(products, eq(stockLevels.productId, products.id))
+        .where(and(
+            sql`${warehouses.sloc} = (SELECT sloc FROM warehouses WHERE id = ${warehouseId})`,
+            sql`${products.materialNumber} = (SELECT material_number FROM products WHERE id = ${productId} LIMIT 1)`,
+        ))
+
+    return Number(result[0]?.totalStock ?? 0)
+}
+
 export async function getSalesOrders() {
     noStore()
     const hasPicColumn = await hasSalesPersonColumn()
@@ -172,24 +187,18 @@ export async function getSalesOrders() {
                 return item.quantity - delivered > 0
             })
 
-            const itemProductIds = items.map((item) => item.productId).filter((productId): productId is number => productId != null)
+            const stockMap = new Map<number, number>()
 
-            const warehouseStocks = order.warehouseId && itemProductIds.length > 0
-                ? await db.select({
-                    productId: stockLevels.productId,
-                    totalStock: sql<number>`COALESCE(SUM(${stockLevels.totalStock}), 0)`,
-                })
-                    .from(stockLevels)
-                    .where(and(
-                        eq(stockLevels.warehouseId, order.warehouseId),
-                        inArray(stockLevels.productId, itemProductIds)
-                    ))
-                    .groupBy(stockLevels.productId)
-                : []
+            if (order.warehouseId) {
+                const uniqueProductIds = [...new Set(
+                    items.map((item) => item.productId).filter((productId): productId is number => productId != null)
+                )]
 
-            const stockMap = new Map<number, number>(
-                warehouseStocks.map((stock) => [stock.productId, Number(stock.totalStock ?? 0)])
-            )
+                await Promise.all(uniqueProductIds.map(async (productId) => {
+                    const availableStock = await getSalesOrderWarehouseStock(order.warehouseId!, productId)
+                    stockMap.set(productId, availableStock)
+                }))
+            }
 
             const outstandingItems = items
                 .map((item) => {
@@ -218,14 +227,22 @@ export async function getSalesOrders() {
                 })
                 .filter((item) => item.remainingQuantity > 0)
 
-            const hasReadyAll = outstandingItems.length > 0 && outstandingItems.every((item) => item.availableStock >= item.remainingQuantity)
-            const hasAnyStock = outstandingItems.some((item) => item.availableStock > 0)
+            const hasReadyAll = outstandingItems.length > 0 && outstandingItems.every((item) => item.stockStatus === "ready")
+            const hasAnyPartial = outstandingItems.some((item) => item.stockStatus === "partial")
+            const hasAnyReady = outstandingItems.some((item) => item.stockStatus === "ready")
             const outstandingDays = order.poReceive
                 ? Math.max(0, Math.floor((Date.now() - new Date(order.poReceive).getTime()) / (1000 * 60 * 60 * 24)))
                 : null
 
             const remarks = outstandingItems.length === 0
-                ? null
+                ? {
+                    status: "complete",
+                    label: "Complete",
+                    outstandingDays,
+                    outstandingItemsCount: 0,
+                    outstandingQty: 0,
+                    items: [],
+                }
                 : hasReadyAll
                     ? {
                         status: "ready",
@@ -235,7 +252,7 @@ export async function getSalesOrders() {
                         outstandingQty: outstandingItems.reduce((sum, item) => sum + item.remainingQuantity, 0),
                         items: outstandingItems,
                     }
-                    : hasAnyStock
+                    : hasAnyPartial || hasAnyReady
                         ? {
                             status: "partial",
                             label: "Partial Stock",
