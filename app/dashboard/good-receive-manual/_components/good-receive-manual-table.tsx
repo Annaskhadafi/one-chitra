@@ -13,6 +13,7 @@ import {
     Maximize2,
     Minimize2,
     PackageOpen,
+    PencilLine,
     Plus,
     Search,
 } from "lucide-react";
@@ -447,17 +448,25 @@ export function GoodReceiveManualTable({ data }: { data: GoodReceiveManualRow[] 
                             </div>
 
                             <div className="pt-1">
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => toggleRow(item.id)}
-                                    disabled={!hasItems}
-                                    className="w-full"
-                                >
-                                    {expanded ? <ChevronDown className="mr-2 h-4 w-4" /> : <ChevronRight className="mr-2 h-4 w-4" />}
-                                    {expanded ? "Hide detail barang" : "Show detail barang"}
-                                </Button>
+                                <div className="flex gap-2">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => toggleRow(item.id)}
+                                        disabled={!hasItems}
+                                        className="flex-1"
+                                    >
+                                        {expanded ? <ChevronDown className="mr-2 h-4 w-4" /> : <ChevronRight className="mr-2 h-4 w-4" />}
+                                        {expanded ? "Hide detail barang" : "Show detail barang"}
+                                    </Button>
+                                    <Button asChild type="button" variant="secondary" size="sm" className="shrink-0">
+                                        <Link href={`/dashboard/good-receive-manual/${item.id}/edit`}>
+                                            <PencilLine className="mr-2 h-4 w-4" />
+                                            Edit
+                                        </Link>
+                                    </Button>
+                                </div>
                             </div>
 
                             {expanded && (
@@ -484,6 +493,7 @@ export function GoodReceiveManualTable({ data }: { data: GoodReceiveManualRow[] 
                             <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Foto DO Vendor</TableHead>
                             <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Created By</TableHead>
                             <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Gap SLA</TableHead>
+                            <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Actions</TableHead>
                             <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right">Created At</TableHead>
                         </TableRow>
                     </TableHeader>
@@ -538,13 +548,21 @@ export function GoodReceiveManualTable({ data }: { data: GoodReceiveManualRow[] 
                                     </TableCell>
                                     <TableCell className="text-sm">{item.createdBy || "-"}</TableCell>
                                     <TableCell className="text-sm">{formatGapSla(item.gapSlaDays)}</TableCell>
+                                    <TableCell>
+                                        <Button asChild type="button" variant="outline" size="sm">
+                                            <Link href={`/dashboard/good-receive-manual/${item.id}/edit`}>
+                                                <PencilLine className="mr-2 h-4 w-4" />
+                                                Edit
+                                            </Link>
+                                        </Button>
+                                    </TableCell>
                                     <TableCell className="text-right text-xs text-muted-foreground">
                                         {format(new Date(item.createdAt), "dd MMM yyyy HH:mm")}
                                     </TableCell>
                                 </TableRow>,
                                 expanded ? (
                                     <TableRow key={`${item.id}-details`} className="bg-muted/10 hover:bg-muted/10">
-                                        <TableCell colSpan={10} className="p-4">
+                                        <TableCell colSpan={11} className="p-4">
                                             <div className="space-y-3 rounded-lg border bg-background p-4">
                                                 <div className="flex items-center justify-between gap-2">
                                                     <div>

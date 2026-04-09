@@ -9,7 +9,6 @@ import { CalendarIcon, Loader2, PackagePlus, FileText, Check, ChevronsUpDown, Im
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { createGoodReceiveManual } from "@/app/actions/good-receive-manual"
-import { uploadFile } from "@/app/actions/upload"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
@@ -23,6 +22,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Checkbox } from "@/components/ui/checkbox"
 import { ProductDialog } from "@/app/dashboard/products/_components/product-dialog"
 import { cn } from "@/lib/utils"
+import { Progress } from "@/components/ui/progress"
+import { optimizeImageForUpload, uploadFileToObjectStorage } from "@/lib/client-upload"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 const formSchema = z.object({
@@ -78,6 +79,7 @@ export function GoodReceiveForm({
     const router = useRouter()
     const [poOpen, setPoOpen] = useState(false)
     const [isUploadingVendorDo, setIsUploadingVendorDo] = useState(false)
+    const [vendorDoUploadProgress, setVendorDoUploadProgress] = useState(0)
     const defaultNotifyRoles = notificationRoles.filter((role) => {
         const normalizedRole = role.trim().toLowerCase()
         return normalizedRole === "admin" || normalizedRole === "billing"
@@ -198,23 +200,29 @@ export function GoodReceiveForm({
         if (!file) return
 
         setIsUploadingVendorDo(true)
+        setVendorDoUploadProgress(0)
         try {
-            const formData = new FormData()
-            formData.append("file", file)
-
-            const result = await uploadFile(formData)
+            const optimizedFile = await optimizeImageForUpload(file)
+            const result = await uploadFileToObjectStorage(optimizedFile, setVendorDoUploadProgress)
             if (!result.success || !result.url) {
                 toast.error(result.error || "Failed to upload Foto DO Vendor")
                 return
             }
 
             form.setValue("vendorDoUrl", result.url, { shouldDirty: true, shouldValidate: true })
-            toast.success("Foto DO Vendor uploaded")
+            toast.success(
+                optimizedFile !== file
+                    ? "Foto DO Vendor uploaded dengan optimasi ukuran"
+                    : "Foto DO Vendor uploaded",
+            )
         } catch {
             toast.error("An error occurred while uploading Foto DO Vendor")
         } finally {
-            setIsUploadingVendorDo(false)
-            event.target.value = ""
+            setTimeout(() => {
+                setIsUploadingVendorDo(false)
+                setVendorDoUploadProgress(0)
+                event.target.value = ""
+            }, 400)
         }
     }
 
@@ -438,6 +446,19 @@ export function GoodReceiveForm({
                                                         {isUploadingVendorDo && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
                                                     </div>
                                                 </div>
+
+                                                {isUploadingVendorDo && (
+                                                    <div className="space-y-2 rounded-md border bg-muted/20 p-3">
+                                                        <div className="flex items-center justify-between text-xs">
+                                                            <span className="font-medium text-foreground">Uploading ke object storage...</span>
+                                                            <span className="font-semibold tabular-nums">{vendorDoUploadProgress}%</span>
+                                                        </div>
+                                                        <Progress value={vendorDoUploadProgress} className="h-2" />
+                                                        <p className="text-[11px] text-muted-foreground">
+                                                            Gambar akan dioptimasi dulu di browser agar upload lebih cepat. PDF tetap dikirim apa adanya.
+                                                        </p>
+                                                    </div>
+                                                )}
 
                                                 {vendorDoUrl ? (
                                                     <div className="rounded-md border bg-muted/30 p-3 space-y-3">

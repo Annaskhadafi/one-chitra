@@ -631,6 +631,87 @@ export async function getGoodReceiveManualNotificationTargets() {
     }
 }
 
+export async function getGoodReceiveManualById(id: number) {
+    await getAuthenticatedSession("good-receive-manual", "edit")
+
+    const [header, items] = await Promise.all([
+        db.query.goodReceiveManual.findFirst({
+            where: eq(goodReceiveManual.id, id),
+        }),
+        db.select({
+            id: goodReceiveManualItems.id,
+            quantity: goodReceiveManualItems.quantity,
+            notes: goodReceiveManualItems.notes,
+            materialNumber: products.materialNumber,
+            materialDescription: products.materialDescription,
+            warehouseSloc: warehouses.sloc,
+            warehouseDescription: warehouses.description,
+        })
+            .from(goodReceiveManualItems)
+            .innerJoin(products, eq(products.id, goodReceiveManualItems.productId))
+            .innerJoin(warehouses, eq(warehouses.id, goodReceiveManualItems.warehouseId))
+            .where(eq(goodReceiveManualItems.headerId, id))
+            .orderBy(goodReceiveManualItems.id),
+    ])
+
+    if (!header) {
+        return null
+    }
+
+    return {
+        ...header,
+        items,
+    } satisfies GoodReceiveManualEditRecord
+}
+
+export async function updateGoodReceiveManual(input: UpdateGoodReceiveManualInput) {
+    try {
+        await getAuthenticatedSession("good-receive-manual", "edit")
+
+        const existingRecord = await db.query.goodReceiveManual.findFirst({
+            where: eq(goodReceiveManual.id, input.id),
+            columns: {
+                id: true,
+            },
+        })
+
+        if (!existingRecord) {
+            throw new Error("Good receive record not found")
+        }
+
+        await db.transaction(async (tx) => {
+            await tx.update(goodReceiveManual)
+                .set({
+                    receiveDate: input.receiveDate.toISOString(),
+                    deliveryType: input.deliveryType,
+                    referenceDocument: input.referenceDocument?.trim() || null,
+                    vendorDoUrl: input.vendorDoUrl?.trim() || null,
+                    updatedAt: new Date(),
+                })
+                .where(eq(goodReceiveManual.id, input.id))
+
+            for (const item of input.items) {
+                await tx.update(goodReceiveManualItems)
+                    .set({
+                        notes: item.notes?.trim() || null,
+                    })
+                    .where(and(
+                        eq(goodReceiveManualItems.id, item.id),
+                        eq(goodReceiveManualItems.headerId, input.id),
+                    ))
+            }
+        })
+
+        revalidatePath("/dashboard/good-receive-manual")
+        revalidatePath(`/dashboard/good-receive-manual/${input.id}/edit`)
+
+        return { success: true }
+    } catch (error) {
+        console.error("Error updating manual good receive:", error)
+        return { success: false, error: "Failed to update good receive record" }
+    }
+}
+
 export type CreateGoodReceiveManualInput = {
     entryMode?: "po" | "manual"
     poNumber: string
@@ -652,6 +733,39 @@ export type CreateGoodReceiveManualInput = {
         openQty: number
         notes?: string
     }[]
+}
+
+export type UpdateGoodReceiveManualInput = {
+    id: number
+    receiveDate: Date
+    deliveryType: "Partial" | "Complete"
+    referenceDocument?: string
+    vendorDoUrl?: string
+    items: {
+        id: number
+        notes?: string
+    }[]
+}
+
+export type GoodReceiveManualEditRecord = {
+    id: number
+    supplier: string
+    poNumber: string
+    receiveDate: string | Date
+    deliveryType: "Partial" | "Complete"
+    referenceDocument: string | null
+    vendorDoUrl: string | null
+    createdAt: string | Date
+    updatedAt: string | Date
+    items: Array<{
+        id: number
+        quantity: number
+        notes: string | null
+        materialNumber: string
+        materialDescription: string | null
+        warehouseSloc: string
+        warehouseDescription: string | null
+    }>
 }
 
 type ManualGoodReceiveNotificationPayload = {

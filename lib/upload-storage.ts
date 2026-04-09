@@ -448,7 +448,7 @@ export async function saveManagedUpload(params: {
         }
     }
 
-    const shouldFallbackToLocal = shouldAllowLocalUploadFallback() || isTransientObjectStorageUploadError(lastError)
+    const shouldFallbackToLocal = shouldAllowLocalUploadFallback()
 
     if (!shouldFallbackToLocal) {
         console.error("[UploadStorage] Object storage upload failed:", lastError)
@@ -459,7 +459,7 @@ export async function saveManagedUpload(params: {
         )
     }
 
-    console.warn("[UploadStorage] Object storage upload failed, falling back to local disk:", lastError)
+    console.warn("[UploadStorage] Object storage upload failed, falling back to local disk because OBJECT_STORAGE_ALLOW_LOCAL_FALLBACK is enabled:", lastError)
     return await saveUploadToLocalDisk({
         filename,
         buffer: params.buffer,
