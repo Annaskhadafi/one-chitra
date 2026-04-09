@@ -7,8 +7,10 @@ const withPWA = withPWAInit({
   customWorkerSrc: "worker",
   disable: process.env.NODE_ENV === "development",
   register: true,
-  cacheOnFrontEndNav: true,
-  aggressiveFrontEndNavCaching: true,
+  // App Router pages were intermittently failing on client-side navigation
+  // because the service worker cached route transitions too aggressively.
+  cacheOnFrontEndNav: false,
+  aggressiveFrontEndNavCaching: false,
   reloadOnOnline: true,
   workboxOptions: {
     disableDevLogs: true,
