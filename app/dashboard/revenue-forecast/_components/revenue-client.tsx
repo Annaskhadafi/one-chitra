@@ -482,7 +482,7 @@ export function RevenueClient({ initialData, selectedPeriod, inventoryData, isEx
                                     Period: {selectedPeriod}
                                 </div>
                             </div>
-                            <h1 className="text-lg font-black text-primary leading-tight">Revenue <span className="text-foreground">vs</span> Forecast</h1>
+                            <h1 className="text-lg font-black text-primary leading-tight">Sales Revenue</h1>
                         </div>
                     </div>
                     <p className="text-[10px] text-muted-foreground mt-1 font-semibold italic">

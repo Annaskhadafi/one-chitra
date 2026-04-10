@@ -354,7 +354,7 @@ export const navigationConfig: NavSection[] = [
                         resource: "r49-dashboard",
                     },
                     {
-                        title: "Revenue vs Forecast",
+                        title: "Sales Revenue",
                         url: "/dashboard/revenue-forecast",
                         resource: "revenue-forecast",
                     },

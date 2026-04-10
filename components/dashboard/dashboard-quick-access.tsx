@@ -36,9 +36,9 @@ type QuickAccessItem = {
 
 const QUICK_ACCESS_ITEMS: QuickAccessItem[] = [
   {
-    title: "Revenue Forecast",
+    title: "Sales Revenue",
     href: "/dashboard/revenue-forecast",
-    description: "Target, trend, dan proyeksi revenue.",
+    description: "Ringkasan sales revenue dan performanya.",
     icon: TrendingUp,
     iconClassName: "bg-emerald-50 text-emerald-600",
     accentClassName: "from-emerald-400/80 to-teal-400/80",

@@ -8,7 +8,7 @@ import { SalesRevenueTable } from "./_components/sales-revenue-table"
 import { format } from "date-fns"
 
 export const metadata = {
-    title: "Revenue vs Forecast Dashboard - One Chitra",
+    title: "Sales Revenue Dashboard - One Chitra",
 }
 
 export const dynamic = "force-dynamic"

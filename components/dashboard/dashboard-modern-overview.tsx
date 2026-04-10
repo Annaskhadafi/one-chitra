@@ -176,7 +176,7 @@ export function DashboardModernOverview({
           month: MONTH_NAMES[(item.name || "").split(".")[0] || ""] ?? item.name,
           value: Number(item.revenue || 0),
           forecast: Number(item.forecast || 0),
-          source: "Revenue vs Forecast",
+          source: "Sales Revenue",
         }))
       : stats.monthlySales.map((item) => ({
           month: MONTH_NAMES[item.month.slice(5)] ?? item.month.slice(5),
