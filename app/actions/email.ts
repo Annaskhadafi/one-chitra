@@ -228,12 +228,12 @@ export async function updateEmailTemplate(
             .update(emailTemplates)
             .set({ ...sanitizedData, updatedAt: new Date() })
             .where(eq(emailTemplates.id, id))
-            .returning({ id: emailTemplates.id, name: emailTemplates.name })
+            .returning()
 
         console.log(`[updateEmailTemplate] Update result: ${JSON.stringify(result)}`)
 
         revalidatePath("/dashboard/settings/email")
-        return { success: true }
+        return { success: true, template: result[0] ?? null }
     } catch (error) {
         console.error(`[updateEmailTemplate] Error:`, error)
         return {

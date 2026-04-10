@@ -225,7 +225,7 @@ interface Props {
     open: boolean
     onOpenChange: (v: boolean) => void
     template: Template | null
-    onSave: (data: Partial<Template> & { id?: string }) => void
+    onSave: (data: Partial<Template> & { id?: string }) => Promise<boolean>
     recipientUsers: Array<{
         id: string
         name: string
@@ -244,6 +244,7 @@ export function TemplateEditorDialog({ open, onOpenChange, template, onSave, rec
     const [newCcEmail, setNewCcEmail] = useState("")
     const [preview, setPreview] = useState(false)
     const [userPickerOpen, setUserPickerOpen] = useState(false)
+    const [isSaving, setIsSaving] = useState(false)
     const isRevenueReportTemplate = isRevenueReportTemplateManagedByAutomation(template?.code)
 
     const form = useForm<FormValues>({
@@ -345,23 +346,34 @@ export function TemplateEditorDialog({ open, onOpenChange, template, onSave, rec
         )
     }
 
-    function onSubmit(values: FormValues) {
-        onSave({
-            ...(template?.id ? { id: template.id } : {}),
-            ...values,
-            code: values.code?.trim() || null,
-            variables,
-            recipientRoles: isRevenueReportTemplate ? [] : normalizeRecipientRoleNames(selectedRecipientRoles),
-            recipientUserIds: isRevenueReportTemplate ? [] : recipientUserIds,
-            ccEmails: isRevenueReportTemplate ? [] : ccEmails,
-            deliveryChannels: values.deliveryChannels,
-        } as Partial<Template> & { id?: string })
+    async function onSubmit(values: FormValues) {
+        setIsSaving(true)
+        try {
+            await onSave({
+                ...(template?.id ? { id: template.id } : {}),
+                ...values,
+                code: values.code?.trim() || null,
+                variables,
+                recipientRoles: isRevenueReportTemplate ? [] : normalizeRecipientRoleNames(selectedRecipientRoles),
+                recipientUserIds: isRevenueReportTemplate ? [] : recipientUserIds,
+                ccEmails: isRevenueReportTemplate ? [] : ccEmails,
+                deliveryChannels: values.deliveryChannels,
+            } as Partial<Template> & { id?: string })
+        } finally {
+            setIsSaving(false)
+        }
     }
 
     const htmlValue = form.watch("htmlContent")
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog
+            open={open}
+            onOpenChange={(nextOpen) => {
+                if (isSaving) return
+                onOpenChange(nextOpen)
+            }}
+        >
             <DialogContent className="!flex h-[94vh] w-[calc(100vw-1rem)] !max-w-none !flex-col overflow-hidden p-0 sm:h-[92vh] sm:w-[calc(100vw-2.5rem)] sm:max-w-[calc(100vw-2.5rem)] 2xl:max-w-[1600px]">
                 <DialogHeader className="px-6 pt-6 pb-0">
                     <DialogTitle>{template ? "Edit Template" : "New Email Template"}</DialogTitle>
@@ -775,11 +787,11 @@ export function TemplateEditorDialog({ open, onOpenChange, template, onSave, rec
                         </ScrollArea>
 
                         <div className="flex justify-end gap-3 px-6 py-4 border-t bg-background">
-                            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
                                 Cancel
                             </Button>
-                            <Button type="submit">
-                                {template ? "Save Changes" : "Create Template"}
+                            <Button type="submit" disabled={isSaving}>
+                                {isSaving ? "Saving..." : (template ? "Save Changes" : "Create Template")}
                             </Button>
                         </div>
                     </form>

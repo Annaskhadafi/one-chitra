@@ -1043,7 +1043,9 @@ export async function ensureSystemEmailTemplates() {
     const existingCodes = new Set(existing.map((entry) => entry.code).filter(Boolean))
     const missingTemplates = SYSTEM_EMAIL_TEMPLATES.filter((entry) => !existingCodes.has(entry.code))
 
-    // Insert missing templates
+    // Only seed templates that do not exist yet.
+    // Existing system templates may already have user customizations from the Email Settings page,
+    // so we must not overwrite them during page load or send-time initialization.
     if (missingTemplates.length > 0) {
         await db.insert(emailTemplates).values(
             missingTemplates.map((template) => ({
@@ -1064,31 +1066,5 @@ export async function ensureSystemEmailTemplates() {
                 isActive: template.defaultActive,
             })),
         )
-    }
-
-    // Update existing system templates to match current definitions (content, variables, etc.)
-    // Only update if they match one of our system codes to avoid touching user custom templates
-    for (const template of SYSTEM_EMAIL_TEMPLATES) {
-        if (existingCodes.has(template.code)) {
-            await db.update(emailTemplates)
-                .set({
-                    name: template.name,
-                    subject: template.subject,
-                    htmlContent: template.htmlContent,
-                    textContent: template.textContent,
-                    variables: template.variables,
-                    recipientRoles: template.recipientRoles,
-                    recipientUserIds: template.recipientUserIds,
-                    ccEmails: template.ccEmails,
-                    deliveryChannels: getDefaultDeliveryChannelsForTemplate({
-                        code: template.code,
-                        type: template.type,
-                    }),
-                    updatedAt: new Date(),
-                    // Optionally force active if it's a critical system template
-                    // isActive: template.defaultActive 
-                })
-                .where(eq(emailTemplates.code, template.code))
-        }
     }
 }

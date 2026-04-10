@@ -128,33 +128,43 @@ export function TemplateList({ initialTemplates, recipientUsers, recipientRoles 
         if (templateId) {
             const res = await updateEmailTemplate(templateId, normalizedData as Parameters<typeof updateEmailTemplate>[1])
             if (res.success) {
-                // Optimistic update agar UI langsung responsif
-                setTemplates((prev) =>
-                    prev.map((t) => (t.id === templateId ? { ...t, ...normalizedData, updatedAt: new Date() } : t))
-                )
+                const updatedTemplate = res.template
+                if (updatedTemplate) {
+                    setTemplates((prev) =>
+                        prev.map((t) => (t.id === templateId ? updatedTemplate : t))
+                    )
+                } else {
+                    setTemplates((prev) =>
+                        prev.map((t) => (t.id === templateId ? { ...t, ...normalizedData, updatedAt: new Date() } : t))
+                    )
+                }
                 toast.success("Template updated")
-                // Refresh Server Component agar data dari DB selalu sinkron
                 router.refresh()
+                setEditorOpen(false)
+                setEditingTemplate(null)
+                return true
             } else {
                 const errorMsg = res.error ?? "Failed to update"
                 console.error("[handleSave] Update gagal:", errorMsg)
                 toast.error(`Gagal menyimpan: ${errorMsg}`, { duration: 8000 })
+                return false
             }
         } else {
             const res = await createEmailTemplate(normalizedData as Parameters<typeof createEmailTemplate>[0])
             if (res.success && res.template) {
                 setTemplates((prev) => [...prev, res.template!])
                 toast.success("Template created")
-                // Refresh Server Component agar data dari DB selalu sinkron
                 router.refresh()
+                setEditorOpen(false)
+                setEditingTemplate(null)
+                return true
             } else {
                 const errorMsg = res.error ?? "Failed to create"
                 console.error("[handleSave] Create gagal:", errorMsg)
                 toast.error(`Gagal membuat template: ${errorMsg}`, { duration: 8000 })
+                return false
             }
         }
-        setEditorOpen(false)
-        setEditingTemplate(null)
     }
 
     function openCreate() {
