@@ -10,6 +10,11 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
 import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card"
+import {
   SidebarGroup,
   SidebarGroupContent,
   SidebarMenu,
@@ -18,7 +23,9 @@ import {
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
+  useSidebar,
 } from "@/components/ui/sidebar"
+import { cn } from "@/lib/utils"
 
 interface NavItem {
   id?: string
@@ -36,8 +43,58 @@ interface NavItem {
   }[]
 }
 
+function CollapsedNavSubmenu({
+  item,
+  isActive,
+  pathname,
+}: {
+  item: NavItem
+  isActive: boolean
+  pathname: string
+}) {
+  return (
+    <HoverCard openDelay={80} closeDelay={120}>
+      <SidebarMenuItem>
+        <HoverCardTrigger asChild>
+          <SidebarMenuButton isActive={isActive}>
+            {item.icon && <item.icon />}
+            <span>{item.title}</span>
+            <ChevronRight className="ml-auto group-data-[collapsible=icon]:hidden" />
+          </SidebarMenuButton>
+        </HoverCardTrigger>
+        <HoverCardContent
+          side="right"
+          align="start"
+          sideOffset={10}
+          className="w-64 p-2"
+        >
+          <div className="px-2 py-1.5 text-sm font-semibold">{item.title}</div>
+          <div className="mt-1 flex flex-col gap-1">
+            {item.items?.map((subItem, subIndex) => (
+              <Link
+                key={subItem.id ?? `${subItem.title}-${subItem.url}-${subIndex}`}
+                href={subItem.url}
+                target={subItem.openInNewTab ? "_blank" : undefined}
+                rel={subItem.openInNewTab ? "noopener noreferrer" : undefined}
+                className={cn(
+                  "flex min-h-9 items-center rounded-md px-3 text-sm transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                  pathname === subItem.url && "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+                )}
+              >
+                <span className="truncate">{subItem.title}</span>
+              </Link>
+            ))}
+          </div>
+        </HoverCardContent>
+      </SidebarMenuItem>
+    </HoverCard>
+  )
+}
+
 export function NavMain({ items }: { items: NavItem[] }) {
   const pathname = usePathname()
+  const { state, isMobile } = useSidebar()
+  const isCollapsed = state === "collapsed" && !isMobile
 
   return (
     <SidebarGroup>
@@ -49,6 +106,17 @@ export function NavMain({ items }: { items: NavItem[] }) {
             const isActive = pathname === item.url || isChildActive;
 
             if (hasChildren) {
+              if (isCollapsed) {
+                return (
+                  <CollapsedNavSubmenu
+                    key={item.id ?? `${item.title}-${item.url}-${itemIndex}`}
+                    item={item}
+                    isActive={Boolean(isActive)}
+                    pathname={pathname}
+                  />
+                )
+              }
+
               return (
                 <Collapsible
                   key={item.id ?? `${item.title}-${item.url}-${itemIndex}`}

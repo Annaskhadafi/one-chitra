@@ -1667,8 +1667,8 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                     }
                 }}
             >
-                <DialogContent className="!w-[calc(100vw-24rem)] !max-w-[calc(100vw-24rem)] flex max-h-[90vh] flex-col overflow-hidden border border-amber-200 bg-white p-0 shadow-2xl">
-                    <DialogHeader className="border-b border-amber-100 bg-white px-6 py-5">
+                <DialogContent className="w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] gap-0 overflow-hidden border border-amber-200 bg-white p-0 shadow-2xl sm:max-w-3xl lg:max-w-5xl max-h-[85dvh]">
+                    <DialogHeader className="border-b border-amber-100 bg-white px-4 py-4 sm:px-6 sm:py-5">
                         <DialogTitle className="flex items-center gap-2 text-amber-700">
                             <Building2 className="h-5 w-5" />
                             Cari Harga Vendor
@@ -1679,7 +1679,7 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                     </DialogHeader>
 
                     <div className="flex min-h-0 flex-1 flex-col">
-                        <div className="border-b border-amber-100 bg-white px-6 py-5">
+                        <div className="border-b border-amber-100 bg-white px-4 py-4 sm:px-6 sm:py-5">
                             <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_240px] md:items-end">
                                 <div className="space-y-2">
                             <Label htmlFor="vendor-match-query">Keyword Pencarian</Label>
@@ -1698,7 +1698,7 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                             </div>
                         </div>
 
-                        <div className="min-h-0 flex-1 overflow-y-auto bg-white px-6 py-5">
+                        <div className="min-h-0 flex-1 overflow-y-auto bg-white px-4 py-4 sm:px-6 sm:py-5">
                             <div className="grid gap-3">
                                 {vendorMatchResults.length === 0 ? (
                                     <div className="rounded-2xl border border-dashed border-amber-200 bg-white/80 p-8 text-center text-sm text-muted-foreground">
