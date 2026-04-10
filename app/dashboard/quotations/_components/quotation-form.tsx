@@ -6,6 +6,7 @@ import { createQuotation, updateQuotation } from "@/app/actions/quotation"
 import { getBundleItemsForExpansion } from "@/app/actions/product-bundle"
 import { getSetting } from "@/app/actions/settings"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { FloatingNavButton } from "@/components/floating-nav-button"
 import { EvhsMasterPriceModal } from "@/components/evhs-master-price-modal"
@@ -51,7 +52,7 @@ import {
 import { Card, CardContent } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
-import { ArrowLeft, Plus, Trash2, Save, Search, ChevronsUpDown, Check, Package, FileDown, Pencil, AlertTriangle, XCircle, Loader2, Calculator, Copy, Eye, EyeOff, Truck, BadgeDollarSign, DollarSign } from "lucide-react"
+import { ArrowLeft, Plus, Trash2, Save, Search, ChevronsUpDown, Check, Package, FileDown, Pencil, AlertTriangle, XCircle, Loader2, Calculator, Copy, Eye, EyeOff, Truck, BadgeDollarSign, DollarSign, Building2 } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 import type { Customer, Product } from "@/lib/types"
@@ -62,6 +63,9 @@ import { StockCheckPopover } from "./stock-check-popover"
 import { usePermissions } from "@/hooks/use-permissions"
 import { ActionBlockedDialog, type ActionBlockedDetails } from "@/components/action-blocked-dialog"
 import { buildActionErrorDetails, buildPermissionBlockedDetails, buildValidationBlockedDetails } from "@/lib/action-blocked"
+import type { VendorQuotationWithItems } from "@/types/vendor-quotation"
+import Fuse from "fuse.js"
+import { PoPreviewDialog } from "@/components/po-preview-dialog"
 
 type User = typeof user.$inferSelect
 
@@ -83,6 +87,7 @@ interface QuotationFormProps {
     customers: Customer[]
     products: Product[]
     users: User[]
+    vendorQuotations: VendorQuotationWithItems[]
     currentUserId?: string
     initialData?: {
         id: number
@@ -129,6 +134,41 @@ function formatCurrency(value: number) {
     }).format(value)
 }
 
+interface VendorQuotationCandidate {
+    id: string
+    vendorQuotationId: number
+    vendorName: string
+    quoteNumber: string
+    quoteDate: string
+    fileUrl: string
+    itemName: string
+    itemRemark: string
+    unitPrice: number
+}
+
+function normalizeSearchText(value: string) {
+    return value
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+}
+
+function tokenizeSearchText(value: string) {
+    return normalizeSearchText(value)
+        .split(" ")
+        .filter((token) => token.length >= 2)
+}
+
+function hasSimilarToken(left: string, right: string) {
+    if (left === right) return true
+    if (left.includes(right) || right.includes(left)) return true
+    if (left.length >= 4 && right.length >= 4) {
+        return left.startsWith(right.slice(0, 4)) || right.startsWith(left.slice(0, 4))
+    }
+    return false
+}
+
 function formatIntegerInput(value: number) {
     return new Intl.NumberFormat("id-ID", {
         maximumFractionDigits: 0,
@@ -155,7 +195,7 @@ function calculateSellingPrice(costIdr: number, margin: number) {
     return ceilToThousand(rawPrice)
 }
 
-export function QuotationForm({ customers, products, users, currentUserId, initialData }: QuotationFormProps) {
+export function QuotationForm({ customers, products, users, vendorQuotations, currentUserId, initialData }: QuotationFormProps) {
     const router = useRouter()
     const isEdit = !!initialData
     const { hasResourcePermission } = usePermissions()
@@ -166,6 +206,11 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
     const [isEvhsMasterPriceOpen, setIsEvhsMasterPriceOpen] = useState(false)
     const [showFloatingShortcuts, setShowFloatingShortcuts] = useState(false)
     const [activeCalculatorItemIndex, setActiveCalculatorItemIndex] = useState<number | null>(null)
+    const [activeVendorItemIndex, setActiveVendorItemIndex] = useState<number | null>(null)
+    const [isVendorMatchOpen, setIsVendorMatchOpen] = useState(false)
+    const [vendorSearchQuery, setVendorSearchQuery] = useState("")
+    const [vendorPreviewFileUrl, setVendorPreviewFileUrl] = useState<string | null>(null)
+    const [isVendorPreviewOpen, setIsVendorPreviewOpen] = useState(false)
 
     // Form State
     const [quotationNumber, setQuotationNumber] = useState(initialData?.quotationNumber || "")
@@ -243,6 +288,103 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
         () => customers.find(c => c.id === customerId),
         [customers, customerId]
     )
+    const vendorQuotationCandidates = useMemo<VendorQuotationCandidate[]>(
+        () => vendorQuotations
+            .filter((quotation) => quotation.ocrStatus === "done")
+            .flatMap((quotation) =>
+                quotation.items.map((item) => ({
+                    id: `${quotation.id}-${item.id}`,
+                    vendorQuotationId: quotation.id,
+                    vendorName: quotation.vendorName || "-",
+                    quoteNumber: quotation.quoteNumber || "-",
+                    quoteDate: quotation.quoteDate || "-",
+                    fileUrl: quotation.fileUrl,
+                    itemName: item.itemName || "",
+                    itemRemark: item.remark || "",
+                    unitPrice: Number(item.unitPrice || 0),
+                }))
+            )
+            .filter((item) => item.itemName.trim().length > 0 && item.unitPrice > 0),
+        [vendorQuotations]
+    )
+    const vendorQuotationFuse = useMemo(
+        () => new Fuse(vendorQuotationCandidates, {
+            includeScore: true,
+            threshold: 0.35,
+            ignoreLocation: true,
+            minMatchCharLength: 2,
+            keys: [
+                { name: "itemName", weight: 0.65 },
+                { name: "itemRemark", weight: 0.15 },
+                { name: "vendorName", weight: 0.1 },
+                { name: "quoteNumber", weight: 0.1 },
+            ],
+        }),
+        [vendorQuotationCandidates]
+    )
+    const vendorMatchResults = useMemo(() => {
+        const query = vendorSearchQuery.trim()
+        if (!query) {
+            return vendorQuotationCandidates.slice(0, 12)
+        }
+
+        const queryTokens = tokenizeSearchText(query)
+        const minimumTokenMatches = queryTokens.length >= 2 ? 2 : 1
+
+        const tokenMatches = vendorQuotationCandidates
+            .map((candidate) => {
+                const candidateTokens = tokenizeSearchText([
+                    candidate.itemName,
+                    candidate.itemRemark,
+                    candidate.vendorName,
+                    candidate.quoteNumber,
+                ].join(" "))
+
+                let matchedTokenCount = 0
+                queryTokens.forEach((queryToken) => {
+                    if (candidateTokens.some((candidateToken) => hasSimilarToken(candidateToken, queryToken))) {
+                        matchedTokenCount += 1
+                    }
+                })
+
+                const fullText = normalizeSearchText([
+                    candidate.itemName,
+                    candidate.itemRemark,
+                    candidate.vendorName,
+                    candidate.quoteNumber,
+                ].join(" "))
+                const normalizedQuery = normalizeSearchText(query)
+                const containsWholeQuery = normalizedQuery.length > 0 && fullText.includes(normalizedQuery)
+
+                return {
+                    candidate,
+                    matchedTokenCount,
+                    containsWholeQuery,
+                }
+            })
+            .filter((entry) => entry.containsWholeQuery || entry.matchedTokenCount >= minimumTokenMatches)
+            .sort((left, right) => {
+                if (Number(right.containsWholeQuery) !== Number(left.containsWholeQuery)) {
+                    return Number(right.containsWholeQuery) - Number(left.containsWholeQuery)
+                }
+                if (right.matchedTokenCount !== left.matchedTokenCount) {
+                    return right.matchedTokenCount - left.matchedTokenCount
+                }
+                return right.candidate.unitPrice - left.candidate.unitPrice
+            })
+            .map((entry) => entry.candidate)
+
+        const fuseMatches = vendorQuotationFuse
+            .search(query)
+            .map((result) => result.item)
+
+        const combinedMatches = [...tokenMatches, ...fuseMatches]
+        const uniqueMatches = combinedMatches.filter((candidate, index, array) => (
+            array.findIndex((entry) => entry.id === candidate.id) === index
+        ))
+
+        return uniqueMatches.slice(0, 16)
+    }, [vendorQuotationCandidates, vendorQuotationFuse, vendorSearchQuery])
     const productById = useMemo(
         () => new Map(products.map(product => [product.id, product])),
         [products]
@@ -263,23 +405,64 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
         }
     }, [productById])
 
+    const openVendorMatch = useCallback((item: QuotationItemRow) => {
+        const itemIndex = items.findIndex((candidate) => candidate === item)
+        if (itemIndex < 0) {
+            return
+        }
+
+        const query = [
+            item.description,
+            item.productName,
+            item.materialNumber,
+            item.longDescription,
+        ]
+            .map((value) => value?.trim())
+            .find((value) => value && value.length > 0)
+
+        if (!query) {
+            toast.error("Isi description atau pilih product dulu supaya vendor quotation bisa dicocokkan")
+            return
+        }
+
+        setActiveVendorItemIndex(itemIndex)
+        setVendorSearchQuery(query)
+        setIsVendorMatchOpen(true)
+    }, [items])
+
+    const applyVendorPrice = useCallback((candidate: VendorQuotationCandidate) => {
+        if (activeVendorItemIndex === null) {
+            return
+        }
+
+        setItems((prev) => prev.map((entry, index) => (
+            index === activeVendorItemIndex
+                ? { ...entry, unitPrice: Math.round(candidate.unitPrice) }
+                : entry
+        )))
+        setIsVendorMatchOpen(false)
+        setActiveVendorItemIndex(null)
+        toast.success(`Harga dari vendor ${candidate.vendorName} diterapkan ke baris item`)
+    }, [activeVendorItemIndex])
+
     const renderItemInsights = useCallback((item: QuotationItemRow, compact = false) => {
         const stockReference = resolveProductReference(item)
-
-        if (!stockReference.productId && !stockReference.materialNo) {
-            return null
-        }
+        const itemIndex = items.findIndex((candidate) => candidate === item)
 
         const content = (
             <>
-                <ProductHistoryPopover
-                    materialNo={stockReference.materialNo}
-                    costSap={item.costSap || 0}
-                />
-                <StockCheckPopover
-                    productId={stockReference.productId}
-                    materialNo={stockReference.materialNo}
-                />
+                {stockReference.productId || stockReference.materialNo ? (
+                    <>
+                        <ProductHistoryPopover
+                            materialNo={stockReference.materialNo}
+                            costSap={item.costSap || 0}
+                        />
+                        <StockCheckPopover
+                            productId={stockReference.productId}
+                            materialNo={stockReference.materialNo}
+                        />
+                    </>
+                ) : null}
                 <Button
                     type="button"
                     variant="ghost"
@@ -287,7 +470,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                     className="h-7 w-7 text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 no-print"
                     title="Cek Harga"
                     onClick={() => {
-                        setActiveCalculatorItemIndex(items.findIndex((candidate) => candidate === item))
+                        setActiveCalculatorItemIndex(itemIndex)
                         const basePrice = resolveItemCostIdr(item, exchangeRate) || item.unitPrice || 0
                         setCalculatorBasePrice(Math.round(basePrice))
                         setCalculatorMargin(globalMargin)
@@ -298,6 +481,16 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                 >
                     <DollarSign className="h-4 w-4" />
                 </Button>
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-amber-600 hover:text-amber-700 hover:bg-amber-50 no-print"
+                    title="Cari Harga Vendor"
+                    onClick={() => openVendorMatch(item)}
+                >
+                    <Building2 className="h-4 w-4" />
+                </Button>
             </>
         )
 
@@ -306,7 +499,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
         }
 
         return <div className="flex items-center">{content}</div>
-    }, [exchangeRate, globalMargin, items, resolveProductReference])
+    }, [exchangeRate, globalMargin, items, openVendorMatch, resolveProductReference])
 
     // Add product
     const addProduct = useCallback(async (product: Product) => {
@@ -1453,9 +1646,125 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                 onOpenChange={setIsVendorQuotationOpen}
             />
 
+            <Dialog
+                open={isVendorMatchOpen}
+                onOpenChange={(open) => {
+                    setIsVendorMatchOpen(open)
+                    if (!open) {
+                        setActiveVendorItemIndex(null)
+                    }
+                }}
+            >
+                <DialogContent className="!w-[calc(100vw-24rem)] !max-w-[calc(100vw-24rem)] flex max-h-[90vh] flex-col overflow-hidden border border-amber-200 bg-white p-0 shadow-2xl">
+                    <DialogHeader className="border-b border-amber-100 bg-white px-6 py-5">
+                        <DialogTitle className="flex items-center gap-2 text-amber-700">
+                            <Building2 className="h-5 w-5" />
+                            Cari Harga Vendor
+                        </DialogTitle>
+                        <DialogDescription className="max-w-3xl text-sm leading-6 text-slate-600">
+                            Sistem akan fuzzy match ke database Vendor Quotation berdasarkan nama item atau description, lalu harga terpilih langsung diisi ke baris quotation ini.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="flex min-h-0 flex-1 flex-col">
+                        <div className="border-b border-amber-100 bg-white px-6 py-5">
+                            <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_240px] md:items-end">
+                                <div className="space-y-2">
+                            <Label htmlFor="vendor-match-query">Keyword Pencarian</Label>
+                            <Input
+                                id="vendor-match-query"
+                                value={vendorSearchQuery}
+                                onChange={(e) => setVendorSearchQuery(e.target.value)}
+                                placeholder="Ketik nama item / description"
+                                className="border-amber-200 bg-white shadow-sm"
+                            />
+                                </div>
+                                <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm">
+                                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-700">Match Ditemukan</p>
+                                    <p className="mt-1 text-2xl font-bold text-slate-900">{vendorMatchResults.length}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="min-h-0 flex-1 overflow-y-auto bg-white px-6 py-5">
+                            <div className="grid gap-3">
+                                {vendorMatchResults.length === 0 ? (
+                                    <div className="rounded-2xl border border-dashed border-amber-200 bg-white/80 p-8 text-center text-sm text-muted-foreground">
+                                        Tidak ada vendor quotation yang cocok untuk pencarian ini.
+                                    </div>
+                                ) : (
+                                    vendorMatchResults.map((candidate) => (
+                                        <div
+                                            key={candidate.id}
+                                            className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-amber-300 hover:shadow-md"
+                                        >
+                                            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                                                <div className="min-w-0 flex-1 space-y-3">
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <Badge variant="secondary" className="bg-amber-100 text-amber-800 hover:bg-amber-100">
+                                                            {candidate.vendorName}
+                                                        </Badge>
+                                                        <Badge variant="outline">
+                                                            {candidate.quoteNumber}
+                                                        </Badge>
+                                                        <span className="text-xs text-muted-foreground">{candidate.quoteDate}</span>
+                                                    </div>
+                                                    <p className="text-base font-semibold leading-6 text-slate-900">{candidate.itemName}</p>
+                                                    {candidate.itemRemark ? (
+                                                        <p className="text-sm leading-6 text-muted-foreground">{candidate.itemRemark}</p>
+                                                    ) : null}
+                                                </div>
+                                                <div className="flex shrink-0 flex-col gap-3 lg:min-w-[220px] lg:items-end">
+                                                    <div className="rounded-xl bg-amber-50 px-4 py-3 text-left lg:text-right">
+                                                        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-amber-700">Harga Vendor</p>
+                                                        <p className="mt-1 text-2xl font-bold text-amber-700">{formatCurrency(candidate.unitPrice)}</p>
+                                                        <p className="mt-1 text-xs text-muted-foreground">Pilih aksi di bawah untuk preview atau pakai harga</p>
+                                                    </div>
+                                                    <div className="flex flex-wrap gap-2 lg:justify-end">
+                                                        <Button
+                                                            type="button"
+                                                            variant="outline"
+                                                            size="sm"
+                                                            className="border-slate-200 bg-white"
+                                                            onClick={() => {
+                                                                setVendorPreviewFileUrl(candidate.fileUrl)
+                                                                setIsVendorPreviewOpen(true)
+                                                            }}
+                                                        >
+                                                            <Eye className="mr-2 h-4 w-4" />
+                                                            Preview PDF
+                                                        </Button>
+                                                        <Button
+                                                            type="button"
+                                                            size="sm"
+                                                            className="bg-amber-600 text-white hover:bg-amber-700"
+                                                            onClick={() => applyVendorPrice(candidate)}
+                                                        >
+                                                            <Check className="mr-2 h-4 w-4" />
+                                                            Pakai Harga Ini
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
             <LogisticsMasterPriceModal
                 open={isDeliveryPriceOpen}
                 onOpenChange={setIsDeliveryPriceOpen}
+            />
+
+            <PoPreviewDialog
+                open={isVendorPreviewOpen}
+                onOpenChange={setIsVendorPreviewOpen}
+                poDocument={vendorPreviewFileUrl}
+                title="Preview Vendor Quotation"
             />
 
             <EvhsMasterPriceModal
@@ -1471,7 +1780,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                             Kalkulator Margin & Diskon
                         </DialogTitle>
                         <DialogDescription>
-                            Hitung harga jual dari harga dasar dengan tambahan margin dan diskon, lalu pakai marginnya langsung ke form quotation.
+                            Hitung harga jual dari harga dasar dengan tambahan margin dan diskon. Jika dibuka dari icon cek harga di baris produk, hasilnya hanya diterapkan ke baris tersebut.
                         </DialogDescription>
                     </DialogHeader>
 
@@ -1535,22 +1844,22 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                                 variant="outline"
                                 className="w-full border-emerald-200 text-emerald-700 hover:bg-emerald-50"
                                 onClick={() => {
-                                    setGlobalMargin(calculatorMargin)
                                     if (activeCalculatorItemIndex !== null) {
                                         setItems((prev) => prev.map((entry, index) => (
                                             index === activeCalculatorItemIndex
                                                 ? { ...entry, unitPrice: Math.round(calculatorFinalPrice) }
                                                 : entry
                                         )))
-                                        toast.success("Price item berhasil diterapkan dari kalkulator")
+                                        toast.success("Harga baris item berhasil diterapkan dari cek harga")
                                     } else {
+                                        setGlobalMargin(calculatorMargin)
                                         toast.success("Margin kalkulator diterapkan ke form quotation")
                                     }
                                     setIsCalculatorOpen(false)
                                     setActiveCalculatorItemIndex(null)
                                 }}
                             >
-                                Pakai Margin Ini di Form
+                                {activeCalculatorItemIndex !== null ? "Pakai ke Baris Ini" : "Pakai Margin Ini di Form"}
                             </Button>
                         </div>
 

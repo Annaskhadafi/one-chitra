@@ -2,6 +2,7 @@ import { getQuotation } from "@/app/actions/quotation"
 import { getCustomers } from "@/app/actions/customer"
 import { getProducts } from "@/app/actions/product"
 import { getUsers } from "@/app/actions/users"
+import { getVendorQuotations } from "@/app/actions/vendor-quotation"
 import { notFound } from "next/navigation"
 import { QuotationForm } from "../../_components/quotation-form"
 
@@ -11,11 +12,12 @@ export default async function EditQuotationPage({ params }: { params: Promise<{ 
         notFound()
     }
 
-    const [quotation, customers, products, users] = await Promise.all([
+    const [quotation, customers, products, users, vendorQuotations] = await Promise.all([
         getQuotation(id),
         getCustomers(),
         getProducts(),
         getUsers(),
+        getVendorQuotations(),
     ])
 
     if (!quotation) {
@@ -27,6 +29,7 @@ export default async function EditQuotationPage({ params }: { params: Promise<{ 
             customers={customers}
             products={products}
             users={users}
+            vendorQuotations={vendorQuotations}
             initialData={quotation as Parameters<typeof QuotationForm>[0]["initialData"]}
         />
     )
