@@ -876,6 +876,345 @@ export async function deleteEvhsVoucher(voucherId: number) {
     }
 }
 
+// ─── Draft Voucher MHU ──────────────────────────────────────────────────────
+
+const _draftVoucherSchema = z.object({
+    woNo: z.string().optional(),
+    date: z.date(),
+    warehouseId: z.number(),
+    remark: z.string().optional(),
+    approvedByName: z.string().optional(),
+    receivedByName: z.string().optional(),
+    items: z.array(z.object({
+        materialNumberCk: z.string().min(1, "Material Number CK wajib diisi"),
+        qty: z.number().min(1, "Qty minimal 1"),
+    })).min(1, "Minimal satu item"),
+})
+
+/**
+ * Buat Voucher VHS Draft untuk Warehouse MHU.
+ * Tidak memerlukan SN/stok pada saat pembuatan — nomor VHS dibuat sekarang.
+ * Stock movement belum dikurangi sampai voucher di-complete.
+ */
+export async function createEvhsDraftVoucher(data: z.infer<typeof _draftVoucherSchema>) {
+    try {
+        const session = await getAuthenticatedSession('evhs', 'create')
+        const userId = session.user.id
+        await assertCurrentUserHasWarehouseAccess(data.warehouseId, "edit")
+
+        return await db.transaction(async (tx) => {
+            const warehouse = await tx.query.warehouses.findFirst({
+                where: eq(warehouses.id, data.warehouseId),
+            })
+
+            if (!isCkVhsWarehouse(warehouse)) {
+                return {
+                    success: false,
+                    error: "Warehouse harus bertipe Warehouse VHS CK untuk proses EVHS.",
+                }
+            }
+
+            // Generate nomor VHS
+            const now = new Date()
+            const dateStr = now.toISOString().slice(0, 10).replace(/-/g, "")
+            const randomStr = Math.random().toString(36).substring(2, 7).toUpperCase()
+            const vhsNo = `VHS/CP/CK/${dateStr}-${randomStr}`
+
+            // Insert voucher header dengan status draft
+            const [voucher] = await tx.insert(evhsVouchers).values({
+                vhsNo,
+                woNo: data.woNo,
+                date: data.date.toISOString().slice(0, 10),
+                warehouseId: data.warehouseId,
+                remark: data.remark,
+                issuedBy: userId,
+                approvedByName: data.approvedByName,
+                receivedByName: data.receivedByName,
+                status: "draft",
+                mrkoStatus: "OPEN",
+            }).returning()
+
+            // Insert items (materialNumberCk + qty saja, productId akan diisi nanti jika perlu)
+            // Untuk draft MHU: cari productId berdasarkan materialNumberCk jika ada
+            for (const item of data.items) {
+                // Cari product berdasarkan materialNumberCk
+                const matchedProduct = await tx.query.products.findFirst({
+                    where: (p, { eq, or }) => or(
+                        eq(p.materialNumberCk, item.materialNumberCk),
+                        eq(p.materialNumber, item.materialNumberCk),
+                    ),
+                    columns: { id: true },
+                })
+
+                // Gunakan productId yang ditemukan, atau placeholder pertama (akan diisi saat complete)
+                // Jika tidak ditemukan, gunakan productId = 0 sebagai sentinel (akan error saat complete)
+                // Tapi kita butuh productId valid untuk FK. Cari product dengan materialNumber match
+                if (!matchedProduct) {
+                    return {
+                        success: false,
+                        error: `Material Number "${item.materialNumberCk}" tidak ditemukan di database. Pastikan CK Material Number sesuai.`,
+                    }
+                }
+
+                await tx.insert(evhsVoucherItems).values({
+                    voucherId: voucher.id,
+                    productId: matchedProduct.id,
+                    materialNumberCk: item.materialNumberCk,
+                    qty: item.qty,
+                    serialNumber: null,
+                    pos: null,
+                    unitId: null,
+                })
+            }
+
+            return { success: true, vhsNo, voucherId: voucher.id }
+        })
+    } catch (error) {
+        console.error("Error creating draft VHS voucher:", error)
+        return { success: false, error: error instanceof Error ? error.message : "Gagal membuat voucher draft" }
+    } finally {
+        revalidatePath("/dashboard/evhs")
+    }
+}
+
+const _updateDraftItemsSchema = z.object({
+    voucherId: z.number(),
+    woNo: z.string().optional(),
+    approvedByName: z.string().optional(),
+    receivedByName: z.string().optional(),
+    remark: z.string().optional(),
+    items: z.array(z.object({
+        itemId: z.number(),
+        serialNumber: z.string().optional(),
+        pos: z.string().optional(),
+        unitId: z.string().optional(),
+        materialNumberCk: z.string().optional(),
+        qty: z.number().min(1).optional(),
+    })),
+})
+
+/**
+ * Update item-item pada voucher draft (isi SN, POS, Unit ID) tanpa mengubah status.
+ */
+export async function updateEvhsDraftVoucherItems(data: z.infer<typeof _updateDraftItemsSchema>) {
+    try {
+        await getAuthenticatedSession('evhs', 'edit')
+        const voucher = await db.query.evhsVouchers.findFirst({
+            where: eq(evhsVouchers.id, data.voucherId),
+            columns: { warehouseId: true, status: true },
+        })
+
+        if (!voucher) {
+            return { success: false, error: "Voucher tidak ditemukan" }
+        }
+
+        if (voucher.status === "completed") {
+            return { success: false, error: "Voucher sudah completed, tidak bisa diedit." }
+        }
+
+        await assertCurrentUserHasWarehouseAccess(voucher.warehouseId, "edit")
+
+        return await db.transaction(async (tx) => {
+            // Update header voucher
+            await tx.update(evhsVouchers).set({
+                woNo: data.woNo,
+                approvedByName: data.approvedByName,
+                receivedByName: data.receivedByName,
+                remark: data.remark,
+                updatedAt: new Date(),
+            }).where(eq(evhsVouchers.id, data.voucherId))
+
+            // Update masing-masing item
+            for (const item of data.items) {
+                await tx.update(evhsVoucherItems).set({
+                    serialNumber: item.serialNumber || null,
+                    pos: item.pos || null,
+                    unitId: item.unitId || null,
+                    materialNumberCk: item.materialNumberCk,
+                    ...(item.qty !== undefined ? { qty: item.qty } : {}),
+                }).where(eq(evhsVoucherItems.id, item.itemId))
+            }
+
+            return { success: true }
+        })
+    } catch (error) {
+        console.error("Error updating draft voucher items:", error)
+        return { success: false, error: error instanceof Error ? error.message : "Gagal update draft voucher" }
+    } finally {
+        revalidatePath("/dashboard/evhs")
+    }
+}
+
+const _completeDraftVoucherSchema = z.object({
+    voucherId: z.number(),
+    woNo: z.string().optional(),
+    approvedByName: z.string().optional(),
+    receivedByName: z.string().optional(),
+    remark: z.string().optional(),
+    items: z.array(z.object({
+        itemId: z.number(),
+        productId: z.number(),
+        qty: z.number().min(1),
+        serialNumber: z.string().optional(),
+        pos: z.string().optional(),
+        unitId: z.string().optional(),
+        materialNumberCk: z.string().optional(),
+    })),
+})
+
+/**
+ * Selesaikan (complete) voucher draft MHU.
+ * Melakukan validasi stok, update items, kurangi stock movement, ubah status → completed.
+ */
+export async function completeEvhsDraftVoucher(data: z.infer<typeof _completeDraftVoucherSchema>) {
+    try {
+        const session = await getAuthenticatedSession('evhs', 'edit')
+        const userId = session.user.id
+
+        const voucher = await db.query.evhsVouchers.findFirst({
+            where: eq(evhsVouchers.id, data.voucherId),
+            columns: { warehouseId: true, status: true, vhsNo: true },
+        })
+
+        if (!voucher) {
+            return { success: false, error: "Voucher tidak ditemukan" }
+        }
+
+        if (voucher.status !== "draft") {
+            return { success: false, error: "Hanya voucher berstatus draft yang bisa di-complete." }
+        }
+
+        await assertCurrentUserHasWarehouseAccess(voucher.warehouseId, "edit")
+
+        return await db.transaction(async (tx) => {
+            const warehouseRow = await tx.query.warehouses.findFirst({
+                where: eq(warehouses.id, voucher.warehouseId),
+            })
+
+            // Validasi stok per product
+            const productIds = Array.from(new Set(data.items.map(i => i.productId)))
+            const legacyStockLevels = productIds.length > 0
+                ? await tx.query.stockLevels.findMany({
+                    where: (sl, { and, eq, inArray }) => and(
+                        eq(sl.warehouseId, voucher.warehouseId),
+                        inArray(sl.productId, productIds),
+                    ),
+                    columns: { productId: true, totalStock: true },
+                })
+                : []
+
+            const warehouseReceipts = await tx.query.evhsReceipts.findMany({
+                with: { transfer: true, items: true },
+            })
+            const existingCompletedVouchers = await tx.query.evhsVouchers.findMany({
+                where: (v, { and, eq, ne }) => and(
+                    eq(v.warehouseId, voucher.warehouseId),
+                    ne(v.id, data.voucherId),
+                    ne(v.status, "draft"),
+                ),
+                with: { items: true },
+            })
+
+            const legacyStockByProduct = new Map<number, number>(
+                legacyStockLevels.map(sl => [sl.productId, Number(sl.totalStock || 0)])
+            )
+
+            const requestedQtyByProduct = new Map<number, number>()
+            const requestedSerials = new Set<string>()
+
+            for (const item of data.items) {
+                const relevantReceiptItems = warehouseReceipts
+                    .filter(r => r.transfer?.toWarehouseId === voucher.warehouseId)
+                    .flatMap(r => r.items)
+                    .filter(ri => ri.productId === item.productId)
+
+                const receivedQty = relevantReceiptItems.reduce((t, ri) => t + ri.confirmedQty, 0)
+                const usedQty = existingCompletedVouchers
+                    .flatMap(v => v.items)
+                    .filter(vi => vi.productId === item.productId)
+                    .reduce((t, vi) => t + vi.qty, 0)
+
+                const warehouseStockQty = legacyStockByProduct.get(item.productId)
+                const availableQty = warehouseStockQty !== undefined
+                    ? Math.max(warehouseStockQty - usedQty, 0)
+                    : Math.max(receivedQty - usedQty, 0)
+
+                const nextRequested = (requestedQtyByProduct.get(item.productId) || 0) + item.qty
+
+                if (nextRequested > availableQty) {
+                    return {
+                        success: false,
+                        error: `Stok tidak cukup untuk product ID ${item.productId}. Tersedia ${availableQty}, diminta ${nextRequested}.`,
+                    }
+                }
+
+                // Cek duplikasi serial number
+                const normalizedSN = normalizeSerialNumber(item.serialNumber)
+                if (normalizedSN) {
+                    const key = `${item.productId}:${normalizedSN}`
+                    if (requestedSerials.has(key)) {
+                        return { success: false, error: `Serial number ${normalizedSN} terduplikasi.` }
+                    }
+                    const snUsed = existingCompletedVouchers.some(v =>
+                        v.items.some(vi =>
+                            vi.productId === item.productId &&
+                            normalizeSerialNumber(vi.serialNumber) === normalizedSN
+                        )
+                    )
+                    if (snUsed) {
+                        return { success: false, error: `Serial number ${normalizedSN} sudah dipakai pada voucher lain.` }
+                    }
+                    requestedSerials.add(key)
+                }
+
+                requestedQtyByProduct.set(item.productId, nextRequested)
+            }
+
+            // Update header
+            await tx.update(evhsVouchers).set({
+                woNo: data.woNo,
+                approvedByName: data.approvedByName,
+                receivedByName: data.receivedByName,
+                remark: data.remark,
+                status: "completed",
+                updatedAt: new Date(),
+            }).where(eq(evhsVouchers.id, data.voucherId))
+
+            // Update items dan rekam stock movement
+            for (const item of data.items) {
+                await tx.update(evhsVoucherItems).set({
+                    serialNumber: normalizeSerialNumber(item.serialNumber) || null,
+                    pos: item.pos || null,
+                    unitId: item.unitId || null,
+                    materialNumberCk: item.materialNumberCk,
+                    qty: item.qty,
+                }).where(eq(evhsVoucherItems.id, item.itemId))
+
+                await recordStockMovement(tx, {
+                    productId: item.productId,
+                    warehouseId: voucher.warehouseId,
+                    quantity: -Math.abs(item.qty),
+                    type: "DELIVERY",
+                    referenceNumber: voucher.vhsNo,
+                    recordedBy: userId,
+                    customerId: warehouseRow?.customerId ?? undefined,
+                    notes: `Pengeluaran EVHS via voucher draft ${voucher.vhsNo} (completed)`,
+                })
+            }
+
+            return { success: true }
+        })
+    } catch (error) {
+        console.error("Error completing draft VHS voucher:", error)
+        return { success: false, error: error instanceof Error ? error.message : "Gagal menyelesaikan draft voucher" }
+    } finally {
+        revalidatePath("/dashboard/evhs")
+        revalidatePath("/dashboard/stock-movements")
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export async function getEvhsVouchers() {
     try {
         const session = await getAuthenticatedSession('evhs', 'view')

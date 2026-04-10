@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Search, FileText, MoreHorizontal, Edit, Trash2 } from "lucide-react"
+import { Search, FileText, MoreHorizontal, Edit, Trash2, PackagePlus, ClipboardEdit } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { format } from "date-fns"
 import { EvhsVoucherPreview } from "./evhs-voucher-preview"
@@ -34,9 +34,26 @@ import {
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { EvhsEditVoucherDialog } from "./evhs-edit-voucher-dialog"
+import { EvhsAddManualVoucherDialog } from "./evhs-add-manual-voucher-dialog"
+import { EvhsFillDraftDialog, type DraftVoucher } from "./evhs-fill-draft-dialog"
 import { deleteEvhsVoucher } from "@/app/actions/evhs"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
+
+type WarehouseOption = {
+    id: number
+    sloc?: string | null
+    description?: string | null
+    type?: string | null
+}
+
+type ProductOption = {
+    id: number
+    materialNumber: string
+    materialNumberCk?: string | null
+    materialDescription?: string | null
+    category?: string | null
+}
 
 type VoucherRow = {
     id: number
@@ -72,14 +89,36 @@ type VoucherRow = {
     } | null
 }
 
+function StatusBadge({ status }: { status: string }) {
+    if (status === "draft") {
+        return (
+            <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 border border-amber-200">
+                Draft
+            </Badge>
+        )
+    }
+    if (status === "cancelled") {
+        return (
+            <Badge className="bg-red-100 text-red-700 hover:bg-red-100 border border-red-200">
+                Cancelled
+            </Badge>
+        )
+    }
+    return (
+        <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-none">
+            {status}
+        </Badge>
+    )
+}
+
 export function EvhsVoucherTable({
     vouchers,
-    products: _products,
-    warehouses: _warehouses
+    products,
+    warehouses,
 }: {
     vouchers: VoucherRow[],
-    products: unknown[],
-    warehouses: unknown[]
+    products: ProductOption[],
+    warehouses: WarehouseOption[]
 }) {
     const [searchTerm, setSearchTerm] = useState("")
     const [selectedVoucher, setSelectedVoucher] = useState<VoucherRow | null>(null)
@@ -87,7 +126,16 @@ export function EvhsVoucherTable({
     const [editOpen, setEditOpen] = useState(false)
     const [deleteOpen, setDeleteOpen] = useState(false)
     const [isDeleting, setIsDeleting] = useState(false)
+    const [addManualOpen, setAddManualOpen] = useState(false)
+    const [fillDraftOpen, setFillDraftOpen] = useState(false)
     const router = useRouter()
+
+    // Cek apakah ada warehouse VHS CK yang tersedia untuk tombol Add Manual
+    const hasVhsWarehouse = warehouses.some((w) => {
+        const type = (w.type || "").trim().toUpperCase()
+        const label = `${(w.sloc || "")} ${(w.description || "")}`.toUpperCase()
+        return type === "WAREHOUSE VHS" && label.includes("CK")
+    })
 
     const filteredVouchers = vouchers.filter(v =>
         v.vhsNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -128,6 +176,19 @@ export function EvhsVoucherTable({
                 voucher={selectedVoucher}
             />
 
+            <EvhsAddManualVoucherDialog
+                open={addManualOpen}
+                onOpenChange={setAddManualOpen}
+                warehouses={warehouses}
+                products={products as ProductOption[]}
+            />
+
+            <EvhsFillDraftDialog
+                open={fillDraftOpen}
+                onOpenChange={setFillDraftOpen}
+                voucher={selectedVoucher as DraftVoucher | null}
+            />
+
             <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
@@ -161,6 +222,19 @@ export function EvhsVoucherTable({
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
                 </div>
+
+                {/* Tombol Add Voucher Manual — hanya tampil jika ada warehouse VHS CK */}
+                {hasVhsWarehouse && (
+                    <Button
+                        id="btn-add-manual-voucher"
+                        onClick={() => setAddManualOpen(true)}
+                        className="bg-amber-500 hover:bg-amber-600 text-white shadow-sm gap-2"
+                        size="sm"
+                    >
+                        <PackagePlus className="h-4 w-4" />
+                        Tambah Voucher Manual
+                    </Button>
+                )}
             </div>
 
             <div className="rounded-md border bg-card overflow-x-auto">
@@ -185,18 +259,19 @@ export function EvhsVoucherTable({
                             </TableRow>
                         ) : (
                             filteredVouchers.map((voucher) => (
-                                <TableRow key={voucher.id}>
+                                <TableRow
+                                    key={voucher.id}
+                                    className={voucher.status === "draft" ? "bg-amber-50/30 dark:bg-amber-950/10" : undefined}
+                                >
                                     <TableCell className="font-mono font-bold text-xs">{voucher.vhsNo}</TableCell>
                                     <TableCell suppressHydrationWarning>{format(new Date(voucher.date), "dd MMM yyyy")}</TableCell>
-                                    <TableCell className="font-medium">{voucher.woNo || "-"}</TableCell>
+                                    <TableCell className="font-medium">{voucher.woNo || "—"}</TableCell>
                                     <TableCell>{voucher.warehouse?.sloc}</TableCell>
                                     <TableCell>
                                         <Badge variant="secondary">{voucher.items.length} Items</Badge>
                                     </TableCell>
                                     <TableCell>
-                                        <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-none">
-                                            {voucher.status}
-                                        </Badge>
+                                        <StatusBadge status={voucher.status} />
                                     </TableCell>
                                     <TableCell className="text-right">
                                         <DropdownMenu>
@@ -208,6 +283,7 @@ export function EvhsVoucherTable({
                                             </DropdownMenuTrigger>
                                             <DropdownMenuContent align="end">
                                                 <DropdownMenuLabel>Aksi</DropdownMenuLabel>
+
                                                 <DropdownMenuItem
                                                     onClick={() => {
                                                         setSelectedVoucher(voucher)
@@ -218,6 +294,21 @@ export function EvhsVoucherTable({
                                                     <FileText className="mr-2 h-4 w-4 text-blue-500" />
                                                     Preview / Print
                                                 </DropdownMenuItem>
+
+                                                {/* Menu Isi Detail — khusus voucher DRAFT */}
+                                                {voucher.status === "draft" && (
+                                                    <DropdownMenuItem
+                                                        onClick={() => {
+                                                            setSelectedVoucher(voucher)
+                                                            setFillDraftOpen(true)
+                                                        }}
+                                                        className="cursor-pointer text-amber-600 focus:text-amber-700 focus:bg-amber-50"
+                                                    >
+                                                        <ClipboardEdit className="mr-2 h-4 w-4" />
+                                                        Isi Detail / SN
+                                                    </DropdownMenuItem>
+                                                )}
+
                                                 <DropdownMenuItem
                                                     onClick={() => {
                                                         setSelectedVoucher(voucher)
@@ -228,6 +319,7 @@ export function EvhsVoucherTable({
                                                     <Edit className="mr-2 h-4 w-4 text-amber-500" />
                                                     Edit Data Voucher
                                                 </DropdownMenuItem>
+
                                                 {voucher.canDelete ? (
                                                     <>
                                                         <DropdownMenuSeparator />
