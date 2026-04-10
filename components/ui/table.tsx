@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
@@ -60,16 +61,118 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
   )
 }
 
-function TableHead({ className, ...props }: React.ComponentProps<"th">) {
+type TableHeadProps = React.ComponentProps<"th"> & {
+  sortable?: boolean
+  sorted?: false | "asc" | "desc"
+  onSort?: (event?: unknown) => void
+  showSortIndicator?: boolean
+}
+
+function TableHead({
+  className,
+  children,
+  sortable = false,
+  sorted = false,
+  onSort,
+  showSortIndicator = false,
+  onClick,
+  onKeyDown,
+  ...props
+}: TableHeadProps) {
+  const isRightAligned = className?.includes("text-right") ?? false
+  const isCenterAligned = className?.includes("text-center") ?? false
+
+  const handleSort = () => {
+    if (!sortable || !onSort) {
+      return
+    }
+
+    onSort(undefined)
+  }
+
+  const handleClick = (event: React.MouseEvent<HTMLTableCellElement>) => {
+    onClick?.(event)
+
+    if (
+      event.defaultPrevented ||
+      !sortable ||
+      !onSort ||
+      (event.target as HTMLElement).closest(
+        "button, a, input, select, textarea, [role='button']"
+      )
+    ) {
+      return
+    }
+
+    handleSort()
+  }
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLTableCellElement>) => {
+    onKeyDown?.(event)
+
+    if (
+      event.defaultPrevented ||
+      !sortable ||
+      !onSort ||
+      (event.key !== "Enter" && event.key !== " ")
+    ) {
+      return
+    }
+
+    event.preventDefault()
+    handleSort()
+  }
+
+  const sortIndicator = !showSortIndicator ? null : sorted === "asc" ? (
+    <ArrowUp className="h-3.5 w-3.5 shrink-0" />
+  ) : sorted === "desc" ? (
+    <ArrowDown className="h-3.5 w-3.5 shrink-0" />
+  ) : (
+    <ArrowUpDown className="h-3.5 w-3.5 shrink-0 opacity-40" />
+  )
+
   return (
     <th
       data-slot="table-head"
+      data-sortable={sortable || undefined}
+      aria-sort={
+        sorted === "asc"
+          ? "ascending"
+          : sorted === "desc"
+            ? "descending"
+            : sortable
+              ? "none"
+              : undefined
+      }
+      role={sortable ? "button" : undefined}
+      tabIndex={sortable ? 0 : undefined}
       className={cn(
         "text-foreground h-10 px-2 text-left align-middle font-medium whitespace-nowrap [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
+        sortable && "cursor-pointer select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
         className
       )}
+      onClick={sortable ? handleClick : onClick}
+      onKeyDown={sortable ? handleKeyDown : onKeyDown}
       {...props}
-    />
+    >
+      {showSortIndicator ? (
+        <div
+          className={cn(
+            "flex items-center gap-1",
+            isRightAligned
+              ? "justify-end"
+              : isCenterAligned
+                ? "justify-center"
+                : "justify-start"
+          )}
+        >
+          {children}
+          {sortIndicator}
+        </div>
+      ) : (
+        children
+      )}
+    </th>
   )
 }
 

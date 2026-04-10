@@ -823,7 +823,12 @@ export function StockComparison({ warehouses }: StockComparisonProps) {
                                 <TableRow key={headerGroup.id}>
                                     <TableHead className="w-[50px] text-center">#</TableHead>
                                     {headerGroup.headers.map((header) => (
-                                        <TableHead key={header.id}>
+                                        <TableHead key={header.id}
+                                            sortable={header.column.getCanSort()}
+                                            sorted={header.column.getIsSorted()}
+                                            onSort={header.column.getToggleSortingHandler()}
+                                            showSortIndicator={typeof header.column.columnDef.header === "string"}
+                                        >
                                             {header.isPlaceholder
                                                 ? null
                                                 : flexRender(
@@ -892,3 +897,4 @@ export function StockComparison({ warehouses }: StockComparisonProps) {
         </div>
     )
 }
+

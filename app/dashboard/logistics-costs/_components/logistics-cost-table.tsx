@@ -399,7 +399,12 @@ export function LogisticsCostTable({ data }: LogisticsCostTableProps) {
                             {table.getHeaderGroups().map((headerGroup) => (
                                 <TableRow key={headerGroup.id} className="hover:bg-transparent">
                                     {headerGroup.headers.map((header) => (
-                                        <TableHead key={header.id} className="whitespace-nowrap py-3 px-4 first:pl-6 last:pr-6">
+                                        <TableHead key={header.id} className="whitespace-nowrap py-3 px-4 first:pl-6 last:pr-6"
+                                            sortable={header.column.getCanSort()}
+                                            sorted={header.column.getIsSorted()}
+                                            onSort={header.column.getToggleSortingHandler()}
+                                            showSortIndicator={typeof header.column.columnDef.header === "string"}
+                                        >
                                             {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
                                         </TableHead>
                                     ))}
@@ -431,3 +436,4 @@ export function LogisticsCostTable({ data }: LogisticsCostTableProps) {
         </div>
     )
 }
+

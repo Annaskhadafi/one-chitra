@@ -482,7 +482,12 @@ export function DeliveryItemsTable({ data }: DeliveryItemsTableProps) {
                             {table.getHeaderGroups().map((headerGroup) => (
                                 <TableRow key={headerGroup.id}>
                                     {headerGroup.headers.map((header) => (
-                                        <TableHead key={header.id} className="sticky top-[var(--header-height)] z-[60] bg-background shadow-[inset_0_-1px_0_hsl(var(--border))] font-semibold text-slate-700 dark:text-slate-300">
+                                        <TableHead key={header.id} className="sticky top-[var(--header-height)] z-[60] bg-background shadow-[inset_0_-1px_0_hsl(var(--border))] font-semibold text-slate-700 dark:text-slate-300"
+                                            sortable={header.column.getCanSort()}
+                                            sorted={header.column.getIsSorted()}
+                                            onSort={header.column.getToggleSortingHandler()}
+                                            showSortIndicator={typeof header.column.columnDef.header === "string"}
+                                        >
                                             {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
                                         </TableHead>
                                     ))}
@@ -556,3 +561,4 @@ export function DeliveryItemsTable({ data }: DeliveryItemsTableProps) {
         </div>
     )
 } 
+

@@ -869,6 +869,11 @@ export function BillingTable({ data: initialData }: { data: BillingRecordDisplay
                                         <TableHead
                                             key={header.id}
                                             className={cn(isSheetView && "h-9 px-2 text-[11px] font-semibold uppercase tracking-wide text-slate-700")}
+                                        
+                                            sortable={header.column.getCanSort()}
+                                            sorted={header.column.getIsSorted()}
+                                            onSort={header.column.getToggleSortingHandler()}
+                                            showSortIndicator={typeof header.column.columnDef.header === "string"}
                                         >
                                             {header.isPlaceholder
                                                 ? null
@@ -1070,3 +1075,4 @@ export function BillingTable({ data: initialData }: { data: BillingRecordDisplay
         </div>
     )
 }
+

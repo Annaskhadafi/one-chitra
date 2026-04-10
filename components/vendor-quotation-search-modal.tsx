@@ -28,9 +28,9 @@ export function VendorQuotationSearchModal({ open, onOpenChange }: VendorQuotati
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="!left-1/2 !top-1/2 !h-[94vh] !max-h-none !w-[96vw] !max-w-[1720px] !-translate-x-1/2 !-translate-y-1/2 rounded-[28px] border border-slate-200 p-0 flex flex-col overflow-hidden shadow-[0_32px_120px_rgba(15,23,42,0.30)]">
-                <DialogHeader className="p-4 border-b shrink-0">
-                    <DialogTitle className="flex items-center gap-2 text-xl">
+            <DialogContent className="!left-1/2 !top-1/2 !h-[92dvh] !max-h-none !w-[calc(100vw-1rem)] !max-w-[calc(100vw-1rem)] !-translate-x-1/2 !-translate-y-1/2 rounded-2xl border border-slate-200 p-0 flex flex-col overflow-hidden shadow-[0_32px_120px_rgba(15,23,42,0.30)] sm:!h-[94vh] sm:!w-[96vw] sm:!max-w-[1720px] sm:rounded-[28px]">
+                <DialogHeader className="shrink-0 border-b p-4">
+                    <DialogTitle className="flex items-center gap-2 pr-8 text-base sm:text-xl">
                         <FileText className="h-6 w-6" />
                         Vendor Quotation Database
                     </DialogTitle>

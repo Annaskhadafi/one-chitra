@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation"
+import Script from "next/script"
 import { getStockOpnameSession } from "@/app/actions/stock-opname"
 
 interface Props {
@@ -334,11 +335,9 @@ export default async function PrintChecklistPage({ params }: Props) {
                 </div>
             </div>
 
-            <script dangerouslySetInnerHTML={{ __html: `
-                window.addEventListener('load', function() {
-                    window.print();
-                });
-            `}} />
+            <Script id="stock-opname-actual-print-trigger" strategy="afterInteractive">
+                {`window.addEventListener('load', function() { window.print(); });`}
+            </Script>
         </>
     )
 }

@@ -66,7 +66,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
-import { Search, Pencil, Trash2, Eye, FileText, Clock, CheckCircle, ArrowRightLeft, User, ChevronUp, ChevronDown, Copy, Calendar, Filter, ShoppingCart, Loader2, BarChart3, Download, FileUp, ExternalLink, FileSearch, Truck, ChevronRight, Maximize2, Minimize2, MoreHorizontal } from "lucide-react"
+import { Search, Pencil, Trash2, Eye, FileText, Clock, CheckCircle, ArrowRightLeft, User, ChevronUp, ChevronDown, Copy, Calendar, Filter, ShoppingCart, Loader2, BarChart3, Download, FileUp, ExternalLink, FileSearch, Truck, ChevronRight, Maximize2, Minimize2, MoreHorizontal, ChevronsUpDown } from "lucide-react"
 import { ProgressLoading } from "@/components/ui/progress-loading"
 import { ScoreCard } from "@/components/score-card"
 import { BulkActions } from "@/components/bulk-actions"
@@ -182,6 +182,10 @@ type ProductQuotationRow = {
     offerPrice: number
     lineValue: number
 }
+
+type SortDirection = "asc" | "desc"
+type ProductRowSortKey = "productName" | "materialNumber" | "offerPrice" | "quantity" | "lineValue" | "quotationDate" | "quotationNumber" | "customerName" | "status" | "createdBy"
+type ExpandedItemSortKey = "index" | "materialNumber" | "productName" | "description" | "quantity" | "unitPrice" | "discount" | "tax" | "lineTotal"
 
 type QuotationSearchItem = {
     productName: string
@@ -627,6 +631,14 @@ function QuotationTableInner({ data: initialData }: QuotationTableProps) {
     const canDelete = hasResourcePermission('quotations', 'delete')
 
     const [sorting, setSorting] = useState<SortingState>([{ id: "quotationDate", desc: true }])
+    const [productRowSort, setProductRowSort] = useState<{ key: ProductRowSortKey; direction: SortDirection }>({
+        key: "quotationDate",
+        direction: "desc",
+    })
+    const [expandedItemSort, setExpandedItemSort] = useState<{ key: ExpandedItemSortKey; direction: SortDirection }>({
+        key: "index",
+        direction: "asc",
+    })
     const [activeTab, setActiveTab] = useState("quotations")
     const [globalFilter, setGlobalFilter] = useState("")
     const [searchSelections, setSearchSelections] = useState<SearchSelection[]>([])
@@ -656,6 +668,32 @@ function QuotationTableInner({ data: initialData }: QuotationTableProps) {
     const [isCustomerPoPreviewOpen, setIsCustomerPoPreviewOpen] = useState(false)
     const [blockedDialog, setBlockedDialog] = useState<ActionBlockedDetails | null>(null)
     const [isProductSearchOpen, setIsProductSearchOpen] = useState(false)
+
+    const toggleProductRowSort = useCallback((key: ProductRowSortKey) => {
+        setProductRowSort((current) => (
+            current.key === key
+                ? { key, direction: current.direction === "asc" ? "desc" : "asc" }
+                : { key, direction: key === "quotationDate" ? "desc" : "asc" }
+        ))
+    }, [])
+
+    const toggleExpandedItemSort = useCallback((key: ExpandedItemSortKey) => {
+        setExpandedItemSort((current) => (
+            current.key === key
+                ? { key, direction: current.direction === "asc" ? "desc" : "asc" }
+                : { key, direction: key === "index" ? "asc" : "desc" }
+        ))
+    }, [])
+
+    const renderStaticSortIcon = useCallback((isActive: boolean, direction: SortDirection) => {
+        if (!isActive) {
+            return <ChevronsUpDown className="h-3.5 w-3.5 opacity-70" />
+        }
+
+        return direction === "asc"
+            ? <ChevronUp className="h-4 w-4" />
+            : <ChevronDown className="h-4 w-4" />
+    }, [])
 
     // Extract unique users for filter
     const uniqueUsers = useMemo(() => {
@@ -1228,14 +1266,92 @@ function QuotationTableInner({ data: initialData }: QuotationTableProps) {
 
     const sortedProductRows = useMemo(() => {
         return [...filteredProductRows].sort((left, right) => {
-            const dateDiff = right.quotationDate.getTime() - left.quotationDate.getTime()
-            if (dateDiff !== 0) {
-                return dateDiff
-            }
+            const direction = productRowSort.direction === "asc" ? 1 : -1
 
-            return left.productName.localeCompare(right.productName)
+            switch (productRowSort.key) {
+                case "productName":
+                    return left.productName.localeCompare(right.productName) * direction
+                case "materialNumber":
+                    return left.materialNumber.localeCompare(right.materialNumber) * direction
+                case "offerPrice":
+                    return (left.offerPrice - right.offerPrice) * direction
+                case "quantity":
+                    return (left.quantity - right.quantity) * direction
+                case "lineValue":
+                    return (left.lineValue - right.lineValue) * direction
+                case "quotationNumber":
+                    return left.quotationNumber.localeCompare(right.quotationNumber) * direction
+                case "customerName":
+                    return left.customerName.localeCompare(right.customerName) * direction
+                case "status":
+                    return left.statusLabel.localeCompare(right.statusLabel) * direction
+                case "createdBy":
+                    return left.createdBy.localeCompare(right.createdBy) * direction
+                case "quotationDate":
+                default:
+                    return (left.quotationDate.getTime() - right.quotationDate.getTime()) * direction
+            }
         })
-    }, [filteredProductRows])
+    }, [filteredProductRows, productRowSort])
+
+    const sortExpandedItems = useCallback((items: QuotationWithRelations["items"]) => {
+        const entries = items.map((item, index) => {
+            const productName =
+                item.product?.materialDescription ||
+                item.description ||
+                item.longDescription ||
+                "Unnamed product"
+            const materialNumber =
+                item.product?.materialNumber ||
+                item.product?.materialNumberCk ||
+                "-"
+            const description = item.longDescription || item.description || "-"
+            const unitPrice = Number(item.unitPrice || 0)
+            const discount = Number(item.discount || 0)
+            const tax = Number(item.tax || 0)
+            const lineTotal = item.quantity * unitPrice - discount + tax
+
+            return {
+                item,
+                index,
+                productName,
+                materialNumber,
+                description,
+                unitPrice,
+                discount,
+                tax,
+                lineTotal,
+            }
+        })
+
+        entries.sort((left, right) => {
+            const direction = expandedItemSort.direction === "asc" ? 1 : -1
+
+            switch (expandedItemSort.key) {
+                case "materialNumber":
+                    return left.materialNumber.localeCompare(right.materialNumber) * direction
+                case "productName":
+                    return left.productName.localeCompare(right.productName) * direction
+                case "description":
+                    return left.description.localeCompare(right.description) * direction
+                case "quantity":
+                    return (left.item.quantity - right.item.quantity) * direction
+                case "unitPrice":
+                    return (left.unitPrice - right.unitPrice) * direction
+                case "discount":
+                    return (left.discount - right.discount) * direction
+                case "tax":
+                    return (left.tax - right.tax) * direction
+                case "lineTotal":
+                    return (left.lineTotal - right.lineTotal) * direction
+                case "index":
+                default:
+                    return (left.index - right.index) * direction
+            }
+        })
+
+        return entries
+    }, [expandedItemSort])
 
     const productSearchSuggestions = useMemo<ProductSearchSuggestion[]>(() => {
         return baseFilteredQuotations
@@ -1477,7 +1593,7 @@ function QuotationTableInner({ data: initialData }: QuotationTableProps) {
                 </DropdownMenu>
             </div>
         )
-    }, [canDelete, currentUserId, isDuplicating, refetch])
+    }, [canDelete, canEdit, currentUserId, isDuplicating, refetch])
 
     const columns = useMemo<ColumnDef<QuotationWithRelations>[]>(() => [
         {
@@ -1542,8 +1658,14 @@ function QuotationTableInner({ data: initialData }: QuotationTableProps) {
             ),
         },
         {
-            accessorKey: "customer.name",
-            header: "Customer",
+            accessorFn: (row) => row.customer?.name || "",
+            id: "customerName",
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                    Customer
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : <ChevronsUpDown className="ml-2 h-3.5 w-3.5 opacity-70" />}
+                </Button>
+            ),
             cell: ({ row }) => (
                 <div>
                     <p className="font-medium">{row.original.customer.name}</p>
@@ -1553,17 +1675,32 @@ function QuotationTableInner({ data: initialData }: QuotationTableProps) {
         },
         {
             accessorKey: "subject",
-            header: "Subject",
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                    Subject
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : <ChevronsUpDown className="ml-2 h-3.5 w-3.5 opacity-70" />}
+                </Button>
+            ),
             cell: ({ row }) => <div className="max-w-[200px] truncate text-sm text-muted-foreground">{row.original.subject || "-"}</div>,
         },
         {
             accessorKey: "quotationDate",
-            header: "Date",
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                    Date
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : <ChevronsUpDown className="ml-2 h-3.5 w-3.5 opacity-70" />}
+                </Button>
+            ),
             cell: ({ row }) => <div className="text-sm">{formatDate(row.original.quotationDate)}</div>,
         },
         {
             accessorKey: "validUntil",
-            header: "Valid Until",
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                    Valid Until
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : <ChevronsUpDown className="ml-2 h-3.5 w-3.5 opacity-70" />}
+                </Button>
+            ),
             cell: ({ row }) => {
                 const q = row.original
                 const isExpired = q.validUntil && new Date(q.validUntil) < new Date() && q.status !== "converted" && q.status !== "approved"
@@ -1580,13 +1717,24 @@ function QuotationTableInner({ data: initialData }: QuotationTableProps) {
             },
         },
         {
+            accessorFn: (row) => calculateGrandTotal(row),
             id: "grandTotal",
-            header: "Grand Total",
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                    Grand Total
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : <ChevronsUpDown className="ml-2 h-3.5 w-3.5 opacity-70" />}
+                </Button>
+            ),
             cell: ({ row }) => <div className="font-medium">{formatCurrency(calculateGrandTotal(row.original))}</div>,
         },
         {
             accessorKey: "status",
-            header: "Status",
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                    Status
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : <ChevronsUpDown className="ml-2 h-3.5 w-3.5 opacity-70" />}
+                </Button>
+            ),
             cell: ({ row }) => {
                 const status = row.original.status
                 const id = row.original.id
@@ -1634,8 +1782,14 @@ function QuotationTableInner({ data: initialData }: QuotationTableProps) {
             },
         },
         {
-            accessorKey: "createdByUser.name",
-            header: "Created By",
+            accessorFn: (row) => row.createdByUser?.name || "",
+            id: "createdByUserName",
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                    Created By
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : <ChevronsUpDown className="ml-2 h-3.5 w-3.5 opacity-70" />}
+                </Button>
+            ),
             cell: ({ row }) => (
                 <div className="flex items-center gap-1.5 text-sm">
                     {row.original.createdByUser ? (
@@ -1651,6 +1805,7 @@ function QuotationTableInner({ data: initialData }: QuotationTableProps) {
             id: "actions",
             header: () => <div className="text-right">Actions</div>,
             cell: ({ row }) => renderQuotationActions(row.original),
+            enableSorting: false,
         },
     ], [renderQuotationActions, canEdit, mounted, expandedQuotationIds, refetch])
 
@@ -2553,7 +2708,12 @@ function QuotationTableInner({ data: initialData }: QuotationTableProps) {
                                     {table.getHeaderGroups().map((headerGroup) => (
                                         <TableRow key={headerGroup.id} className="bg-muted/50">
                                             {headerGroup.headers.map((header) => (
-                                                <TableHead key={header.id}>
+                                                <TableHead key={header.id}
+                                                    sortable={header.column.getCanSort()}
+                                                    sorted={header.column.getIsSorted()}
+                                                    onSort={header.column.getToggleSortingHandler()}
+                                                    showSortIndicator={typeof header.column.columnDef.header === "string"}
+                                                >
                                                     {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
                                                 </TableHead>
                                             ))}
@@ -2596,30 +2756,64 @@ function QuotationTableInner({ data: initialData }: QuotationTableProps) {
                                                                         <Table>
                                                                             <TableHeader>
                                                                                 <TableRow className="bg-muted/40">
-                                                                                    <TableHead className="w-[60px]">No</TableHead>
-                                                                                    <TableHead className="min-w-[140px]">Material No</TableHead>
-                                                                                    <TableHead className="min-w-[240px]">Product</TableHead>
-                                                                                    <TableHead className="min-w-[220px]">Description</TableHead>
-                                                                                    <TableHead className="text-right">Qty</TableHead>
-                                                                                    <TableHead className="text-right">Unit Price</TableHead>
-                                                                                    <TableHead className="text-right">Discount</TableHead>
-                                                                                    <TableHead className="text-right">Tax</TableHead>
-                                                                                    <TableHead className="text-right">Line Total</TableHead>
+                                                                                    <TableHead className="w-[60px]">
+                                                                                        <Button type="button" variant="ghost" onClick={() => toggleExpandedItemSort("index")} className="-ml-4 h-8">
+                                                                                            No
+                                                                                            <span className="ml-2">{renderStaticSortIcon(expandedItemSort.key === "index", expandedItemSort.direction)}</span>
+                                                                                        </Button>
+                                                                                    </TableHead>
+                                                                                    <TableHead className="min-w-[140px]">
+                                                                                        <Button type="button" variant="ghost" onClick={() => toggleExpandedItemSort("materialNumber")} className="-ml-4 h-8">
+                                                                                            Material No
+                                                                                            <span className="ml-2">{renderStaticSortIcon(expandedItemSort.key === "materialNumber", expandedItemSort.direction)}</span>
+                                                                                        </Button>
+                                                                                    </TableHead>
+                                                                                    <TableHead className="min-w-[240px]">
+                                                                                        <Button type="button" variant="ghost" onClick={() => toggleExpandedItemSort("productName")} className="-ml-4 h-8">
+                                                                                            Product
+                                                                                            <span className="ml-2">{renderStaticSortIcon(expandedItemSort.key === "productName", expandedItemSort.direction)}</span>
+                                                                                        </Button>
+                                                                                    </TableHead>
+                                                                                    <TableHead className="min-w-[220px]">
+                                                                                        <Button type="button" variant="ghost" onClick={() => toggleExpandedItemSort("description")} className="-ml-4 h-8">
+                                                                                            Description
+                                                                                            <span className="ml-2">{renderStaticSortIcon(expandedItemSort.key === "description", expandedItemSort.direction)}</span>
+                                                                                        </Button>
+                                                                                    </TableHead>
+                                                                                    <TableHead className="text-right">
+                                                                                        <Button type="button" variant="ghost" onClick={() => toggleExpandedItemSort("quantity")} className="ml-auto h-8 px-0">
+                                                                                            Qty
+                                                                                            <span className="ml-2">{renderStaticSortIcon(expandedItemSort.key === "quantity", expandedItemSort.direction)}</span>
+                                                                                        </Button>
+                                                                                    </TableHead>
+                                                                                    <TableHead className="text-right">
+                                                                                        <Button type="button" variant="ghost" onClick={() => toggleExpandedItemSort("unitPrice")} className="ml-auto h-8 px-0">
+                                                                                            Unit Price
+                                                                                            <span className="ml-2">{renderStaticSortIcon(expandedItemSort.key === "unitPrice", expandedItemSort.direction)}</span>
+                                                                                        </Button>
+                                                                                    </TableHead>
+                                                                                    <TableHead className="text-right">
+                                                                                        <Button type="button" variant="ghost" onClick={() => toggleExpandedItemSort("discount")} className="ml-auto h-8 px-0">
+                                                                                            Discount
+                                                                                            <span className="ml-2">{renderStaticSortIcon(expandedItemSort.key === "discount", expandedItemSort.direction)}</span>
+                                                                                        </Button>
+                                                                                    </TableHead>
+                                                                                    <TableHead className="text-right">
+                                                                                        <Button type="button" variant="ghost" onClick={() => toggleExpandedItemSort("tax")} className="ml-auto h-8 px-0">
+                                                                                            Tax
+                                                                                            <span className="ml-2">{renderStaticSortIcon(expandedItemSort.key === "tax", expandedItemSort.direction)}</span>
+                                                                                        </Button>
+                                                                                    </TableHead>
+                                                                                    <TableHead className="text-right">
+                                                                                        <Button type="button" variant="ghost" onClick={() => toggleExpandedItemSort("lineTotal")} className="ml-auto h-8 px-0">
+                                                                                            Line Total
+                                                                                            <span className="ml-2">{renderStaticSortIcon(expandedItemSort.key === "lineTotal", expandedItemSort.direction)}</span>
+                                                                                        </Button>
+                                                                                    </TableHead>
                                                                                 </TableRow>
                                                                             </TableHeader>
                                                                             <TableBody>
-                                                                                {quotation.items.map((item, index) => {
-                                                                                    const productName =
-                                                                                        item.product?.materialDescription ||
-                                                                                        item.description ||
-                                                                                        item.longDescription ||
-                                                                                        "Unnamed product"
-                                                                                    const materialNumber =
-                                                                                        item.product?.materialNumber ||
-                                                                                        item.product?.materialNumberCk ||
-                                                                                        "-"
-                                                                                    const lineTotal = item.quantity * Number(item.unitPrice || 0) - Number(item.discount || 0) + Number(item.tax || 0)
-
+                                                                                {sortExpandedItems(quotation.items).map(({ item, index, productName, materialNumber, description, lineTotal, unitPrice, discount, tax }) => {
                                                                                     return (
                                                                                         <TableRow key={item.id}>
                                                                                             <TableCell>{index + 1}</TableCell>
@@ -2630,12 +2824,12 @@ function QuotationTableInner({ data: initialData }: QuotationTableProps) {
                                                                                                 </div>
                                                                                             </TableCell>
                                                                                             <TableCell className="text-sm text-muted-foreground">
-                                                                                                {item.longDescription || item.description || "-"}
+                                                                                                {description}
                                                                                             </TableCell>
                                                                                             <TableCell className="text-right">{item.quantity}</TableCell>
-                                                                                            <TableCell className="text-right">{formatCurrency(Number(item.unitPrice || 0))}</TableCell>
-                                                                                            <TableCell className="text-right">{formatCurrency(Number(item.discount || 0))}</TableCell>
-                                                                                            <TableCell className="text-right">{formatCurrency(Number(item.tax || 0))}</TableCell>
+                                                                                            <TableCell className="text-right">{formatCurrency(unitPrice)}</TableCell>
+                                                                                            <TableCell className="text-right">{formatCurrency(discount)}</TableCell>
+                                                                                            <TableCell className="text-right">{formatCurrency(tax)}</TableCell>
                                                                                             <TableCell className="text-right font-medium">{formatCurrency(lineTotal)}</TableCell>
                                                                                         </TableRow>
                                                                                     )
@@ -2788,16 +2982,66 @@ function QuotationTableInner({ data: initialData }: QuotationTableProps) {
                                 <Table>
                                     <TableHeader className="sticky top-0 z-10 bg-background shadow-sm">
                                         <TableRow className="bg-muted/50">
-                                            <TableHead>Product</TableHead>
-                                            <TableHead>Material No</TableHead>
-                                            <TableHead className="text-right">Offer Price</TableHead>
-                                            <TableHead className="text-right">Qty</TableHead>
-                                            <TableHead className="text-right">Line Value</TableHead>
-                                            <TableHead>Date</TableHead>
-                                            <TableHead>Quotation</TableHead>
-                                            <TableHead>Customer</TableHead>
-                                            <TableHead>Status</TableHead>
-                                            <TableHead>Created By</TableHead>
+                                            <TableHead>
+                                                <Button type="button" variant="ghost" onClick={() => toggleProductRowSort("productName")} className="-ml-4 h-8">
+                                                    Product
+                                                    <span className="ml-2">{renderStaticSortIcon(productRowSort.key === "productName", productRowSort.direction)}</span>
+                                                </Button>
+                                            </TableHead>
+                                            <TableHead>
+                                                <Button type="button" variant="ghost" onClick={() => toggleProductRowSort("materialNumber")} className="-ml-4 h-8">
+                                                    Material No
+                                                    <span className="ml-2">{renderStaticSortIcon(productRowSort.key === "materialNumber", productRowSort.direction)}</span>
+                                                </Button>
+                                            </TableHead>
+                                            <TableHead className="text-right">
+                                                <Button type="button" variant="ghost" onClick={() => toggleProductRowSort("offerPrice")} className="ml-auto h-8 px-0">
+                                                    Offer Price
+                                                    <span className="ml-2">{renderStaticSortIcon(productRowSort.key === "offerPrice", productRowSort.direction)}</span>
+                                                </Button>
+                                            </TableHead>
+                                            <TableHead className="text-right">
+                                                <Button type="button" variant="ghost" onClick={() => toggleProductRowSort("quantity")} className="ml-auto h-8 px-0">
+                                                    Qty
+                                                    <span className="ml-2">{renderStaticSortIcon(productRowSort.key === "quantity", productRowSort.direction)}</span>
+                                                </Button>
+                                            </TableHead>
+                                            <TableHead className="text-right">
+                                                <Button type="button" variant="ghost" onClick={() => toggleProductRowSort("lineValue")} className="ml-auto h-8 px-0">
+                                                    Line Value
+                                                    <span className="ml-2">{renderStaticSortIcon(productRowSort.key === "lineValue", productRowSort.direction)}</span>
+                                                </Button>
+                                            </TableHead>
+                                            <TableHead>
+                                                <Button type="button" variant="ghost" onClick={() => toggleProductRowSort("quotationDate")} className="-ml-4 h-8">
+                                                    Date
+                                                    <span className="ml-2">{renderStaticSortIcon(productRowSort.key === "quotationDate", productRowSort.direction)}</span>
+                                                </Button>
+                                            </TableHead>
+                                            <TableHead>
+                                                <Button type="button" variant="ghost" onClick={() => toggleProductRowSort("quotationNumber")} className="-ml-4 h-8">
+                                                    Quotation
+                                                    <span className="ml-2">{renderStaticSortIcon(productRowSort.key === "quotationNumber", productRowSort.direction)}</span>
+                                                </Button>
+                                            </TableHead>
+                                            <TableHead>
+                                                <Button type="button" variant="ghost" onClick={() => toggleProductRowSort("customerName")} className="-ml-4 h-8">
+                                                    Customer
+                                                    <span className="ml-2">{renderStaticSortIcon(productRowSort.key === "customerName", productRowSort.direction)}</span>
+                                                </Button>
+                                            </TableHead>
+                                            <TableHead>
+                                                <Button type="button" variant="ghost" onClick={() => toggleProductRowSort("status")} className="-ml-4 h-8">
+                                                    Status
+                                                    <span className="ml-2">{renderStaticSortIcon(productRowSort.key === "status", productRowSort.direction)}</span>
+                                                </Button>
+                                            </TableHead>
+                                            <TableHead>
+                                                <Button type="button" variant="ghost" onClick={() => toggleProductRowSort("createdBy")} className="-ml-4 h-8">
+                                                    Created By
+                                                    <span className="ml-2">{renderStaticSortIcon(productRowSort.key === "createdBy", productRowSort.direction)}</span>
+                                                </Button>
+                                            </TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
@@ -2930,3 +3174,4 @@ function QuotationTableInner({ data: initialData }: QuotationTableProps) {
         </div>
     )
 }
+

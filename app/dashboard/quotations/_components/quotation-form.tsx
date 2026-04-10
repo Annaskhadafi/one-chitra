@@ -2,7 +2,25 @@
 
 import { useState, useMemo, useCallback, useEffect, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { createQuotation, updateQuotation } from "@/app/actions/quotation"
+import {
+    DndContext,
+    MouseSensor,
+    TouchSensor,
+    KeyboardSensor,
+    closestCenter,
+    useSensor,
+    useSensors,
+    type DragEndEvent,
+} from "@dnd-kit/core"
+import {
+    SortableContext,
+    useSortable,
+    verticalListSortingStrategy,
+    arrayMove,
+} from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
+import { restrictToVerticalAxis } from "@dnd-kit/modifiers"
+import { createQuotation, getQuotation, updateQuotation } from "@/app/actions/quotation"
 import { getBundleItemsForExpansion } from "@/app/actions/product-bundle"
 import { getSetting } from "@/app/actions/settings"
 import { Button } from "@/components/ui/button"
@@ -52,7 +70,7 @@ import {
 import { Card, CardContent } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
-import { ArrowLeft, Plus, Trash2, Save, Search, ChevronsUpDown, Check, Package, FileDown, Pencil, AlertTriangle, XCircle, Loader2, Calculator, Copy, Eye, EyeOff, Truck, BadgeDollarSign, DollarSign, Building2 } from "lucide-react"
+import { ArrowLeft, Plus, Trash2, Save, Search, ChevronsUpDown, Check, Package, FileDown, Pencil, AlertTriangle, XCircle, Loader2, Calculator, Copy, Eye, EyeOff, Truck, BadgeDollarSign, DollarSign, Building2, ChevronUp, ChevronDown, GripVertical } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 import type { Customer, Product } from "@/lib/types"
@@ -70,6 +88,7 @@ import { PoPreviewDialog } from "@/components/po-preview-dialog"
 type User = typeof user.$inferSelect
 
 interface QuotationItemRow {
+    clientId: string
     productId: number | null
     productName: string
     description: string
@@ -82,6 +101,143 @@ interface QuotationItemRow {
     costIdr?: number
     costSap?: number
     materialNumber?: string
+    bundleGroupId?: string
+    bundleRole?: "parent" | "child"
+    bundleComponentQuantity?: number
+}
+
+type ItemSortKey = "index" | "description" | "quantity" | "unitPrice" | "tax" | "amount"
+type SortDirection = "asc" | "desc"
+
+interface SortedQuotationItemEntry {
+    item: QuotationItemRow
+    index: number
+    lineSubtotal: number
+    descriptionLabel: string
+}
+
+function createQuotationItemClientId(seed?: string) {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+        return seed ? `${seed}-${crypto.randomUUID()}` : crypto.randomUUID()
+    }
+
+    const fallback = Math.random().toString(36).slice(2, 10)
+    return seed ? `${seed}-${fallback}` : `quotation-item-${fallback}`
+}
+
+function createBundleGroupId(parentProductId: number) {
+    return createQuotationItemClientId(`bundle-group-${parentProductId}`)
+}
+
+function buildSortedQuotationItemEntries(
+    items: QuotationItemRow[],
+    sortConfig: { key: ItemSortKey; direction: SortDirection }
+) {
+    const entries: SortedQuotationItemEntry[] = items.map((item, index) => ({
+        item,
+        index,
+        lineSubtotal: item.quantity * item.unitPrice - item.discount + item.tax,
+        descriptionLabel: [
+            item.description,
+            item.longDescription,
+            item.productName,
+            item.materialNumber,
+        ]
+            .map((value) => value?.trim())
+            .find((value) => value && value.length > 0) || "",
+    }))
+
+    entries.sort((left, right) => {
+        const direction = sortConfig.direction === "asc" ? 1 : -1
+
+        switch (sortConfig.key) {
+            case "description":
+                return left.descriptionLabel.localeCompare(right.descriptionLabel) * direction
+            case "quantity":
+                return (left.item.quantity - right.item.quantity) * direction
+            case "unitPrice":
+                return (left.item.unitPrice - right.item.unitPrice) * direction
+            case "tax":
+                return (left.item.tax - right.item.tax) * direction
+            case "amount":
+                return (left.lineSubtotal - right.lineSubtotal) * direction
+            case "index":
+            default:
+                return (left.index - right.index) * direction
+        }
+    })
+
+    return entries
+}
+
+function SortableQuotationItemCard({
+    id,
+    children,
+}: {
+    id: string
+    children: (dragHandle: React.ReactNode) => React.ReactNode
+}) {
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
+
+    return (
+        <div
+            ref={setNodeRef}
+            style={{
+                transform: CSS.Transform.toString(transform),
+                transition,
+            }}
+            className={cn(isDragging && "relative z-10 opacity-80")}
+        >
+            {children(
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 cursor-grab text-white/90 hover:bg-white/15 hover:text-white active:cursor-grabbing touch-none"
+                    {...attributes}
+                    {...listeners}
+                >
+                    <GripVertical className="h-4 w-4" />
+                    <span className="sr-only">Drag to reorder item</span>
+                </Button>
+            )}
+        </div>
+    )
+}
+
+function SortableQuotationItemRow({
+    id,
+    children,
+}: {
+    id: string
+    children: (dragHandle: React.ReactNode) => React.ReactNode
+}) {
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
+
+    return (
+        <TableRow
+            ref={setNodeRef}
+            style={{
+                transform: CSS.Transform.toString(transform),
+                transition,
+            }}
+            className={cn("group", isDragging && "relative z-10 bg-blue-50/80 opacity-80")}
+        >
+            {children(
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 cursor-grab text-slate-500 hover:bg-slate-100 hover:text-slate-700 active:cursor-grabbing touch-none"
+                    {...attributes}
+                    {...listeners}
+                >
+                    <GripVertical className="h-4 w-4" />
+                    <span className="sr-only">Drag to reorder item</span>
+                </Button>
+            )}
+        </TableRow>
+    )
 }
 
 interface QuotationFormProps {
@@ -196,6 +352,71 @@ function calculateSellingPrice(costIdr: number, margin: number) {
     return ceilToThousand(rawPrice)
 }
 
+function buildBundleSelectionState(
+    bundleItems: Array<{ childProductId: number; quantity: number; childProduct: Product }>,
+    exchangeRate: number,
+    margin: number
+) {
+    let parentUnitPrice = 0
+    let parentCostIdr = 0
+    let parentCostSap = 0
+
+    const children = bundleItems.map((bundleItem) => {
+        const childProduct = bundleItem.childProduct
+        const childCostSap = Number(childProduct.costSap || 0)
+        const childCostIdr = childCostSap * exchangeRate
+        const childSellingPrice = calculateSellingPrice(childCostIdr, margin)
+
+        parentUnitPrice += childSellingPrice * bundleItem.quantity
+        parentCostIdr += childCostIdr * bundleItem.quantity
+        parentCostSap += childCostSap * bundleItem.quantity
+
+        return {
+            childProduct,
+            childProductId: bundleItem.childProductId,
+            quantity: bundleItem.quantity,
+            costSap: childCostSap,
+            costIdr: childCostIdr,
+        }
+    })
+
+    return {
+        parentUnitPrice,
+        parentCostIdr,
+        parentCostSap,
+        children,
+    }
+}
+
+function calculateBundleSnapshotFromRows(
+    items: QuotationItemRow[],
+    bundleGroupId: string,
+    exchangeRate: number,
+    margin: number
+) {
+    return items.reduce((summary, item) => {
+        if (item.bundleGroupId !== bundleGroupId || item.bundleRole !== "child") {
+            return summary
+        }
+
+        const componentQuantity = item.bundleComponentQuantity && item.bundleComponentQuantity > 0
+            ? item.bundleComponentQuantity
+            : item.quantity
+        const childCostIdr = resolveItemCostIdr(item, exchangeRate)
+        const childSellingPrice = childCostIdr > 0 ? calculateSellingPrice(childCostIdr, margin) : 0
+
+        return {
+            parentUnitPrice: summary.parentUnitPrice + (childSellingPrice * componentQuantity),
+            parentCostIdr: summary.parentCostIdr + (childCostIdr * componentQuantity),
+            parentCostSap: summary.parentCostSap + ((item.costSap || 0) * componentQuantity),
+        }
+    }, {
+        parentUnitPrice: 0,
+        parentCostIdr: 0,
+        parentCostSap: 0,
+    })
+}
+
 export function QuotationForm({ customers, products, users, vendorQuotations, currentUserId, initialData }: QuotationFormProps) {
     const router = useRouter()
     const isEdit = !!initialData
@@ -264,7 +485,8 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
 
     // Items
     const [items, setItems] = useState<QuotationItemRow[]>(
-        initialData?.items.map(item => ({
+        initialData?.items.map((item, index) => ({
+            clientId: createQuotationItemClientId(`initial-${item.productId}-${index}`),
             productId: item.productId,
             productName: item.product?.materialDescription || item.product?.materialNumber || "",
             description: item.description || "",
@@ -277,6 +499,7 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
             costIdr: Number(item.product?.costSap || 0) * 1, // Will be updated by useEffect if needed
             costSap: Number(item.product?.costSap || 0),
             materialNumber: item.product?.materialNumber || "",
+            bundleRole: item.product?.isBundle ? "parent" : undefined,
         })) || []
     )
 
@@ -285,6 +508,10 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
     const [productOpen, setProductOpen] = useState(false)
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [blockedDialog, setBlockedDialog] = useState<ActionBlockedDetails | null>(null)
+    const [itemSortConfig, setItemSortConfig] = useState<{ key: ItemSortKey; direction: SortDirection }>({
+        key: "index",
+        direction: "asc",
+    })
 
     const selectedCustomer = useMemo(
         () => customers.find(c => c.id === customerId),
@@ -454,6 +681,7 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
     const renderItemInsights = useCallback((item: QuotationItemRow, compact = false) => {
         const stockReference = resolveProductReference(item)
         const itemIndex = items.findIndex((candidate) => candidate === item)
+        const isBundleChild = item.bundleRole === "child"
 
         const content = (
             <>
@@ -469,36 +697,40 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                         />
                     </>
                 ) : null}
-                <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 no-print"
-                    title="Cek Harga"
-                    onClick={() => {
-                        setActiveCalculatorItemIndex(itemIndex)
-                        const basePrice = item.vendorBasePrice && item.vendorBasePrice > 0
-                            ? item.vendorBasePrice
-                            : (resolveItemCostIdr(item, exchangeRate) || item.unitPrice || 0)
-                        setCalculatorBasePrice(Math.round(basePrice))
-                        setCalculatorMargin(globalMargin)
-                        setCalculatorDiscountType("percent")
-                        setCalculatorDiscountValue(0)
-                        setIsCalculatorOpen(true)
-                    }}
-                >
-                    <DollarSign className="h-4 w-4" />
-                </Button>
-                <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-amber-600 hover:text-amber-700 hover:bg-amber-50 no-print"
-                    title="Cari Harga Vendor"
-                    onClick={() => openVendorMatch(item)}
-                >
-                    <Building2 className="h-4 w-4" />
-                </Button>
+                {!isBundleChild ? (
+                    <>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 no-print"
+                            title="Cek Harga"
+                            onClick={() => {
+                                setActiveCalculatorItemIndex(itemIndex)
+                                const basePrice = item.vendorBasePrice && item.vendorBasePrice > 0
+                                    ? item.vendorBasePrice
+                                    : (resolveItemCostIdr(item, exchangeRate) || item.unitPrice || 0)
+                                setCalculatorBasePrice(Math.round(basePrice))
+                                setCalculatorMargin(globalMargin)
+                                setCalculatorDiscountType("percent")
+                                setCalculatorDiscountValue(0)
+                                setIsCalculatorOpen(true)
+                            }}
+                        >
+                            <DollarSign className="h-4 w-4" />
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-amber-600 hover:text-amber-700 hover:bg-amber-50 no-print"
+                            title="Cari Harga Vendor"
+                            onClick={() => openVendorMatch(item)}
+                        >
+                            <Building2 className="h-4 w-4" />
+                        </Button>
+                    </>
+                ) : null}
             </>
         )
 
@@ -509,46 +741,187 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
         return <div className="flex items-center">{content}</div>
     }, [exchangeRate, globalMargin, items, openVendorMatch, resolveProductReference])
 
+    const renderBundleBadges = useCallback((item: QuotationItemRow) => {
+        if (!item.bundleRole) {
+            return null
+        }
+
+        return (
+            <div className="flex flex-wrap gap-2">
+                <Badge variant="secondary" className={cn(
+                    "w-fit",
+                    item.bundleRole === "parent"
+                        ? "bg-blue-100 text-blue-800 hover:bg-blue-100"
+                        : "bg-amber-100 text-amber-800 hover:bg-amber-100"
+                )}>
+                    {item.bundleRole === "parent" ? "Bundle Header" : "Bundle Item"}
+                </Badge>
+                {item.bundleRole === "child" ? (
+                    <Badge variant="outline" className="w-fit border-amber-200 text-amber-700">
+                        Price included in bundle
+                    </Badge>
+                ) : null}
+            </div>
+        )
+    }, [])
+
+    const toggleItemSort = useCallback((key: ItemSortKey) => {
+        setItemSortConfig((current) => (
+            current.key === key
+                ? { key, direction: current.direction === "asc" ? "desc" : "asc" }
+                : { key, direction: key === "index" ? "asc" : "desc" }
+        ))
+    }, [])
+
+    const sortedItemEntries = useMemo(
+        () => buildSortedQuotationItemEntries(items, itemSortConfig),
+        [items, itemSortConfig]
+    )
+
+    const renderItemSortHeader = useCallback((label: React.ReactNode, key: ItemSortKey, className?: string) => {
+        const isActive = itemSortConfig.key === key
+
+        return (
+            <Button
+                type="button"
+                variant="ghost"
+                onClick={() => toggleItemSort(key)}
+                className={cn("h-8 px-0 font-semibold text-inherit hover:bg-transparent hover:text-white", className)}
+            >
+                <span className="flex items-center gap-1">
+                    {label}
+                    {isActive ? (
+                        itemSortConfig.direction === "asc" ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />
+                    ) : (
+                        <ChevronsUpDown className="h-3.5 w-3.5 opacity-70" />
+                    )}
+                </span>
+            </Button>
+        )
+    }, [itemSortConfig, toggleItemSort])
+
     // Add product
     const addProduct = useCallback(async (product: Product) => {
         if (product.isBundle) {
             const bundleItems = await getBundleItemsForExpansion(product.id)
             if (bundleItems && bundleItems.length > 0) {
+                const bundleState = buildBundleSelectionState(
+                    bundleItems.map((bundleItem) => ({
+                        childProductId: bundleItem.childProductId,
+                        quantity: bundleItem.quantity,
+                        childProduct: bundleItem.childProduct as Product,
+                    })),
+                    exchangeRate,
+                    globalMargin
+                )
                 setItems(prev => {
                     const nextItems = [...prev]
-                    bundleItems.forEach(bi => {
-                        const childProduct = bi.childProduct as Product
-                        const costSap = Number(childProduct.costSap || 0)
-                        const costIdr = costSap * exchangeRate
-                        
-                        const unitPrice = calculateSellingPrice(costIdr, globalMargin)
+                    const existingParentIdx = nextItems.findIndex((item) =>
+                        item.bundleRole === "parent" && item.productId === product.id
+                    )
 
-                        const existingIdx = nextItems.findIndex(i => i.productId === bi.childProductId)
-                        if (existingIdx > -1) {
-                            nextItems[existingIdx] = {
-                                ...nextItems[existingIdx],
-                                quantity: nextItems[existingIdx].quantity + bi.quantity
-                            }
-                        } else {
-                            nextItems.push({
-                                productId: bi.childProductId,
-                                productName: childProduct.materialDescription || childProduct.materialNumber,
-                                description: childProduct.materialDescription || "",
-                                longDescription: childProduct.materialNumber || "",
-                                quantity: bi.quantity,
-                                unitPrice: unitPrice,
-                                vendorBasePrice: null,
-                                discount: 0,
-                                tax: 0,
-                                costIdr: costIdr,
-                                costSap: costSap,
-                                materialNumber: childProduct.materialNumber,
-                            })
+                    if (existingParentIdx > -1) {
+                        const existingParent = nextItems[existingParentIdx]
+                        const bundleGroupId = existingParent.bundleGroupId || createBundleGroupId(product.id)
+                        const nextParentQuantity = existingParent.quantity + 1
+
+                        nextItems[existingParentIdx] = {
+                            ...existingParent,
+                            bundleGroupId,
+                            bundleRole: "parent",
+                            quantity: nextParentQuantity,
+                            unitPrice: bundleState.parentUnitPrice,
+                            costIdr: bundleState.parentCostIdr,
+                            costSap: bundleState.parentCostSap,
+                            tax: existingParent.tax > 0 ? bundleState.parentUnitPrice * nextParentQuantity * 0.11 : existingParent.tax,
+                            materialNumber: product.materialNumber,
                         }
+
+                        bundleState.children.forEach((bundleChild) => {
+                            const existingChildIdx = nextItems.findIndex((item) =>
+                                item.bundleGroupId === bundleGroupId &&
+                                item.bundleRole === "child" &&
+                                item.productId === bundleChild.childProductId
+                            )
+
+                            if (existingChildIdx > -1) {
+                                nextItems[existingChildIdx] = {
+                                    ...nextItems[existingChildIdx],
+                                    quantity: nextItems[existingChildIdx].quantity + bundleChild.quantity,
+                                    unitPrice: 0,
+                                    tax: 0,
+                                    costIdr: bundleChild.costIdr,
+                                    costSap: bundleChild.costSap,
+                                    materialNumber: bundleChild.childProduct.materialNumber || undefined,
+                                    bundleComponentQuantity: bundleChild.quantity,
+                                }
+                            } else {
+                                nextItems.push({
+                                    clientId: createQuotationItemClientId(`bundle-child-${bundleChild.childProductId}`),
+                                    productId: bundleChild.childProductId,
+                                    productName: bundleChild.childProduct.materialDescription || bundleChild.childProduct.materialNumber || "",
+                                    description: bundleChild.childProduct.materialDescription || "",
+                                    longDescription: bundleChild.childProduct.materialNumber || "",
+                                    quantity: bundleChild.quantity,
+                                    unitPrice: 0,
+                                    vendorBasePrice: null,
+                                    discount: 0,
+                                    tax: 0,
+                                    costIdr: bundleChild.costIdr,
+                                    costSap: bundleChild.costSap,
+                                    materialNumber: bundleChild.childProduct.materialNumber || undefined,
+                                    bundleGroupId,
+                                    bundleRole: "child",
+                                    bundleComponentQuantity: bundleChild.quantity,
+                                })
+                            }
+                        })
+
+                        return nextItems
+                    }
+
+                    const bundleGroupId = createBundleGroupId(product.id)
+                    nextItems.push({
+                        clientId: createQuotationItemClientId(`bundle-parent-${product.id}`),
+                        productId: product.id,
+                        productName: product.materialDescription || product.materialNumber,
+                        description: product.materialDescription || product.materialNumber || "",
+                        longDescription: product.materialNumber || "",
+                        quantity: 1,
+                        unitPrice: bundleState.parentUnitPrice,
+                        vendorBasePrice: null,
+                        discount: 0,
+                        tax: 0,
+                        costIdr: bundleState.parentCostIdr,
+                        costSap: bundleState.parentCostSap,
+                        materialNumber: product.materialNumber,
+                        bundleGroupId,
+                        bundleRole: "parent",
+                    })
+
+                    bundleState.children.forEach((bundleChild) => {
+                        nextItems.push({
+                            clientId: createQuotationItemClientId(`bundle-child-${bundleChild.childProductId}`),
+                            productId: bundleChild.childProductId,
+                            productName: bundleChild.childProduct.materialDescription || bundleChild.childProduct.materialNumber || "",
+                            description: bundleChild.childProduct.materialDescription || "",
+                            longDescription: bundleChild.childProduct.materialNumber || "",
+                            quantity: bundleChild.quantity,
+                            unitPrice: 0,
+                            vendorBasePrice: null,
+                            discount: 0,
+                            tax: 0,
+                            costIdr: bundleChild.costIdr,
+                            costSap: bundleChild.costSap,
+                            materialNumber: bundleChild.childProduct.materialNumber || undefined,
+                            bundleGroupId,
+                            bundleRole: "child",
+                            bundleComponentQuantity: bundleChild.quantity,
+                        })
                     })
                     return nextItems
                 })
-                toast.success(`Bundle ${product.materialNumber} exploded into ${bundleItems.length} items`)
+                toast.success(`Bundle ${product.materialNumber} masuk ke quotation dengan ${bundleItems.length} item`)
             } else {
                 toast.error("Bundle has no components")
             }
@@ -568,6 +941,7 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
             )
         } else {
             setItems(prev => [...prev, {
+                clientId: createQuotationItemClientId(`product-${product.id}`),
                 productId: product.id,
                 productName: product.materialDescription || product.materialNumber,
                 description: product.materialDescription || "",
@@ -587,6 +961,7 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
 
     const addEmptyRow = () => {
         setItems(prev => [...prev, {
+            clientId: createQuotationItemClientId("custom"),
             productId: null,
             productName: "Custom Item",
             description: "",
@@ -611,13 +986,53 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
             setItems(prev => {
                 let hasChanges = false
                 const nextItems = prev.map(item => {
+                    if (item.bundleRole === "child") {
+                        if (item.unitPrice === 0 && item.tax === 0) {
+                            return item
+                        }
+
+                        hasChanges = true
+                        return {
+                            ...item,
+                            unitPrice: 0,
+                            tax: 0,
+                            vendorBasePrice: null,
+                        }
+                    }
+
+                    if (item.bundleRole === "parent" && item.bundleGroupId) {
+                        const bundleSnapshot = calculateBundleSnapshotFromRows(prev, item.bundleGroupId, exchangeRate, globalMargin)
+                        const nextTax = item.tax > 0 ? bundleSnapshot.parentUnitPrice * item.quantity * 0.11 : item.tax
+
+                        if (
+                            item.costIdr === bundleSnapshot.parentCostIdr &&
+                            item.costSap === bundleSnapshot.parentCostSap &&
+                            item.unitPrice === bundleSnapshot.parentUnitPrice &&
+                            item.tax === nextTax
+                        ) {
+                            return item
+                        }
+
+                        hasChanges = true
+                        return {
+                            ...item,
+                            costIdr: bundleSnapshot.parentCostIdr,
+                            costSap: bundleSnapshot.parentCostSap,
+                            unitPrice: bundleSnapshot.parentUnitPrice,
+                            tax: nextTax,
+                            vendorBasePrice: null,
+                        }
+                    }
+
                     const currentCostIdr = resolveItemCostIdr(item, exchangeRate)
                     if (currentCostIdr <= 0) {
                         return item
                     }
 
                     const nextUnitPrice = calculateSellingPrice(currentCostIdr, globalMargin)
-                    if (item.costIdr === currentCostIdr && item.unitPrice === nextUnitPrice) {
+                    const nextTax = item.tax > 0 ? item.quantity * nextUnitPrice * 0.11 : item.tax
+
+                    if (item.costIdr === currentCostIdr && item.unitPrice === nextUnitPrice && item.tax === nextTax) {
                         return item
                     }
 
@@ -626,6 +1041,7 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                         ...item,
                         costIdr: currentCostIdr,
                         unitPrice: nextUnitPrice,
+                        tax: nextTax,
                         vendorBasePrice: null,
                     }
                 })
@@ -638,12 +1054,110 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
     }, [exchangeRate, globalMargin])
 
     const removeItem = (index: number) => {
-        setItems(prev => prev.filter((_, i) => i !== index))
+        setItems(prev => {
+            const targetItem = prev[index]
+            if (!targetItem) {
+                return prev
+            }
+
+            if (targetItem.bundleGroupId) {
+                return prev.filter((item) => item.bundleGroupId !== targetItem.bundleGroupId)
+            }
+
+            return prev.filter((_, i) => i !== index)
+        })
     }
 
     const updateItem = (index: number, field: keyof QuotationItemRow, value: number | string) => {
-        setItems(prev => prev.map((item, i) => i === index ? { ...item, [field]: value } : item))
+        setItems(prev => {
+            const targetItem = prev[index]
+            if (!targetItem) {
+                return prev
+            }
+
+            if (targetItem.bundleRole === "child" && (field === "quantity" || field === "unitPrice" || field === "tax")) {
+                return prev
+            }
+
+            if (field === "quantity" && targetItem.bundleRole === "parent" && targetItem.bundleGroupId) {
+                const nextQuantity = Math.max(1, Number(value) || 1)
+
+                return prev.map((item, itemIndex) => {
+                    if (itemIndex === index) {
+                        return {
+                            ...item,
+                            quantity: nextQuantity,
+                            tax: item.tax > 0 ? item.unitPrice * nextQuantity * 0.11 : item.tax,
+                        }
+                    }
+
+                    if (item.bundleGroupId === targetItem.bundleGroupId && item.bundleRole === "child") {
+                        const bundleComponentQuantity = item.bundleComponentQuantity && item.bundleComponentQuantity > 0
+                            ? item.bundleComponentQuantity
+                            : item.quantity
+
+                        return {
+                            ...item,
+                            quantity: bundleComponentQuantity * nextQuantity,
+                            unitPrice: 0,
+                            tax: 0,
+                        }
+                    }
+
+                    return item
+                })
+            }
+
+            return prev.map((item, itemIndex) => {
+                if (itemIndex !== index) {
+                    return item
+                }
+
+                const nextItem = {
+                    ...item,
+                    [field]: value,
+                }
+
+                if ((field === "quantity" || field === "unitPrice") && nextItem.tax > 0) {
+                    return {
+                        ...nextItem,
+                        tax: Number(nextItem.quantity) * Number(nextItem.unitPrice) * 0.11,
+                    }
+                }
+
+                return nextItem
+            })
+        })
     }
+
+    const itemDndSensors = useSensors(
+        useSensor(MouseSensor),
+        useSensor(TouchSensor),
+        useSensor(KeyboardSensor)
+    )
+
+    const sortedItemIds = useMemo(
+        () => sortedItemEntries.map(({ item }) => item.clientId),
+        [sortedItemEntries]
+    )
+
+    const handleItemDragEnd = useCallback((event: DragEndEvent) => {
+        const { active, over } = event
+        if (!over || active.id === over.id) {
+            return
+        }
+
+        const oldIndex = sortedItemIds.indexOf(String(active.id))
+        const newIndex = sortedItemIds.indexOf(String(over.id))
+
+        if (oldIndex < 0 || newIndex < 0) {
+            return
+        }
+
+        const reorderedItems = arrayMove(sortedItemEntries, oldIndex, newIndex).map(({ item }) => item)
+        setItems(reorderedItems)
+        setItemSortConfig({ key: "index", direction: "asc" })
+    }, [sortedItemEntries, sortedItemIds])
 
     // Calculations
     const subTotal = useMemo(() => {
@@ -674,6 +1188,44 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
     const calculatorFinalPrice = useMemo(() => {
         return Math.max(calculatorPriceAfterMargin - calculatorDiscountAmount, 0)
     }, [calculatorDiscountAmount, calculatorPriceAfterMargin])
+
+    const navigateToQuotationList = useCallback((savedId: number | null) => {
+        const listParams = new URLSearchParams({
+            refresh: Date.now().toString(),
+        })
+        if (savedId) {
+            listParams.set("focusId", String(savedId))
+        }
+
+        const listUrl = `/dashboard/quotations?${listParams.toString()}`
+        if (typeof window !== "undefined") {
+            window.location.assign(listUrl)
+            return
+        }
+
+        router.push(listUrl)
+    }, [router])
+
+    const downloadSavedQuotationPdf = useCallback(async (quotationId: number) => {
+        toast.info("Sedang menyiapkan PDF quotation...")
+
+        const savedQuotation = await getQuotation(quotationId)
+        if (!savedQuotation) {
+            throw new Error("Quotation tidak ditemukan setelah disimpan")
+        }
+
+        const { buildQuotationPdfPayload, generateQuotationPdf } = await import("./quotation-pdf-generator")
+        const pdfPayload = buildQuotationPdfPayload({
+            ...savedQuotation,
+            currency: savedQuotation.currency || "IDR",
+            discountType: savedQuotation.discountType || "fixed",
+            discount: String(savedQuotation.discount ?? 0),
+            tax: String(savedQuotation.tax ?? 0),
+            shipping: String(savedQuotation.shipping ?? 0),
+        })
+
+        await generateQuotationPdf(pdfPayload, { mergeAttachments: false })
+    }, [])
 
     const copyCalculatorValue = useCallback(async (value: number, label: string) => {
         try {
@@ -744,18 +1296,7 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
             if (result.success) {
                 toast.success(`Quotation ${isEdit ? "updated" : "created"} successfully`)
                 const savedId = isEdit ? initialData!.id : ("id" in result && typeof result.id === "number" ? result.id : null)
-                const listParams = new URLSearchParams({
-                    refresh: Date.now().toString(),
-                })
-                if (savedId) {
-                    listParams.set("focusId", String(savedId))
-                }
-                const listUrl = `/dashboard/quotations?${listParams.toString()}`
-                if (typeof window !== "undefined") {
-                    window.location.assign(listUrl)
-                    return
-                }
-                router.push(listUrl)
+                navigateToQuotationList(savedId)
             } else {
                 setBlockedDialog(buildActionErrorDetails(
                     isEdit ? "Edit Quotation" : "Create Quotation",
@@ -774,7 +1315,7 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
         }
     }
 
-    const handleSaveAndPreviewPdf = async () => {
+    const handleSaveAndDownloadPdf = async () => {
         if (!canSubmit) {
             setBlockedDialog(buildPermissionBlockedDetails(
                 isEdit ? "Edit Quotation" : "Create Quotation",
@@ -837,8 +1378,8 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
             if (result.success) {
                 toast.success(`Quotation ${isEdit ? "updated" : "created"} successfully`)
                 const qId = isEdit ? initialData!.id : (result as { id: number }).id
-                router.refresh()
-                router.push(`/dashboard/quotations/${qId}?pdf=true`)
+                await downloadSavedQuotationPdf(qId)
+                navigateToQuotationList(qId)
             } else {
                 setBlockedDialog(buildActionErrorDetails(
                     isEdit ? "Edit Quotation" : "Create Quotation",
@@ -890,9 +1431,9 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                         <Save className="h-4 w-4" />
                         {isSubmitting ? "Saving..." : "Save"}
                     </Button>
-                    <Button onClick={handleSaveAndPreviewPdf} disabled={isSubmitting} variant="outline" className="gap-2">
+                    <Button onClick={handleSaveAndDownloadPdf} disabled={isSubmitting} variant="outline" className="gap-2">
                         <FileDown className="h-4 w-4" />
-                        Save & Preview PDF
+                        Save & Download PDF
                     </Button>
                 </div>
             </div>
@@ -948,7 +1489,7 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                     </Button>
                                 </PopoverTrigger>
-                                <PopoverContent className="w-[400px] p-0">
+                                <PopoverContent className="w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] p-0 sm:w-[400px] sm:max-w-[400px]">
                                     <Command>
                                         <CommandInput placeholder="Search customer..." />
                                         <CommandList>
@@ -1288,140 +1829,42 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                                     <p>No data</p>
                                 </div>
                             ) : (
-                                items.map((item, index) => {
-                                    const lineSubtotal = item.quantity * item.unitPrice - item.discount + item.tax
-                                    return (
-                                        <Card key={index} className="overflow-hidden border-blue-100 shadow-sm relative group">
-                                            <div className="bg-blue-600 px-4 py-2 flex justify-between items-center text-white">
-                                                <span className="font-bold text-sm">Item #{index + 1}</span>
-                                                <div className="flex items-center space-x-2">
-                                                    {renderItemInsights(item)}
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        className="h-6 w-6 text-white hover:text-white hover:bg-red-500/50"
-                                                        onClick={() => removeItem(index)}
-                                                    >
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </Button>
-                                                </div>
-                                            </div>
-                                            <CardContent className="p-4 space-y-4">
-                                                <div className="space-y-2">
-                                                    <Label className="text-xs text-muted-foreground">Description</Label>
-                                                    <Textarea
-                                                        placeholder="Description"
-                                                        value={item.description}
-                                                        onChange={(e) => updateItem(index, "description", e.target.value)}
-                                                        className="min-h-[60px] font-bold text-sm"
-                                                    />
-                                                    <Textarea
-                                                        placeholder="Long description"
-                                                        value={item.longDescription}
-                                                        onChange={(e) => updateItem(index, "longDescription", e.target.value)}
-                                                        className="min-h-[80px] text-xs"
-                                                    />
-                                                </div>
-                                                <div className="grid grid-cols-2 gap-4">
-                                                    <div className="space-y-1">
-                                                        <Label className="text-xs text-muted-foreground">Qty</Label>
-                                                        <div className="flex items-center gap-2">
-                                                            <Input
-                                                                type="number"
-                                                                min={1}
-                                                                value={item.quantity}
-                                                                onChange={(e) => updateItem(index, "quantity", Number(e.target.value))}
-                                                                className="h-9"
-                                                            />
-                                                            <p className="text-[10px] text-muted-foreground italic">Unit</p>
+                                <DndContext
+                                    collisionDetection={closestCenter}
+                                    modifiers={[restrictToVerticalAxis]}
+                                    onDragEnd={handleItemDragEnd}
+                                    sensors={itemDndSensors}
+                                >
+                                    <SortableContext items={sortedItemIds} strategy={verticalListSortingStrategy}>
+                                        {sortedItemEntries.map(({ item, index, lineSubtotal }) => (
+                                            <SortableQuotationItemCard key={item.clientId} id={item.clientId}>
+                                                {(dragHandle) => (
+                                                    <Card className="overflow-hidden border-blue-100 shadow-sm relative group">
+                                                        <div className="bg-blue-600 px-4 py-2 flex justify-between items-center text-white">
+                                                            <span className="font-bold text-sm">Item #{index + 1}</span>
+                                                            <div className="flex items-center space-x-2">
+                                                                {dragHandle}
+                                                                {renderItemInsights(item)}
+                                                                <Button
+                                                                    type="button"
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    className="h-6 w-6 text-white hover:text-white hover:bg-red-500/50"
+                                                                    onClick={() => removeItem(index)}
+                                                                >
+                                                                    <Trash2 className="h-4 w-4" />
+                                                                </Button>
+                                                            </div>
                                                         </div>
-                                                    </div>
-                                                    <div className="space-y-1">
-                                                        <Label className="flex items-center gap-1 text-xs text-muted-foreground">
-                                                            <BadgeDollarSign className="h-3.5 w-3.5 text-emerald-600" />
-                                                            Price
-                                                        </Label>
-                                                        <Input
-                                                            type="number"
-                                                            min={0}
-                                                            placeholder="Rate"
-                                                            value={item.unitPrice}
-                                                            onChange={(e) => updateItem(index, "unitPrice", Number(e.target.value))}
-                                                            className="h-9"
-                                                        />
-                                                    </div>
-                                                </div>
-                                                <div className="grid grid-cols-2 gap-4 items-center border-t pt-3 mt-1">
-                                                    <div className="space-y-1">
-                                                        <Label className="text-xs text-muted-foreground">Tax</Label>
-                                                        <Select value={item.tax > 0 ? "11" : "0"} onValueChange={(v) => updateItem(index, "tax", v === "11" ? (item.quantity * item.unitPrice * 0.11) : 0)}>
-                                                            <SelectTrigger className="h-9">
-                                                                <SelectValue />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                <SelectItem value="0">No Tax</SelectItem>
-                                                                <SelectItem value="11">11.00%</SelectItem>
-                                                            </SelectContent>
-                                                        </Select>
-                                                    </div>
-                                                    <div className="space-y-1 text-right">
-                                                        <Label className="text-xs text-muted-foreground block">Amount</Label>
-                                                        <span className="font-bold text-blue-700 text-sm block">{formatCurrency(lineSubtotal)}</span>
-                                                    </div>
-                                                </div>
-                                            </CardContent>
-                                        </Card>
-                                    )
-                                })
-                            )}
-                        </div>
-
-                        {/* Desktop Items Table */}
-                        <div className="hidden md:block rounded-md border overflow-hidden">
-                            <div className="overflow-x-auto">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow className="bg-blue-600 hover:bg-blue-600">
-                                            <TableHead className="w-[50px] text-white"># Item</TableHead>
-                                            <TableHead className="text-white">Description</TableHead>
-                                            <TableHead className="w-[100px] text-white">Qty</TableHead>
-                                            <TableHead className="w-[200px] text-white">
-                                                <div className="flex items-center gap-1">
-                                                    <BadgeDollarSign className="h-3.5 w-3.5" />
-                                                    <span>Price</span>
-                                                </div>
-                                            </TableHead>
-                                            <TableHead className="w-[120px] text-white">Tax</TableHead>
-                                            <TableHead className="w-[140px] text-white">Amount</TableHead>
-                                            <TableHead className="w-[60px] text-white">Action</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {items.length === 0 ? (
-                                            <TableRow>
-                                                <TableCell colSpan={9} className="h-32 text-center">
-                                                    <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                                                        <Package className="h-10 w-10 opacity-30" />
-                                                        <p>No data</p>
-                                                    </div>
-                                                </TableCell>
-                                            </TableRow>
-                                        ) : (
-                                            items.map((item, index) => {
-                                                const lineSubtotal = item.quantity * item.unitPrice - item.discount + item.tax
-                                                return (
-                                                    <TableRow key={index} className="group">
-                                                        <TableCell className="font-mono text-muted-foreground">                                                            <div className="flex flex-col items-center gap-1">
-                                                            {index + 1}
-                                                            {renderItemInsights(item, true)}
-                                                        </div></TableCell>
-                                                        <TableCell>
+                                                        <CardContent className="p-4 space-y-4">
                                                             <div className="space-y-2">
+                                                                {renderBundleBadges(item)}
+                                                                <Label className="text-xs text-muted-foreground">Description</Label>
                                                                 <Textarea
                                                                     placeholder="Description"
                                                                     value={item.description}
                                                                     onChange={(e) => updateItem(index, "description", e.target.value)}
-                                                                    className="min-h-[60px] font-bold"
+                                                                    className="min-h-[60px] font-bold text-sm"
                                                                 />
                                                                 <Textarea
                                                                     placeholder="Long description"
@@ -1430,64 +1873,197 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                                                                     className="min-h-[80px] text-xs"
                                                                 />
                                                             </div>
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            <div className="space-y-1 text-center">
-                                                                <Input
-                                                                    type="number"
-                                                                    min={1}
-                                                                    value={item.quantity}
-                                                                    onChange={(e) => updateItem(index, "quantity", Number(e.target.value))}
-                                                                    className="w-20"
-                                                                />
-                                                                <p className="text-[10px] text-muted-foreground italic">Unit</p>
+                                                            <div className="grid grid-cols-2 gap-4">
+                                                                <div className="space-y-1">
+                                                                    <Label className="text-xs text-muted-foreground">Qty</Label>
+                                                                    <div className="flex items-center gap-2">
+                                                                        <Input
+                                                                            type="number"
+                                                                            min={1}
+                                                                            value={item.quantity}
+                                                                            onChange={(e) => updateItem(index, "quantity", Number(e.target.value))}
+                                                                            className="h-9"
+                                                                            disabled={item.bundleRole === "child"}
+                                                                        />
+                                                                        <p className="text-[10px] text-muted-foreground italic">Unit</p>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="space-y-1">
+                                                                    <Label className="flex items-center gap-1 text-xs text-muted-foreground">
+                                                                        <BadgeDollarSign className="h-3.5 w-3.5 text-emerald-600" />
+                                                                        Price
+                                                                    </Label>
+                                                                    <Input
+                                                                        type="number"
+                                                                        min={0}
+                                                                        placeholder="Rate"
+                                                                        value={item.unitPrice}
+                                                                        onChange={(e) => updateItem(index, "unitPrice", Number(e.target.value))}
+                                                                        className="h-9"
+                                                                        disabled={item.bundleRole === "child"}
+                                                                    />
+                                                                </div>
                                                             </div>
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            <Input
-                                                                type="number"
-                                                                min={0}
-                                                                placeholder="Rate"
-                                                                value={item.unitPrice}
-                                                                onChange={(e) => updateItem(index, "unitPrice", Number(e.target.value))}
-                                                                className="w-full"
-                                                            />
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            <Select value={item.tax > 0 ? "11" : "0"} onValueChange={(v) => updateItem(index, "tax", v === "11" ? (item.quantity * item.unitPrice * 0.11) : 0)}>
-                                                                <SelectTrigger className="w-24">
-                                                                    <SelectValue />
-                                                                </SelectTrigger>
-                                                                <SelectContent>
-                                                                    <SelectItem value="0">No Tax</SelectItem>
-                                                                    <SelectItem value="11">11.00%</SelectItem>
-                                                                </SelectContent>
-                                                            </Select>
-                                                        </TableCell>
-                                                        <TableCell className="font-medium text-right">
-                                                            {formatCurrency(lineSubtotal)}
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            <div className="flex flex-col gap-1 items-center">
-                                                                <Button
-                                                                    variant="ghost"
-                                                                    size="icon"
-                                                                    className="h-8 w-8 text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
-                                                                    onClick={() => removeItem(index)}
-                                                                >
-                                                                    <Trash2 className="h-4 w-4" />
-                                                                </Button>
-                                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600">
-                                                                    <Check className="h-4 w-4" />
-                                                                </Button>
+                                                            <div className="grid grid-cols-2 gap-4 items-center border-t pt-3 mt-1">
+                                                                <div className="space-y-1">
+                                                                    <Label className="text-xs text-muted-foreground">Tax</Label>
+                                                                    <Select value={item.tax > 0 ? "11" : "0"} onValueChange={(v) => updateItem(index, "tax", v === "11" ? (item.quantity * item.unitPrice * 0.11) : 0)}>
+                                                                        <SelectTrigger className="h-9" disabled={item.bundleRole === "child"}>
+                                                                            <SelectValue />
+                                                                        </SelectTrigger>
+                                                                        <SelectContent>
+                                                                            <SelectItem value="0">No Tax</SelectItem>
+                                                                            <SelectItem value="11">11.00%</SelectItem>
+                                                                        </SelectContent>
+                                                                    </Select>
+                                                                </div>
+                                                                <div className="space-y-1 text-right">
+                                                                    <Label className="text-xs text-muted-foreground block">Amount</Label>
+                                                                    <span className="font-bold text-blue-700 text-sm block">{formatCurrency(lineSubtotal)}</span>
+                                                                </div>
                                                             </div>
-                                                        </TableCell>
-                                                    </TableRow>
-                                                )
-                                            })
-                                        )}
-                                    </TableBody>
-                                </Table>
+                                                        </CardContent>
+                                                    </Card>
+                                                )}
+                                            </SortableQuotationItemCard>
+                                        ))}
+                                    </SortableContext>
+                                </DndContext>
+                            )}
+                        </div>
+
+                        {/* Desktop Items Table */}
+                        <div className="hidden md:block rounded-md border overflow-hidden">
+                            <div className="overflow-x-auto">
+                                <DndContext
+                                    collisionDetection={closestCenter}
+                                    modifiers={[restrictToVerticalAxis]}
+                                    onDragEnd={handleItemDragEnd}
+                                    sensors={itemDndSensors}
+                                >
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow className="bg-blue-600 hover:bg-blue-600">
+                                                <TableHead className="w-[72px] text-white">{renderItemSortHeader("# Item", "index")}</TableHead>
+                                                <TableHead className="text-white">{renderItemSortHeader("Description", "description")}</TableHead>
+                                                <TableHead className="w-[100px] text-white">{renderItemSortHeader("Qty", "quantity")}</TableHead>
+                                                <TableHead className="w-[200px] text-white">
+                                                    {renderItemSortHeader(
+                                                        <span className="flex items-center gap-1">
+                                                            <BadgeDollarSign className="h-3.5 w-3.5" />
+                                                            <span>Price</span>
+                                                        </span>,
+                                                        "unitPrice"
+                                                    )}
+                                                </TableHead>
+                                                <TableHead className="w-[120px] text-white">{renderItemSortHeader("Tax", "tax")}</TableHead>
+                                                <TableHead className="w-[140px] text-white">{renderItemSortHeader("Amount", "amount")}</TableHead>
+                                                <TableHead className="w-[60px] text-white">Action</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {items.length === 0 ? (
+                                                <TableRow>
+                                                    <TableCell colSpan={7} className="h-32 text-center">
+                                                        <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                                                            <Package className="h-10 w-10 opacity-30" />
+                                                            <p>No data</p>
+                                                        </div>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ) : (
+                                                <SortableContext items={sortedItemIds} strategy={verticalListSortingStrategy}>
+                                                    {sortedItemEntries.map(({ item, index, lineSubtotal }) => (
+                                                        <SortableQuotationItemRow key={item.clientId} id={item.clientId}>
+                                                            {(dragHandle) => (
+                                                                <>
+                                                                    <TableCell className="font-mono text-muted-foreground">
+                                                                        <div className="flex flex-col items-center gap-1">
+                                                                            {dragHandle}
+                                                                            <span>{index + 1}</span>
+                                                                            {renderItemInsights(item, true)}
+                                                                        </div>
+                                                                    </TableCell>
+                                                                    <TableCell>
+                                                                        <div className="space-y-2">
+                                                                            {renderBundleBadges(item)}
+                                                                            <Textarea
+                                                                                placeholder="Description"
+                                                                                value={item.description}
+                                                                                onChange={(e) => updateItem(index, "description", e.target.value)}
+                                                                                className="min-h-[60px] font-bold"
+                                                                            />
+                                                                            <Textarea
+                                                                                placeholder="Long description"
+                                                                                value={item.longDescription}
+                                                                                onChange={(e) => updateItem(index, "longDescription", e.target.value)}
+                                                                                className="min-h-[80px] text-xs"
+                                                                            />
+                                                                        </div>
+                                                                    </TableCell>
+                                                                    <TableCell>
+                                                                        <div className="space-y-1 text-center">
+                                                                            <Input
+                                                                                type="number"
+                                                                                min={1}
+                                                                                value={item.quantity}
+                                                                                onChange={(e) => updateItem(index, "quantity", Number(e.target.value))}
+                                                                                className="w-20"
+                                                                                disabled={item.bundleRole === "child"}
+                                                                            />
+                                                                            <p className="text-[10px] text-muted-foreground italic">Unit</p>
+                                                                        </div>
+                                                                    </TableCell>
+                                                                    <TableCell>
+                                                                        <Input
+                                                                            type="number"
+                                                                            min={0}
+                                                                            placeholder="Rate"
+                                                                            value={item.unitPrice}
+                                                                            onChange={(e) => updateItem(index, "unitPrice", Number(e.target.value))}
+                                                                            className="w-full"
+                                                                            disabled={item.bundleRole === "child"}
+                                                                        />
+                                                                    </TableCell>
+                                                                    <TableCell>
+                                                                        <Select value={item.tax > 0 ? "11" : "0"} onValueChange={(v) => updateItem(index, "tax", v === "11" ? (item.quantity * item.unitPrice * 0.11) : 0)}>
+                                                                            <SelectTrigger className="w-24" disabled={item.bundleRole === "child"}>
+                                                                                <SelectValue />
+                                                                            </SelectTrigger>
+                                                                            <SelectContent>
+                                                                                <SelectItem value="0">No Tax</SelectItem>
+                                                                                <SelectItem value="11">11.00%</SelectItem>
+                                                                            </SelectContent>
+                                                                        </Select>
+                                                                    </TableCell>
+                                                                    <TableCell className="font-medium text-right">
+                                                                        {formatCurrency(lineSubtotal)}
+                                                                    </TableCell>
+                                                                    <TableCell>
+                                                                        <div className="flex flex-col gap-1 items-center">
+                                                                            <Button
+                                                                                type="button"
+                                                                                variant="ghost"
+                                                                                size="icon"
+                                                                                className="h-8 w-8 text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                                                                                onClick={() => removeItem(index)}
+                                                                            >
+                                                                                <Trash2 className="h-4 w-4" />
+                                                                            </Button>
+                                                                            <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-blue-600">
+                                                                                <Check className="h-4 w-4" />
+                                                                            </Button>
+                                                                        </div>
+                                                                    </TableCell>
+                                                                </>
+                                                            )}
+                                                        </SortableQuotationItemRow>
+                                                    ))}
+                                                </SortableContext>
+                                            )}
+                                        </TableBody>
+                                    </Table>
+                                </DndContext>
                             </div>
 
                             {/* Totals Summary */}
@@ -1593,9 +2169,9 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                     <Save className="h-4 w-4" />
                     {isSubmitting ? "Saving..." : "Save"}
                 </Button>
-                <Button onClick={handleSaveAndPreviewPdf} disabled={isSubmitting} variant="outline" size="lg" className="w-full max-w-xs gap-2">
+                <Button onClick={handleSaveAndDownloadPdf} disabled={isSubmitting} variant="outline" size="lg" className="w-full max-w-xs gap-2">
                     <FileDown className="h-4 w-4" />
-                    Save & Preview PDF
+                    Save & Download PDF
                 </Button>
             </div>
 
@@ -1785,7 +2361,7 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
             />
 
             <Dialog open={isCalculatorOpen} onOpenChange={setIsCalculatorOpen}>
-                <DialogContent className="sm:max-w-4xl">
+                <DialogContent className="w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] max-h-[85dvh] overflow-y-auto sm:max-w-4xl">
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2 text-emerald-700">
                             <Calculator className="h-5 w-5" />
@@ -1823,7 +2399,7 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                                 />
                             </div>
 
-                            <div className="grid grid-cols-[1fr_110px] gap-2">
+                            <div className="grid grid-cols-[minmax(0,1fr)_110px] gap-2">
                                 <div className="space-y-2">
                                     <Label htmlFor="calculator-discount">Diskon</Label>
                                     <Input

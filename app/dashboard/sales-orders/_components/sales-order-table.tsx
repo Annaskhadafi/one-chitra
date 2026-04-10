@@ -1482,7 +1482,12 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
                             {table.getHeaderGroups().map((headerGroup) => (
                                 <TableRow key={headerGroup.id}>
                                     {headerGroup.headers.map((header) => (
-                                        <TableHead key={header.id} className="bg-background shadow-[inset_0_-1px_0_hsl(var(--border))]">
+                                        <TableHead key={header.id} className="bg-background shadow-[inset_0_-1px_0_hsl(var(--border))]"
+                                            sortable={header.column.getCanSort()}
+                                            sorted={header.column.getIsSorted()}
+                                            onSort={header.column.getToggleSortingHandler()}
+                                            showSortIndicator={typeof header.column.columnDef.header === "string"}
+                                        >
                                             {header.isPlaceholder
                                                 ? null
                                                 : flexRender(
@@ -1601,3 +1606,4 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
         </div>
     )
 }
+

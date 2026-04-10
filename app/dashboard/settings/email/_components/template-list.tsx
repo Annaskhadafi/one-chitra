@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import {
     Card, CardContent, CardDescription, CardHeader, CardTitle,
@@ -59,6 +60,7 @@ interface Props {
 }
 
 export function TemplateList({ initialTemplates, recipientUsers, recipientRoles }: Props) {
+    const router = useRouter()
     const [templates, setTemplates] = useState<Template[]>(initialTemplates)
     const [editorOpen, setEditorOpen] = useState(false)
     const [editingTemplate, setEditingTemplate] = useState<Template | null>(null)
@@ -109,18 +111,23 @@ export function TemplateList({ initialTemplates, recipientUsers, recipientRoles 
     }
 
     async function handleSave(data: Partial<Template> & { id?: string }) {
+        // Pisahkan id dari payload agar tidak ikut masuk ke SET clause Drizzle
+        const { id: templateId, ...rest } = data
         const normalizedData = {
-            ...data,
-            code: typeof data.code === "string" ? (data.code.trim() || null) : (data.code ?? null),
+            ...rest,
+            code: typeof rest.code === "string" ? (rest.code.trim() || null) : (rest.code ?? null),
         }
 
-        if (data.id) {
-            const res = await updateEmailTemplate(data.id, normalizedData as Parameters<typeof updateEmailTemplate>[1])
+        if (templateId) {
+            const res = await updateEmailTemplate(templateId, normalizedData as Parameters<typeof updateEmailTemplate>[1])
             if (res.success) {
+                // Optimistic update agar UI langsung responsif
                 setTemplates((prev) =>
-                    prev.map((t) => (t.id === data.id ? { ...t, ...normalizedData, updatedAt: new Date() } : t))
+                    prev.map((t) => (t.id === templateId ? { ...t, ...normalizedData, updatedAt: new Date() } : t))
                 )
                 toast.success("Template updated")
+                // Refresh Server Component agar data dari DB selalu sinkron
+                router.refresh()
             } else {
                 toast.error(res.error ?? "Failed to update")
             }
@@ -129,6 +136,8 @@ export function TemplateList({ initialTemplates, recipientUsers, recipientRoles 
             if (res.success && res.template) {
                 setTemplates((prev) => [...prev, res.template!])
                 toast.success("Template created")
+                // Refresh Server Component agar data dari DB selalu sinkron
+                router.refresh()
             } else {
                 toast.error(res.error ?? "Failed to create")
             }

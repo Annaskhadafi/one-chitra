@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { convertToSalesOrder } from "@/app/actions/quotation"
 import { Button } from "@/components/ui/button"
@@ -45,9 +45,13 @@ import {
     ExternalLink,
     FileDown,
     Loader2,
+    ChevronUp,
+    ChevronDown,
+    ChevronsUpDown,
 } from "lucide-react"
 import type { Customer, Product } from "@/lib/types"
 import { user } from "@/db/schema"
+import { cn } from "@/lib/utils"
 import { QuotationPdfPreview } from "./quotation-pdf-preview"
 import { ProductHistoryPopover } from "./product-history-popover"
 import { QuotationFileCenter } from "./quotation-file-center"
@@ -56,6 +60,8 @@ import { buildQuotationPdfPayload } from "./quotation-pdf-generator"
 import type { QuotationPoValidationSummary, QuotationRevisionSnapshot } from "@/db/schema/quotations"
 
 type User = typeof user.$inferSelect
+type DetailItemSortKey = "index" | "materialNumber" | "description" | "quantity" | "unitPrice" | "discount" | "tax" | "subtotal"
+type DetailSortDirection = "asc" | "desc"
 
 interface QuotationDetailData {
     id: number
@@ -178,6 +184,10 @@ export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDet
     const [isConverting, setIsConverting] = useState(false)
     const [isDownloadingPdf, setIsDownloadingPdf] = useState(false)
     const [pdfOpen, setPdfOpen] = useState(false)
+    const [itemSortConfig, setItemSortConfig] = useState<{ key: DetailItemSortKey; direction: DetailSortDirection }>({
+        key: "index",
+        direction: "asc",
+    })
 
     useEffect(() => {
         if (autoOpenPdf) {
@@ -229,6 +239,75 @@ export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDet
 
     const getItemCostSap = (item: QuotationDetailData["items"][number]) =>
         item.product?.costSap || 0
+
+    const toggleItemSort = (key: DetailItemSortKey) => {
+        setItemSortConfig((current) => (
+            current.key === key
+                ? { key, direction: current.direction === "asc" ? "desc" : "asc" }
+                : { key, direction: key === "index" ? "asc" : "desc" }
+        ))
+    }
+
+    const sortedQuotationItems = useMemo(() => {
+        const entries = quotation.items.map((item, index) => ({
+            item,
+            index,
+            materialNumber: getItemMaterialNumber(item),
+            materialDescription: getItemMaterialDescription(item),
+            unitPrice: Number(item.unitPrice),
+            discount: Number(item.discount),
+            tax: Number(item.tax),
+            subtotal: item.quantity * Number(item.unitPrice) - Number(item.discount) + Number(item.tax),
+        }))
+
+        entries.sort((left, right) => {
+            const direction = itemSortConfig.direction === "asc" ? 1 : -1
+
+            switch (itemSortConfig.key) {
+                case "materialNumber":
+                    return left.materialNumber.localeCompare(right.materialNumber) * direction
+                case "description":
+                    return left.materialDescription.localeCompare(right.materialDescription) * direction
+                case "quantity":
+                    return (left.item.quantity - right.item.quantity) * direction
+                case "unitPrice":
+                    return (left.unitPrice - right.unitPrice) * direction
+                case "discount":
+                    return (left.discount - right.discount) * direction
+                case "tax":
+                    return (left.tax - right.tax) * direction
+                case "subtotal":
+                    return (left.subtotal - right.subtotal) * direction
+                case "index":
+                default:
+                    return (left.index - right.index) * direction
+            }
+        })
+
+        return entries
+    }, [quotation.items, itemSortConfig])
+
+    const renderSortHeader = (label: string, key: DetailItemSortKey, className?: string) => {
+        const isActive = itemSortConfig.key === key
+
+        return (
+            <Button
+                type="button"
+                variant="ghost"
+                onClick={() => toggleItemSort(key)}
+                className={cn("h-8 px-0 font-semibold", className)}
+            >
+                <span className="flex items-center gap-1">
+                    {label}
+                    {isActive ? (
+                        itemSortConfig.direction === "asc" ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />
+                    ) : (
+                        <ChevronsUpDown className="h-3.5 w-3.5 opacity-70" />
+                    )}
+                </span>
+            </Button>
+        )
+    }
 
     const handleConvert = async () => {
         setIsConverting(true)
@@ -545,8 +624,7 @@ export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDet
                 </CardHeader>
                 <CardContent className="px-0 pb-0">
                     <div className="space-y-3 px-4 pb-4 sm:hidden">
-                        {quotation.items.map((item, index) => {
-                            const lineSubtotal = item.quantity * Number(item.unitPrice) - Number(item.discount) + Number(item.tax)
+                        {sortedQuotationItems.map(({ item, index, subtotal: lineSubtotal }) => {
                             return (
                                 <div key={item.id} className="rounded-xl border p-4">
                                     <div className="flex items-start justify-between gap-3">
@@ -602,19 +680,18 @@ export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDet
                         <Table>
                             <TableHeader>
                                 <TableRow className="bg-muted/50">
-                                    <TableHead className="w-[50px]">#</TableHead>
-                                    <TableHead>Material Number</TableHead>
-                                    <TableHead>Description</TableHead>
-                                    <TableHead className="text-right">Qty</TableHead>
-                                    <TableHead className="text-right">Unit Price</TableHead>
-                                    <TableHead className="text-right">Discount</TableHead>
-                                    <TableHead className="text-right">Tax</TableHead>
-                                    <TableHead className="text-right">SubTotal</TableHead>
+                                    <TableHead className="w-[50px]">{renderSortHeader("#", "index")}</TableHead>
+                                    <TableHead>{renderSortHeader("Material Number", "materialNumber")}</TableHead>
+                                    <TableHead>{renderSortHeader("Description", "description")}</TableHead>
+                                    <TableHead className="text-right">{renderSortHeader("Qty", "quantity", "ml-auto")}</TableHead>
+                                    <TableHead className="text-right">{renderSortHeader("Unit Price", "unitPrice", "ml-auto")}</TableHead>
+                                    <TableHead className="text-right">{renderSortHeader("Discount", "discount", "ml-auto")}</TableHead>
+                                    <TableHead className="text-right">{renderSortHeader("Tax", "tax", "ml-auto")}</TableHead>
+                                    <TableHead className="text-right">{renderSortHeader("SubTotal", "subtotal", "ml-auto")}</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {quotation.items.map((item, index) => {
-                                    const lineSubtotal = item.quantity * Number(item.unitPrice) - Number(item.discount) + Number(item.tax)
+                                {sortedQuotationItems.map(({ item, index, subtotal: lineSubtotal }) => {
                                     return (
                                         <TableRow key={item.id}>
                                             <TableCell className="font-mono text-muted-foreground">{index + 1}</TableCell>

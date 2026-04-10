@@ -498,6 +498,11 @@ export function DataTable({
                           colSpan={header.colSpan}
                           className={header.column.id === "target" || header.column.id === "limit" ? "text-right" : ""}
                           suppressHydrationWarning
+                        
+                            sortable={header.column.getCanSort()}
+                            sorted={header.column.getIsSorted()}
+                            onSort={header.column.getToggleSortingHandler()}
+                            showSortIndicator={typeof header.column.columnDef.header === "string"}
                         >
                           {header.isPlaceholder
                             ? null
@@ -810,3 +815,4 @@ function TableCellViewer({ item }: { item: z.infer<typeof schema> }) {
     </Drawer>
   )
 }
+

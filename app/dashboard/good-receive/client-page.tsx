@@ -634,7 +634,12 @@ export default function GoodReceiveClient({ warehouses }: GoodReceiveClientProps
                                                     {table.getHeaderGroups().map((headerGroup) => (
                                                         <TableRow key={headerGroup.id} className="hover:bg-transparent border-b">
                                                             {headerGroup.headers.map((header) => (
-                                                                <TableHead key={header.id} className="h-10 text-xs text-muted-foreground">
+                                                                <TableHead key={header.id} className="h-10 text-xs text-muted-foreground"
+                                                                    sortable={header.column.getCanSort()}
+                                                                    sorted={header.column.getIsSorted()}
+                                                                    onSort={header.column.getToggleSortingHandler()}
+                                                                    showSortIndicator={typeof header.column.columnDef.header === "string"}
+                                                                >
                                                                     {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
                                                                 </TableHead>
                                                             ))}
@@ -769,7 +774,12 @@ export default function GoodReceiveClient({ warehouses }: GoodReceiveClientProps
                                                     {table.getHeaderGroups().map((headerGroup) => (
                                                         <TableRow key={headerGroup.id} className="hover:bg-transparent border-b">
                                                             {headerGroup.headers.map((header) => (
-                                                                <TableHead key={header.id} className="h-10 text-xs text-muted-foreground">
+                                                                <TableHead key={header.id} className="h-10 text-xs text-muted-foreground"
+                                                                    sortable={header.column.getCanSort()}
+                                                                    sorted={header.column.getIsSorted()}
+                                                                    onSort={header.column.getToggleSortingHandler()}
+                                                                    showSortIndicator={typeof header.column.columnDef.header === "string"}
+                                                                >
                                                                     {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
                                                                 </TableHead>
                                                             ))}
@@ -827,3 +837,4 @@ export default function GoodReceiveClient({ warehouses }: GoodReceiveClientProps
         </TooltipProvider>
     )
 }
+

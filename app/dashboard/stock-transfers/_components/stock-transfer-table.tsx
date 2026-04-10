@@ -553,7 +553,12 @@ export function StockTransferTable({ data: initialData }: { data: Transfer[] }) 
                             {table.getHeaderGroups().map((headerGroup) => (
                                 <TableRow key={headerGroup.id}>
                                     {headerGroup.headers.map((header) => (
-                                        <TableHead key={header.id}>
+                                        <TableHead key={header.id}
+                                            sortable={header.column.getCanSort()}
+                                            sorted={header.column.getIsSorted()}
+                                            onSort={header.column.getToggleSortingHandler()}
+                                            showSortIndicator={typeof header.column.columnDef.header === "string"}
+                                        >
                                             {header.isPlaceholder
                                                 ? null
                                                 : flexRender(
@@ -615,3 +620,4 @@ export function StockTransferTable({ data: initialData }: { data: Transfer[] }) 
         </div>
     )
 }
+
