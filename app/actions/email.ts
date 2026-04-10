@@ -202,24 +202,40 @@ export async function updateEmailTemplate(
 ) {
     try {
         await ensureEmailManagementSchema()
+
+        // Debug: verifikasi template ada di DB sebelum update
         const current = await db
-            .select({ code: emailTemplates.code })
+            .select({ code: emailTemplates.code, name: emailTemplates.name })
             .from(emailTemplates)
             .where(eq(emailTemplates.id, id))
             .limit(1)
+
+        console.log(`[updateEmailTemplate] id=${id}, found=${current.length > 0}, currentName=${current[0]?.name}`)
+
+        if (current.length === 0) {
+            console.error(`[updateEmailTemplate] Template not found: ${id}`)
+            return { success: false, error: `Template dengan id '${id}' tidak ditemukan di database.` }
+        }
 
         const sanitizedData = sanitizeTemplateRecipientSettings({
             ...data,
             code: data.code ?? current[0]?.code ?? null,
         })
-        await db
+
+        console.log(`[updateEmailTemplate] Updating template '${current[0]?.name}' with keys: ${Object.keys(sanitizedData).join(", ")}`)
+
+        const result = await db
             .update(emailTemplates)
             .set({ ...sanitizedData, updatedAt: new Date() })
             .where(eq(emailTemplates.id, id))
+            .returning({ id: emailTemplates.id, name: emailTemplates.name })
+
+        console.log(`[updateEmailTemplate] Update result: ${JSON.stringify(result)}`)
 
         revalidatePath("/dashboard/settings/email")
         return { success: true }
     } catch (error) {
+        console.error(`[updateEmailTemplate] Error:`, error)
         return {
             success: false,
             error: error instanceof Error ? error.message : "Failed to update template",

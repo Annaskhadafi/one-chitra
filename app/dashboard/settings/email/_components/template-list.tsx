@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import {
@@ -64,6 +64,13 @@ export function TemplateList({ initialTemplates, recipientUsers, recipientRoles 
     const [templates, setTemplates] = useState<Template[]>(initialTemplates)
     const [editorOpen, setEditorOpen] = useState(false)
     const [editingTemplate, setEditingTemplate] = useState<Template | null>(null)
+
+    // Sync templates dari Server Component — diperlukan karena useState hanya init sekali.
+    // Ketika router.refresh() dipanggil setelah save, Server Component re-render
+    // dan mengirim initialTemplates baru, tapi useState tidak otomatis update.
+    useEffect(() => {
+        setTemplates(initialTemplates)
+    }, [initialTemplates])
 
     async function handleToggle(id: string, isActive: boolean) {
         const res = await toggleEmailTemplate(id, isActive)
@@ -129,7 +136,9 @@ export function TemplateList({ initialTemplates, recipientUsers, recipientRoles 
                 // Refresh Server Component agar data dari DB selalu sinkron
                 router.refresh()
             } else {
-                toast.error(res.error ?? "Failed to update")
+                const errorMsg = res.error ?? "Failed to update"
+                console.error("[handleSave] Update gagal:", errorMsg)
+                toast.error(`Gagal menyimpan: ${errorMsg}`, { duration: 8000 })
             }
         } else {
             const res = await createEmailTemplate(normalizedData as Parameters<typeof createEmailTemplate>[0])
@@ -139,7 +148,9 @@ export function TemplateList({ initialTemplates, recipientUsers, recipientRoles 
                 // Refresh Server Component agar data dari DB selalu sinkron
                 router.refresh()
             } else {
-                toast.error(res.error ?? "Failed to create")
+                const errorMsg = res.error ?? "Failed to create"
+                console.error("[handleSave] Create gagal:", errorMsg)
+                toast.error(`Gagal membuat template: ${errorMsg}`, { duration: 8000 })
             }
         }
         setEditorOpen(false)

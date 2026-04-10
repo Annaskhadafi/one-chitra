@@ -10,6 +10,9 @@ export const metadata = {
     title: "Email Settings – One Chitra",
 }
 
+// Pastikan halaman tidak di-cache — selalu fetch fresh dari DB
+export const dynamic = "force-dynamic"
+
 export default async function EmailSettingsPage() {
     const [smtpData, templates, logs, rules, users, roleRows] = await Promise.all([
         getSmtpSettings(),
