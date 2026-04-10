@@ -44,12 +44,10 @@ export function StockCheckPopover({ productId, materialNo, className }: StockChe
         try {
             const result = await getStockByProductReference({ productId, materialNumber: materialNo })
             if (result.success && result.data) {
-                // Filter ready stock (>0)
-                const availableStocks = (result.data as StockActionItem[]).filter(s => s.totalStock > 0).map(s => ({
+                const availableStocks = (result.data as StockActionItem[]).map(s => ({
                     warehouse: s.warehouse,
                     totalStock: s.totalStock
                 }))
-                // Sort by totalStock descending
                 availableStocks.sort((a, b) => b.totalStock - a.totalStock)
                 setStocks(availableStocks)
             } else {
@@ -85,7 +83,7 @@ export function StockCheckPopover({ productId, materialNo, className }: StockChe
                     <div className="flex items-center justify-between">
                         <h4 className="font-semibold text-sm flex items-center gap-2">
                             <Package className="h-4 w-4 text-indigo-600" />
-                            Ready Stock
+                            Stock Data
                         </h4>
                         <Badge variant="outline" className="text-[10px] font-mono">
                             {materialNo || "-"}
@@ -108,8 +106,8 @@ export function StockCheckPopover({ productId, materialNo, className }: StockChe
                     ) : stocks.length === 0 ? (
                         <div className="p-8 text-center">
                             <Package className="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />
-                            <p className="text-sm text-muted-foreground">No ready stock available.</p>
-                            <p className="text-[10px] text-muted-foreground mt-1 italic">Stock is empty across all warehouses.</p>
+                            <p className="text-sm text-muted-foreground">No stock data found.</p>
+                            <p className="text-[10px] text-muted-foreground mt-1 italic">Material ini belum punya data stock di warehouse mana pun.</p>
                         </div>
                     ) : (
                         <div className="divide-y">
@@ -124,7 +122,14 @@ export function StockCheckPopover({ productId, materialNo, className }: StockChe
                                         </p>
                                     </div>
                                     <div className="text-sm font-bold text-indigo-700">
-                                        {item.totalStock} <span className="text-[10px] font-normal text-muted-foreground">PC</span>
+                                        <span className={cn(
+                                            item.totalStock > 0 && "text-indigo-700",
+                                            item.totalStock === 0 && "text-muted-foreground",
+                                            item.totalStock < 0 && "text-destructive"
+                                        )}>
+                                            {item.totalStock}
+                                        </span>{" "}
+                                        <span className="text-[10px] font-normal text-muted-foreground">PC</span>
                                     </div>
                                 </div>
                             ))}

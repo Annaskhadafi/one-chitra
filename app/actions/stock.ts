@@ -323,18 +323,20 @@ async function resolveRelatedProductIdsForStockLookup({
         return { product: null, productIds: [] as number[] }
     }
 
-    const normalizedReferences = Array.from(
-        new Set(
-            [
-                product.materialNumber,
-                product.materialNumberCk,
-                product.oldMaterialNo,
-                materialNumber,
-            ]
-                .map((value) => value?.trim())
-                .filter((value): value is string => Boolean(value))
+    const explicitMaterialNumber = materialNumber?.trim()
+    const normalizedReferences = Array.from(new Set(
+        (
+            explicitMaterialNumber
+                ? [explicitMaterialNumber]
+                : [
+                    product.materialNumber,
+                    product.materialNumberCk,
+                    product.oldMaterialNo,
+                ]
         )
-    )
+            .map((value) => value?.trim())
+            .filter((value): value is string => Boolean(value))
+    ))
 
     if (normalizedReferences.length === 0) {
         return { product, productIds: [product.id] }
