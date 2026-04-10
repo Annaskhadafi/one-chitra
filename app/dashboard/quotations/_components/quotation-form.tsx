@@ -76,6 +76,7 @@ interface QuotationItemRow {
     longDescription: string
     quantity: number
     unitPrice: number
+    vendorBasePrice?: number | null
     discount: number
     tax: number
     costIdr?: number
@@ -270,6 +271,7 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
             longDescription: item.longDescription || "",
             quantity: item.quantity,
             unitPrice: Number(item.unitPrice),
+            vendorBasePrice: null,
             discount: Number(item.discount),
             tax: Number(item.tax),
             costIdr: Number(item.product?.costSap || 0) * 1, // Will be updated by useEffect if needed
@@ -437,7 +439,11 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
 
         setItems((prev) => prev.map((entry, index) => (
             index === activeVendorItemIndex
-                ? { ...entry, unitPrice: Math.round(candidate.unitPrice) }
+                ? {
+                    ...entry,
+                    unitPrice: Math.round(candidate.unitPrice),
+                    vendorBasePrice: Math.round(candidate.unitPrice),
+                }
                 : entry
         )))
         setIsVendorMatchOpen(false)
@@ -471,7 +477,9 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                     title="Cek Harga"
                     onClick={() => {
                         setActiveCalculatorItemIndex(itemIndex)
-                        const basePrice = resolveItemCostIdr(item, exchangeRate) || item.unitPrice || 0
+                        const basePrice = item.vendorBasePrice && item.vendorBasePrice > 0
+                            ? item.vendorBasePrice
+                            : (resolveItemCostIdr(item, exchangeRate) || item.unitPrice || 0)
                         setCalculatorBasePrice(Math.round(basePrice))
                         setCalculatorMargin(globalMargin)
                         setCalculatorDiscountType("percent")
@@ -529,6 +537,7 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                                 longDescription: childProduct.materialNumber || "",
                                 quantity: bi.quantity,
                                 unitPrice: unitPrice,
+                                vendorBasePrice: null,
                                 discount: 0,
                                 tax: 0,
                                 costIdr: costIdr,
@@ -565,6 +574,7 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                 longDescription: product.materialNumber || "",
                 quantity: 1,
                 unitPrice: unitPrice,
+                vendorBasePrice: null,
                 discount: 0,
                 tax: 0,
                 costIdr: costIdr,
@@ -583,6 +593,7 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
             longDescription: "",
             quantity: 1,
             unitPrice: 0,
+            vendorBasePrice: null,
             discount: 0,
             tax: 0,
             costIdr: 0,
@@ -615,6 +626,7 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                         ...item,
                         costIdr: currentCostIdr,
                         unitPrice: nextUnitPrice,
+                        vendorBasePrice: null,
                     }
                 })
 
