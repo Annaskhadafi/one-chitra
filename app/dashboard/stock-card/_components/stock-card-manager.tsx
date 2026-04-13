@@ -3,6 +3,12 @@
 import Link from "next/link"
 import { useMemo, useState } from "react"
 import type { StockCardCatalogItem } from "@/lib/stock-card"
+import {
+    DEFAULT_STOCK_CARD_PRINT_LAYOUT,
+    getStockCardPrintLayoutConfig,
+    isStockCardPrintLayout,
+    STOCK_CARD_PRINT_LAYOUTS,
+} from "@/lib/stock-card-print"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -37,6 +43,7 @@ export function StockCardManager({ data }: StockCardManagerProps) {
     const [warehouseType, setWarehouseType] = useState("all")
     const [stockState, setStockState] = useState("all")
     const [selectedIds, setSelectedIds] = useState<number[]>([])
+    const [printLayout, setPrintLayout] = useState(DEFAULT_STOCK_CARD_PRINT_LAYOUT)
 
     const warehouses = useMemo(() => {
         return Array.from(
@@ -92,6 +99,8 @@ export function StockCardManager({ data }: StockCardManagerProps) {
     const selectedItems = useMemo(() => {
         return data.filter((item) => selectedSet.has(item.stockId))
     }, [data, selectedSet])
+    const activePrintLayout = useMemo(() => getStockCardPrintLayoutConfig(printLayout), [printLayout])
+    const selectedPageEstimate = Math.ceil(selectedItems.length / activePrintLayout.itemsPerPage)
 
     const handleToggleSelection = (stockId: number, checked: boolean) => {
         setSelectedIds((current) => {
@@ -119,6 +128,7 @@ export function StockCardManager({ data }: StockCardManagerProps) {
 
         const params = new URLSearchParams({
             ids: selectedIds.join(","),
+            layout: printLayout,
         })
 
         window.open(`/print/stock-card?${params.toString()}`, "_blank", "noopener,noreferrer")
@@ -140,7 +150,7 @@ export function StockCardManager({ data }: StockCardManagerProps) {
                     title="Terpilih"
                     value={selectedIds.length}
                     icon={Printer}
-                    description="Siap dicetak ke A4 landscape / 2 sticker"
+                    description={`Siap dicetak ke ${activePrintLayout.label}`}
                     gradient="from-emerald-500/10 via-emerald-400/5 to-teal-500/10 border-emerald-200/50 hover:shadow-lg"
                     iconColor="text-emerald-600"
                     textColor="text-emerald-900"
@@ -231,6 +241,25 @@ export function StockCardManager({ data }: StockCardManagerProps) {
                         </div>
 
                         <div className="flex flex-wrap items-center gap-2">
+                            <Select
+                                value={printLayout}
+                                onValueChange={(value) => {
+                                    if (isStockCardPrintLayout(value)) {
+                                        setPrintLayout(value)
+                                    }
+                                }}
+                            >
+                                <SelectTrigger className="w-full min-w-[230px] sm:w-[260px]">
+                                    <SelectValue placeholder="Pilih ukuran cetak" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {STOCK_CARD_PRINT_LAYOUTS.map((layout) => (
+                                        <SelectItem key={layout.value} value={layout.value}>
+                                            {layout.label}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
                             <Button variant="outline" onClick={() => setSelectedIds([])} disabled={!selectedIds.length}>
                                 Reset Pilihan
                             </Button>
@@ -242,7 +271,11 @@ export function StockCardManager({ data }: StockCardManagerProps) {
                     </div>
 
                     <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                        Layout cetak menggunakan kertas A4 landscape dibagi 2 stock card per halaman. Qty tidak dicetak di sticker agar label tetap valid meskipun stok berubah.
+                        Template aktif: <span className="font-semibold text-slate-900">{activePrintLayout.label}</span>.
+                        {" "}
+                        {activePrintLayout.description}
+                        {" "}
+                        Qty tidak dicetak di sticker agar label tetap valid meskipun stok berubah.
                     </div>
 
                     <div className="rounded-xl border">
@@ -348,7 +381,8 @@ export function StockCardManager({ data }: StockCardManagerProps) {
                                 <div>
                                     <h3 className="font-semibold text-slate-900">Ringkasan Cetak</h3>
                                     <p className="text-sm text-muted-foreground">
-                                        {selectedItems.length} label dipilih, estimasi {Math.ceil(selectedItems.length / 2)} halaman cetak.
+                                        {selectedItems.length} label dipilih, estimasi {selectedPageEstimate} halaman
+                                        cetak dengan {activePrintLayout.label}.
                                     </p>
                                 </div>
                                 <Button onClick={handlePrint}>

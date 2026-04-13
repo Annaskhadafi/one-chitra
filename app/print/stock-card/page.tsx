@@ -1,5 +1,6 @@
 import { getStockCardLabelsByIdsAction } from "@/app/actions/stock-card"
 import { StockCardPrintView } from "@/app/dashboard/stock-card/_components/stock-card-print-view"
+import { parseStockCardPrintLayout } from "@/lib/stock-card-print"
 
 type PrintStockCardPageProps = {
     searchParams?: Promise<Record<string, string | string[] | undefined>> | Record<string, string | string[] | undefined>
@@ -17,6 +18,7 @@ function parseIds(value: string | string[] | undefined) {
 export default async function PrintStockCardPage({ searchParams }: PrintStockCardPageProps) {
     const resolvedParams = searchParams instanceof Promise ? await searchParams : searchParams
     const ids = parseIds(resolvedParams?.ids)
+    const layout = parseStockCardPrintLayout(resolvedParams?.layout)
     const items = await getStockCardLabelsByIdsAction(ids)
 
     if (!items.length) {
@@ -32,5 +34,5 @@ export default async function PrintStockCardPage({ searchParams }: PrintStockCar
         )
     }
 
-    return <StockCardPrintView items={items} />
+    return <StockCardPrintView items={items} layout={layout} />
 }

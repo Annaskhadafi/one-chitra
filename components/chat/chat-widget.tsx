@@ -1307,6 +1307,7 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
 }
 
 export function ChatWidget({ currentUserId }: { currentUserId: string }) {
+    const pathname = usePathname()
     const [isOpen, setIsOpen] = useState(false)
     const [rooms, setRooms] = useState<ChatRoomWithMeta[]>([])
     const [activeRoom, setActiveRoom] = useState<ChatRoomWithMeta | null>(null)
@@ -1319,6 +1320,10 @@ export function ChatWidget({ currentUserId }: { currentUserId: string }) {
     const previousRoomsRef = useRef<ChatRoomWithMeta[]>([])
     const lastSoundAtRef = useRef(0)
     const hasLoadedRoomsRef = useRef(false)
+    const shouldHideOnPrintRoute =
+        pathname?.includes("/print-checklist") ||
+        pathname?.endsWith("/pdf") ||
+        pathname?.includes("/print/")
     const activeRoomId = activeRoom?.id ?? null
     const totalUnread = rooms.filter((room) => !room.isArchived).reduce((sum, room) => sum + room.unreadCount, 0)
     const loadChatUsers = useCallback(async () => {
@@ -1387,6 +1392,10 @@ export function ChatWidget({ currentUserId }: { currentUserId: string }) {
         }
     }, [])
     const deleteRoom = useCallback(async (roomId: number) => { try { await deleteChatRoom(roomId); toast.success("Chat dihapus dari daftar Anda"); setActiveRoom(null); setShowNewChat(false); await loadRooms() } catch { toast.error("Gagal menghapus chat") } }, [loadRooms])
+    if (shouldHideOnPrintRoute) {
+        return null
+    }
+
     return (
         <div className="fixed inset-x-3 bottom-3 z-50 flex flex-col items-end gap-3 sm:inset-x-auto sm:bottom-5 sm:right-5">
             {isOpen ? <div className="flex h-[min(620px,calc(100dvh-6.5rem))] w-full max-w-[calc(100vw-1.5rem)] flex-col overflow-hidden rounded-[24px] border border-white/60 bg-background/95 shadow-[0_24px_80px_rgba(236,72,153,0.28)] backdrop-blur animate-in slide-in-from-bottom-4 fade-in duration-200 sm:h-[min(620px,calc(100dvh-7rem))] sm:w-[380px] sm:max-w-[380px] sm:rounded-[28px]">

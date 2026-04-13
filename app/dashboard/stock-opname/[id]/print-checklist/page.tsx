@@ -1,14 +1,21 @@
 import { notFound } from "next/navigation"
-import Script from "next/script"
 import { getStockOpnameSession } from "@/app/actions/stock-opname"
+import { PrintAutoTrigger } from "@/components/print-auto-trigger"
+import {
+    parseStockOpnameSortKey,
+    parseStockOpnameSortOrder,
+    sortStockOpnameItems,
+} from "@/lib/stock-opname-sort"
 
 interface Props {
     params: Promise<{ id: string }>
+    searchParams?: Promise<Record<string, string | string[] | undefined>> | Record<string, string | string[] | undefined>
 }
 
-export default async function PrintChecklistPage({ params }: Props) {
+export default async function PrintChecklistPage({ params, searchParams }: Props) {
     const { id } = await params
     const sessionId = parseInt(id)
+    const resolvedSearchParams = searchParams instanceof Promise ? await searchParams : searchParams
 
     if (isNaN(sessionId)) notFound()
 
@@ -18,7 +25,11 @@ export default async function PrintChecklistPage({ params }: Props) {
         notFound()
     }
 
-    const items = session.items ?? []
+    const items = sortStockOpnameItems(
+        session.items ?? [],
+        parseStockOpnameSortKey(resolvedSearchParams?.sortKey),
+        parseStockOpnameSortOrder(resolvedSearchParams?.sortOrder),
+    )
     const signatures = session.signatures ?? []
 
     const styles = `
@@ -335,9 +346,7 @@ export default async function PrintChecklistPage({ params }: Props) {
                 </div>
             </div>
 
-            <Script id="stock-opname-print-trigger" strategy="afterInteractive">
-                {`window.addEventListener('load', function() { window.print(); });`}
-            </Script>
+            <PrintAutoTrigger />
         </>
     )
 }

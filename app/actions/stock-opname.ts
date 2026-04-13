@@ -11,6 +11,13 @@ import type { OpnamePdfReportData } from "@/lib/types"
 import { sendSystemTemplatedEmailByCode } from "@/lib/email"
 import { SYSTEM_EMAIL_TEMPLATE_CODES } from "@/lib/email-template-registry"
 import { formatWarehouseLabel, normalizeSloc, normalizeSlocFields } from "@/lib/sloc"
+import {
+    DEFAULT_STOCK_OPNAME_SORT_KEY,
+    DEFAULT_STOCK_OPNAME_SORT_ORDER,
+    sortStockOpnameItems,
+    type StockOpnameSortKey,
+    type StockOpnameSortOrder,
+} from "@/lib/stock-opname-sort"
 
 type SapStockRow = {
     material_no: string | null
@@ -1042,10 +1049,16 @@ export async function bulkUpdateOpnameCounts(
  */
 export async function getOpnamePdfReportData(
     sessionId: number,
-    sourceType: OpnameSourceType = "sap"
+    sourceType: OpnameSourceType = "sap",
+    options: {
+        sortKey?: StockOpnameSortKey
+        sortOrder?: StockOpnameSortOrder
+    } = {}
 ): Promise<{ success: boolean; data?: OpnamePdfReportData; error?: string }> {
     try {
         await getOpnameAuthSession(sourceType, "view")
+        const sortKey = options.sortKey ?? DEFAULT_STOCK_OPNAME_SORT_KEY
+        const sortOrder = options.sortOrder ?? DEFAULT_STOCK_OPNAME_SORT_ORDER
 
         // Fetch session with all required relations
         const session = await db.query.stockOpnameSessions.findFirst({
@@ -1082,7 +1095,8 @@ export async function getOpnamePdfReportData(
 
         // Ensure all items have product data
         const itemsWithProducts = session.items.filter(item => item.product !== null) as Array<typeof session.items[number] & { product: NonNullable<typeof session.items[number]['product']> }>
-        const sortedItems = sortOpnameItemsByCategoryAndStock(itemsWithProducts)
+        const defaultSortedItems = sortOpnameItemsByCategoryAndStock(itemsWithProducts)
+        const sortedItems = sortStockOpnameItems(defaultSortedItems, sortKey, sortOrder) as typeof defaultSortedItems
 
         // Return structured data for PDF rendering
         // Includes closure timestamp and user information (Requirements 5.2, 5.3)

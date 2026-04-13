@@ -3,6 +3,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools"
 import { useEffect } from "react"
+import { isServiceWorkerEnabled, unregisterServiceWorkers } from "@/lib/service-worker"
 
 function makeQueryClient() {
     return new QueryClient({
@@ -30,6 +31,11 @@ function getQueryClient() {
 
 function syncServiceWorkerRegistration() {
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
+        return
+    }
+
+    if (!isServiceWorkerEnabled()) {
+        void unregisterServiceWorkers()
         return
     }
 

@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react"
 import { useRouter } from "next/navigation"
-import { Search, CheckCircle2, AlertTriangle, Loader2, X, FileText, Upload, Paperclip, Download } from "lucide-react"
+import { Search, CheckCircle2, AlertTriangle, Loader2, X, FileText, Upload, Paperclip, Download, ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -44,6 +44,13 @@ import {
 } from "@/app/actions/stock-opname"
 import { uploadFile } from "@/app/actions/upload"
 import type { StockOpnameSession } from "@/lib/types"
+import {
+    DEFAULT_STOCK_OPNAME_SORT_KEY,
+    DEFAULT_STOCK_OPNAME_SORT_ORDER,
+    sortStockOpnameItems,
+    type StockOpnameSortKey,
+    type StockOpnameSortOrder,
+} from "@/lib/stock-opname-sort"
 import { extractUploadFilename, resolveUploadDocumentUrl } from "@/lib/upload-url"
 
 interface OpnameDetailViewProps {
@@ -70,6 +77,8 @@ export function OpnameDetailView({
     const [closing, setClosing] = useState(false)
     const [applyAdjustments, setApplyAdjustments] = useState(false)
     const [isUploading, setIsUploading] = useState(false)
+    const [sortKey, setSortKey] = useState<StockOpnameSortKey>(DEFAULT_STOCK_OPNAME_SORT_KEY)
+    const [sortOrder, setSortOrder] = useState<StockOpnameSortOrder>(DEFAULT_STOCK_OPNAME_SORT_ORDER)
     const orderedSignatures = useMemo(
         () => [...(session.signatures ?? [])].sort((a, b) => a.order - b.order),
         [session.signatures]
@@ -94,8 +103,22 @@ export function OpnameDetailView({
             return
         }
 
-        // Open PDF in new window
-        window.open(`${basePath}/${session.id}/pdf?mode=${mode}`, '_blank')
+        const params = new URLSearchParams({ mode })
+        if (mode === "report") {
+            params.set("sortKey", sortKey)
+            params.set("sortOrder", sortOrder)
+        }
+
+        window.open(`${basePath}/${session.id}/pdf?${params.toString()}`, '_blank')
+    }
+
+    function handlePrintChecklist() {
+        const params = new URLSearchParams({
+            sortKey,
+            sortOrder,
+        })
+
+        window.open(`${basePath}/${session.id}/print-checklist?${params.toString()}`, "_blank")
     }
 
     async function handleUploadDocument(e: React.ChangeEvent<HTMLInputElement>) {
@@ -148,6 +171,43 @@ export function OpnameDetailView({
             return matchSearch && matchStatus
         })
     }, [items, search, filterStatus])
+    const sortedFiltered = useMemo(
+        () => sortStockOpnameItems(filtered, sortKey, sortOrder),
+        [filtered, sortKey, sortOrder],
+    )
+
+    function handleSort(nextKey: StockOpnameSortKey) {
+        if (sortKey === nextKey) {
+            setSortOrder((current) => (current === "asc" ? "desc" : "asc"))
+            return
+        }
+
+        setSortKey(nextKey)
+        setSortOrder("asc")
+    }
+
+    function renderSortIcon(columnKey: StockOpnameSortKey) {
+        if (sortKey !== columnKey) {
+            return <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />
+        }
+
+        return sortOrder === "asc"
+            ? <ArrowUp className="h-3.5 w-3.5 text-foreground" />
+            : <ArrowDown className="h-3.5 w-3.5 text-foreground" />
+    }
+
+    function renderSortableHeader(label: string, columnKey: StockOpnameSortKey, align: "left" | "right" = "left") {
+        return (
+            <button
+                type="button"
+                className={`inline-flex w-full items-center gap-1.5 font-semibold hover:text-foreground ${align === "right" ? "justify-end text-right" : "justify-start text-left"}`}
+                onClick={() => handleSort(columnKey)}
+            >
+                <span>{label}</span>
+                {renderSortIcon(columnKey)}
+            </button>
+        )
+    }
 
     function startEdit(itemId: number, currentCountedQty: number | null, currentNotes: string | null) {
         if (!isOpen) return
@@ -295,7 +355,7 @@ export function OpnameDetailView({
                             variant="outline" 
                             size="sm" 
                             className="w-full sm:w-auto"
-                            onClick={() => window.open(`${basePath}/${session.id}/print-checklist`, '_blank')}
+                            onClick={handlePrintChecklist}
                         >
                             <FileText className="h-4 w-4 mr-1" />
                             Cetak Checklist
@@ -457,12 +517,12 @@ export function OpnameDetailView({
 
             {/* Items Mobile */}
             <div className="space-y-3 md:hidden">
-                {filtered.length === 0 ? (
+                {sortedFiltered.length === 0 ? (
                     <div className="rounded-xl border bg-card px-4 py-10 text-center text-sm text-muted-foreground">
                         Tidak ada item.
                     </div>
                 ) : (
-                    filtered.map((item, i) => {
+                    sortedFiltered.map((item, i) => {
                         const isEditing = editingId === item.id
                         const hasVariance = item.variance !== null && item.variance !== 0
                         const isCounted = item.countedQty !== null
@@ -580,26 +640,28 @@ export function OpnameDetailView({
                 <Table>
                     <TableHeader>
                         <TableRow className="bg-muted/40">
-                            <TableHead className="w-8">#</TableHead>
-                            <TableHead>Material No.</TableHead>
-                            <TableHead>Deskripsi</TableHead>
-                            <TableHead>Kategori</TableHead>
-                            <TableHead className="text-right">{sourceType === "actual" ? "Qty Aktual Sistem" : "Qty SAP"}</TableHead>
-                            <TableHead className="text-right">Qty Fisik</TableHead>
-                            <TableHead className="text-right">Selisih</TableHead>
-                            <TableHead>Catatan</TableHead>
-                            <TableHead>Status</TableHead>
+                            <TableHead className="w-8">{renderSortableHeader("#", "default")}</TableHead>
+                            <TableHead>{renderSortableHeader("Material No.", "materialNumber")}</TableHead>
+                            <TableHead>{renderSortableHeader("Deskripsi", "materialDescription")}</TableHead>
+                            <TableHead>{renderSortableHeader("Kategori", "category")}</TableHead>
+                            <TableHead className="text-right">
+                                {renderSortableHeader(sourceType === "actual" ? "Qty Aktual Sistem" : "Qty SAP", "systemQty", "right")}
+                            </TableHead>
+                            <TableHead className="text-right">{renderSortableHeader("Qty Fisik", "countedQty", "right")}</TableHead>
+                            <TableHead className="text-right">{renderSortableHeader("Selisih", "variance", "right")}</TableHead>
+                            <TableHead>{renderSortableHeader("Catatan", "notes")}</TableHead>
+                            <TableHead>{renderSortableHeader("Status", "status")}</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {filtered.length === 0 ? (
+                        {sortedFiltered.length === 0 ? (
                             <TableRow>
                                 <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
                                     Tidak ada item.
                                 </TableCell>
                             </TableRow>
                         ) : (
-                            filtered.map((item, i) => {
+                            sortedFiltered.map((item, i) => {
                                 const isEditing = editingId === item.id
                                 const hasVariance = item.variance !== null && item.variance !== 0
                                 const isCounted = item.countedQty !== null
@@ -715,7 +777,7 @@ export function OpnameDetailView({
                 </div>
             </div>
             <p className="text-xs text-muted-foreground">
-                Menampilkan {filtered.length} dari {items.length} item ·{" "}
+                Menampilkan {sortedFiltered.length} dari {items.length} item ·{" "}
                 {isOpen && "Klik angka di kolom Qty Fisik untuk menginput hitungan"}
             </p>
         </div>

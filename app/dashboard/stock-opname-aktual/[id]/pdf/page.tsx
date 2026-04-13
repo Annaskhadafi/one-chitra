@@ -1,18 +1,24 @@
 import { notFound } from "next/navigation"
 import { getOpnamePdfReportData } from "@/app/actions/stock-opname"
 import { OpnamePdfReport } from "@/app/dashboard/stock-opname/_components/opname-pdf-report"
+import { parseStockOpnameSortKey, parseStockOpnameSortOrder } from "@/lib/stock-opname-sort"
 
 interface Props {
     params: Promise<{ id: string }>
+    searchParams?: Promise<Record<string, string | string[] | undefined>> | Record<string, string | string[] | undefined>
 }
 
-export default async function StockOpnameAktualPdfPage({ params }: Props) {
+export default async function StockOpnameAktualPdfPage({ params, searchParams }: Props) {
     const { id } = await params
     const sessionId = parseInt(id)
+    const resolvedSearchParams = searchParams instanceof Promise ? await searchParams : searchParams
 
     if (isNaN(sessionId)) notFound()
 
-    const result = await getOpnamePdfReportData(sessionId, "actual")
+    const result = await getOpnamePdfReportData(sessionId, "actual", {
+        sortKey: parseStockOpnameSortKey(resolvedSearchParams?.sortKey),
+        sortOrder: parseStockOpnameSortOrder(resolvedSearchParams?.sortOrder),
+    })
 
     if (!result.success || !result.data) {
         notFound()

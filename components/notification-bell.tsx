@@ -14,6 +14,7 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { isServiceWorkerEnabled } from "@/lib/service-worker"
 
 interface AppNotificationItem {
     id: string
@@ -39,6 +40,10 @@ type PushSubscriptionMeta = {
 const SERVICE_WORKER_URL = "/sw.js"
 
 async function registerNotificationServiceWorker() {
+    if (!isServiceWorkerEnabled()) {
+        throw new Error("Service worker disabled in local development")
+    }
+
     const registration = await navigator.serviceWorker.register(SERVICE_WORKER_URL)
 
     if (registration.active) {
@@ -162,7 +167,7 @@ export function NotificationBell() {
     }, [])
 
     const loadPushStatus = useCallback(async () => {
-        if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
+        if (typeof window === "undefined" || !("serviceWorker" in navigator) || !isServiceWorkerEnabled()) {
             return
         }
 
@@ -260,7 +265,7 @@ export function NotificationBell() {
     }, [])
 
     const enablePushNotifications = useCallback(async () => {
-        if (!("serviceWorker" in navigator) || !("Notification" in window)) {
+        if (!("serviceWorker" in navigator) || !("Notification" in window) || !isServiceWorkerEnabled()) {
             return
         }
 
