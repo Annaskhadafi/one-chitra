@@ -8,7 +8,7 @@ import {
     salesOrders,
     customers
 } from "@/db/schema";
-import { eq, desc, sql, and, isNotNull, ne, type SQLWrapper } from "drizzle-orm";
+import { eq, desc, sql, and, isNotNull, ne, inArray, type SQLWrapper } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { checkPermission } from "@/lib/rbac";
 import { normalizeCodeValue, normalizeSapDocumentFields } from "@/lib/formatters";
@@ -122,63 +122,110 @@ export async function getBillingRecords(poNoFilter?: string) {
             .groupBy(historyOrders.poNo, historyOrders.billingNo)
             .as("groupedHistory");
 
-        const records = await db.select({
-            // Base ID / Keys
+        const historyRecords = await db.select({
             poNo: groupedHistorySubquery.poNo,
-            billingRecordId: billingRecords.id,
-
-            // Dynamic columns (priority to billing record, fallback to history data)
-            customer: sql<string>`COALESCE(${billingRecords.customer}, "groupedHistory"."customer")`,
-            plant: sql<string>`COALESCE(${billingRecords.plant}, "groupedHistory"."plant")`,
-            datePo: sql<Date>`COALESCE(${billingRecords.datePo}, "groupedHistory"."datePo")`,
-            materialNumber: sql<string>`COALESCE(${billingRecords.materialNumber}, "groupedHistory"."materialNumber")`,
-            materialDescription: sql<string>`COALESCE(${billingRecords.materialDescription}, "groupedHistory"."materialDescription")`,
-            matGrpDesc: sql<string>`"groupedHistory"."matGrpDesc"`,
-            materialGroup: sql<string>`"groupedHistory"."materialGroup"`,
-            qty: sql<string>`CAST(COALESCE(${billingRecords.qty}, "groupedHistory"."qty") AS TEXT)`,
-            curr: sql<string>`COALESCE(${billingRecords.curr}, "groupedHistory"."curr", 'IDR')`,
-            salesName: sql<string>`COALESCE(${billingRecords.salesName}, "groupedHistory"."salesName")`,
-            dateInvoice: sql<Date>`COALESCE(${billingRecords.dateInvoice}, "groupedHistory"."dateInvoice")`,
-            revType: sql<string>`"groupedHistory"."revType"`,
-            items: sql<unknown>`"groupedHistory"."items"`,
-
-            // Editable Billing Record Fields Only
-            no: billingRecords.no,
-            year: sql<number>`COALESCE(${billingRecords.year}, EXTRACT(YEAR FROM "groupedHistory"."dateInvoice")::INTEGER)`,
-            month: sql<string>`COALESCE(${billingRecords.month}, TO_CHAR("groupedHistory"."dateInvoice", 'FMMonth'))`,
-            pricePerPcsIdr: billingRecords.pricePerPcsIdr,
-            totalPriceIdr: billingRecords.totalPriceIdr,
-            ppn: billingRecords.ppn,
-            price: billingRecords.price,
-            includePpn: billingRecords.includePpn,
-            noInvSap: sql<string>`COALESCE(${billingRecords.noInvSap}, "groupedHistory"."noInvSap")`,
-            custId: sql<string>`COALESCE(${billingRecords.custId}, "groupedHistory"."custId")`,
-            ddpAddress: sql<string>`COALESCE(${billingRecords.ddpAddress}, "groupedHistory"."ddpAddress")`,
-            paymentType: billingRecords.paymentType,
-            nomorDoSap: sql<string>`COALESCE(${billingRecords.nomorDoSap}, "groupedHistory"."nomorDoSap")`,
-            actualNoDo: billingRecords.actualNoDo,
-            tglDoFaktur: billingRecords.tglDoFaktur,
-            remaks: billingRecords.remaks,
-            dateSendInvoice: billingRecords.dateSendInvoice,
-            receiverDate: billingRecords.receiverDate,
-            recvDateApproved: billingRecords.recvDateApproved,
-            eFaktur: billingRecords.eFaktur,
-            modeDelivery: billingRecords.modeDelivery,
-            noResi: billingRecords.noResi,
-            statusDelivery: billingRecords.statusDelivery,
-            scanInvUrl: billingRecords.scanInvUrl,
+            customer: groupedHistorySubquery.customer,
+            plant: groupedHistorySubquery.plant,
+            datePo: groupedHistorySubquery.datePo,
+            materialNumber: groupedHistorySubquery.materialNumber,
+            materialDescription: groupedHistorySubquery.materialDescription,
+            matGrpDesc: groupedHistorySubquery.matGrpDesc,
+            materialGroup: groupedHistorySubquery.materialGroup,
+            qty: sql<string>`CAST("groupedHistory"."qty" AS TEXT)`,
+            curr: groupedHistorySubquery.curr,
+            salesName: groupedHistorySubquery.salesName,
+            dateInvoice: groupedHistorySubquery.dateInvoice,
+            revType: groupedHistorySubquery.revType,
+            items: groupedHistorySubquery.items,
+            noInvSap: groupedHistorySubquery.noInvSap,
+            custId: groupedHistorySubquery.custId,
+            ddpAddress: groupedHistorySubquery.ddpAddress,
+            nomorDoSap: groupedHistorySubquery.nomorDoSap,
         })
             .from(groupedHistorySubquery)
-            .leftJoin(
-                billingRecords,
-                and(
-                    eq(groupedHistorySubquery.poNo, billingRecords.poNo),
-                    sql`${normalizedSapCodeSql(billingRecords.noInvSap)} = ${normalizedSapCodeSql(groupedHistorySubquery.noInvSap)}`
-                )
-            )
             .orderBy(desc(sql`"groupedHistory"."dateInvoice"`));
 
-        const normalizedRecords = normalizeSapDocumentFields(records.map((record) => ({
+        const candidatePoNos = Array.from(new Set(historyRecords.map((record) => record.poNo).filter(Boolean))) as string[];
+        const relatedBillingRecords = candidatePoNos.length > 0
+            ? await db.query.billingRecords.findMany({
+                where: inArray(billingRecords.poNo, candidatePoNos),
+            })
+            : [];
+
+        const invoiceSpecificRecordMap = new Map<string, typeof relatedBillingRecords[number]>();
+        const legacyPoRecordMap = new Map<string, typeof relatedBillingRecords[number]>();
+
+        for (const record of relatedBillingRecords) {
+            const normalizedPo = (record.poNo || "").trim().toUpperCase();
+            const normalizedInvoice = normalizeCodeValue(record.noInvSap);
+
+            if (normalizedInvoice) {
+                invoiceSpecificRecordMap.set(`${normalizedPo}::${normalizedInvoice}`, record);
+                continue;
+            }
+
+            const existingLegacy = legacyPoRecordMap.get(normalizedPo);
+            if (!existingLegacy || existingLegacy.updatedAt < record.updatedAt) {
+                legacyPoRecordMap.set(normalizedPo, record);
+            }
+        }
+
+        const mergedRecords = historyRecords.map((record) => {
+            const normalizedPo = (record.poNo || "").trim().toUpperCase();
+            const normalizedInvoice = normalizeCodeValue(record.noInvSap);
+            const invoiceSpecificRecord = normalizedInvoice
+                ? invoiceSpecificRecordMap.get(`${normalizedPo}::${normalizedInvoice}`)
+                : undefined;
+            const legacyPoRecord = legacyPoRecordMap.get(normalizedPo);
+            const mergedBillingRecord = invoiceSpecificRecord ?? null;
+            const fallbackBillingRecord = legacyPoRecord ?? null;
+
+            return {
+                poNo: record.poNo,
+                billingRecordId: mergedBillingRecord?.id ?? null,
+                customer: mergedBillingRecord?.customer ?? fallbackBillingRecord?.customer ?? record.customer,
+                plant: mergedBillingRecord?.plant ?? fallbackBillingRecord?.plant ?? record.plant,
+                datePo: mergedBillingRecord?.datePo ?? fallbackBillingRecord?.datePo ?? record.datePo,
+                materialNumber: mergedBillingRecord?.materialNumber ?? fallbackBillingRecord?.materialNumber ?? record.materialNumber,
+                materialDescription: mergedBillingRecord?.materialDescription ?? fallbackBillingRecord?.materialDescription ?? record.materialDescription,
+                matGrpDesc: record.matGrpDesc,
+                materialGroup: record.materialGroup,
+                qty: String(mergedBillingRecord?.qty ?? fallbackBillingRecord?.qty ?? record.qty ?? ""),
+                curr: mergedBillingRecord?.curr ?? fallbackBillingRecord?.curr ?? record.curr ?? "IDR",
+                salesName: mergedBillingRecord?.salesName ?? fallbackBillingRecord?.salesName ?? record.salesName,
+                dateInvoice: mergedBillingRecord?.dateInvoice ?? fallbackBillingRecord?.dateInvoice ?? record.dateInvoice,
+                revType: record.revType,
+                items: record.items,
+                no: mergedBillingRecord?.no ?? fallbackBillingRecord?.no ?? null,
+                year: mergedBillingRecord?.year ?? fallbackBillingRecord?.year ?? (record.dateInvoice ? new Date(record.dateInvoice).getFullYear() : null),
+                month: mergedBillingRecord?.month ?? fallbackBillingRecord?.month ?? (record.dateInvoice
+                    ? new Date(record.dateInvoice).toLocaleString("en-US", { month: "long" })
+                    : null),
+                pricePerPcsIdr: mergedBillingRecord?.pricePerPcsIdr ?? fallbackBillingRecord?.pricePerPcsIdr ?? null,
+                totalPriceIdr: mergedBillingRecord?.totalPriceIdr ?? fallbackBillingRecord?.totalPriceIdr ?? null,
+                ppn: mergedBillingRecord?.ppn ?? fallbackBillingRecord?.ppn ?? null,
+                price: mergedBillingRecord?.price ?? fallbackBillingRecord?.price ?? null,
+                includePpn: mergedBillingRecord?.includePpn ?? fallbackBillingRecord?.includePpn ?? null,
+                noInvSap: mergedBillingRecord?.noInvSap ?? record.noInvSap,
+                custId: mergedBillingRecord?.custId ?? fallbackBillingRecord?.custId ?? record.custId,
+                ddpAddress: mergedBillingRecord?.ddpAddress ?? fallbackBillingRecord?.ddpAddress ?? record.ddpAddress,
+                paymentType: mergedBillingRecord?.paymentType ?? fallbackBillingRecord?.paymentType ?? null,
+                nomorDoSap: mergedBillingRecord?.nomorDoSap ?? fallbackBillingRecord?.nomorDoSap ?? record.nomorDoSap,
+                actualNoDo: mergedBillingRecord?.actualNoDo ?? fallbackBillingRecord?.actualNoDo ?? null,
+                tglDoFaktur: mergedBillingRecord?.tglDoFaktur ?? fallbackBillingRecord?.tglDoFaktur ?? null,
+                remaks: mergedBillingRecord?.remaks ?? fallbackBillingRecord?.remaks ?? null,
+                dateSendInvoice: mergedBillingRecord?.dateSendInvoice ?? fallbackBillingRecord?.dateSendInvoice ?? null,
+                receiverDate: mergedBillingRecord?.receiverDate ?? fallbackBillingRecord?.receiverDate ?? null,
+                recvDateApproved: mergedBillingRecord?.recvDateApproved ?? fallbackBillingRecord?.recvDateApproved ?? null,
+                eFaktur: mergedBillingRecord?.eFaktur ?? fallbackBillingRecord?.eFaktur ?? null,
+                modeDelivery: mergedBillingRecord?.modeDelivery ?? fallbackBillingRecord?.modeDelivery ?? null,
+                noResi: mergedBillingRecord?.noResi ?? fallbackBillingRecord?.noResi ?? null,
+                statusDelivery: mergedBillingRecord?.statusDelivery ?? fallbackBillingRecord?.statusDelivery ?? null,
+                scanInvUrl: mergedBillingRecord?.scanInvUrl ?? fallbackBillingRecord?.scanInvUrl ?? null,
+            };
+        });
+
+        const normalizedRecords = normalizeSapDocumentFields(mergedRecords.map((record) => ({
             ...record,
             rowKey: buildBillingRecordKey(record.poNo, record.noInvSap, record.dateInvoice),
             plant: normalizeCodeValue(record.plant) ?? "",

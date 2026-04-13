@@ -1,10 +1,11 @@
 "use client"
 
-import { useState, useMemo, useRef } from "react"
+import { useState, useMemo, useRef, useEffect, useCallback } from "react"
 import { EditDoDialog } from "./edit-do-dialog"
 import { BulkDoOcrUploadDialog } from "./bulk-do-ocr-upload-dialog"
 import { ScanDoPreview } from "./scan-do-preview"
 import { SuccessAlertDialog } from "@/components/success-alert-dialog"
+import { ScoreCard } from "@/components/score-card"
 import { DeliveryPdfPreview } from "../../deliveries/_components/delivery-pdf-preview"
 import { deleteDelivery, updateDoMonitoringFields, getDoMonitoringDeliveries } from "@/app/actions/delivery"
 import { batchSyncInvoiceFromBilling } from "@/app/actions/billing"
@@ -19,6 +20,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import {
     Select,
     SelectContent,
@@ -51,7 +53,7 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Search, MoreHorizontal, FileEdit, Trash2, Eye, Download, ChevronUp, ChevronDown, FileText, RefreshCw, Calendar as CalendarIcon, X } from "lucide-react"
+import { Search, MoreHorizontal, FileEdit, Trash2, Eye, Download, ChevronUp, ChevronDown, FileText, RefreshCw, Calendar as CalendarIcon, X, Truck, Clock, CheckCircle, DollarSign, FileX } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
 import { usePermissions } from "@/hooks/use-permissions"
@@ -61,7 +63,6 @@ import {
     useReactTable,
     getCoreRowModel,
     getSortedRowModel,
-    getFilteredRowModel,
     ColumnDef,
     flexRender,
     SortingState,
@@ -99,6 +100,63 @@ function formatCurrency(value: number) {
         currency: "IDR",
         minimumFractionDigits: 0,
     }).format(value)
+}
+
+function formatQuantity(value: number | null | undefined) {
+    return new Intl.NumberFormat("id-ID", {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+    }).format(Number(value) || 0)
+}
+
+function getDeliveryItemValue(
+    delivery: DeliveryWithRelations,
+    item: DeliveryWithRelations["items"][number],
+) {
+    const salesOrderItem = delivery.salesOrder?.items?.find((orderItem) => orderItem.id === item.salesOrderItemId)
+
+    if (!salesOrderItem) {
+        return 0
+    }
+
+    const deliveredQuantity = Number(item.deliveredQuantity) || 0
+    const orderedQuantity = Number(salesOrderItem.quantity) || 0
+    const unitPrice = Number(salesOrderItem.unitPrice) || 0
+    const discount = Number(salesOrderItem.discount) || 0
+    const tax = Number(salesOrderItem.tax) || 0
+
+    if (orderedQuantity <= 0) {
+        return deliveredQuantity * unitPrice
+    }
+
+    const proportionalDiscount = (discount / orderedQuantity) * deliveredQuantity
+    const proportionalTax = (tax / orderedQuantity) * deliveredQuantity
+
+    return deliveredQuantity * unitPrice - proportionalDiscount + proportionalTax
+}
+
+function getMatchedDeliveryItems(delivery: DeliveryWithRelations, term: string) {
+    const normalizedTerm = term.trim().toLowerCase()
+    if (!normalizedTerm) return []
+
+    return (delivery.items ?? []).filter((item) =>
+        [
+            item.product?.materialNumber,
+            item.product?.oldMaterialNo,
+            item.product?.materialDescription,
+            item.product?.category,
+        ]
+            .filter(Boolean)
+            .some((value) => String(value).toLowerCase().includes(normalizedTerm)),
+    )
+}
+
+function escapeCsvValue(value: string | number | null | undefined) {
+    const stringValue = String(value ?? "")
+    if (/[",\n]/.test(stringValue)) {
+        return `"${stringValue.replace(/"/g, '""')}"`
+    }
+    return stringValue
 }
 
 // Helper functions for date range presets
@@ -170,6 +228,7 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
     const [sorting, setSorting] = useState<SortingState>([{ id: "deliveryDate", desc: true }])
     const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined)
     const [datePreset, setDatePreset] = useState<string>("all")
+    const [expandedRows, setExpandedRows] = useState<Record<number, boolean>>({})
 
 
     const [editDelivery, setEditDelivery] = useState<DeliveryWithRelations | null>(null)
@@ -202,6 +261,18 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
         }
         return unique.sort((a, b) => getWarehouseLabel(a).localeCompare(getWarehouseLabel(b)))
     }, [data])
+
+    const normalizedSearchTerm = globalFilter.toLowerCase().trim()
+
+    const matchedItemsByDeliveryId = useMemo(() => {
+        const itemMap = new Map<number, DeliveryWithRelations["items"]>()
+
+        for (const delivery of data || []) {
+            itemMap.set(delivery.id, getMatchedDeliveryItems(delivery, normalizedSearchTerm))
+        }
+
+        return itemMap
+    }, [data, normalizedSearchTerm])
 
     // Mutations
     const updateStatusMutation = useMutation({
@@ -254,6 +325,20 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
         },
     })
 
+    const handleUpdateStatus = useCallback((id: number, status: string) => {
+        updateStatusMutation.mutate({ id, status })
+        setSuccessMessage(`Status DO berhasil diubah menjadi ${status}`)
+        setShowSuccessDialog(true)
+    }, [updateStatusMutation])
+
+    const handleDelete = useCallback((id: number) => {
+        setDeleting(id)
+        deleteMutation.mutate(id, {
+            onSuccess: () => toast.success("Delivery deleted successfully"),
+            onSettled: () => setDeleting((current) => (current === id ? null : current)),
+        })
+    }, [deleteMutation])
+
     const columns = useMemo<ColumnDef<DeliveryWithRelations>[]>(() => [
         {
             accessorKey: "deliveryNumber",
@@ -267,36 +352,115 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
                     {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
                 </Button>
             ),
-            cell: ({ row }) => (
-                <div className="flex items-center gap-2">
-                    <div className="font-mono text-sm flex-1">
-                        <div className="font-medium text-blue-600 dark:text-blue-400 flex items-center gap-2">
-                            {row.original.deliveryNumber || "-"}
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-6 w-6 text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/30 p-0"
-                                onClick={(e) => {
-                                    e.stopPropagation()
-                                    setOfficialPreviewDelivery(row.original)
-                                    setIsOfficialPreviewOpen(true)
-                                }}
-                                title="View Official DO"
-                            >
-                                <FileText className="h-4 w-4" />
-                            </Button>
-                        </div>
-                        {row.original.doSap && (
-                            <div className="text-[10px] font-semibold text-amber-600 dark:text-amber-500 font-mono">
-                                DO SAP: {row.original.doSap}
+            cell: ({ row }) => {
+                const delivery = row.original
+                const matchedItems = matchedItemsByDeliveryId.get(delivery.id) ?? []
+                const visibleItems = matchedItems.length > 0 ? matchedItems : (delivery.items ?? [])
+                const itemCount = visibleItems.length
+                const totalDeliveredQty = visibleItems.reduce(
+                    (sum, item) => sum + (Number(item.deliveredQuantity) || 0),
+                    0,
+                )
+                const totalItemValue = visibleItems.reduce(
+                    (sum, item) => sum + getDeliveryItemValue(delivery, item),
+                    0,
+                )
+                const isExpanded = Boolean(expandedRows[delivery.id]) || (normalizedSearchTerm.length > 0 && matchedItems.length > 0)
+
+                return (
+                    <div className="flex items-start gap-2">
+                        <div className="font-mono text-sm flex-1 min-w-[250px]">
+                            <div className="font-medium text-blue-600 dark:text-blue-400 flex items-center gap-2">
+                                {delivery.deliveryNumber || "-"}
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6 text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/30 p-0"
+                                    onClick={(e) => {
+                                        e.stopPropagation()
+                                        setOfficialPreviewDelivery(delivery)
+                                        setIsOfficialPreviewOpen(true)
+                                    }}
+                                    title="View Official DO"
+                                >
+                                    <FileText className="h-4 w-4" />
+                                </Button>
                             </div>
-                        )}
-                        <div className="text-xs text-muted-foreground">
-                            SO: {row.original.salesOrder?.invoiceNumber || "-"}
+                            {delivery.doSap && (
+                                <div className="text-[10px] font-semibold text-amber-600 dark:text-amber-500 font-mono">
+                                    DO SAP: {delivery.doSap}
+                                </div>
+                            )}
+                            <div className="text-xs text-muted-foreground">
+                                SO: {delivery.salesOrder?.invoiceNumber || "-"}
+                            </div>
+
+                            {itemCount > 0 && (
+                                <Collapsible
+                                    open={isExpanded}
+                                    onOpenChange={(open) => {
+                                        setExpandedRows((current) => ({
+                                            ...current,
+                                            [delivery.id]: open,
+                                        }))
+                                    }}
+                                >
+                                    <CollapsibleTrigger asChild>
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            className="mt-2 h-7 px-2 text-[11px] text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+                                        >
+                                            {isExpanded ? (
+                                                <ChevronDown className="mr-1 h-3.5 w-3.5" />
+                                            ) : (
+                                                <ChevronUp className="mr-1 h-3.5 w-3.5 rotate-180" />
+                                            )}
+                                            Detail Material
+                                            <span className="ml-2 text-[10px] text-muted-foreground">
+                                                {itemCount} item • Qty {formatQuantity(totalDeliveredQty)} • {formatCurrency(totalItemValue)}
+                                            </span>
+                                        </Button>
+                                    </CollapsibleTrigger>
+                                    <CollapsibleContent className="mt-2">
+                                        <div className="overflow-hidden rounded-md border">
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow className="bg-slate-50 dark:bg-slate-900/60">
+                                                        <TableHead className="h-8 text-[11px] font-semibold">Material</TableHead>
+                                                        <TableHead className="h-8 text-[11px] font-semibold">Description</TableHead>
+                                                        <TableHead className="h-8 text-[11px] font-semibold text-right">Qty</TableHead>
+                                                        <TableHead className="h-8 text-[11px] font-semibold text-right">Value</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {visibleItems.map((item) => (
+                                                        <TableRow key={item.id}>
+                                                            <TableCell className="py-2 align-top text-[11px] font-semibold text-slate-900 dark:text-slate-100">
+                                                                {item.product?.materialNumber || "-"}
+                                                            </TableCell>
+                                                            <TableCell className="py-2 align-top text-[11px] leading-relaxed text-slate-600 dark:text-slate-300 whitespace-normal break-words">
+                                                                {item.product?.materialDescription || "-"}
+                                                            </TableCell>
+                                                            <TableCell className="py-2 align-top text-right text-[11px] font-medium">
+                                                                {formatQuantity(item.deliveredQuantity)}
+                                                            </TableCell>
+                                                            <TableCell className="py-2 align-top text-right text-[11px] font-medium">
+                                                                {formatCurrency(getDeliveryItemValue(delivery, item))}
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                        </div>
+                                    </CollapsibleContent>
+                                </Collapsible>
+                            )}
                         </div>
                     </div>
-                </div>
-            ),
+                )
+            },
         },
         {
             id: "customerPo",
@@ -542,19 +706,21 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
                 )
             },
         },
-    ], [canEdit, canDelete, deleting])
+    ], [canEdit, canDelete, deleting, expandedRows, handleDelete, handleUpdateStatus, matchedItemsByDeliveryId, normalizedSearchTerm])
 
     const filteredData = useMemo(() => {
-        const term = globalFilter.toLowerCase().trim()
+        const term = normalizedSearchTerm
         return (data || []).filter(d => {
             const dateFrom = dateRange?.from
             const dateTo = dateRange?.to
+            const matchedItems = matchedItemsByDeliveryId.get(d.id) ?? []
             const matchesSearch = !term || (
                 (d.deliveryNumber?.toLowerCase().includes(term)) ||
                 (d.doSap?.toLowerCase().includes(term)) ||
                 (d.salesOrder?.customer?.name?.toLowerCase().includes(term)) ||
                 (d.invoiceNumber?.toLowerCase().includes(term)) ||
-                (d.salesOrder?.customerPo?.toLowerCase().includes(term))
+                (d.salesOrder?.customerPo?.toLowerCase().includes(term)) ||
+                matchedItems.length > 0
             )
 
             const matchesStatus = statusFilter === "all" || getDoMonitoringStatus(d) === statusFilter
@@ -593,7 +759,74 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
 
             return matchesSearch && matchesStatus && matchesInvoice && matchesWarehouse && matchesDateRange
         })
-    }, [data, globalFilter, statusFilter, invoiceFilter, warehouseFilter, dateRange])
+    }, [data, normalizedSearchTerm, statusFilter, invoiceFilter, warehouseFilter, dateRange, matchedItemsByDeliveryId])
+
+    const visibleItemsByDeliveryId = useMemo(() => {
+        const itemMap = new Map<number, DeliveryWithRelations["items"]>()
+
+        for (const delivery of filteredData) {
+            const matchedItems = matchedItemsByDeliveryId.get(delivery.id) ?? []
+            itemMap.set(delivery.id, matchedItems.length > 0 ? matchedItems : (delivery.items ?? []))
+        }
+
+        return itemMap
+    }, [filteredData, matchedItemsByDeliveryId])
+
+    const autoExpandedRowIds = useMemo(
+        () => new Set(
+            filteredData
+                .filter((delivery) => (matchedItemsByDeliveryId.get(delivery.id)?.length ?? 0) > 0)
+                .map((delivery) => delivery.id),
+        ),
+        [filteredData, matchedItemsByDeliveryId],
+    )
+
+    const summaryCards = useMemo(() => {
+        const pendingCount = filteredData.filter((delivery) => getDoMonitoringStatus(delivery) === "Pending").length
+        const returnedCount = filteredData.filter((delivery) => getDoMonitoringStatus(delivery) === "Return").length
+
+        let grandTotalInvoiced = 0
+        let grandTotalUninvoiced = 0
+
+        for (const delivery of filteredData) {
+            const deliveryValue = (visibleItemsByDeliveryId.get(delivery.id) ?? []).reduce(
+                (sum, item) => sum + getDeliveryItemValue(delivery, item),
+                0,
+            )
+
+            if (delivery.invoiceNumber && delivery.invoiceNumber.trim() !== "") {
+                grandTotalInvoiced += deliveryValue
+            } else {
+                grandTotalUninvoiced += deliveryValue
+            }
+        }
+
+        return {
+            totalDeliveries: filteredData.length,
+            pendingCount,
+            returnedCount,
+            grandTotalInvoiced,
+            grandTotalUninvoiced,
+        }
+    }, [filteredData, visibleItemsByDeliveryId])
+
+    useEffect(() => {
+        if (autoExpandedRowIds.size === 0) return
+
+        setExpandedRows((current) => {
+            const next = { ...current }
+            let hasChanges = false
+
+            for (const rowId of autoExpandedRowIds) {
+                if (!next[rowId]) {
+                    next[rowId] = true
+                    hasChanges = true
+                }
+            }
+
+            return hasChanges ? next : current
+        })
+    }, [autoExpandedRowIds])
 
     const table = useReactTable({
         data: filteredData,
@@ -613,9 +846,13 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
     const rowVirtualizer = useVirtualizer({
         count: rows.length,
         getScrollElement: () => parentRef.current,
-        estimateSize: () => 53,
+        estimateSize: () => 74,
         overscan: 20,
     })
+
+    useEffect(() => {
+        rowVirtualizer.measure()
+    }, [expandedRows, rowVirtualizer])
 
     const [before, after] = rowVirtualizer.getVirtualItems().length > 0
         ? [
@@ -625,10 +862,28 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
         : [0, 0]
 
     const handleExport = () => {
-        const headers = ["Delivery No", "DO SAP", "SO No", "Customer PO", "Tgl Pengiriman", "Return Date", "DO Status", "Scan DO URL", "Invoice No", "Invoice Date", "Warehouse", "Customer", "Remark"]
-        const csvData = table.getFilteredRowModel().rows.map(row => {
+        const headers = [
+            "Delivery No",
+            "DO SAP",
+            "SO No",
+            "Customer PO",
+            "Tgl Pengiriman",
+            "Return Date",
+            "DO Status",
+            "Invoice No",
+            "Invoice Date",
+            "Warehouse",
+            "Customer",
+            "Material Number",
+            "Material Description",
+            "Qty Delivered",
+            "Value",
+            "Remark",
+        ]
+        const csvData = table.getRowModel().rows.flatMap((row) => {
             const d = row.original
-            return [
+            const visibleItems = visibleItemsByDeliveryId.get(d.id) ?? []
+            const baseRow = [
                 d.deliveryNumber || "",
                 d.doSap || "",
                 d.salesOrder?.invoiceNumber || "",
@@ -636,18 +891,29 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
                 d.deliveryDate ? new Date(d.deliveryDate).toLocaleDateString("id-ID") : "",
                 d.returnDoDate ? new Date(d.returnDoDate).toLocaleDateString("id-ID") : "",
                 getDoMonitoringStatus(d),
-                d.scanDoDocument || "",
                 d.invoiceNumber || "",
                 d.invoiceDate ? new Date(d.invoiceDate).toLocaleDateString("id-ID") : "",
                 getWarehouseLabel(d.warehouse),
                 d.salesOrder?.customer?.name || "",
-                d.remark || ""
             ]
+
+            if (visibleItems.length === 0) {
+                return [[...baseRow, "", "", "", "", d.remark || ""]]
+            }
+
+            return visibleItems.map((item) => [
+                ...baseRow,
+                item.product?.materialNumber || "",
+                item.product?.materialDescription || "",
+                formatQuantity(item.deliveredQuantity),
+                getDeliveryItemValue(d, item),
+                d.remark || "",
+            ])
         })
 
         const csvContent = [
-            headers.join(","),
-            ...csvData.map(row => row.join(","))
+            headers.map(escapeCsvValue).join(","),
+            ...csvData.map((row) => row.map(escapeCsvValue).join(",")),
         ].join("\n")
 
         const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
@@ -659,18 +925,6 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
         document.body.appendChild(link)
         link.click()
         document.body.removeChild(link)
-    }
-
-    const handleUpdateStatus = async (id: number, status: string) => {
-        updateStatusMutation.mutate({ id, status })
-        setSuccessMessage(`Status DO berhasil diubah menjadi ${status}`)
-        setShowSuccessDialog(true)
-    }
-
-    async function handleDelete(id: number) {
-        deleteMutation.mutate(id, {
-            onSuccess: () => toast.success("Delivery deleted successfully")
-        })
     }
 
     const handleSyncInvoiceFromSap = async () => {
@@ -724,11 +978,59 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
     return (
 
         <div className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-5">
+                <ScoreCard
+                    title="Total Deliveries"
+                    value={summaryCards.totalDeliveries}
+                    icon={Truck}
+                    description="Sesuai search & filter aktif"
+                    gradient="from-blue-500/10 via-blue-400/5 to-indigo-500/10 border-blue-200/50"
+                    iconColor="text-blue-600 dark:text-blue-400"
+                    textColor="text-blue-900 dark:text-blue-100"
+                />
+                <ScoreCard
+                    title="Pending Return"
+                    value={summaryCards.pendingCount}
+                    icon={Clock}
+                    description="Menunggu DO kembali"
+                    gradient="from-amber-500/10 via-amber-400/5 to-orange-500/10 border-amber-200/50"
+                    iconColor="text-amber-600 dark:text-amber-400"
+                    textColor="text-amber-900 dark:text-amber-100"
+                />
+                <ScoreCard
+                    title="DO Returned"
+                    value={summaryCards.returnedCount}
+                    icon={CheckCircle}
+                    description="Sudah kembali"
+                    gradient="from-green-500/10 via-green-400/5 to-emerald-500/10 border-green-200/50"
+                    iconColor="text-green-600 dark:text-green-400"
+                    textColor="text-green-900 dark:text-green-100"
+                />
+                <ScoreCard
+                    title="Grand Total Invoiced"
+                    value={formatCurrency(summaryCards.grandTotalInvoiced)}
+                    icon={DollarSign}
+                    description="Value item terlihat yang sudah invoice"
+                    gradient="from-emerald-500/10 via-emerald-400/5 to-teal-500/10 border-emerald-200/50"
+                    iconColor="text-emerald-600 dark:text-emerald-400"
+                    textColor="text-emerald-900 dark:text-emerald-100"
+                />
+                <ScoreCard
+                    title="Grand Total Un-invoice"
+                    value={formatCurrency(summaryCards.grandTotalUninvoiced)}
+                    icon={FileX}
+                    description="Value item terlihat yang belum invoice"
+                    gradient="from-red-500/10 via-red-400/5 to-rose-500/10 border-red-200/50"
+                    iconColor="text-red-600 dark:text-red-400"
+                    textColor="text-red-900 dark:text-red-100"
+                />
+            </div>
+
             <div className="flex flex-col sm:flex-row gap-3">
                 <div className="relative flex-1 max-w-sm">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
-                        placeholder="Search DO, SO, Customer, Invoice..."
+                        placeholder="Search DO, SO, Customer, Invoice, Material..."
                         value={globalFilter ?? ""}
                         onChange={e => setGlobalFilter(e.target.value)}
                         className="pl-10"
@@ -875,6 +1177,11 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
                                             <TableRow
                                                 key={row.id}
                                                 data-state={row.getIsSelected() && "selected"}
+                                                ref={(node) => {
+                                                    if (node) {
+                                                        rowVirtualizer.measureElement(node)
+                                                    }
+                                                }}
                                             >
                                                 {row.getVisibleCells().map((cell) => (
                                                     <TableCell key={cell.id}>
