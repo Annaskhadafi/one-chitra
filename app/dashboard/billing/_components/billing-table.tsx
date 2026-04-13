@@ -176,13 +176,22 @@ export function BillingTable({ data: initialData }: { data: BillingRecordDisplay
     }, [])
 
     const handleView = React.useCallback((record: BillingRecordDisplay) => {
-        router.push(`/dashboard/billing/${encodeURIComponent(record.poNo)}`)
+        const params = new URLSearchParams()
+        if (record.noInvSap) {
+            params.set("invoice", record.noInvSap)
+        }
+        const query = params.toString()
+        router.push(`/dashboard/billing/${encodeURIComponent(record.poNo)}${query ? `?${query}` : ""}`)
     }, [router])
 
-    const handleDelete = React.useCallback(async (poNo: string) => {
+    const handleDelete = React.useCallback(async (record: BillingRecordDisplay) => {
         if (confirm("Are you sure you want to delete the billing data for this PO? This will reset custom fields.")) {
             try {
-                const result = await deleteBillingRecord(poNo)
+                const result = await deleteBillingRecord({
+                    billingRecordId: record.billingRecordId,
+                    poNo: record.poNo,
+                    currentNoInvSap: record.noInvSap,
+                })
                 if (result.success) {
                     toast.success("Billing data deleted")
                     refetch()
@@ -221,8 +230,10 @@ export function BillingTable({ data: initialData }: { data: BillingRecordDisplay
             try {
                 const result = await trackJneResi(String(r.noResi).trim())
                 if (result.success && result.data) {
-                    const updates: { poNo: string; statusDelivery: string; receiverDate?: Date | null } = {
+                    const updates: { billingRecordId?: number | null; poNo: string; currentNoInvSap?: string | null; statusDelivery: string; receiverDate?: Date | null } = {
+                        billingRecordId: r.billingRecordId,
                         poNo: r.poNo,
+                        currentNoInvSap: r.noInvSap,
                         statusDelivery: result.data.statusAction,
                     }
                     if (result.data.receiverDate) updates.receiverDate = toOptionalDate(result.data.receiverDate)
@@ -351,8 +362,8 @@ export function BillingTable({ data: initialData }: { data: BillingRecordDisplay
     const canDelete = hasResourcePermission('billing', 'delete')
 
     const columns = React.useMemo(() => getColumns(
-        canEdit ? handleEdit : () => toast.error("No permission"),
-        canDelete ? handleDelete : () => toast.error("No permission"),
+        canEdit ? handleEdit : (_record: BillingRecordDisplay) => { toast.error("No permission") },
+        canDelete ? handleDelete : (_record: BillingRecordDisplay) => { toast.error("No permission") },
         handleView
     ), [canEdit, canDelete, handleDelete, handleEdit, handleView])
 
@@ -456,11 +467,11 @@ export function BillingTable({ data: initialData }: { data: BillingRecordDisplay
             handleCellMouseDown,
             handleCellMouseEnter,
             isCellSelected,
-            updateData: (poNo: string, columnId: string, value: unknown) => {
+            updateData: (rowKey: string, columnId: string, value: unknown) => {
                 queryClient.setQueryData<BillingRecordDisplay[]>(["billing-records"], (old) => {
                     if (!old) return old;
                     return old.map(record => {
-                        if (record.poNo === poNo) return { ...record, [columnId]: value }
+                        if (record.rowKey === rowKey) return { ...record, [columnId]: value }
                         return record;
                     })
                 });
@@ -479,9 +490,8 @@ export function BillingTable({ data: initialData }: { data: BillingRecordDisplay
                 // Determine how many rows we can safely update
                 const maxRowsToUpdate = Math.min(values.length, currentRows.length - startVisualIndex);
 
-                const updates = [];
                 const updatePromises = [];
-                const poNosToUpdate = new Map();
+                const poNosToUpdate = new Map<string, unknown>();
 
                 for (let i = 0; i < maxRowsToUpdate; i++) {
                     const targetRow = currentRows[startVisualIndex + i];
@@ -496,12 +506,12 @@ export function BillingTable({ data: initialData }: { data: BillingRecordDisplay
                                 ? normalizeCodeValue(finalValue as string | number | null | undefined)
                                 : finalValue;
 
-                        poNosToUpdate.set(poNo, normalizedValue);
-                        updates.push({ poNo, columnId, newValue: normalizedValue });
-
+                        poNosToUpdate.set(targetRow.original.rowKey, normalizedValue);
                         updatePromises.push(
                             updateBillingRecord(normalizeBillingUpdatePayload({
+                                billingRecordId: targetRow.original.billingRecordId,
                                 poNo,
+                                currentNoInvSap: targetRow.original.noInvSap,
                                 [columnId]: normalizedValue
                             }))
                         );
@@ -512,8 +522,8 @@ export function BillingTable({ data: initialData }: { data: BillingRecordDisplay
                 queryClient.setQueryData<BillingRecordDisplay[]>(["billing-records"], (old) => {
                     if (!old) return old;
                     return old.map(record => {
-                        if (poNosToUpdate.has(record.poNo)) {
-                            return { ...record, [columnId]: poNosToUpdate.get(record.poNo) }
+                        if (poNosToUpdate.has(record.rowKey)) {
+                            return { ...record, [columnId]: poNosToUpdate.get(record.rowKey) }
                         }
                         return record;
                     })
@@ -607,7 +617,7 @@ export function BillingTable({ data: initialData }: { data: BillingRecordDisplay
 
         if (targetRows.length === 0 || targetColumns.length === 0) return
 
-        const updatesByPoNo = new Map<string, Partial<BillingRecordDisplay>>()
+        const updatesByRowKey = new Map<string, Partial<BillingRecordDisplay>>()
 
         targetRows.forEach((row, rowOffset) => {
             targetColumns.forEach((columnId, columnOffset) => {
@@ -624,34 +634,38 @@ export function BillingTable({ data: initialData }: { data: BillingRecordDisplay
                         ? normalizeCodeValue(rawValue)
                         : rawValue
 
-                const currentPayload = updatesByPoNo.get(row.original.poNo) ?? {}
+                const currentPayload = updatesByRowKey.get(row.original.rowKey) ?? {}
                 currentPayload[columnId as keyof BillingRecordDisplay] = normalizedValue as never
-                updatesByPoNo.set(row.original.poNo, currentPayload)
+                updatesByRowKey.set(row.original.rowKey, currentPayload)
             })
         })
 
-        if (updatesByPoNo.size === 0) return
+        if (updatesByRowKey.size === 0) return
 
         queryClient.setQueryData<BillingRecordDisplay[]>(["billing-records"], (old) => {
             if (!old) return old
             return old.map((record) => {
-                const pendingUpdates = updatesByPoNo.get(record.poNo)
+                const pendingUpdates = updatesByRowKey.get(record.rowKey)
                 return pendingUpdates ? { ...record, ...pendingUpdates } : record
             })
         })
 
-        const requests = Array.from(updatesByPoNo.entries()).map(([poNo, values]) =>
-            updateBillingRecord(normalizeBillingUpdatePayload({
-                poNo,
+        const requests = targetRows.map((row) => {
+            const values = updatesByRowKey.get(row.original.rowKey)
+            if (!values) return null
+            return updateBillingRecord(normalizeBillingUpdatePayload({
+                billingRecordId: row.original.billingRecordId,
+                poNo: row.original.poNo,
+                currentNoInvSap: row.original.noInvSap,
                 ...values,
             }))
-        )
+        }).filter(Boolean)
 
         toast.promise(Promise.all(requests), {
-            loading: `Pasting into ${updatesByPoNo.size} row(s)...`,
+            loading: `Pasting into ${updatesByRowKey.size} row(s)...`,
             success: () => {
                 refetch()
-                return `Paste berhasil ke ${updatesByPoNo.size} row(s)`
+                return `Paste berhasil ke ${updatesByRowKey.size} row(s)`
             },
             error: "Paste massal gagal",
         })

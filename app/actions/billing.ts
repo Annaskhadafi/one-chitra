@@ -12,9 +12,12 @@ import { eq, desc, sql, and, isNotNull, ne, type SQLWrapper } from "drizzle-orm"
 import { revalidatePath } from "next/cache";
 import { checkPermission } from "@/lib/rbac";
 import { normalizeCodeValue, normalizeSapDocumentFields } from "@/lib/formatters";
+import { buildBillingRecordKey } from "@/lib/billing";
 
 type BillingRecordUpdate = {
+    billingRecordId?: number | null;
     poNo: string;
+    currentNoInvSap?: string | null;
     no?: string | null;
     year?: number | null;
     month?: string | null;
@@ -116,7 +119,7 @@ export async function getBillingRecords(poNoFilter?: string) {
                     poNoFilter ? eq(historyOrders.poNo, poNoFilter) : undefined
                 )
             )
-            .groupBy(historyOrders.poNo)
+            .groupBy(historyOrders.poNo, historyOrders.billingNo)
             .as("groupedHistory");
 
         const records = await db.select({
@@ -166,11 +169,18 @@ export async function getBillingRecords(poNoFilter?: string) {
             scanInvUrl: billingRecords.scanInvUrl,
         })
             .from(groupedHistorySubquery)
-            .leftJoin(billingRecords, eq(groupedHistorySubquery.poNo, billingRecords.poNo))
+            .leftJoin(
+                billingRecords,
+                and(
+                    eq(groupedHistorySubquery.poNo, billingRecords.poNo),
+                    sql`${normalizedSapCodeSql(billingRecords.noInvSap)} = ${normalizedSapCodeSql(groupedHistorySubquery.noInvSap)}`
+                )
+            )
             .orderBy(desc(sql`"groupedHistory"."dateInvoice"`));
 
         const normalizedRecords = normalizeSapDocumentFields(records.map((record) => ({
             ...record,
+            rowKey: buildBillingRecordKey(record.poNo, record.noInvSap, record.dateInvoice),
             plant: normalizeCodeValue(record.plant) ?? "",
         })));
 
@@ -181,13 +191,23 @@ export async function getBillingRecords(poNoFilter?: string) {
     }
 }
 
-export async function getBillingRecordByPo(poNo: string) {
+export async function getBillingRecordByPo(poNo: string, noInvSap?: string | null) {
     try {
         const records = await getBillingRecords(poNo);
         if (!records.success || !records.data || records.data.length === 0) {
             return { success: false, error: records.error || "Record not found" };
         }
-        return { success: true, data: records.data[0] };
+
+        const normalizedInvoice = normalizeCodeValue(noInvSap);
+        const matchedRecord = normalizedInvoice
+            ? records.data.find((record) => normalizeCodeValue(record.noInvSap) === normalizedInvoice)
+            : records.data[0];
+
+        if (!matchedRecord) {
+            return { success: false, error: "Record not found" };
+        }
+
+        return { success: true, data: matchedRecord };
     } catch (error) {
         console.error("Error fetching single billing record:", error);
         return { success: false, error: "Failed to fetch record" };
@@ -488,7 +508,7 @@ export async function trackJneResi(awb: string) {
 export async function updateBillingRecord(data: BillingRecordUpdate) {
     try {
         await checkPermission('billing', 'edit');
-        const { poNo, ...rawUpdateData } = data;
+        const { poNo, billingRecordId, currentNoInvSap, ...rawUpdateData } = data;
         const updateData: BillingMutableUpdate = rawUpdateData;
 
         if (!poNo) throw new Error("PO Number is required");
@@ -496,6 +516,7 @@ export async function updateBillingRecord(data: BillingRecordUpdate) {
         if (updateData.noInvSap !== undefined) {
             updateData.noInvSap = normalizeCodeValue(updateData.noInvSap);
         }
+        const normalizedCurrentNoInvSap = normalizeCodeValue(currentNoInvSap);
         if (updateData.nomorDoSap !== undefined) {
             updateData.nomorDoSap = normalizeCodeValue(updateData.nomorDoSap);
         }
@@ -555,17 +576,27 @@ export async function updateBillingRecord(data: BillingRecordUpdate) {
         }
 
         // Check if record exists
-        const existing = await db.query.billingRecords.findFirst({
-            where: eq(billingRecords.poNo, poNo)
-        });
+        const existing = billingRecordId
+            ? await db.query.billingRecords.findFirst({
+                where: eq(billingRecords.id, billingRecordId)
+            })
+            : await db.query.billingRecords.findFirst({
+                where: normalizedCurrentNoInvSap
+                    ? and(
+                        eq(billingRecords.poNo, poNo),
+                        eq(billingRecords.noInvSap, normalizedCurrentNoInvSap)
+                    )
+                    : eq(billingRecords.poNo, poNo)
+            });
 
         if (existing) {
             await db.update(billingRecords)
                 .set({ ...updateData, updatedAt: new Date() })
-                .where(eq(billingRecords.poNo, poNo));
+                .where(eq(billingRecords.id, existing.id));
         } else {
             await db.insert(billingRecords).values({
                 poNo,
+                noInvSap: updateData.noInvSap ?? normalizedCurrentNoInvSap ?? null,
                 ...updateData
             });
         }
@@ -579,10 +610,23 @@ export async function updateBillingRecord(data: BillingRecordUpdate) {
 }
 
 // Delete Billing Record (Reset to default)
-export async function deleteBillingRecord(poNo: string) {
+export async function deleteBillingRecord(data: { billingRecordId?: number | null; poNo: string; currentNoInvSap?: string | null }) {
     try {
         await checkPermission('billing', 'delete');
-        await db.delete(billingRecords).where(eq(billingRecords.poNo, poNo));
+        const normalizedCurrentNoInvSap = normalizeCodeValue(data.currentNoInvSap);
+
+        if (data.billingRecordId) {
+            await db.delete(billingRecords).where(eq(billingRecords.id, data.billingRecordId));
+        } else if (normalizedCurrentNoInvSap) {
+            await db.delete(billingRecords).where(
+                and(
+                    eq(billingRecords.poNo, data.poNo),
+                    eq(billingRecords.noInvSap, normalizedCurrentNoInvSap)
+                )
+            );
+        } else {
+            await db.delete(billingRecords).where(eq(billingRecords.poNo, data.poNo));
+        }
         revalidatePath("/dashboard/billing");
         return { success: true };
     } catch (error) {

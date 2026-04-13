@@ -114,7 +114,9 @@ export function BillingSheet({ open, onOpenChange, record, onSuccess }: BillingS
             }
 
             const result = await updateBillingRecord({
+                billingRecordId: formData.billingRecordId,
                 poNo: formData.poNo || record.poNo,
+                currentNoInvSap: record.noInvSap,
                 ...updatePayload
             })
 
@@ -147,7 +149,9 @@ export function BillingSheet({ open, onOpenChange, record, onSuccess }: BillingS
 
                 // AUTO SAVE langsung ke DB tanpa harus klik tombol Save
                 const saveResult = await updateBillingRecord({
+                    billingRecordId: record.billingRecordId,
                     poNo: record.poNo as string,
+                    currentNoInvSap: record.noInvSap,
                     scanInvUrl: result.url
                 })
 

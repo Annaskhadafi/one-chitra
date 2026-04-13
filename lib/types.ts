@@ -57,6 +57,7 @@ export type QuotationItem = InferSelectModel<typeof quotationItems>
 export type NewQuotationItem = InferInsertModel<typeof quotationItems>
 
 export type BillingRecordDisplay = {
+    rowKey: string
     billingRecordId: number | null
     no: string | null
     year: number | null

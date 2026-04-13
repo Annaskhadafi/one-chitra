@@ -15,7 +15,7 @@ interface EditableTableMeta {
     isCellSelected?: (rowIndex: number, columnId: string) => boolean
     handleCellMouseDown?: (rowIndex: number, columnId: string) => void
     handleCellMouseEnter?: (rowIndex: number, columnId: string) => void
-    updateData?: (poNo: string, columnId: string, value: unknown) => void
+    updateData?: (rowKey: string, columnId: string, value: unknown) => void
     onMassUpdate?: (rowIndex: number, columnId: string, values: string[]) => void
 }
 
@@ -64,7 +64,7 @@ export function EditableCell({ row, column, type = "text", options, tableMeta, r
 
         // Optimistic UI Update immediately
         if (tableMeta?.updateData) {
-            tableMeta.updateData(poNo, column, normalizedValue)
+            tableMeta.updateData(row.original.rowKey, column, normalizedValue)
         }
 
         // Auto-track JNE: jika kolom noResi & modeDelivery row ini JNE
@@ -73,20 +73,27 @@ export function EditableCell({ row, column, type = "text", options, tableMeta, r
             toast.promise(
                 (async () => {
                     // Simpan noResi dulu
-                    await updateBillingRecord({ poNo, noResi: finalValue as string })
+                    await updateBillingRecord({
+                        billingRecordId: row.original.billingRecordId,
+                        poNo,
+                        currentNoInvSap: row.original.noInvSap,
+                        noResi: finalValue as string
+                    })
                     // Lalu track
                     const result = await trackJneResi(noResi)
                     if (result.success && result.data) {
                         const updates = {
+                            billingRecordId: row.original.billingRecordId,
                             poNo,
+                            currentNoInvSap: row.original.noInvSap,
                             statusDelivery: result.data.statusAction,
                             ...(result.data.receiverDate ? { receiverDate: result.data.receiverDate } : {})
                         }
                         // Update optimistic UI
                         if (tableMeta?.updateData) {
-                            tableMeta.updateData(poNo, "statusDelivery", result.data.statusAction)
+                            tableMeta.updateData(row.original.rowKey, "statusDelivery", result.data.statusAction)
                             if (result.data.receiverDate) {
-                                tableMeta.updateData(poNo, "receiverDate", result.data.receiverDate)
+                                tableMeta.updateData(row.original.rowKey, "receiverDate", result.data.receiverDate)
                             }
                         }
                         // Simpan ke DB
@@ -106,7 +113,9 @@ export function EditableCell({ row, column, type = "text", options, tableMeta, r
         }
 
         const promise = updateBillingRecord({
+            billingRecordId: row.original.billingRecordId,
             poNo,
+            currentNoInvSap: row.original.noInvSap,
             [column]: normalizedValue
         })
 
@@ -162,8 +171,13 @@ export function EditableCell({ row, column, type = "text", options, tableMeta, r
                         ? normalizeCodeValue(finalValue as string | number | null | undefined)
                         : finalValue
 
-                if (tableMeta?.updateData) tableMeta.updateData(row.original.poNo!, column, normalizedValue)
-                updateBillingRecord({ poNo: row.original.poNo!, [column]: normalizedValue })
+                if (tableMeta?.updateData) tableMeta.updateData(row.original.rowKey, column, normalizedValue)
+                updateBillingRecord({
+                    billingRecordId: row.original.billingRecordId,
+                    poNo: row.original.poNo!,
+                    currentNoInvSap: row.original.noInvSap,
+                    [column]: normalizedValue
+                })
                 setValue(values[0])
             }
         } catch (_err) {

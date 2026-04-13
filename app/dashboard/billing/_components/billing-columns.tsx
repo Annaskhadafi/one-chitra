@@ -26,7 +26,7 @@ interface ActionProps {
         original: BillingRecordDisplay;
     }
     onEdit: (record: BillingRecordDisplay) => void
-    onDelete: (poNo: string) => void
+    onDelete: (record: BillingRecordDisplay) => void
     onView: (record: BillingRecordDisplay) => void
 }
 
@@ -48,7 +48,7 @@ const ActionCell = ({ row, onEdit, onDelete, onView }: ActionProps) => {
                     <Pencil className="mr-2 h-4 w-4" /> Edit
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => onDelete(row.original.poNo as string)} className="text-destructive focus:text-destructive">
+                <DropdownMenuItem onClick={() => onDelete(row.original)} className="text-destructive focus:text-destructive">
                     <Trash2 className="mr-2 h-4 w-4" /> Delete Billing Data
                 </DropdownMenuItem>
             </DropdownMenuContent>
@@ -85,7 +85,7 @@ const ScanInvoiceCell = ({ url }: { url: string | null | undefined }) => {
 // We need a factory function to create columns with handlers
 export const getColumns = (
     onEdit: (record: BillingRecordDisplay) => void,
-    onDelete: (poNo: string) => void,
+    onDelete: (record: BillingRecordDisplay) => void,
     onView: (record: BillingRecordDisplay) => void
 ): ColumnDef<BillingRecordDisplay>[] => [
         {
