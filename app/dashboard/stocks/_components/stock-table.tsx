@@ -45,7 +45,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { updateSetting } from "@/app/actions/settings"
 import { useQuery } from "@tanstack/react-query"
 import {
@@ -58,23 +58,43 @@ import {
     SortingState,
 } from "@tanstack/react-table"
 import { useVirtualizer } from "@tanstack/react-virtual"
-import type { Product, Warehouse, Stock } from "@/lib/types"
+import type { Product, Warehouse } from "@/lib/types"
+
+type StockRow = Awaited<ReturnType<typeof getStocks>>[number]
 
 interface StockTableProps {
-    data: Stock[] // Initial data for query hydrantion if needed
+    data: StockRow[]
+    customers: {
+        id: number
+        customerCode: string
+        name: string
+    }[]
     products: Product[]
     warehouses: Warehouse[]
     defaultRate?: string
 }
 
-export function StockTable({ data: initialData, products, warehouses, defaultRate }: StockTableProps) {
+function getTotalBookingQty(stock: StockRow) {
+    return stock.stockBookings?.reduce((sum, booking) => sum + Number(booking.quantity || 0), 0) ?? 0
+}
+
+function getBookingRemarkSummary(stock: StockRow) {
+    return stock.stockBookings?.map((booking) => ({
+        id: booking.id,
+        label: ("customer" in booking ? booking.customer?.name : null) || `Customer #${booking.customerId}`,
+        quantity: Number(booking.quantity || 0),
+        remark: booking.remark?.trim() || null,
+    })) ?? []
+}
+
+export function StockTable({ data: initialData, customers, products, warehouses, defaultRate }: StockTableProps) {
     const [mounted, setMounted] = useState(false)
 
     useEffect(() => {
         setMounted(true)
     }, [])
 
-    const { data: stocks = initialData, isLoading, refetch } = useQuery<Stock[]>({
+    const { data: stocks = initialData, isLoading, refetch } = useQuery<StockRow[]>({
         queryKey: ["stocks"],
         queryFn: async () => {
             return await getStocks()
@@ -123,7 +143,7 @@ export function StockTable({ data: initialData, products, warehouses, defaultRat
         return valuation / stock
     }
 
-    const columns = useMemo<ColumnDef<Stock>[]>(() => [
+    const columns = useMemo<ColumnDef<StockRow>[]>(() => [
         {
             id: "select",
             header: ({ table }) => (
@@ -215,6 +235,18 @@ export function StockTable({ data: initialData, products, warehouses, defaultRat
             ),
         },
         {
+            id: "qtyBooking",
+            header: () => <div className="text-right">Qty Booking</div>,
+            cell: ({ row }) => {
+                const totalBookingQty = getTotalBookingQty(row.original)
+                return (
+                    <div className="text-right font-mono font-semibold text-sky-700">
+                        {totalBookingQty.toLocaleString("id-ID")}
+                    </div>
+                )
+            },
+        },
+        {
             accessorKey: "minStock",
             header: ({ column }) => (
                 <div className="text-right">
@@ -269,6 +301,32 @@ export function StockTable({ data: initialData, products, warehouses, defaultRat
             ),
         },
         {
+            id: "customerRemark",
+            header: "Remark (Customer)",
+            cell: ({ row }) => {
+                const bookingSummary = getBookingRemarkSummary(row.original)
+                if (bookingSummary.length === 0) {
+                    return <span className="text-muted-foreground">-</span>
+                }
+
+                return (
+                    <div className="max-w-[260px] space-y-1">
+                        {bookingSummary.map((booking) => (
+                            <div key={booking.id} className="rounded-md border bg-muted/40 px-2 py-1">
+                                <div className="flex items-center justify-between gap-2 text-xs">
+                                    <span className="font-medium">{booking.label}</span>
+                                    <span className="font-mono text-sky-700">Qty {booking.quantity}</span>
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                    {booking.remark || "-"}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )
+            },
+        },
+        {
             id: "actions",
             cell: ({ row }) => (
                 <DropdownMenu>
@@ -280,6 +338,7 @@ export function StockTable({ data: initialData, products, warehouses, defaultRat
                     <DropdownMenuContent align="end">
                         <StockDialog
                             stock={row.original}
+                            customers={customers}
                             products={products}
                             warehouses={warehouses}
                             onSuccess={() => refetch()}
@@ -326,7 +385,7 @@ export function StockTable({ data: initialData, products, warehouses, defaultRat
                 </DropdownMenu>
             ),
         },
-    ], [manualRate, products, warehouses])
+    ], [calculatePrice, calculateValuation, customers, manualRate, products, refetch, warehouses])
 
     // Pre-filter by tab/category/slocDesc so TanStack Table always sees changed data
     const preFilteredData = useMemo(() => {
@@ -405,7 +464,14 @@ export function StockTable({ data: initialData, products, warehouses, defaultRat
                 item.product?.oldMaterialNo?.toLowerCase().includes(term) ||
                 item.warehouse?.sloc?.toLowerCase().includes(term) ||
                 item.warehouse?.description?.toLowerCase().includes(term) ||
-                item.warehouse?.type?.toLowerCase().includes(term)
+                item.warehouse?.type?.toLowerCase().includes(term) ||
+                item.stockBookings?.some((booking) =>
+                    ("customer" in booking && (
+                        booking.customer?.name?.toLowerCase().includes(term) ||
+                        booking.customer?.customerCode?.toLowerCase().includes(term)
+                    )) ||
+                    booking.remark?.toLowerCase().includes(term)
+                )
             )
         },
     })
@@ -421,7 +487,7 @@ export function StockTable({ data: initialData, products, warehouses, defaultRat
                 return sum + calculateValuation(row.original.totalStock, row.original.product?.costSap ?? null)
             }, 0)
         }
-    }, [filteredRows, manualRate])
+    }, [calculateValuation, filteredRows, manualRate])
 
     const parentRef = useRef<HTMLDivElement>(null)
     const rowVirtualizer = useVirtualizer({
@@ -488,10 +554,14 @@ export function StockTable({ data: initialData, products, warehouses, defaultRat
                 SLoc: item.warehouse?.sloc ?? "",
                 "Sloc Desc": item.warehouse?.description ?? "",
                 "Actual Stock": item.totalStock,
+                "Qty Booking": getTotalBookingQty(item),
                 "Min Stock": item.minStock ?? 0,
                 "Type Warehouse": item.warehouse?.type ?? "",
                 Price: Math.round(price),
                 Valuation: Math.round(valuation),
+                "Remark (Customer)": getBookingRemarkSummary(item)
+                    .map((booking) => `${booking.label} (${booking.quantity})${booking.remark ? ` - ${booking.remark}` : ""}`)
+                    .join("; "),
             }
         })
 
@@ -731,7 +801,7 @@ export function StockTable({ data: initialData, products, warehouses, defaultRat
                                 {showDuplicatesOnly ? 'Showing Duplicates' : 'Duplikat'}
                             </Button>
                             <StockCSVUpload onSuccess={() => refetch()} />
-                            <StockDialog products={products} warehouses={warehouses} onSuccess={() => refetch()} />
+                            <StockDialog customers={customers} products={products} warehouses={warehouses} onSuccess={() => refetch()} />
                         </div>
                     </div>
                 </div>

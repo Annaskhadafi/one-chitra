@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { useForm } from "react-hook-form"
+import { useFieldArray, useForm, type Resolver } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Button } from "@/components/ui/button"
 import {
@@ -31,17 +31,12 @@ import {
 import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
 import { upsertStock } from "@/app/actions/stock"
-import { Plus } from "lucide-react"
+import { Plus, Trash2 } from "lucide-react"
+import { z } from "zod"
 
 import { stockSchema } from "@/lib/schemas"
 
-type StockFormValues = {
-    productId: number
-    warehouseId: number
-    totalStock: number
-    minStock?: number
-    valuationValue?: number
-}
+type StockFormValues = z.infer<typeof stockSchema>
 
 interface StockDialogProps {
     stock?: {
@@ -51,6 +46,17 @@ interface StockDialogProps {
         totalStock: number
         minStock: number
         valuationValue: string
+        stockBookings?: {
+            id: number
+            customerId: number
+            quantity: number
+            remark: string | null
+            customer?: {
+                id: number
+                customerCode: string
+                name: string
+            } | null
+        }[]
     }
     products: {
         id: number;
@@ -60,25 +66,40 @@ interface StockDialogProps {
         category: string;
         oldMaterialNo: string | null;
     }[]
+    customers: {
+        id: number
+        customerCode: string
+        name: string
+    }[]
     warehouses: { id: number; sloc: string; description: string | null; type: string | null }[]
     trigger?: React.ReactNode
     onSuccess?: () => void
 }
 
-export function StockDialog({ stock, products, warehouses, trigger, onSuccess }: StockDialogProps) {
+export function StockDialog({ stock, products, customers, warehouses, trigger, onSuccess }: StockDialogProps) {
     const [isOpen, setIsOpen] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
     const isEdit = !!stock
 
     const form = useForm<StockFormValues>({
-        resolver: zodResolver(stockSchema),
+        resolver: zodResolver(stockSchema) as Resolver<StockFormValues>,
         defaultValues: {
             productId: stock?.productId || 0,
             warehouseId: stock?.warehouseId || 0,
             totalStock: stock?.totalStock || 0,
             minStock: stock?.minStock || 0,
             valuationValue: stock?.valuationValue ? Number(stock.valuationValue) : 0,
+            stockBookings: stock?.stockBookings?.map((booking) => ({
+                id: booking.id,
+                customerId: booking.customerId,
+                quantity: booking.quantity,
+                remark: booking.remark || "",
+            })) || [],
         },
+    })
+    const { fields: bookingFields, append: appendBooking, remove: removeBooking } = useFieldArray({
+        control: form.control,
+        name: "stockBookings",
     })
 
     const handleSubmit = async (data: StockFormValues) => {
@@ -111,7 +132,7 @@ export function StockDialog({ stock, products, warehouses, trigger, onSuccess }:
                     </Button>
                 )}
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px]">
+            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[780px]">
                 <DialogHeader>
                     <DialogTitle>{isEdit ? "Edit Stock Level" : "Add Stock Level"}</DialogTitle>
                     <DialogDescription>
@@ -256,6 +277,123 @@ export function StockDialog({ stock, products, warehouses, trigger, onSuccess }:
                                     </FormItem>
                                 )}
                             />
+                        </div>
+
+                        <div className="space-y-3 rounded-lg border p-4">
+                            <div className="flex items-start justify-between gap-4">
+                                <div>
+                                    <h3 className="text-sm font-semibold">Stock Booking</h3>
+                                    <p className="text-xs text-muted-foreground">
+                                        Tambahkan booking stok per customer beserta remark-nya.
+                                    </p>
+                                </div>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={isLoading}
+                                    onClick={() => appendBooking({
+                                        customerId: 0,
+                                        quantity: 0,
+                                        remark: "",
+                                    })}
+                                >
+                                    <Plus className="mr-2 h-4 w-4" />
+                                    Tambah Booking
+                                </Button>
+                            </div>
+
+                            {bookingFields.length === 0 ? (
+                                <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+                                    Belum ada booking customer untuk stock ini.
+                                </div>
+                            ) : (
+                                <div className="space-y-3">
+                                    {bookingFields.map((field, index) => (
+                                        <div key={field.id} className="grid gap-3 rounded-lg border bg-muted/30 p-3 md:grid-cols-[1.3fr_0.7fr_1.4fr_auto]">
+                                            <FormField
+                                                control={form.control}
+                                                name={`stockBookings.${index}.customerId`}
+                                                render={({ field: customerField }) => (
+                                                    <FormItem>
+                                                        <FormLabel>Customer</FormLabel>
+                                                        <Select
+                                                            onValueChange={(value) => customerField.onChange(Number(value))}
+                                                            value={customerField.value ? customerField.value.toString() : undefined}
+                                                            disabled={isLoading}
+                                                        >
+                                                            <FormControl>
+                                                                <SelectTrigger>
+                                                                    <SelectValue placeholder="Pilih customer" />
+                                                                </SelectTrigger>
+                                                            </FormControl>
+                                                            <SelectContent>
+                                                                {customers.map((customer) => (
+                                                                    <SelectItem key={customer.id} value={customer.id.toString()}>
+                                                                        {customer.customerCode} - {customer.name}
+                                                                    </SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}
+                                            />
+
+                                            <FormField
+                                                control={form.control}
+                                                name={`stockBookings.${index}.quantity`}
+                                                render={({ field: quantityField }) => (
+                                                    <FormItem>
+                                                        <FormLabel>Qty Booking</FormLabel>
+                                                        <FormControl>
+                                                            <Input
+                                                                {...quantityField}
+                                                                type="number"
+                                                                min={0}
+                                                                disabled={isLoading}
+                                                                onChange={(event) => quantityField.onChange(event.target.value === "" ? 0 : Number(event.target.value))}
+                                                            />
+                                                        </FormControl>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}
+                                            />
+
+                                            <FormField
+                                                control={form.control}
+                                                name={`stockBookings.${index}.remark`}
+                                                render={({ field: remarkField }) => (
+                                                    <FormItem>
+                                                        <FormLabel>Remark (Customer)</FormLabel>
+                                                        <FormControl>
+                                                            <Input
+                                                                {...remarkField}
+                                                                value={remarkField.value ?? ""}
+                                                                disabled={isLoading}
+                                                                placeholder="Contoh: booking urgent / ambil minggu ini"
+                                                            />
+                                                        </FormControl>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}
+                                            />
+
+                                            <div className="flex items-end">
+                                                <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    disabled={isLoading}
+                                                    onClick={() => removeBooking(index)}
+                                                >
+                                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
 
                         <FormField

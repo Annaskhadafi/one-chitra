@@ -38,6 +38,12 @@ export const stockSchema = z.object({
     totalStock: z.number().min(0),
     minStock: z.number().min(0).optional(),
     valuationValue: z.number().min(0).optional(),
+    stockBookings: z.array(z.object({
+        id: z.number().optional(),
+        customerId: z.number().min(1, "Customer is required"),
+        quantity: z.number().min(0),
+        remark: z.string().optional().nullable(),
+    })).default([]),
 })
 
 export const salesOrderItemSchema = z.object({

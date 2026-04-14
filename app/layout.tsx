@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import localFont from "next/font/local";
-import Script from "next/script";
 import { ThemeProvider } from "@/components/theme-context";
 import { Providers } from "@/components/providers";
 import "./globals.css";
@@ -79,30 +78,12 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const themeInitScript = `
-    (function() {
-      try {
-        var storedTheme = localStorage.getItem("theme") || "light";
-        var resolvedTheme = storedTheme === "system"
-          ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
-          : storedTheme;
-        var root = document.documentElement;
-        root.classList.remove("light", "dark");
-        root.classList.add(resolvedTheme);
-        root.style.colorScheme = resolvedTheme;
-      } catch (error) {}
-    })();
-  `;
-
   return (
     <html lang="en" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${parkinsans.variable} antialiased`}
         suppressHydrationWarning
       >
-        <Script id="theme-init" strategy="beforeInteractive">
-          {themeInitScript}
-        </Script>
         <ThemeProvider
           attribute="class"
           defaultTheme="light"

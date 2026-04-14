@@ -1,4 +1,5 @@
 import { getStocks } from "@/app/actions/stock"
+import { getCustomers } from "@/app/actions/customer"
 import { getProducts } from "@/app/actions/product"
 import { getWarehouses } from "@/app/actions/warehouse"
 import { getSetting } from "@/app/actions/settings"
@@ -7,8 +8,9 @@ import { StackedBarChart } from "@/components/reports/report-charts"
 
 export default async function StocksPage() {
     // Force re-compile to fix module factory error
-    const [stocks, products, warehouses, savedRate] = await Promise.all([
+    const [stocks, customers, products, warehouses, savedRate] = await Promise.all([
         getStocks(),
+        getCustomers(),
         getProducts(),
         getWarehouses(),
         getSetting("manual_usd_rate")
@@ -55,6 +57,7 @@ export default async function StocksPage() {
             <div className="flex-1">
                 <StockTable
                     data={stocks}
+                    customers={customers}
                     products={products}
                     warehouses={warehouses}
                     defaultRate={savedRate || "1"}

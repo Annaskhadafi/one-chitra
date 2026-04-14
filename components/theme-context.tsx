@@ -92,6 +92,26 @@ function applyThemeToDocument({
   }
 }
 
+function getInitialSystemTheme(): "light" | "dark" {
+  if (typeof window === "undefined") {
+    return "light";
+  }
+
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+function getInitialTheme(defaultTheme: Theme, storageKey: string): Theme {
+  if (typeof window === "undefined") {
+    return defaultTheme;
+  }
+
+  try {
+    return (window.localStorage.getItem(storageKey) as Theme | null) ?? defaultTheme;
+  } catch {
+    return defaultTheme;
+  }
+}
+
 export function ThemeProvider({
   attribute = "class",
   children,
@@ -104,8 +124,8 @@ export function ThemeProvider({
   themes = ["light", "dark"],
   value,
 }: ThemeProviderProps) {
-  const [theme, setThemeState] = React.useState<Theme>(defaultTheme);
-  const [systemTheme, setSystemTheme] = React.useState<"light" | "dark">("light");
+  const [theme, setThemeState] = React.useState<Theme>(() => getInitialTheme(defaultTheme, storageKey));
+  const [systemTheme, setSystemTheme] = React.useState<"light" | "dark">(getInitialSystemTheme);
 
   React.useEffect(() => {
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
@@ -120,21 +140,6 @@ export function ThemeProvider({
     return () => mediaQuery.removeEventListener("change", updateSystemTheme);
   }, []);
 
-  React.useEffect(() => {
-    try {
-      const storedTheme = window.localStorage.getItem(storageKey) as Theme | null;
-
-      if (storedTheme) {
-        setThemeState(storedTheme);
-        return;
-      }
-    } catch {
-      // Ignore storage failures and keep the default theme.
-    }
-
-    setThemeState(defaultTheme);
-  }, [defaultTheme, storageKey]);
-
   const resolvedTheme =
     forcedTheme && forcedTheme !== "system"
       ? forcedTheme
@@ -144,7 +149,7 @@ export function ThemeProvider({
           : "light"
         : theme;
 
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     const restoreTransitions = disableTransitionOnChange
       ? disableTransitionsTemporarily()
       : undefined;

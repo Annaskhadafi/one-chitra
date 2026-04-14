@@ -63,6 +63,7 @@ import { PoPreviewDialog } from "@/components/po-preview-dialog"
 import { ProcessKanbanBoard } from "@/components/kanban/process-kanban-board"
 import { ActionBlockedDialog, type ActionBlockedDetails } from "@/components/action-blocked-dialog"
 import { buildActionErrorDetails, buildPermissionBlockedDetails } from "@/lib/action-blocked"
+import { Providers } from "@/components/providers"
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query"
 import {
     useReactTable,
@@ -128,7 +129,7 @@ function calculateGrandTotal(order: SalesOrderListItem) {
     return subtotal - Number(order.discount) + Number(order.shipping)
 }
 
-export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
+function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
     const queryClient = useQueryClient()
     const searchParams = useSearchParams()
     const { data: session } = useSession()
@@ -1604,6 +1605,14 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
                 description={successMessage}
             />
         </div>
+    )
+}
+
+export function SalesOrderTable(props: SalesOrderTableProps) {
+    return (
+        <Providers>
+            <SalesOrderTableContent {...props} />
+        </Providers>
     )
 }
 

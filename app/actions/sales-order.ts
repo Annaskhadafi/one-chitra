@@ -11,6 +11,7 @@ import { deleteFile } from "./upload"
 import { sendSalesOrderCreatedNotification } from "@/lib/delivery-notifications"
 import { sendEmail } from "@/lib/email"
 import { recordActivity } from "@/lib/audit"
+import { restoreStockBookingsForDelivery } from "@/lib/stock-bookings"
 
 let hasSalesPersonColumnCache: boolean | null = null
 type SalesPersonRecord = typeof user.$inferSelect
@@ -792,30 +793,18 @@ export async function deleteSalesOrder(id: number) {
             for (const delivery of relatedDeliveries) {
                 // If delivery was not cancelled, it affects stock
                 if (delivery.status !== "cancelled" && delivery.warehouseId) {
+                    await restoreStockBookingsForDelivery(tx, delivery.id)
                     for (const dItem of delivery.items) {
-                        // Reverting delivery means:
-                        // - Add back to Total Stock (it was deducted when delivered)
-                        // - Add back to Booked Stock (it was deducted from booked when delivered)
-
-                        // NOTE: If status is 'delivered', it deducted both.
-                        // If status is 'scheduled/ready/in_transit', it only deducted Booked Stock? 
-                        // Actually, standard logic:
-                        // - SO Create -> Booked Stock +
-                        // - Delivery Delivered -> Total Stock -, Booked Stock -
-
-                        // So if we delete an SO that has a 'delivered' delivery:
-                        if (delivery.status === "delivered") {
-                            await tx.update(stockLevels)
-                                .set({
-                                    totalStock: sql`${stockLevels.totalStock} + ${dItem.deliveredQuantity}`,
-                                    bookedStock: sql`${stockLevels.bookedStock} + ${dItem.deliveredQuantity}`,
-                                    updatedAt: new Date(),
-                                })
-                                .where(and(
-                                    eq(stockLevels.warehouseId, delivery.warehouseId),
-                                    eq(stockLevels.productId, dItem.productId)
-                                ))
-                        }
+                        await tx.update(stockLevels)
+                            .set({
+                                totalStock: sql`${stockLevels.totalStock} + ${dItem.deliveredQuantity}`,
+                                bookedStock: sql`${stockLevels.bookedStock} + ${dItem.deliveredQuantity}`,
+                                updatedAt: new Date(),
+                            })
+                            .where(and(
+                                eq(stockLevels.warehouseId, delivery.warehouseId),
+                                eq(stockLevels.productId, dItem.productId)
+                            ))
                     }
                 }
 
@@ -906,7 +895,8 @@ export async function bulkDeleteSalesOrders(ids: number[]) {
                 })
 
                 for (const delivery of relatedDeliveries) {
-                    if (delivery.status === "delivered" && delivery.warehouseId) {
+                    if (delivery.status !== "cancelled" && delivery.warehouseId) {
+                        await restoreStockBookingsForDelivery(tx, delivery.id)
                         for (const dItem of delivery.items) {
                             await tx.update(stockLevels)
                                 .set({

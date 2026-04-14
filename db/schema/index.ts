@@ -27,6 +27,12 @@ export { products } from "./products";
 export { productBundleItems, productBundleItemsRelations, productsBundlesRelations } from "./product-bundles";
 export { stockLevels, stockLevelsRelations } from "./stock-levels";
 export {
+    stockCustomerBookings,
+    stockBookingConsumptions,
+    stockCustomerBookingsRelations,
+    stockBookingConsumptionsRelations,
+} from "./stock-bookings";
+export {
     stockTransfers,
     stockTransferItems,
     stockTransfersRelations,

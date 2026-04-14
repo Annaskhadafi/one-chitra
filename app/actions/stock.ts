@@ -1,12 +1,13 @@
 "use server"
 
 import { db } from "@/db"
-import { stockLevels, products } from "@/db/schema"
-import { eq, and, inArray, or } from "drizzle-orm"
+import { products, stockBookingConsumptions, stockCustomerBookings, stockLevels } from "@/db/schema"
+import { and, eq, gt, inArray, or } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { recordStockMovement } from "./stock-movement"
 import { getAuthenticatedSession } from "@/lib/rbac"
+import { isStockBookingSchemaAvailable } from "@/lib/stock-bookings"
 
 import { stockSchema } from "@/lib/schemas"
 
@@ -17,6 +18,182 @@ function normalizeStockLogicalKeyPart(value: string | number | null | undefined)
         .trim()
         .toUpperCase()
         .replace(/\s+/g, " ")
+}
+
+function normalizeStockBookingEntries(
+    entries: z.infer<typeof stockSchema>["stockBookings"] | undefined,
+) {
+    const groupedBookings = new Map<number, { customerId: number; quantity: number; remark: string | null }>()
+
+    for (const entry of entries ?? []) {
+        const customerId = Number(entry.customerId)
+        if (!customerId || Number.isNaN(customerId)) {
+            continue
+        }
+
+        const quantity = Math.max(Number(entry.quantity) || 0, 0)
+        const remark = entry.remark?.trim() || null
+        const existing = groupedBookings.get(customerId)
+
+        if (existing) {
+            existing.quantity += quantity
+            existing.remark = remark || existing.remark
+            continue
+        }
+
+        groupedBookings.set(customerId, {
+            customerId,
+            quantity,
+            remark,
+        })
+    }
+
+    return Array.from(groupedBookings.values())
+}
+
+async function mergeStockBookingsForDuplicateGroup(
+    tx: StockTransaction,
+    stockIds: number[],
+    keeperStockId: number,
+) {
+    if (!(await isStockBookingSchemaAvailable())) {
+        return
+    }
+
+    const bookings = await tx.query.stockCustomerBookings.findMany({
+        where: inArray(stockCustomerBookings.stockLevelId, stockIds),
+    })
+
+    if (bookings.length === 0) {
+        return
+    }
+
+    const groupedByCustomer = new Map<number, typeof bookings>()
+    for (const booking of bookings) {
+        const existing = groupedByCustomer.get(booking.customerId)
+        if (existing) {
+            existing.push(booking)
+        } else {
+            groupedByCustomer.set(booking.customerId, [booking])
+        }
+    }
+
+    for (const customerBookings of groupedByCustomer.values()) {
+        const keeperBooking = [...customerBookings].sort((left, right) => {
+            if (left.stockLevelId === keeperStockId && right.stockLevelId !== keeperStockId) return -1
+            if (left.stockLevelId !== keeperStockId && right.stockLevelId === keeperStockId) return 1
+            return left.id - right.id
+        })[0]
+
+        const mergedQuantity = customerBookings.reduce((sum, booking) => sum + Number(booking.quantity || 0), 0)
+        const mergedRemark = Array.from(new Set(
+            customerBookings
+                .map((booking) => booking.remark?.trim())
+                .filter((remark): remark is string => Boolean(remark))
+        )).join(" | ") || null
+
+        await tx.update(stockCustomerBookings)
+            .set({
+                stockLevelId: keeperStockId,
+                quantity: mergedQuantity,
+                remark: mergedRemark,
+                updatedAt: new Date(),
+            })
+            .where(eq(stockCustomerBookings.id, keeperBooking.id))
+
+        for (const duplicateBooking of customerBookings.filter((booking) => booking.id !== keeperBooking.id)) {
+            const consumptions = await tx.query.stockBookingConsumptions.findMany({
+                where: eq(stockBookingConsumptions.stockBookingId, duplicateBooking.id),
+            })
+
+            for (const consumption of consumptions) {
+                const existingKeeperConsumption = await tx.query.stockBookingConsumptions.findFirst({
+                    where: and(
+                        eq(stockBookingConsumptions.stockBookingId, keeperBooking.id),
+                        eq(stockBookingConsumptions.deliveryId, consumption.deliveryId),
+                    ),
+                })
+
+                if (existingKeeperConsumption) {
+                    await tx.update(stockBookingConsumptions)
+                        .set({
+                            quantity: existingKeeperConsumption.quantity + consumption.quantity,
+                            updatedAt: new Date(),
+                        })
+                        .where(eq(stockBookingConsumptions.id, existingKeeperConsumption.id))
+
+                    await tx.delete(stockBookingConsumptions)
+                        .where(eq(stockBookingConsumptions.id, consumption.id))
+                } else {
+                    await tx.update(stockBookingConsumptions)
+                        .set({
+                            stockBookingId: keeperBooking.id,
+                            updatedAt: new Date(),
+                        })
+                        .where(eq(stockBookingConsumptions.id, consumption.id))
+                }
+            }
+
+            await tx.delete(stockCustomerBookings)
+                .where(eq(stockCustomerBookings.id, duplicateBooking.id))
+        }
+    }
+}
+
+async function syncStockBookings(
+    tx: StockTransaction,
+    stockLevelId: number,
+    stockBookings: z.infer<typeof stockSchema>["stockBookings"] | undefined,
+) {
+    if (!(await isStockBookingSchemaAvailable())) {
+        return
+    }
+
+    const normalizedBookings = normalizeStockBookingEntries(stockBookings)
+    const existingBookings = await tx.query.stockCustomerBookings.findMany({
+        where: eq(stockCustomerBookings.stockLevelId, stockLevelId),
+    })
+
+    for (const booking of normalizedBookings) {
+        const existingBooking = existingBookings.find((item) => item.customerId === booking.customerId)
+
+        if (existingBooking) {
+            await tx.update(stockCustomerBookings)
+                .set({
+                    quantity: booking.quantity,
+                    remark: booking.remark,
+                    updatedAt: new Date(),
+                })
+                .where(eq(stockCustomerBookings.id, existingBooking.id))
+            continue
+        }
+
+        if (booking.quantity <= 0) {
+            continue
+        }
+
+        await tx.insert(stockCustomerBookings)
+            .values({
+                stockLevelId,
+                customerId: booking.customerId,
+                quantity: booking.quantity,
+                remark: booking.remark,
+            })
+    }
+
+    for (const existingBooking of existingBookings) {
+        if (normalizedBookings.some((booking) => booking.customerId === existingBooking.customerId)) {
+            continue
+        }
+
+        await tx.update(stockCustomerBookings)
+            .set({
+                quantity: 0,
+                remark: null,
+                updatedAt: new Date(),
+            })
+            .where(eq(stockCustomerBookings.id, existingBooking.id))
+    }
 }
 
 async function consolidateDuplicateStocks(tx: StockTransaction) {
@@ -83,6 +260,7 @@ async function consolidateDuplicateStocks(tx: StockTransaction) {
             })
             .where(eq(stockLevels.id, keeper.id))
 
+        await mergeStockBookingsForDuplicateGroup(tx, sortedGroup.map((item) => item.id), keeper.id)
         await tx.delete(stockLevels).where(inArray(stockLevels.id, duplicates.map((item) => item.id)))
     }
 }
@@ -90,8 +268,9 @@ async function consolidateDuplicateStocks(tx: StockTransaction) {
 export async function getStocks() {
     return await db.transaction(async (tx) => {
         await consolidateDuplicateStocks(tx)
+        const hasStockBookingSchema = await isStockBookingSchemaAvailable()
 
-        return await tx.query.stockLevels.findMany({
+        const rows = await tx.query.stockLevels.findMany({
             columns: {
                 id: true,
                 productId: true,
@@ -101,30 +280,41 @@ export async function getStocks() {
                 valuationValue: true,
             },
             with: {
-                product: {
-                    columns: {
-                        materialNumber: true,
-                        materialDescription: true,
-                        plant: true,
-                        category: true,
-                        oldMaterialNo: true,
-                        costSap: true,
+                product: true,
+                warehouse: true,
+                ...(hasStockBookingSchema
+                    ? {
+                        stockBookings: {
+                            where: gt(stockCustomerBookings.quantity, 0),
+                            with: {
+                                customer: {
+                                    columns: {
+                                        id: true,
+                                        customerCode: true,
+                                        name: true,
+                                    },
+                                },
+                            },
+                        },
                     }
-                },
-                warehouse: {
-                    columns: {
-                        sloc: true,
-                        description: true,
-                        type: true,
-                    }
-                },
+                    : {}),
             },
         })
+
+        if (hasStockBookingSchema) {
+            return rows
+        }
+
+        return rows.map((row) => ({
+            ...row,
+            stockBookings: [],
+        }))
     })
 }
 
-export async function upsertStock(data: z.infer<typeof stockSchema>, id?: number) {
+export async function upsertStock(data: z.input<typeof stockSchema>, id?: number) {
     try {
+        const parsedData = stockSchema.parse(data)
         const session = await getAuthenticatedSession('stocks', id ? 'edit' : 'create')
         const userId = session.user.id
 
@@ -133,12 +323,13 @@ export async function upsertStock(data: z.infer<typeof stockSchema>, id?: number
 
             let oldStock = 0
             let targetStockId: number | undefined = id
+            const { stockBookings, ...stockValues } = parsedData
 
             if (!targetStockId) {
                 const existing = await tx.query.stockLevels.findFirst({
                     where: and(
-                        eq(stockLevels.productId, data.productId),
-                        eq(stockLevels.warehouseId, data.warehouseId)
+                        eq(stockLevels.productId, parsedData.productId),
+                        eq(stockLevels.warehouseId, parsedData.warehouseId)
                     )
                 })
                 if (existing) {
@@ -157,24 +348,30 @@ export async function upsertStock(data: z.infer<typeof stockSchema>, id?: number
             if (targetStockId) {
                 await tx.update(stockLevels)
                     .set({
-                        ...data,
-                        valuationValue: data.valuationValue?.toString(),
+                        ...stockValues,
+                        valuationValue: parsedData.valuationValue?.toString(),
                         updatedAt: new Date(),
                     })
                     .where(eq(stockLevels.id, targetStockId))
             } else {
-                await tx.insert(stockLevels).values({
-                    ...data,
-                    valuationValue: data.valuationValue?.toString(),
-                })
+                const [createdStock] = await tx.insert(stockLevels).values({
+                    ...stockValues,
+                    valuationValue: parsedData.valuationValue?.toString(),
+                }).returning({ id: stockLevels.id })
+
+                targetStockId = createdStock.id
+            }
+
+            if (targetStockId) {
+                await syncStockBookings(tx, targetStockId, stockBookings)
             }
 
             // Record Movement (Adjustment)
-            const delta = data.totalStock - oldStock
+            const delta = parsedData.totalStock - oldStock
             if (delta !== 0) {
                 await recordStockMovement(tx, {
-                    productId: data.productId,
-                    warehouseId: data.warehouseId,
+                    productId: parsedData.productId,
+                    warehouseId: parsedData.warehouseId,
                     quantity: delta,
                     type: "ADJUSTMENT",
                     referenceNumber: "Manual Adjustment",

@@ -14,6 +14,7 @@ import { sendDeliveryCreatedNotification, sendDeliveryDeliveredNotification } fr
 import { formatWarehouseLabel, normalizeSlocFields } from "@/lib/sloc"
 import { recordActivity } from "@/lib/audit"
 import { normalizeCodeValue, normalizeSapDocumentFields } from "@/lib/formatters"
+import { consumeStockBookingsForDelivery, getStockBookingAvailability, restoreStockBookingsForDelivery } from "@/lib/stock-bookings"
 
 const isConsignmentCategory = (categoryPo: string | null | undefined) => {
     const normalized = (categoryPo ?? "").trim().toLowerCase()
@@ -160,6 +161,8 @@ type DeliveryStockCheckResult = {
     remainingAfterDelivery: number
     shortage: number
     sufficient: boolean
+    customerBooked: number
+    bookedByOtherCustomers: number
     alternativeIds?: { id: number; stock: number; description: string }[]
     otherWarehouses?: { warehouseId: number; warehouseName: string; stock: number }[]
 }
@@ -193,12 +196,20 @@ async function buildDeliveryStockCheckResult(
     queryable: StockQueryable,
     warehouseId: number,
     item: DeliveryStockCheckInput,
+    customerId?: number | null,
 ): Promise<DeliveryStockCheckResult> {
     const requested = Math.max(item.quantity, 0)
-    const directAvailable = await getOriginWarehouseStock(queryable, warehouseId, item.productId)
-    const remainingAfterDelivery = Math.max(directAvailable - requested, 0)
-    const shortage = Math.max(requested - directAvailable, 0)
-    const sufficient = directAvailable >= requested
+    const physicalStock = await getOriginWarehouseStock(queryable, warehouseId, item.productId)
+    const bookingAvailability = await getStockBookingAvailability(queryable, {
+        warehouseId,
+        productId: item.productId,
+        totalStock: physicalStock,
+        customerId,
+    })
+    const availableForDelivery = bookingAvailability.availableQty
+    const remainingAfterDelivery = Math.max(availableForDelivery - requested, 0)
+    const shortage = Math.max(requested - availableForDelivery, 0)
+    const sufficient = availableForDelivery >= requested
 
     const alternatives: { id: number; stock: number; description: string }[] = []
 
@@ -253,10 +264,12 @@ async function buildDeliveryStockCheckResult(
     return {
         productId: item.productId,
         requested,
-        available: directAvailable,
+        available: availableForDelivery,
         remainingAfterDelivery,
         shortage,
         sufficient,
+        customerBooked: bookingAvailability.customerReservedQty,
+        bookedByOtherCustomers: bookingAvailability.otherReservedQty,
         alternativeIds: alternatives.length > 0 ? alternatives : undefined,
         otherWarehouses: otherWarehouses.length > 0 ? otherWarehouses : undefined,
     }
@@ -266,6 +279,7 @@ async function assertOriginWarehouseStock(
     queryable: StockQueryable,
     warehouseId: number,
     items: Array<{ productId: number; deliveredQuantity: number }>,
+    customerId?: number | null,
 ) {
     const insufficientItems: string[] = []
 
@@ -273,7 +287,7 @@ async function assertOriginWarehouseStock(
         const stock = await buildDeliveryStockCheckResult(queryable, warehouseId, {
             productId: item.productId,
             quantity: item.deliveredQuantity,
-        })
+        }, customerId)
 
         if (!stock.sufficient) {
             const product = await queryable.query.products.findFirst({
@@ -285,7 +299,7 @@ async function assertOriginWarehouseStock(
             })
 
             insufficientItems.push(
-                `${getProductStockLabel(product, item.productId)}: stok aktual ${stock.available}, qty kirim ${stock.requested}, kurang ${stock.shortage}`,
+                `${getProductStockLabel(product, item.productId)}: stok tersedia ${stock.available}, qty kirim ${stock.requested}, kurang ${stock.shortage}${stock.bookedByOtherCustomers > 0 ? `, tertahan booking customer lain ${stock.bookedByOtherCustomers}` : ""}`,
             )
         }
     }
@@ -559,7 +573,14 @@ export async function getReadyOutstandingSalesOrders(): Promise<ReadyOutstanding
             if (item.remainingQuantity > 0 && item.productId) {
                 // Mengecek stok akurat di Origin Warehouse
                 if (order.warehouseId) {
-                    const directAvailable = await getOriginWarehouseStock(db, order.warehouseId, item.productId)
+                    const physicalStock = await getOriginWarehouseStock(db, order.warehouseId, item.productId)
+                    const bookingAvailability = await getStockBookingAvailability(db, {
+                        warehouseId: order.warehouseId,
+                        productId: item.productId,
+                        totalStock: physicalStock,
+                        customerId: order.customerId,
+                    })
+                    const directAvailable = bookingAvailability.availableQty
                     if (directAvailable > 0) {
                         readyItems.push({
                             ...item,
@@ -582,13 +603,13 @@ export async function getReadyOutstandingSalesOrders(): Promise<ReadyOutstanding
     return readyOrdersList
 }
 
-export async function checkStockAvailability(warehouseId: number, items: DeliveryStockCheckInput[]) {
+export async function checkStockAvailability(warehouseId: number, items: DeliveryStockCheckInput[], customerId?: number | null) {
     const results: DeliveryStockCheckResult[] = []
 
     console.log(`[STOCKS] Checking warehouse ${warehouseId}, items:`, items)
 
     for (const item of items) {
-        const result = await buildDeliveryStockCheckResult(db, warehouseId, item)
+        const result = await buildDeliveryStockCheckResult(db, warehouseId, item, customerId)
 
         console.log(
             `[STOCKS] Product ${item.productId}: available=${result.available}, requested=${result.requested}, remaining=${result.remainingAfterDelivery}, alternatives=${result.alternativeIds?.length ?? 0}, otherWHs=${result.otherWarehouses?.length ?? 0}`,
@@ -704,12 +725,16 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
             if (mergedItems.length > 0) {
                 const hasDestination = data.warehouseToId && data.warehouseToId !== 0
                 const isCancelled = data.status === "cancelled"
+                const order = await tx.query.salesOrders.findFirst({
+                    where: eq(salesOrders.id, data.salesOrderId),
+                    columns: { categoryPo: true, customerId: true }
+                })
 
                 if (!isCancelled && data.warehouseId) {
                     await assertOriginWarehouseStock(tx, data.warehouseId, mergedItems.map((item) => ({
                         productId: item.productId,
                         deliveredQuantity: item.deliveredQuantity,
-                    })))
+                    })), order?.customerId)
                 }
 
                 console.log("[CREATE DELIVERY] Inserting items...")
@@ -727,10 +752,6 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
 
                 // Handle Stock Transfer automation for VHS/Consignment or any delivery with destination warehouse
                 console.log("[CREATE DELIVERY] Checking for stock transfer...")
-                const order = await tx.query.salesOrders.findFirst({
-                    where: eq(salesOrders.id, data.salesOrderId),
-                    columns: { categoryPo: true, customerId: true }
-                })
 
                 if (hasDestination && !isCancelled) {
                     console.log("[CREATE DELIVERY] Creating stock transfer...")
@@ -793,6 +814,16 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
                             notes: hasDestination ? `Transfer OUT ke warehouse tujuan` : `Delivery ke customer`,
                         })
                     }
+
+                    await consumeStockBookingsForDelivery(tx, {
+                        deliveryId: newDelivery.id,
+                        warehouseId: data.warehouseId,
+                        customerId: order?.customerId,
+                        items: mergedItems.map((item) => ({
+                            productId: item.productId,
+                            quantity: item.deliveredQuantity,
+                        })),
+                    })
                     console.log("[CREATE DELIVERY] Stock deducted")
                 }
             }
@@ -859,6 +890,10 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
                 where: eq(salesOrders.id, originalDelivery.salesOrderId),
                 columns: { categoryPo: true, customerId: true }
             })
+            const nextOrder = await tx.query.salesOrders.findFirst({
+                where: eq(salesOrders.id, data.salesOrderId),
+                columns: { categoryPo: true, customerId: true }
+            })
             const originalWasVHS = isConsignmentCategory(originalOrder?.categoryPo) && originalDelivery.warehouseToId
             const originalWasCommitted = originalDelivery.status !== "cancelled"
             const newIsCommitted = data.status !== "cancelled"
@@ -886,6 +921,7 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
                 !sameItemComposition
 
             if (shouldReconcileStock && originalWasCommitted && originalDelivery.warehouseId) {
+                await restoreStockBookingsForDelivery(tx, id)
                 const originalMovementType = originalWasVHS ? "TRANSFER_OUT" : "DELIVERY"
                 for (const item of originalDelivery.items) {
                     await tx.update(stockLevels)
@@ -916,7 +952,7 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
                 await assertOriginWarehouseStock(tx, data.warehouseId, mergedNewItems.map((item) => ({
                     productId: item.productId,
                     deliveredQuantity: item.deliveredQuantity,
-                })))
+                })), nextOrder?.customerId)
             }
 
             await tx.update(deliveries)
@@ -1043,11 +1079,7 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
 
                 // Apply new stock deduction if now committed (not cancelled)
                 // For VHS/Consignment, stock will be managed by the transfer
-                const order = await tx.query.salesOrders.findFirst({
-                    where: eq(salesOrders.id, data.salesOrderId),
-                    columns: { categoryPo: true, customerId: true }
-                })
-                const isVHSConsignment = isConsignmentCategory(order?.categoryPo) && data.warehouseToId
+                const isVHSConsignment = isConsignmentCategory(nextOrder?.categoryPo) && data.warehouseToId
 
                 if (shouldReconcileStock && newIsCommitted) {
                     const movementType = isVHSConsignment ? "TRANSFER_OUT" : "DELIVERY"
@@ -1071,10 +1103,22 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
                             type: movementType,
                             referenceNumber: data.deliveryNumber ?? originalDelivery.deliveryNumber ?? undefined,
                             recordedBy: userId,
-                            customerId: order?.customerId ?? undefined,
+                            customerId: nextOrder?.customerId ?? undefined,
                             fromWarehouseId: hasDestination ? (data.warehouseId ?? undefined) : undefined,
                             toWarehouseId: hasDestination ? (data.warehouseToId ?? undefined) : undefined,
                             notes: hasDestination ? `Transfer OUT ke warehouse tujuan` : `Delivery ke customer`,
+                        })
+                    }
+
+                    if (data.warehouseId) {
+                        await consumeStockBookingsForDelivery(tx, {
+                            deliveryId: id,
+                            warehouseId: data.warehouseId,
+                            customerId: nextOrder?.customerId,
+                            items: mergedNewItems.map((item) => ({
+                                productId: item.productId,
+                                quantity: item.deliveredQuantity,
+                            })),
                         })
                     }
                 }
@@ -1136,12 +1180,13 @@ export async function deleteDelivery(id: number) {
             // Check if it was VHS/Consignment
             const order = await tx.query.salesOrders.findFirst({
                 where: eq(salesOrders.id, delivery.salesOrderId),
-                columns: { categoryPo: true }
+                columns: { categoryPo: true, customerId: true }
             })
             const wasVHS = order?.categoryPo === "VHS/Consignment" && delivery.warehouseToId
             const wasCommitted = delivery.status !== "cancelled"
 
             if (wasCommitted && delivery.warehouseId) {
+                await restoreStockBookingsForDelivery(tx, id)
                 const movementType = wasVHS ? "TRANSFER_OUT" : "DELIVERY"
                 for (const item of delivery.items) {
                     await tx.update(stockLevels)
@@ -1163,6 +1208,7 @@ export async function deleteDelivery(id: number) {
                         type: movementType,
                         referenceNumber: delivery.deliveryNumber ?? undefined,
                         recordedBy: userId,
+                        customerId: order?.customerId ?? undefined,
                     })
                 }
             }
@@ -1224,12 +1270,13 @@ export async function bulkDeleteDeliveries(ids: number[]) {
                 // 1. Revert stock if it was committed
                 const order = await tx.query.salesOrders.findFirst({
                     where: eq(salesOrders.id, delivery.salesOrderId),
-                    columns: { categoryPo: true }
+                    columns: { categoryPo: true, customerId: true }
                 })
                 const wasVHS = order?.categoryPo === "VHS/Consignment" && delivery.warehouseToId
                 const wasCommitted = delivery.status !== "cancelled"
 
                 if (wasCommitted && delivery.warehouseId) {
+                    await restoreStockBookingsForDelivery(tx, id)
                     const movementType = wasVHS ? "TRANSFER_OUT" : "DELIVERY"
                     for (const item of delivery.items) {
                         await tx.update(stockLevels)
@@ -1250,6 +1297,7 @@ export async function bulkDeleteDeliveries(ids: number[]) {
                             type: movementType,
                             referenceNumber: delivery.deliveryNumber ?? undefined,
                             recordedBy: userId,
+                            customerId: order?.customerId ?? undefined,
                         })
                     }
                 }
@@ -1310,7 +1358,7 @@ export async function bulkUpdateDeliveryStatus(ids: number[], status: string) {
 
                 const order = await tx.query.salesOrders.findFirst({
                     where: eq(salesOrders.id, delivery.salesOrderId),
-                    columns: { categoryPo: true }
+                    columns: { categoryPo: true, customerId: true }
                 })
                 const isVHS = order?.categoryPo === "VHS/Consignment" && delivery.warehouseToId
 
@@ -1318,6 +1366,7 @@ export async function bulkUpdateDeliveryStatus(ids: number[], status: string) {
                 // 1. From non-cancelled to cancelled: REVERT stock
                 if (delivery.status !== "cancelled" && status === "cancelled") {
                     if (delivery.warehouseId) {
+                        await restoreStockBookingsForDelivery(tx, id)
                         const movementType = isVHS ? "TRANSFER_OUT" : "DELIVERY"
                         for (const item of delivery.items) {
                             await tx.update(stockLevels)
@@ -1338,6 +1387,7 @@ export async function bulkUpdateDeliveryStatus(ids: number[], status: string) {
                                 type: movementType,
                                 referenceNumber: delivery.deliveryNumber ?? undefined,
                                 recordedBy: userId,
+                                customerId: order?.customerId ?? undefined,
                             })
                         }
                     }
@@ -1352,7 +1402,7 @@ export async function bulkUpdateDeliveryStatus(ids: number[], status: string) {
                         await assertOriginWarehouseStock(tx, delivery.warehouseId, delivery.items.map((item) => ({
                             productId: item.productId,
                             deliveredQuantity: item.deliveredQuantity,
-                        })))
+                        })), order?.customerId)
 
                         const movementType = isVHS ? "TRANSFER_OUT" : "DELIVERY"
                         for (const item of delivery.items) {
@@ -1374,8 +1424,19 @@ export async function bulkUpdateDeliveryStatus(ids: number[], status: string) {
                                 type: movementType,
                                 referenceNumber: delivery.deliveryNumber ?? undefined,
                                 recordedBy: userId,
+                                customerId: order?.customerId ?? undefined,
                             })
                         }
+
+                        await consumeStockBookingsForDelivery(tx, {
+                            deliveryId: id,
+                            warehouseId: delivery.warehouseId,
+                            customerId: order?.customerId,
+                            items: delivery.items.map((item) => ({
+                                productId: item.productId,
+                                quantity: item.deliveredQuantity,
+                            })),
+                        })
                     }
 
                     // Re-create automated transfer if it's VHS and moving back from cancelled

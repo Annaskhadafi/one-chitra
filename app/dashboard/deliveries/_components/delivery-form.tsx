@@ -125,6 +125,8 @@ interface StockResult {
     remainingAfterDelivery: number
     shortage: number
     sufficient: boolean
+    customerBooked: number
+    bookedByOtherCustomers: number
     alternativeIds?: { id: number; stock: number; description: string }[]
     otherWarehouses?: { warehouseId: number; warehouseName: string; stock: number }[]
 }
@@ -811,7 +813,8 @@ export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSale
         try {
             const results = await checkStockAvailability(
                 warehouseId,
-                items.map(item => ({ productId: item.productId, quantity: item.deliveredQuantity }))
+                items.map(item => ({ productId: item.productId, quantity: item.deliveredQuantity })),
+                selectedSO?.customerId
             )
             console.log("✅ Stock check results:", results)
             setStockResults(results)
@@ -822,7 +825,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSale
         } finally {
             setCheckingStock(false)
         }
-    }, [warehouseId, items])
+    }, [warehouseId, items, selectedSO?.customerId])
 
     // Get stock status for a product
     const getStockStatus = useCallback((productId: number) => {
@@ -1487,6 +1490,18 @@ export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSale
                                                                                 ) : (
                                                                                     <span className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-[10px] font-semibold text-rose-700 shadow-sm">
                                                                                         Kekurangan: <strong className="text-rose-900">{stock.shortage}</strong>
+                                                                                    </span>
+                                                                                )}
+
+                                                                                {stock.customerBooked > 0 && (
+                                                                                    <span className="rounded-md border border-sky-200 bg-sky-50 px-2 py-1 text-[10px] font-semibold text-sky-700 shadow-sm">
+                                                                                        Booking customer ini: <strong className="text-sky-900">{stock.customerBooked}</strong>
+                                                                                    </span>
+                                                                                )}
+
+                                                                                {stock.bookedByOtherCustomers > 0 && (
+                                                                                    <span className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-700 shadow-sm">
+                                                                                        Ditahan customer lain: <strong className="text-amber-900">{stock.bookedByOtherCustomers}</strong>
                                                                                     </span>
                                                                                 )}
 
