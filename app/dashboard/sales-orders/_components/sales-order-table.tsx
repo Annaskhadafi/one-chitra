@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useMemo, useEffect, useCallback } from "react"
+import * as XLSX from "xlsx"
 import { cn } from "@/lib/utils"
 import { useMounted } from "@/hooks/use-mounted"
 import { SuccessAlertDialog } from "@/components/success-alert-dialog"
@@ -129,9 +130,24 @@ function calculateGrandTotal(order: SalesOrderListItem) {
     return subtotal - Number(order.discount) + Number(order.shipping)
 }
 
-function escapeCsvCell(value: string | number | null | undefined) {
-    const normalized = value == null ? "" : String(value)
-    return `"${normalized.replace(/"/g, '""')}"`
+function formatRemarkDetailForExport(order: SalesOrderListItem) {
+    const remarks = order.remarks
+    if (!remarks) return ""
+
+    const lines = [
+        `Outstanding Qty: ${remarks.outstandingQty.toLocaleString("id-ID")} | Items: ${remarks.outstandingItemsCount.toLocaleString("id-ID")}`,
+        `Aging dari PO Receive: ${remarks.outstandingDays != null ? `${remarks.outstandingDays} hari` : "-"}`,
+    ]
+
+    if (remarks.items.length > 0) {
+        lines.push(
+            ...remarks.items.map((item) =>
+                `${item.productName}: stock ${item.availableStock.toLocaleString("id-ID")} / outstanding ${item.remainingQuantity.toLocaleString("id-ID")}`
+            )
+        )
+    }
+
+    return lines.join("\n")
 }
 
 function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
@@ -954,40 +970,47 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
     }
 
     const handleExport = () => {
-        const headers = ["Created Date", "Invoice Number", "Customer PO", "Customer", "PIC Sales", "Date PO", "Cat. PO", "Category", "Remark", "Items", "Grand Total", "Status", "Created By"]
-        const csvData = table.getFilteredRowModel().rows.map(row => {
+        const exportRows = table.getFilteredRowModel().rows.map(row => {
             const order = row.original
-            return [
-                new Date(order.createdAt).toLocaleDateString("id-ID"),
-                order.invoiceNumber || "",
-                order.customerPo || "",
-                order.customer?.name || "",
-                order.salesPerson?.name || "",
-                new Date(order.salesDate).toLocaleDateString("id-ID"),
-                order.categoryPo || "Normal",
-                order.categoryProduct || "",
-                order.remarks?.label || "",
-                order.items.length,
-                calculateGrandTotal(order),
-                order.status,
-                order.createdByUser?.name || ""
-            ]
+            return {
+                "Created Date": new Date(order.createdAt).toLocaleDateString("id-ID"),
+                "Invoice Number": order.invoiceNumber || "",
+                "Customer PO": order.customerPo || "",
+                Customer: order.customer?.name || "",
+                "PIC Sales": order.salesPerson?.name || "",
+                "Date PO": new Date(order.salesDate).toLocaleDateString("id-ID"),
+                "Cat. PO": order.categoryPo || "Normal",
+                Category: order.categoryProduct || "",
+                "Remark Status": order.remarks?.label || "",
+                "Remark Detail": formatRemarkDetailForExport(order),
+                Items: order.items.length,
+                "Grand Total": calculateGrandTotal(order),
+                Status: order.status,
+                "Created By": order.createdByUser?.name || "",
+            }
         })
 
-        const csvContent = [
-            headers.map((header) => escapeCsvCell(header)).join(","),
-            ...csvData.map((row) => row.map((value) => escapeCsvCell(value)).join(","))
-        ].join("\n")
+        const worksheet = XLSX.utils.json_to_sheet(exportRows)
+        worksheet["!cols"] = [
+            { wch: 14 },
+            { wch: 18 },
+            { wch: 18 },
+            { wch: 28 },
+            { wch: 20 },
+            { wch: 14 },
+            { wch: 12 },
+            { wch: 18 },
+            { wch: 18 },
+            { wch: 80 },
+            { wch: 10 },
+            { wch: 18 },
+            { wch: 14 },
+            { wch: 20 },
+        ]
 
-        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
-        const link = document.createElement("a")
-        const url = URL.createObjectURL(blob)
-        link.setAttribute("href", url)
-        link.setAttribute("download", `sales-orders-${new Date().toISOString().slice(0, 10)}.csv`)
-        link.style.visibility = "hidden"
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
+        const workbook = XLSX.utils.book_new()
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Sales Orders")
+        XLSX.writeFile(workbook, `sales-orders-${new Date().toISOString().slice(0, 10)}.xlsx`)
     }
 
     const handleKanbanStatusChange = useCallback(async (id: number, status: string) => {
