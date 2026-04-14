@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef } from "react"
-import { useSidebar } from "@/components/ui/sidebar"
+import { useOptionalSidebar } from "@/components/ui/sidebar"
 import { useIsMobile } from "@/hooks/use-mobile"
 
 /**
@@ -12,11 +12,17 @@ import { useIsMobile } from "@/hooks/use-mobile"
  * It only collapses the sidebar on desktop views.
  */
 export function AutoCloseSidebar() {
-  const { setOpen, state } = useSidebar()
+  const sidebar = useOptionalSidebar()
   const isMobile = useIsMobile()
   const hasRun = useRef(false)
 
   useEffect(() => {
+    if (!sidebar) {
+      return
+    }
+
+    const { setOpen, state } = sidebar
+
     // Only auto-close on desktop and if it's currently open
     // We only want to do this ONCE when the component mounts
     if (!isMobile && state === "expanded" && !hasRun.current) {
@@ -26,7 +32,7 @@ export function AutoCloseSidebar() {
           setOpen(false)
       }, 50)
     }
-  }, [isMobile, state, setOpen])
+  }, [isMobile, sidebar])
 
   return null
 }
