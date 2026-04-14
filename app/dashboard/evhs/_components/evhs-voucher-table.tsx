@@ -63,6 +63,7 @@ type VoucherRow = {
     status: string
     items: Array<{
         id: number
+        productId: number
         qty: number | string
         serialNumber?: string | null
         materialNumberCk?: string | null

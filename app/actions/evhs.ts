@@ -77,6 +77,7 @@ type EvhsMatchedVoucher = {
     warehouseId: number | null
     woNo: string | null
     vhsNo: string
+    status: string
     date: Date | string | null
     createdAt: Date
     updatedAt: Date
@@ -1679,7 +1680,12 @@ export async function getEvhsTrackingData() {
                 ? inArray(evhsVouchers.warehouseId, allowedWarehouseIds)
                 : undefined,
             with: {
-                items: true
+                items: {
+                    with: {
+                        product: true,
+                    }
+                },
+                warehouse: true,
             }
         })
 
@@ -1693,6 +1699,7 @@ export async function getEvhsTrackingData() {
         const filteredReceipts = filterEvhsReceiptRowsByWarehouse(receipts, allowedWarehouseIds)
 
         const trackingRows: EvhsTrackingRow[] = []
+        const trackedVoucherItemIds = new Set<number>()
 
         for (const receipt of filteredReceipts) {
             for (const item of receipt.items) {
@@ -1716,6 +1723,7 @@ export async function getEvhsTrackingData() {
                             if (vi) {
                                 matchedVoucherItem = vi
                                 matchedVoucher = v
+                                trackedVoucherItemIds.add(vi.id)
                                 break
                             }
                         }
@@ -1767,6 +1775,10 @@ export async function getEvhsTrackingData() {
                         }
                     }
 
+                    for (const usage of itemUsages) {
+                        trackedVoucherItemIds.add(usage.voucherItem.id)
+                    }
+
                     const usedQty = itemUsages.reduce(
                         (total, usage) => total + Number(usage.voucherItem.qty || 0),
                         0
@@ -1804,6 +1816,67 @@ export async function getEvhsTrackingData() {
                         warehouse: receipt.transfer?.toWarehouse
                     })
                 }
+            }
+        }
+
+        for (const voucher of vouchers) {
+            if (voucher.status !== "completed") {
+                continue
+            }
+
+            for (const voucherItem of voucher.items) {
+                if (trackedVoucherItemIds.has(voucherItem.id)) {
+                    continue
+                }
+
+                const matchedGi = getEvhsMatchedGiRecord(voucher, voucherItem, giRecords)
+
+                trackingRows.push({
+                    id: `manual-voucher-${voucherItem.id}`,
+                    dateIn: voucher.date,
+                    cpDo: "MANUAL VOUCHER",
+                    materialNumberCp: voucherItem.product?.materialNumber || "-",
+                    materialNumberCk: voucherItem.materialNumberCk || voucherItem.product?.materialNumberCk || "-",
+                    sn: normalizeSerialNumber(voucherItem.serialNumber) || "-",
+                    qty: Number(voucherItem.qty || 0),
+                    receivedQty: Number(voucherItem.qty || 0),
+                    availableQty: 0,
+                    usedQty: Number(voucherItem.qty || 0),
+                    installDate: voucher.date,
+                    pos: voucherItem.pos || "",
+                    unitId: voucherItem.unitId || "",
+                    voucherNo: voucher.vhsNo,
+                    voucherId: voucher.id,
+                    voucherItemId: voucherItem.id,
+                    woNo: voucher.woNo || "",
+                    giNumber: matchedGi?.documentNo || "",
+                    mrko: voucher.mrkoStatus === "SETTLED" ? "SETTLED" : (voucher.mrkoStatus || ""),
+                    inv: voucher.sapInvoiceNo || "",
+                    date: voucher.settledDate || null,
+                    productId: voucherItem.productId,
+                    product: voucherItem.product
+                        ? {
+                            materialNumber: voucherItem.product.materialNumber,
+                            materialDescription: voucherItem.product.materialDescription,
+                            materialNumberCk: voucherItem.product.materialNumberCk,
+                            category: voucherItem.product.category,
+                        }
+                        : {
+                            materialNumber: "-",
+                            materialDescription: null,
+                            materialNumberCk: null,
+                            category: null,
+                        },
+                    warehouseId: voucher.warehouseId,
+                    warehouse: voucher.warehouse
+                        ? {
+                            id: voucher.warehouse.id,
+                            sloc: voucher.warehouse.sloc,
+                            description: voucher.warehouse.description,
+                            type: voucher.warehouse.type,
+                        }
+                        : null,
+                })
             }
         }
 

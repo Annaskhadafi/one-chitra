@@ -129,6 +129,11 @@ function calculateGrandTotal(order: SalesOrderListItem) {
     return subtotal - Number(order.discount) + Number(order.shipping)
 }
 
+function escapeCsvCell(value: string | number | null | undefined) {
+    const normalized = value == null ? "" : String(value)
+    return `"${normalized.replace(/"/g, '""')}"`
+}
+
 function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
     const queryClient = useQueryClient()
     const searchParams = useSearchParams()
@@ -949,7 +954,7 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
     }
 
     const handleExport = () => {
-        const headers = ["Created Date", "Invoice Number", "Customer PO", "Customer", "PIC Sales", "Date PO", "Cat. PO", "Category", "Items", "Grand Total", "Status", "Created By"]
+        const headers = ["Created Date", "Invoice Number", "Customer PO", "Customer", "PIC Sales", "Date PO", "Cat. PO", "Category", "Remark", "Items", "Grand Total", "Status", "Created By"]
         const csvData = table.getFilteredRowModel().rows.map(row => {
             const order = row.original
             return [
@@ -961,6 +966,7 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
                 new Date(order.salesDate).toLocaleDateString("id-ID"),
                 order.categoryPo || "Normal",
                 order.categoryProduct || "",
+                order.remarks?.label || "",
                 order.items.length,
                 calculateGrandTotal(order),
                 order.status,
@@ -969,8 +975,8 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
         })
 
         const csvContent = [
-            headers.join(","),
-            ...csvData.map(row => row.join(","))
+            headers.map((header) => escapeCsvCell(header)).join(","),
+            ...csvData.map((row) => row.map((value) => escapeCsvCell(value)).join(","))
         ].join("\n")
 
         const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })

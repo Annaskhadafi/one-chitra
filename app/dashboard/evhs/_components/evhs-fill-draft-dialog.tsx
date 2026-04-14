@@ -64,6 +64,11 @@ type ItemEditState = {
     materialNumberCk: string
 }
 
+function toPositiveQty(value: number | string) {
+    const parsedValue = typeof value === "number" ? value : Number(value)
+    return Math.max(1, Number.isFinite(parsedValue) ? Math.trunc(parsedValue) : 1)
+}
+
 export function EvhsFillDraftDialog({
     open,
     onOpenChange,
@@ -97,7 +102,7 @@ export function EvhsFillDraftDialog({
                 voucher.items.map((item) => ({
                     itemId: item.id,
                     productId: item.productId,
-                    qty: Number(item.qty) || 1,
+                    qty: toPositiveQty(item.qty),
                     serialNumber: item.serialNumber || "",
                     pos: item.pos || "",
                     unitId: item.unitId || "",
@@ -129,12 +134,13 @@ export function EvhsFillDraftDialog({
                     pos: item.pos || undefined,
                     unitId: item.unitId || undefined,
                     materialNumberCk: item.materialNumberCk || undefined,
-                    qty: item.qty,
+                    qty: toPositiveQty(item.qty),
                 })),
             })
 
             if (result.success) {
                 toast.success("Draft voucher berhasil disimpan.")
+                onOpenChange(false)
                 router.refresh()
             } else {
                 toast.error("error" in result ? result.error : "Gagal menyimpan draft.")
@@ -159,7 +165,7 @@ export function EvhsFillDraftDialog({
                 items: editItems.map((item) => ({
                     itemId: item.itemId,
                     productId: item.productId,
-                    qty: item.qty,
+                    qty: toPositiveQty(item.qty),
                     serialNumber: item.serialNumber || undefined,
                     pos: item.pos || undefined,
                     unitId: item.unitId || undefined,
@@ -223,8 +229,8 @@ export function EvhsFillDraftDialog({
                         <DialogDescription>
                             Voucher <span className="font-mono font-bold text-foreground">{voucher.vhsNo}</span> —
                             Isi Serial Number, POS, dan Unit ID setelah barang tiba. Klik{" "}
-                            <strong>"Simpan Draft"</strong> untuk menyimpan sementara, atau{" "}
-                            <strong>"Selesaikan Voucher"</strong> untuk mengubah status menjadi Completed.
+                            <strong>&quot;Simpan Draft&quot;</strong> untuk menyimpan sementara, atau{" "}
+                            <strong>&quot;Selesaikan Voucher&quot;</strong> untuk mengubah status menjadi Completed.
                         </DialogDescription>
                     </DialogHeader>
 
@@ -320,8 +326,10 @@ export function EvhsFillDraftDialog({
                                                         <Input
                                                             type="number"
                                                             min={1}
+                                                            step={1}
+                                                            inputMode="numeric"
                                                             value={item.qty}
-                                                            onChange={(e) => updateEditItem(item.itemId, "qty", Math.max(1, Number(e.target.value)))}
+                                                            onChange={(e) => updateEditItem(item.itemId, "qty", toPositiveQty(e.target.value))}
                                                             className="h-7 text-center text-xs w-full"
                                                         />
                                                     </td>
