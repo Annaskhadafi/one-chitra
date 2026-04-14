@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react"
+import { useDeferredValue, useEffect, useMemo, useState } from "react"
 import {
     useReactTable,
     getCoreRowModel,
@@ -66,7 +66,6 @@ export function VendorQuotationTable({ data, onDelete, onOpenOcr }: VendorQuotat
     const [itemSearchByQuotation, setItemSearchByQuotation] = useState<Record<number, string>>({})
     const [highlightedItemIds, setHighlightedItemIds] = useState<Set<number>>(new Set())
     const [autoExpanded, setAutoExpanded] = useState(false)
-    const prevGlobalFilterRef = useRef("")
     const deferredGlobalFilter = useDeferredValue(searchInput)
     const [previewFileUrl, setPreviewFileUrl] = useState<string | null>(null)
     const [isPreviewOpen, setIsPreviewOpen] = useState(false)
@@ -110,7 +109,7 @@ export function VendorQuotationTable({ data, onDelete, onOpenOcr }: VendorQuotat
                 itemsSummary: quotation.items.length > 0
                     ? quotation.items.map((item) => item.itemName).join(", ")
                     : "No items",
-                searchText: [
+                quotationSearchText: [
                     quotation.quoteNumber,
                     quotation.vendorName,
                     quotation.quoteDate,
@@ -119,7 +118,6 @@ export function VendorQuotationTable({ data, onDelete, onOpenOcr }: VendorQuotat
                     quotation.fileUrl,
                     quotation.ocrStatus,
                     formatCurrency(totalAmount),
-                    ...itemIndexes.map((item) => item.searchText),
                 ]
                     .filter(Boolean)
                     .join(" ")
@@ -128,52 +126,66 @@ export function VendorQuotationTable({ data, onDelete, onOpenOcr }: VendorQuotat
         })
     }, [data])
 
+    const searchMatchesByQuotation = useMemo(() => {
+        const query = deferredGlobalFilter.trim().toLowerCase()
+        const matches = new Map<number, { matchesQuotation: boolean; matchingItemIds: Set<number> }>()
+
+        indexedQuotations.forEach(({ quotation, quotationSearchText, itemIndexes }) => {
+            const matchesQuotation = !query || quotationSearchText.includes(query)
+            const matchingItemIds = new Set(
+                itemIndexes
+                    .filter((item) => !query || item.searchText.includes(query))
+                    .map((item) => item.id)
+            )
+
+            matches.set(quotation.id, {
+                matchesQuotation,
+                matchingItemIds,
+            })
+        })
+
+        return matches
+    }, [deferredGlobalFilter, indexedQuotations])
+
     useEffect(() => {
         const query = deferredGlobalFilter.trim().toLowerCase()
-        const prevQuery = prevGlobalFilterRef.current.trim().toLowerCase()
 
-        if (query && query !== prevQuery) {
+        if (query) {
             const matchingQuotationIds = new Set<number>()
             const matchingItemIds = new Set<number>()
 
-            indexedQuotations.forEach(({ quotation, itemIndexes }) => {
-                const matchingItems = itemIndexes.filter((item) => item.searchText.includes(query))
-
-                if (matchingItems.length > 0) {
-                    matchingQuotationIds.add(quotation.id)
-                    matchingItems.forEach((item) => matchingItemIds.add(item.id))
+            searchMatchesByQuotation.forEach((match, quotationId) => {
+                if (match.matchesQuotation || match.matchingItemIds.size > 0) {
+                    matchingQuotationIds.add(quotationId)
                 }
+
+                match.matchingItemIds.forEach((itemId) => matchingItemIds.add(itemId))
             })
 
-            if (matchingQuotationIds.size > 0) {
-                setExpandedQuotationIds(matchingQuotationIds)
-                setHighlightedItemIds(matchingItemIds)
-                setAutoExpanded(true)
-            } else if (autoExpanded) {
-                setExpandedQuotationIds(new Set())
-                setHighlightedItemIds(new Set())
-                setAutoExpanded(false)
-            }
-        } else if (!query && autoExpanded) {
+            setExpandedQuotationIds(matchingQuotationIds)
+            setHighlightedItemIds(matchingItemIds)
+            setAutoExpanded(matchingQuotationIds.size > 0)
+        } else if (autoExpanded) {
             setExpandedQuotationIds(new Set())
             setHighlightedItemIds(new Set())
             setAutoExpanded(false)
         }
-
-        prevGlobalFilterRef.current = deferredGlobalFilter
-    }, [autoExpanded, deferredGlobalFilter, indexedQuotations])
+    }, [autoExpanded, deferredGlobalFilter, searchMatchesByQuotation])
 
     const searchableData = useMemo(() => {
         const query = deferredGlobalFilter.trim().toLowerCase()
         return indexedQuotations
-            .filter(({ quotation, searchText }) => {
-                const matchesSearch = !query || searchText.includes(query)
+            .filter(({ quotation }) => {
+                const match = searchMatchesByQuotation.get(quotation.id)
+                const matchesSearch = !query || Boolean(
+                    match && (match.matchesQuotation || match.matchingItemIds.size > 0)
+                )
                 const matchesOcrStatus = ocrStatusFilter.length === 0 || ocrStatusFilter.includes(quotation.ocrStatus)
                 const matchesVendor = vendorFilter.length === 0 || vendorFilter.includes(quotation.vendorName || "")
                 return matchesSearch && matchesOcrStatus && matchesVendor
             })
             .map(({ quotation }) => quotation)
-    }, [deferredGlobalFilter, indexedQuotations, ocrStatusFilter, vendorFilter])
+    }, [deferredGlobalFilter, indexedQuotations, ocrStatusFilter, searchMatchesByQuotation, vendorFilter])
 
     const vendorOptions = useMemo(
         () => Array.from(new Set(data.map((quotation) => quotation.vendorName).filter(Boolean))) as string[],
@@ -475,10 +487,19 @@ export function VendorQuotationTable({ data, onDelete, onOpenOcr }: VendorQuotat
     }
 
     const getFilteredItems = (quotation: VendorQuotationWithItems) => {
-        const searchTerm = itemSearchByQuotation[quotation.id]?.trim().toLowerCase() ?? ""
-        if (!searchTerm) return quotation.items
+        const globalQuery = deferredGlobalFilter.trim().toLowerCase()
+        const localQuery = itemSearchByQuotation[quotation.id]?.trim().toLowerCase() ?? ""
+        const searchMatch = searchMatchesByQuotation.get(quotation.id)
 
-        return quotation.items.filter((item) => {
+        let visibleItems = quotation.items
+
+        if (globalQuery && searchMatch?.matchingItemIds.size) {
+            visibleItems = quotation.items.filter((item) => searchMatch.matchingItemIds.has(item.id))
+        }
+
+        if (!localQuery) return visibleItems
+
+        return visibleItems.filter((item) => {
             const searchValue = [
                 item.itemName,
                 item.remark,
@@ -493,7 +514,7 @@ export function VendorQuotationTable({ data, onDelete, onOpenOcr }: VendorQuotat
                 .join(" ")
                 .toLowerCase()
 
-            return searchValue.includes(searchTerm)
+            return searchValue.includes(localQuery)
         })
     }
 
@@ -700,7 +721,7 @@ export function VendorQuotationTable({ data, onDelete, onOpenOcr }: VendorQuotat
             </div>
 
             <div className="text-xs text-muted-foreground px-1">
-                Showing {rows.length} of {data.length} quotations. Search mencakup semua item di dalam detail accordion.
+                Showing {rows.length} of {data.length} quotations. Search otomatis membuka detail dan hanya menampilkan item yang cocok.
             </div>
 
             <VendorQuotationDetailDialog
