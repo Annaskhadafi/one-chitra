@@ -2243,7 +2243,7 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                     }
                 }}
             >
-                <DialogContent className="w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] gap-0 overflow-hidden border border-amber-200 bg-white p-0 shadow-2xl sm:max-w-3xl lg:max-w-5xl max-h-[85dvh]">
+                <DialogContent className="flex h-[85dvh] w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] flex-col gap-0 overflow-hidden border border-amber-200 bg-white p-0 shadow-2xl sm:max-w-3xl lg:max-w-5xl">
                     <DialogHeader className="border-b border-amber-100 bg-white px-4 py-4 sm:px-6 sm:py-5">
                         <DialogTitle className="flex items-center gap-2 text-amber-700">
                             <Building2 className="h-5 w-5" />
@@ -2254,89 +2254,111 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                         </DialogDescription>
                     </DialogHeader>
 
-                    <div className="flex min-h-0 flex-1 flex-col">
-                        <div className="border-b border-amber-100 bg-white px-4 py-4 sm:px-6 sm:py-5">
-                            <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_240px] md:items-end">
-                                <div className="space-y-2">
-                            <Label htmlFor="vendor-match-query">Keyword Pencarian</Label>
-                            <Input
-                                id="vendor-match-query"
-                                value={vendorSearchQuery}
-                                onChange={(e) => setVendorSearchQuery(e.target.value)}
-                                placeholder="Ketik nama item / description"
-                                className="border-amber-200 bg-white shadow-sm"
-                            />
-                                </div>
-                                <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm">
-                                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-700">Match Ditemukan</p>
-                                    <p className="mt-1 text-2xl font-bold text-slate-900">{vendorMatchResults.length}</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="min-h-0 flex-1 overflow-y-auto bg-white px-4 py-4 sm:px-6 sm:py-5">
-                            <div className="grid gap-3">
-                                {vendorMatchResults.length === 0 ? (
-                                    <div className="rounded-2xl border border-dashed border-amber-200 bg-white/80 p-8 text-center text-sm text-muted-foreground">
-                                        Tidak ada vendor quotation yang cocok untuk pencarian ini.
-                                    </div>
-                                ) : (
-                                    vendorMatchResults.map((candidate) => (
-                                        <div
-                                            key={candidate.id}
-                                            className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-amber-300 hover:shadow-md"
-                                        >
-                                            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                                                <div className="min-w-0 flex-1 space-y-3">
-                                                    <div className="flex flex-wrap items-center gap-2">
-                                                        <Badge variant="secondary" className="bg-amber-100 text-amber-800 hover:bg-amber-100">
-                                                            {candidate.vendorName}
-                                                        </Badge>
-                                                        <Badge variant="outline">
-                                                            {candidate.quoteNumber}
-                                                        </Badge>
-                                                        <span className="text-xs text-muted-foreground">{candidate.quoteDate}</span>
-                                                    </div>
-                                                    <p className="text-base font-semibold leading-6 text-slate-900">{candidate.itemName}</p>
-                                                    {candidate.itemRemark ? (
-                                                        <p className="text-sm leading-6 text-muted-foreground">{candidate.itemRemark}</p>
-                                                    ) : null}
-                                                </div>
-                                                <div className="flex shrink-0 flex-col gap-3 lg:min-w-[220px] lg:items-end">
-                                                    <div className="rounded-xl bg-amber-50 px-4 py-3 text-left lg:text-right">
-                                                        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-amber-700">Harga Vendor</p>
-                                                        <p className="mt-1 text-2xl font-bold text-amber-700">{formatCurrency(candidate.unitPrice)}</p>
-                                                        <p className="mt-1 text-xs text-muted-foreground">Pilih aksi di bawah untuk preview atau pakai harga</p>
-                                                    </div>
-                                                    <div className="flex flex-wrap gap-2 lg:justify-end">
-                                                        <Button
-                                                            type="button"
-                                                            variant="outline"
-                                                            size="sm"
-                                                            className="border-slate-200 bg-white"
-                                                            onClick={() => {
-                                                                setVendorPreviewFileUrl(candidate.fileUrl)
-                                                                setIsVendorPreviewOpen(true)
-                                                            }}
-                                                        >
-                                                            <Eye className="mr-2 h-4 w-4" />
-                                                            Preview PDF
-                                                        </Button>
-                                                        <Button
-                                                            type="button"
-                                                            size="sm"
-                                                            className="bg-amber-600 text-white hover:bg-amber-700"
-                                                            onClick={() => applyVendorPrice(candidate)}
-                                                        >
-                                                            <Check className="mr-2 h-4 w-4" />
-                                                            Pakai Harga Ini
-                                                        </Button>
-                                                    </div>
-                                                </div>
-                                            </div>
+                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                        <div className="min-h-0 flex-1 overflow-auto bg-white">
+                            <div className="min-w-[42rem] md:min-w-[48rem] xl:min-w-0">
+                                <div className="sticky top-0 z-10 border-b border-amber-100 bg-white px-4 py-4 shadow-sm sm:px-6 sm:py-5">
+                                    <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_240px] md:items-end">
+                                        <div className="space-y-2">
+                                            <Label htmlFor="vendor-match-query">Keyword Pencarian</Label>
+                                            <Input
+                                                id="vendor-match-query"
+                                                value={vendorSearchQuery}
+                                                onChange={(e) => setVendorSearchQuery(e.target.value)}
+                                                placeholder="Ketik nama item / description"
+                                                className="border-amber-200 bg-white shadow-sm"
+                                            />
                                         </div>
-                                    ))
-                                )}
+                                        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm">
+                                            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-700">Match Ditemukan</p>
+                                            <p className="mt-1 text-2xl font-bold text-slate-900">{vendorMatchResults.length}</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="px-4 py-4 sm:px-6 sm:py-5">
+                                    <div className="grid gap-3">
+                                        {vendorMatchResults.length === 0 ? (
+                                            <div className="rounded-2xl border border-dashed border-amber-200 bg-white/80 p-8 text-center text-sm text-muted-foreground">
+                                                Tidak ada vendor quotation yang cocok untuk pencarian ini.
+                                            </div>
+                                        ) : (
+                                            vendorMatchResults.map((candidate) => (
+                                                <div
+                                                    key={candidate.id}
+                                                    className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-amber-300 hover:shadow-md"
+                                                >
+                                                    <div className="flex min-w-0 flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                                                        <div className="min-w-0 flex-1 space-y-3">
+                                                            <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                                                <Badge
+                                                                    variant="secondary"
+                                                                    className="max-w-full overflow-hidden text-ellipsis whitespace-nowrap bg-amber-100 text-amber-800 hover:bg-amber-100 xl:max-w-[24rem]"
+                                                                    title={candidate.vendorName}
+                                                                >
+                                                                    {candidate.vendorName}
+                                                                </Badge>
+                                                                <Badge
+                                                                    variant="outline"
+                                                                    className="max-w-[12rem] overflow-hidden text-ellipsis whitespace-nowrap"
+                                                                    title={candidate.quoteNumber}
+                                                                >
+                                                                    {candidate.quoteNumber}
+                                                                </Badge>
+                                                                <span className="text-xs text-muted-foreground">{candidate.quoteDate}</span>
+                                                            </div>
+                                                            <p
+                                                                className="overflow-hidden text-base font-semibold leading-6 text-slate-900 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]"
+                                                                title={candidate.itemName}
+                                                            >
+                                                                {candidate.itemName}
+                                                            </p>
+                                                            {candidate.itemRemark ? (
+                                                                <p
+                                                                    className="overflow-hidden text-sm leading-6 text-muted-foreground [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]"
+                                                                    title={candidate.itemRemark}
+                                                                >
+                                                                    {candidate.itemRemark}
+                                                                </p>
+                                                            ) : null}
+                                                        </div>
+                                                        <div className="flex shrink-0 flex-col gap-3 xl:min-w-[260px] xl:items-end">
+                                                            <div className="rounded-xl bg-amber-50 px-4 py-3 text-left xl:text-right">
+                                                                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-amber-700">Harga Vendor</p>
+                                                                <p className="mt-1 text-2xl font-bold text-amber-700">{formatCurrency(candidate.unitPrice)}</p>
+                                                                <p className="mt-1 text-xs text-muted-foreground">Pilih aksi di bawah untuk preview atau pakai harga</p>
+                                                            </div>
+                                                            <div className="flex flex-wrap gap-2 xl:justify-end">
+                                                                <Button
+                                                                    type="button"
+                                                                    variant="outline"
+                                                                    size="sm"
+                                                                    className="border-slate-200 bg-white"
+                                                                    onClick={() => {
+                                                                        setVendorPreviewFileUrl(candidate.fileUrl)
+                                                                        setIsVendorPreviewOpen(true)
+                                                                    }}
+                                                                >
+                                                                    <Eye className="mr-2 h-4 w-4" />
+                                                                    Preview PDF
+                                                                </Button>
+                                                                <Button
+                                                                    type="button"
+                                                                    size="sm"
+                                                                    className="bg-amber-600 text-white hover:bg-amber-700"
+                                                                    onClick={() => applyVendorPrice(candidate)}
+                                                                >
+                                                                    <Check className="mr-2 h-4 w-4" />
+                                                                    Pakai Harga Ini
+                                                                </Button>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
