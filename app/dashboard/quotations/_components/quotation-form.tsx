@@ -1162,14 +1162,19 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
     // Calculations
     const subTotal = useMemo(() => {
         return items.reduce((sum, item) => {
-            return sum + (item.quantity * item.unitPrice - item.discount + item.tax)
+            return sum + (item.quantity * item.unitPrice - item.discount)
         }, 0)
     }, [items])
 
+    const quotationTax = useMemo(() => {
+        const itemTaxTotal = items.reduce((sum, item) => sum + item.tax, 0)
+        return itemTaxTotal > 0 ? itemTaxTotal : tax
+    }, [items, tax])
+
     const grandTotal = useMemo(() => {
         const discAmount = discountType === "percent" ? (subTotal * discount) / 100 : discount
-        return subTotal - discAmount + tax + shipping
-    }, [subTotal, discount, discountType, tax, shipping])
+        return subTotal - discAmount + quotationTax + shipping
+    }, [subTotal, discount, discountType, quotationTax, shipping])
 
     const calculatorPriceAfterMargin = useMemo(() => {
         return calculatorBasePrice > 0
@@ -1276,7 +1281,7 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                 termsConditions: termsConditions || undefined,
                 notes: notes || undefined,
                 discount,
-                tax,
+                tax: quotationTax,
                 shipping,
                 items: items.map(item => ({
                     productId: item.productId,
@@ -1355,7 +1360,7 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                 termsConditions: termsConditions || undefined,
                 notes: notes || undefined,
                 discount,
-                tax,
+                tax: quotationTax,
                 shipping,
                 items: items.map(item => ({
                     productId: item.productId,
@@ -2107,6 +2112,10 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                                         className="w-24 md:w-20 h-8 text-right font-mono text-xs"
                                     />
                                     <span className="text-sm font-bold md:w-32 text-right">{formatCurrency(shipping)}</span>
+                                </div>
+                                <div className="flex items-center justify-between md:justify-end w-full md:w-[400px] gap-4 mt-1">
+                                    <span className="text-sm font-medium text-muted-foreground">Tax :</span>
+                                    <span className="text-sm font-bold md:w-32 text-right">{formatCurrency(quotationTax)}</span>
                                 </div>
                                 <Separator className="my-2 w-full md:w-[400px]" />
                                 <div className="flex items-center justify-between md:justify-end w-full md:w-[400px] gap-4">

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
     Dialog,
     DialogContent,
@@ -14,6 +14,13 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
 import { CheckCircle2, Save, AlertTriangle } from "lucide-react"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
@@ -27,7 +34,11 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { updateEvhsDraftVoucherItems, completeEvhsDraftVoucher } from "@/app/actions/evhs"
+import {
+    completeEvhsDraftVoucher,
+    getEvhsDraftVoucherSerialCatalog,
+    updateEvhsDraftVoucherItems,
+} from "@/app/actions/evhs"
 
 type DraftVoucherItem = {
     id: number
@@ -40,12 +51,18 @@ type DraftVoucherItem = {
     product?: {
         materialNumber?: string | null
         materialDescription?: string | null
+        category?: string | null
     } | null
 }
 
 export type DraftVoucher = {
     id: number
     vhsNo: string
+    warehouseId: number
+    warehouse?: {
+        sloc?: string | null
+        description?: string | null
+    } | null
     woNo?: string | null
     date?: string | Date | null
     remark?: string | null
@@ -55,18 +72,30 @@ export type DraftVoucher = {
 }
 
 type ItemEditState = {
-    itemId: number
+    rowKey: string
+    sourceItemId: number
     productId: number
     qty: number
     serialNumber: string
     pos: string
     unitId: string
     materialNumberCk: string
+    requiresSerial: boolean
+}
+
+type SerialCatalogEntry = {
+    productId: number
+    requiresSerial: boolean
+    availableSerials: string[]
 }
 
 function toPositiveQty(value: number | string) {
     const parsedValue = typeof value === "number" ? value : Number(value)
     return Math.max(1, Number.isFinite(parsedValue) ? Math.trunc(parsedValue) : 1)
+}
+
+function normalizeSerialNumber(value?: string | null) {
+    return value?.trim() || ""
 }
 
 export function EvhsFillDraftDialog({
@@ -91,32 +120,119 @@ export function EvhsFillDraftDialog({
 
     // Items edit state
     const [editItems, setEditItems] = useState<ItemEditState[]>([])
+    const [serialCatalogByProduct, setSerialCatalogByProduct] = useState<Record<number, SerialCatalogEntry>>({})
+    const [isLoadingSerialCatalog, setIsLoadingSerialCatalog] = useState(false)
+    const [serialCatalogError, setSerialCatalogError] = useState<string | null>(null)
 
     useEffect(() => {
-        if (open && voucher) {
+        let isActive = true
+
+        const hydrateDraftItems = async () => {
+            if (!open || !voucher) {
+                return
+            }
+
             setWoNo(voucher.woNo || "")
             setRemark(voucher.remark || "")
             setApprovedByName(voucher.approvedByName || "")
             setReceivedByName(voucher.receivedByName || "")
-            setEditItems(
-                voucher.items.map((item) => ({
-                    itemId: item.id,
-                    productId: item.productId,
-                    qty: toPositiveQty(item.qty),
-                    serialNumber: item.serialNumber || "",
-                    pos: item.pos || "",
-                    unitId: item.unitId || "",
-                    materialNumberCk: item.materialNumberCk || "",
-                }))
-            )
+            setIsLoadingSerialCatalog(true)
+            setSerialCatalogError(null)
+
+            try {
+                const catalogResult = await getEvhsDraftVoucherSerialCatalog(voucher.id)
+                if (!isActive) {
+                    return
+                }
+
+                const catalogEntries: SerialCatalogEntry[] = catalogResult.success ? (catalogResult.data ?? []) : []
+                const catalogMap = Object.fromEntries(
+                    catalogEntries.map((entry) => [entry.productId, entry])
+                ) as Record<number, SerialCatalogEntry>
+
+                if (!catalogResult.success) {
+                    setSerialCatalogError(catalogResult.error || "Gagal memuat daftar serial number.")
+                }
+
+                setSerialCatalogByProduct(catalogMap)
+                setEditItems(
+                    voucher.items.flatMap((item) => {
+                        const qty = toPositiveQty(item.qty)
+                        const catalog = catalogMap[item.productId]
+                        const requiresSerial = catalog?.requiresSerial || item.product?.category?.trim().toUpperCase() === "TYRE"
+
+                        if (requiresSerial && qty > 1) {
+                            return Array.from({ length: qty }, (_, rowIndex) => ({
+                                rowKey: `${item.id}-${rowIndex}`,
+                                sourceItemId: item.id,
+                                productId: item.productId,
+                                qty: 1,
+                                serialNumber: rowIndex === 0 ? item.serialNumber || "" : "",
+                                pos: item.pos || "",
+                                unitId: item.unitId || "",
+                                materialNumberCk: item.materialNumberCk || "",
+                                requiresSerial: true,
+                            }))
+                        }
+
+                        return [{
+                            rowKey: `${item.id}-0`,
+                            sourceItemId: item.id,
+                            productId: item.productId,
+                            qty: requiresSerial ? 1 : qty,
+                            serialNumber: item.serialNumber || "",
+                            pos: item.pos || "",
+                            unitId: item.unitId || "",
+                            materialNumberCk: item.materialNumberCk || "",
+                            requiresSerial,
+                        }]
+                    })
+                )
+            } catch (error) {
+                if (!isActive) {
+                    return
+                }
+                setSerialCatalogError(error instanceof Error ? error.message : "Gagal memuat daftar serial number.")
+                setSerialCatalogByProduct({})
+            } finally {
+                if (isActive) {
+                    setIsLoadingSerialCatalog(false)
+                }
+            }
+        }
+
+        void hydrateDraftItems()
+
+        return () => {
+            isActive = false
         }
     }, [open, voucher])
 
-    const updateEditItem = (itemId: number, field: keyof Omit<ItemEditState, "itemId" | "productId">, value: string | number) => {
+    const updateEditItem = (rowKey: string, field: keyof Omit<ItemEditState, "rowKey" | "sourceItemId" | "productId" | "requiresSerial">, value: string | number) => {
         setEditItems((prev) =>
-            prev.map((item) => (item.itemId === itemId ? { ...item, [field]: value } : item))
+            prev.map((item) => (item.rowKey === rowKey ? { ...item, [field]: value } : item))
         )
     }
+
+    const availableSerialsByRowKey = useMemo(() => {
+        const result: Record<string, string[]> = {}
+
+        for (const item of editItems) {
+            const baseSerials = serialCatalogByProduct[item.productId]?.availableSerials || []
+            const usedByOtherRows = new Set(
+                editItems
+                    .filter((candidate) => candidate.rowKey !== item.rowKey && candidate.productId === item.productId)
+                    .map((candidate) => normalizeSerialNumber(candidate.serialNumber))
+                    .filter(Boolean)
+            )
+
+            result[item.rowKey] = baseSerials.filter((serialNumber) => (
+                normalizeSerialNumber(item.serialNumber) === serialNumber || !usedByOtherRows.has(serialNumber)
+            ))
+        }
+
+        return result
+    }, [editItems, serialCatalogByProduct])
 
     const handleSaveDraft = async () => {
         if (!voucher) return
@@ -129,12 +245,12 @@ export function EvhsFillDraftDialog({
                 approvedByName: approvedByName || undefined,
                 receivedByName: receivedByName || undefined,
                 items: editItems.map((item) => ({
-                    itemId: item.itemId,
+                    productId: item.productId,
                     serialNumber: item.serialNumber || undefined,
                     pos: item.pos || undefined,
                     unitId: item.unitId || undefined,
                     materialNumberCk: item.materialNumberCk || undefined,
-                    qty: toPositiveQty(item.qty),
+                    qty: item.requiresSerial ? 1 : toPositiveQty(item.qty),
                 })),
             })
 
@@ -154,6 +270,13 @@ export function EvhsFillDraftDialog({
 
     const handleComplete = async () => {
         if (!voucher) return
+
+        const missingSerialItem = editItems.find((item) => item.requiresSerial && !normalizeSerialNumber(item.serialNumber))
+        if (missingSerialItem) {
+            toast.error(`Pilih Serial Number dulu untuk material ${missingSerialItem.materialNumberCk || missingSerialItem.productId}.`)
+            return
+        }
+
         setIsCompleting(true)
         try {
             const result = await completeEvhsDraftVoucher({
@@ -163,9 +286,8 @@ export function EvhsFillDraftDialog({
                 approvedByName: approvedByName || undefined,
                 receivedByName: receivedByName || undefined,
                 items: editItems.map((item) => ({
-                    itemId: item.itemId,
                     productId: item.productId,
-                    qty: toPositiveQty(item.qty),
+                    qty: item.requiresSerial ? 1 : toPositiveQty(item.qty),
                     serialNumber: item.serialNumber || undefined,
                     pos: item.pos || undefined,
                     unitId: item.unitId || undefined,
@@ -228,7 +350,7 @@ export function EvhsFillDraftDialog({
                         </DialogTitle>
                         <DialogDescription>
                             Voucher <span className="font-mono font-bold text-foreground">{voucher.vhsNo}</span> —
-                            Isi Serial Number, POS, dan Unit ID setelah barang tiba. Klik{" "}
+                            Isi Serial Number, POS, dan Unit ID setelah barang tiba. Item berserial akan otomatis dipecah sesuai qty draft dan SN diambil dari receipt warehouse VHS terkait. Klik{" "}
                             <strong>&quot;Simpan Draft&quot;</strong> untuk menyimpan sementara, atau{" "}
                             <strong>&quot;Selesaikan Voucher&quot;</strong> untuk mengubah status menjadi Completed.
                         </DialogDescription>
@@ -247,6 +369,14 @@ export function EvhsFillDraftDialog({
 
                         {/* WO + Penerima */}
                         <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label className="text-xs">Warehouse VHS</Label>
+                                <Input
+                                    value={[voucher.warehouse?.sloc, voucher.warehouse?.description].filter(Boolean).join(" - ") || `Warehouse #${voucher.warehouseId}`}
+                                    readOnly
+                                    className="h-8 bg-muted/40 text-sm"
+                                />
+                            </div>
                             <div className="space-y-2">
                                 <Label htmlFor="fill-wo" className="text-xs">WO Number</Label>
                                 <Input
@@ -294,6 +424,16 @@ export function EvhsFillDraftDialog({
                         {/* Items Table */}
                         <div className="space-y-2">
                             <Label className="text-sm font-semibold">Detail Item — Isi SN & Unit</Label>
+                            {isLoadingSerialCatalog ? (
+                                <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+                                    Memuat daftar serial number dari receipt warehouse VHS...
+                                </div>
+                            ) : null}
+                            {serialCatalogError ? (
+                                <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                                    Gagal memuat daftar SN: {serialCatalogError}
+                                </div>
+                            ) : null}
                             <div className="rounded-md border overflow-hidden">
                                 <table className="w-full text-xs">
                                     <thead className="bg-muted/50">
@@ -308,9 +448,10 @@ export function EvhsFillDraftDialog({
                                     </thead>
                                     <tbody className="divide-y">
                                         {editItems.map((item, idx) => {
-                                            const origItem = voucher.items.find((vi) => vi.id === item.itemId)
+                                            const origItem = voucher.items.find((vi) => vi.id === item.sourceItemId)
+                                            const serialOptions = availableSerialsByRowKey[item.rowKey] || []
                                             return (
-                                                <tr key={item.itemId} className="bg-background hover:bg-muted/20">
+                                                <tr key={item.rowKey} className="bg-background hover:bg-muted/20">
                                                     <td className="py-2 px-3 text-muted-foreground">{idx + 1}</td>
                                                     <td className="py-2 px-3">
                                                         <div className="font-mono font-bold text-blue-700 dark:text-blue-400 text-[10px]">
@@ -323,28 +464,58 @@ export function EvhsFillDraftDialog({
                                                         )}
                                                     </td>
                                                     <td className="py-2 px-3">
-                                                        <Input
-                                                            type="number"
-                                                            min={1}
-                                                            step={1}
-                                                            inputMode="numeric"
-                                                            value={item.qty}
-                                                            onChange={(e) => updateEditItem(item.itemId, "qty", toPositiveQty(e.target.value))}
-                                                            className="h-7 text-center text-xs w-full"
-                                                        />
+                                                        {item.requiresSerial ? (
+                                                            <div className="flex h-7 items-center justify-center rounded-md border bg-muted/30 text-xs font-semibold">
+                                                                1
+                                                            </div>
+                                                        ) : (
+                                                            <Input
+                                                                type="number"
+                                                                min={1}
+                                                                step={1}
+                                                                inputMode="numeric"
+                                                                value={item.qty}
+                                                                onChange={(e) => updateEditItem(item.rowKey, "qty", toPositiveQty(e.target.value))}
+                                                                className="h-7 text-center text-xs w-full"
+                                                            />
+                                                        )}
                                                     </td>
                                                     <td className="py-2 px-3">
-                                                        <Input
-                                                            value={item.serialNumber}
-                                                            onChange={(e) => updateEditItem(item.itemId, "serialNumber", e.target.value)}
-                                                            placeholder="SN Tire..."
-                                                            className="h-7 text-xs font-mono"
-                                                        />
+                                                        {item.requiresSerial ? (
+                                                            <div className="space-y-1">
+                                                                <Select
+                                                                    value={item.serialNumber || undefined}
+                                                                    onValueChange={(value) => updateEditItem(item.rowKey, "serialNumber", value)}
+                                                                >
+                                                                    <SelectTrigger className="h-7 w-full text-xs font-mono">
+                                                                        <SelectValue placeholder={serialOptions.length > 0 ? "Pilih SN dari receipt..." : "SN belum tersedia"} />
+                                                                    </SelectTrigger>
+                                                                    <SelectContent>
+                                                                        {serialOptions.length > 0 ? serialOptions.map((serialNumber) => (
+                                                                            <SelectItem key={serialNumber} value={serialNumber}>
+                                                                                {serialNumber}
+                                                                            </SelectItem>
+                                                                        )) : (
+                                                                            <SelectItem value="__no-serial__" disabled>
+                                                                                SN tidak tersedia di warehouse ini
+                                                                            </SelectItem>
+                                                                        )}
+                                                                    </SelectContent>
+                                                                </Select>
+                                                                <p className="text-[10px] text-muted-foreground">
+                                                                    {serialOptions.length} SN tersedia
+                                                                </p>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="flex h-7 items-center rounded-md border bg-muted/30 px-2 text-[11px] text-muted-foreground">
+                                                                Tidak perlu SN
+                                                            </div>
+                                                        )}
                                                     </td>
                                                     <td className="py-2 px-3">
                                                         <Input
                                                             value={item.pos}
-                                                            onChange={(e) => updateEditItem(item.itemId, "pos", e.target.value)}
+                                                            onChange={(e) => updateEditItem(item.rowKey, "pos", e.target.value)}
                                                             placeholder="FL/FR/..."
                                                             className="h-7 text-xs"
                                                         />
@@ -352,7 +523,7 @@ export function EvhsFillDraftDialog({
                                                     <td className="py-2 px-3">
                                                         <Input
                                                             value={item.unitId}
-                                                            onChange={(e) => updateEditItem(item.itemId, "unitId", e.target.value)}
+                                                            onChange={(e) => updateEditItem(item.rowKey, "unitId", e.target.value)}
                                                             placeholder="Unit ID..."
                                                             className="h-7 text-xs"
                                                         />

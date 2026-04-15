@@ -1,3 +1,5 @@
+import { toCanonicalAppUrl } from "./app-url"
+
 function stripQueryAndHash(value: string) {
     return value.split("#")[0]?.split("?")[0] ?? value
 }
@@ -61,6 +63,24 @@ export function resolveUploadDocumentUrl(value: string | null | undefined): stri
     }
 
     return `/api/uploads/${encodeURIComponent(filename)}`
+}
+
+export function toAbsoluteUploadDocumentUrl(value: string | null | undefined): string | null {
+    const raw = (value ?? "").trim()
+    if (!raw) return null
+
+    if (/^https?:\/\//i.test(raw)) {
+        return raw
+    }
+
+    const resolvedUrl = resolveUploadDocumentUrl(raw)
+    if (!resolvedUrl) {
+        return null
+    }
+
+    return resolvedUrl.startsWith("/")
+        ? toCanonicalAppUrl(resolvedUrl, "/api/uploads")
+        : resolvedUrl
 }
 
 export function isUploadImageFile(value: string | null | undefined) {

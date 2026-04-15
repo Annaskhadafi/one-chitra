@@ -24,6 +24,8 @@ interface QuotationPdfData {
         longDescription: string | null
         quantity: number
         unitPrice: string
+        discount?: string
+        tax?: string
     }[]
     attachments?: {
         title: string
@@ -57,6 +59,8 @@ type QuotationPdfPayloadSource = {
         longDescription: string | null
         quantity: number
         unitPrice: string
+        discount?: string
+        tax?: string
     }[]
     attachments?: {
         title: string
@@ -110,6 +114,8 @@ export function buildQuotationPdfPayload(source: QuotationPdfPayloadSource): Quo
             longDescription: item.longDescription,
             quantity: item.quantity,
             unitPrice: item.unitPrice,
+            discount: item.discount,
+            tax: item.tax,
         })),
         attachments: source.attachments?.map((attachment) => ({
             title: attachment.title,
@@ -498,11 +504,12 @@ export async function generateQuotationPdf(
         finalY = (mutableDoc.lastAutoTable?.finalY ?? currentY) + 10
 
         // Subtotals
-        const itemsSubtotal = quotation.items.reduce((sum, item) => sum + (item.quantity * Number(item.unitPrice)), 0)
+        const itemsSubtotal = quotation.items.reduce((sum, item) => sum + (item.quantity * Number(item.unitPrice) - Number(item.discount || 0)), 0)
         const discountAmount = quotation.discountType === "percent"
             ? (itemsSubtotal * Number(quotation.discount)) / 100
             : Number(quotation.discount)
-        const taxAmount = Number(quotation.tax)
+        const itemTaxTotal = quotation.items.reduce((sum, item) => sum + Number(item.tax || 0), 0)
+        const taxAmount = Number(quotation.tax) > 0 ? Number(quotation.tax) : itemTaxTotal
         const grandTotal = itemsSubtotal - discountAmount + taxAmount + Number(quotation.shipping)
 
         // Draw Totals section immediately following table

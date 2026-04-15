@@ -120,14 +120,15 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
     const ITEMS_SUBSEQUENT_PAGES = 5
 
     const itemsSubtotal = quotation.items.reduce((sum, item) => {
-        return sum + (item.quantity * Number(item.unitPrice))
+        return sum + (item.quantity * Number(item.unitPrice) - Number(item.discount || 0))
     }, 0)
 
     const discountAmount = quotation.discountType === "percent"
         ? (itemsSubtotal * Number(quotation.discount)) / 100
         : Number(quotation.discount)
 
-    const taxAmount = Number(quotation.tax)
+    const itemTaxTotal = quotation.items.reduce((sum, item) => sum + Number(item.tax || 0), 0)
+    const taxAmount = Number(quotation.tax) > 0 ? Number(quotation.tax) : itemTaxTotal
     const grandTotal = itemsSubtotal - discountAmount + taxAmount + Number(quotation.shipping)
     const recipientAddressLines = [
         quotation.customer.address1,

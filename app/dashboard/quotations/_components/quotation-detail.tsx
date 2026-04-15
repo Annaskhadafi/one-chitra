@@ -227,9 +227,11 @@ export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDet
 
     // Calculations
     const itemsSubtotal = quotation.items.reduce((sum, item) => {
-        return sum + (item.quantity * Number(item.unitPrice) - Number(item.discount) + Number(item.tax))
+        return sum + (item.quantity * Number(item.unitPrice) - Number(item.discount))
     }, 0)
-    const grandTotal = itemsSubtotal - Number(quotation.discount) + Number(quotation.tax) + Number(quotation.shipping)
+    const itemTaxTotal = quotation.items.reduce((sum, item) => sum + Number(item.tax), 0)
+    const quotationTaxAmount = Number(quotation.tax) > 0 ? Number(quotation.tax) : itemTaxTotal
+    const grandTotal = itemsSubtotal - Number(quotation.discount) + quotationTaxAmount + Number(quotation.shipping)
 
     const getItemMaterialNumber = (item: QuotationDetailData["items"][number]) =>
         item.product?.materialNumber || item.description || `ITEM-${item.id}`
@@ -774,7 +776,7 @@ export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDet
                         </div>
                         <div className="flex justify-between text-sm">
                             <span className="text-muted-foreground">Tax (PPN)</span>
-                            <span className="font-medium">{formatCurrency(Number(quotation.tax))}</span>
+                            <span className="font-medium">{formatCurrency(quotationTaxAmount)}</span>
                         </div>
                         <div className="flex justify-between text-sm">
                             <span className="text-muted-foreground">Shipping</span>

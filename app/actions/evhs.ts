@@ -9,12 +9,13 @@ import {
     evhsGiRecords,
     evhsGiItems,
     evhsMasterPrices,
+    products,
     stockLevels,
     stockTransfers,
     warehouses,
     zmc9StockSap,
 } from "@/db/schema"
-import { eq, desc, sql, inArray, or } from "drizzle-orm"
+import { and, desc, eq, inArray, ne, or, sql } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { getAuthenticatedSession, getPermissionsByRoleName } from "@/lib/rbac"
@@ -141,6 +142,121 @@ function parseSerialNumbers(serialNumbers: string[] | string | null | undefined)
     }
 
     return []
+}
+
+type EvhsDraftVoucherSerialCatalogEntry = {
+    productId: number
+    requiresSerial: boolean
+    availableSerials: string[]
+}
+
+export async function getEvhsDraftVoucherSerialCatalog(voucherId: number) {
+    try {
+        await getAuthenticatedSession("evhs", "view")
+
+        const voucher = await db.query.evhsVouchers.findFirst({
+            where: eq(evhsVouchers.id, voucherId),
+            with: {
+                items: {
+                    with: {
+                        product: true,
+                    },
+                },
+            },
+        })
+
+        if (!voucher) {
+            return { success: false, error: "Voucher tidak ditemukan" as const }
+        }
+
+        await assertCurrentUserHasWarehouseAccess(voucher.warehouseId, "view")
+
+        const warehouseReceipts = await db.query.evhsReceipts.findMany({
+            with: {
+                transfer: true,
+                items: true,
+            },
+            orderBy: [desc(evhsReceipts.receivedDate)],
+        })
+
+        const otherVouchers = await db.query.evhsVouchers.findMany({
+            where: and(
+                eq(evhsVouchers.warehouseId, voucher.warehouseId),
+                ne(evhsVouchers.id, voucherId),
+            ),
+            with: {
+                items: true,
+            },
+        })
+
+        const usedSerialsByProduct = new Map<number, Set<string>>()
+        for (const otherVoucher of otherVouchers) {
+            for (const item of otherVoucher.items) {
+                const normalizedSerial = normalizeSerialNumber(item.serialNumber)
+                if (!normalizedSerial) {
+                    continue
+                }
+
+                const usedSerials = usedSerialsByProduct.get(item.productId) || new Set<string>()
+                usedSerials.add(normalizedSerial)
+                usedSerialsByProduct.set(item.productId, usedSerials)
+            }
+        }
+
+        const receiptItemsByProduct = new Map<number, string[]>()
+        for (const receipt of warehouseReceipts) {
+            if (receipt.transfer?.toWarehouseId !== voucher.warehouseId) {
+                continue
+            }
+
+            for (const item of receipt.items) {
+                const currentSerials = receiptItemsByProduct.get(item.productId) || []
+                currentSerials.push(...parseSerialNumbers(item.serialNumbers))
+                receiptItemsByProduct.set(item.productId, currentSerials)
+            }
+        }
+
+        const catalogMap = new Map<number, EvhsDraftVoucherSerialCatalogEntry>()
+
+        for (const item of voucher.items) {
+            const availableSerialSet = new Set<string>()
+            const receiptSerials = receiptItemsByProduct.get(item.productId) || []
+            const usedSerials = usedSerialsByProduct.get(item.productId) || new Set<string>()
+
+            for (const serialNumber of receiptSerials) {
+                const normalizedSerial = normalizeSerialNumber(serialNumber)
+                if (!normalizedSerial || usedSerials.has(normalizedSerial)) {
+                    continue
+                }
+                availableSerialSet.add(normalizedSerial)
+            }
+
+            const existingSerial = normalizeSerialNumber(item.serialNumber)
+            if (existingSerial) {
+                availableSerialSet.add(existingSerial)
+            }
+
+            const productCategory = item.product?.category?.trim().toUpperCase()
+            const requiresSerial = availableSerialSet.size > 0 || productCategory === "TYRE" || Boolean(existingSerial)
+
+            catalogMap.set(item.productId, {
+                productId: item.productId,
+                requiresSerial,
+                availableSerials: Array.from(availableSerialSet).sort((left, right) => left.localeCompare(right)),
+            })
+        }
+
+        return {
+            success: true,
+            data: Array.from(catalogMap.values()),
+        }
+    } catch (error) {
+        console.error("Error fetching EVHS draft voucher serial catalog:", error)
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Gagal mengambil daftar serial number draft voucher",
+        }
+    }
 }
 
 type EvhsVoucherPricingProduct = {
@@ -978,20 +1094,22 @@ export async function createEvhsDraftVoucher(data: z.infer<typeof _draftVoucherS
     }
 }
 
+const _draftVoucherItemInputSchema = z.object({
+    productId: z.number(),
+    serialNumber: z.string().optional(),
+    pos: z.string().optional(),
+    unitId: z.string().optional(),
+    materialNumberCk: z.string().optional(),
+    qty: z.number().min(1),
+})
+
 const _updateDraftItemsSchema = z.object({
     voucherId: z.number(),
     woNo: z.string().optional(),
     approvedByName: z.string().optional(),
     receivedByName: z.string().optional(),
     remark: z.string().optional(),
-    items: z.array(z.object({
-        itemId: z.number(),
-        serialNumber: z.string().optional(),
-        pos: z.string().optional(),
-        unitId: z.string().optional(),
-        materialNumberCk: z.string().optional(),
-        qty: z.number().min(1).optional(),
-    })),
+    items: z.array(_draftVoucherItemInputSchema),
 })
 
 /**
@@ -1025,15 +1143,44 @@ export async function updateEvhsDraftVoucherItems(data: z.infer<typeof _updateDr
                 updatedAt: new Date(),
             }).where(eq(evhsVouchers.id, data.voucherId))
 
-            // Update masing-masing item
+            const requestedSerials = new Set<string>()
             for (const item of data.items) {
-                await tx.update(evhsVoucherItems).set({
-                    serialNumber: item.serialNumber || null,
-                    pos: item.pos || null,
-                    unitId: item.unitId || null,
-                    materialNumberCk: item.materialNumberCk,
-                    ...(item.qty !== undefined ? { qty: item.qty } : {}),
-                }).where(eq(evhsVoucherItems.id, item.itemId))
+                const normalizedSerial = normalizeSerialNumber(item.serialNumber)
+                if (!normalizedSerial) {
+                    continue
+                }
+
+                if (item.qty !== 1) {
+                    return {
+                        success: false,
+                        error: `Qty untuk item berserial harus 1. Serial ${normalizedSerial} menerima qty ${item.qty}.`,
+                    }
+                }
+
+                const serialKey = `${item.productId}:${normalizedSerial}`
+                if (requestedSerials.has(serialKey)) {
+                    return {
+                        success: false,
+                        error: `Serial number ${normalizedSerial} terduplikasi dalam draft yang sama.`,
+                    }
+                }
+                requestedSerials.add(serialKey)
+            }
+
+            await tx.delete(evhsVoucherItems).where(eq(evhsVoucherItems.voucherId, data.voucherId))
+
+            if (data.items.length > 0) {
+                await tx.insert(evhsVoucherItems).values(
+                    data.items.map((item) => ({
+                        voucherId: data.voucherId,
+                        productId: item.productId,
+                        materialNumberCk: item.materialNumberCk || null,
+                        qty: item.qty,
+                        serialNumber: normalizeSerialNumber(item.serialNumber) || null,
+                        pos: item.pos || null,
+                        unitId: item.unitId || null,
+                    }))
+                )
             }
 
             return { success: true }
@@ -1052,15 +1199,7 @@ const _completeDraftVoucherSchema = z.object({
     approvedByName: z.string().optional(),
     receivedByName: z.string().optional(),
     remark: z.string().optional(),
-    items: z.array(z.object({
-        itemId: z.number(),
-        productId: z.number(),
-        qty: z.number().min(1),
-        serialNumber: z.string().optional(),
-        pos: z.string().optional(),
-        unitId: z.string().optional(),
-        materialNumberCk: z.string().optional(),
-    })),
+    items: z.array(_draftVoucherItemInputSchema),
 })
 
 /**
@@ -1107,11 +1246,10 @@ export async function completeEvhsDraftVoucher(data: z.infer<typeof _completeDra
             const warehouseReceipts = await tx.query.evhsReceipts.findMany({
                 with: { transfer: true, items: true },
             })
-            const existingCompletedVouchers = await tx.query.evhsVouchers.findMany({
+            const existingOtherVouchers = await tx.query.evhsVouchers.findMany({
                 where: (v, { and, eq, ne }) => and(
                     eq(v.warehouseId, voucher.warehouseId),
                     ne(v.id, data.voucherId),
-                    ne(v.status, "draft"),
                 ),
                 with: { items: true },
             })
@@ -1128,9 +1266,16 @@ export async function completeEvhsDraftVoucher(data: z.infer<typeof _completeDra
                     .filter(r => r.transfer?.toWarehouseId === voucher.warehouseId)
                     .flatMap(r => r.items)
                     .filter(ri => ri.productId === item.productId)
+                const productMeta = await tx.query.products.findFirst({
+                    where: eq(products.id, item.productId),
+                    columns: {
+                        category: true,
+                        materialNumber: true,
+                    },
+                })
 
                 const receivedQty = relevantReceiptItems.reduce((t, ri) => t + ri.confirmedQty, 0)
-                const usedQty = existingCompletedVouchers
+                const usedQty = existingOtherVouchers
                     .flatMap(v => v.items)
                     .filter(vi => vi.productId === item.productId)
                     .reduce((t, vi) => t + vi.qty, 0)
@@ -1149,14 +1294,34 @@ export async function completeEvhsDraftVoucher(data: z.infer<typeof _completeDra
                     }
                 }
 
-                // Cek duplikasi serial number
                 const normalizedSN = normalizeSerialNumber(item.serialNumber)
+                const productHasReceiptSerials = relevantReceiptItems.some((receiptItem) => (
+                    parseSerialNumbers(receiptItem.serialNumbers).length > 0
+                ))
+                const requiresSerial = productHasReceiptSerials || productMeta?.category?.trim().toUpperCase() === "TYRE"
+
+                if (requiresSerial && !normalizedSN) {
+                    return {
+                        success: false,
+                        error: `Serial number wajib dipilih untuk material ${productMeta?.materialNumber || item.materialNumberCk || item.productId}.`,
+                    }
+                }
+
                 if (normalizedSN) {
                     const key = `${item.productId}:${normalizedSN}`
                     if (requestedSerials.has(key)) {
                         return { success: false, error: `Serial number ${normalizedSN} terduplikasi.` }
                     }
-                    const snUsed = existingCompletedVouchers.some(v =>
+                    const serialExistsInWarehouse = relevantReceiptItems.some((receiptItem) =>
+                        parseSerialNumbers(receiptItem.serialNumbers).includes(normalizedSN)
+                    )
+                    if (!serialExistsInWarehouse) {
+                        return {
+                            success: false,
+                            error: `Serial number ${normalizedSN} tidak ditemukan pada stok EVHS warehouse ini.`,
+                        }
+                    }
+                    const snUsed = existingOtherVouchers.some(v =>
                         v.items.some(vi =>
                             vi.productId === item.productId &&
                             normalizeSerialNumber(vi.serialNumber) === normalizedSN
@@ -1181,15 +1346,19 @@ export async function completeEvhsDraftVoucher(data: z.infer<typeof _completeDra
                 updatedAt: new Date(),
             }).where(eq(evhsVouchers.id, data.voucherId))
 
-            // Update items dan rekam stock movement
+            await tx.delete(evhsVoucherItems).where(eq(evhsVoucherItems.voucherId, data.voucherId))
+
+            // Insert items baru dan rekam stock movement
             for (const item of data.items) {
-                await tx.update(evhsVoucherItems).set({
+                await tx.insert(evhsVoucherItems).values({
+                    voucherId: data.voucherId,
+                    productId: item.productId,
                     serialNumber: normalizeSerialNumber(item.serialNumber) || null,
                     pos: item.pos || null,
                     unitId: item.unitId || null,
                     materialNumberCk: item.materialNumberCk,
                     qty: item.qty,
-                }).where(eq(evhsVoucherItems.id, item.itemId))
+                })
 
                 await recordStockMovement(tx, {
                     productId: item.productId,

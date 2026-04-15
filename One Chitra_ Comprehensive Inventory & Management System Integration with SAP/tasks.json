@@ -43,7 +43,7 @@
     {
       "id": 5,
       "title": "Implement Quotation Management & Approval Workflow",
-      "status": "pending",
+      "status": "completed",
       "details": "Develop a form for selecting customers and adding SKUs (filtered by available stock). Implement a status state machine (Draft -> Pending Approval -> Approved/Rejected). Create the approval interface for Managers. Ensure approved quotes reserve stock temporarily to prevent overselling.",
       "priority": "medium",
       "description": "Create the module for Sales Reps to generate quotes for tires/accessories and for Managers to approve them.",

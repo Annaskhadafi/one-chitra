@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import {
     Table,
     TableBody,
@@ -13,6 +13,14 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Search, FileText, MoreHorizontal, Edit, Trash2, PackagePlus, ClipboardEdit } from "lucide-react"
 import { Input } from "@/components/ui/input"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
+import { Card, CardContent } from "@/components/ui/card"
 import { format } from "date-fns"
 import { EvhsVoucherPreview } from "./evhs-voucher-preview"
 import {
@@ -59,6 +67,7 @@ type VoucherRow = {
     id: number
     vhsNo: string
     date: string | Date
+    warehouseId: number
     woNo?: string | null
     status: string
     items: Array<{
@@ -88,6 +97,14 @@ type VoucherRow = {
     issuedByUser?: {
         name?: string | null
     } | null
+}
+
+function formatWarehouseLabel(warehouse?: { sloc?: string | null; description?: string | null } | null) {
+    if (!warehouse) {
+        return "Tanpa Warehouse"
+    }
+
+    return [warehouse.sloc, warehouse.description].filter(Boolean).join(" - ") || "Tanpa Warehouse"
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -122,6 +139,7 @@ export function EvhsVoucherTable({
     warehouses: WarehouseOption[]
 }) {
     const [searchTerm, setSearchTerm] = useState("")
+    const [warehouseFilter, setWarehouseFilter] = useState("all")
     const [selectedVoucher, setSelectedVoucher] = useState<VoucherRow | null>(null)
     const [previewOpen, setPreviewOpen] = useState(false)
     const [editOpen, setEditOpen] = useState(false)
@@ -138,10 +156,55 @@ export function EvhsVoucherTable({
         return type === "WAREHOUSE VHS" && label.includes("CK")
     })
 
-    const filteredVouchers = vouchers.filter(v =>
-        v.vhsNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        v.woNo?.toLowerCase().includes(searchTerm.toLowerCase())
-    )
+    const warehouseOptions = useMemo(() => {
+        const map = new Map<string, { value: string; label: string }>()
+        for (const voucher of vouchers) {
+            const value = String(voucher.warehouseId)
+            if (!map.has(value)) {
+                map.set(value, {
+                    value,
+                    label: formatWarehouseLabel(voucher.warehouse),
+                })
+            }
+        }
+        return Array.from(map.values()).sort((left, right) => left.label.localeCompare(right.label))
+    }, [vouchers])
+
+    const filteredVouchers = useMemo(() => vouchers.filter((voucher) => {
+        const matchesSearch =
+            voucher.vhsNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            voucher.woNo?.toLowerCase().includes(searchTerm.toLowerCase())
+
+        const matchesWarehouse = warehouseFilter === "all" || String(voucher.warehouseId) === warehouseFilter
+
+        return matchesSearch && matchesWarehouse
+    }), [searchTerm, vouchers, warehouseFilter])
+
+    const summaryCards = useMemo(() => {
+        const totalAmount = filteredVouchers.reduce((sum, voucher) => sum + Number(voucher.totalAmount || 0), 0)
+        return [
+            {
+                title: "Total Voucher",
+                value: filteredVouchers.length.toLocaleString("id-ID"),
+                helper: "Semua voucher hasil filter",
+            },
+            {
+                title: "Draft",
+                value: filteredVouchers.filter((voucher) => voucher.status === "draft").length.toLocaleString("id-ID"),
+                helper: "Butuh isi detail / SN",
+            },
+            {
+                title: "Completed",
+                value: filteredVouchers.filter((voucher) => voucher.status === "completed").length.toLocaleString("id-ID"),
+                helper: "Voucher selesai",
+            },
+            {
+                title: "Nilai Voucher",
+                value: new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(totalAmount),
+                helper: "Total amount hasil filter",
+            },
+        ]
+    }, [filteredVouchers])
 
     const handleDelete = async () => {
         if (!selectedVoucher) return
@@ -213,15 +276,42 @@ export function EvhsVoucherTable({
                 </AlertDialogContent>
             </AlertDialog>
 
-            <div className="flex justify-between items-center gap-4">
-                <div className="relative flex-1 max-w-sm">
-                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input
-                        placeholder="Cari No VHS atau WO..."
-                        className="pl-8"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                    />
+            <div className="grid gap-3 lg:grid-cols-4">
+                {summaryCards.map((card) => (
+                    <Card key={card.title} className="border-slate-200/80 shadow-sm">
+                        <CardContent className="p-4">
+                            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{card.title}</p>
+                            <p className="mt-2 text-2xl font-bold text-slate-900">{card.value}</p>
+                            <p className="mt-1 text-xs text-muted-foreground">{card.helper}</p>
+                        </CardContent>
+                    </Card>
+                ))}
+            </div>
+
+            <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
+                <div className="grid flex-1 gap-3 md:grid-cols-[minmax(0,1fr)_280px]">
+                    <div className="relative flex-1">
+                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input
+                            placeholder="Cari No VHS atau WO..."
+                            className="pl-8"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                    </div>
+                    <Select value={warehouseFilter} onValueChange={setWarehouseFilter}>
+                        <SelectTrigger>
+                            <SelectValue placeholder="Filter warehouse" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">Semua Warehouse</SelectItem>
+                            {warehouseOptions.map((warehouse) => (
+                                <SelectItem key={warehouse.value} value={warehouse.value}>
+                                    {warehouse.label}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
                 </div>
 
                 {/* Tombol Add Voucher Manual — hanya tampil jika ada warehouse VHS CK */}
@@ -239,14 +329,15 @@ export function EvhsVoucherTable({
             </div>
 
             <div className="rounded-md border bg-card overflow-x-auto">
-                <Table className="min-w-[860px]">
+                <Table className="min-w-[1020px]">
                     <TableHeader>
                         <TableRow>
                             <TableHead>Voucher No</TableHead>
                             <TableHead>Date</TableHead>
                             <TableHead>WO Number</TableHead>
-                            <TableHead>Site</TableHead>
+                            <TableHead>Warehouse</TableHead>
                             <TableHead>Items</TableHead>
+                            <TableHead className="text-right">Amount</TableHead>
                             <TableHead>Status</TableHead>
                             <TableHead className="text-right">Aksi</TableHead>
                         </TableRow>
@@ -254,7 +345,7 @@ export function EvhsVoucherTable({
                     <TableBody>
                         {filteredVouchers.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                                <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
                                     Belum ada voucher yang di-generate.
                                 </TableCell>
                             </TableRow>
@@ -267,9 +358,12 @@ export function EvhsVoucherTable({
                                     <TableCell className="font-mono font-bold text-xs">{voucher.vhsNo}</TableCell>
                                     <TableCell suppressHydrationWarning>{format(new Date(voucher.date), "dd MMM yyyy")}</TableCell>
                                     <TableCell className="font-medium">{voucher.woNo || "—"}</TableCell>
-                                    <TableCell>{voucher.warehouse?.sloc}</TableCell>
+                                    <TableCell>{formatWarehouseLabel(voucher.warehouse)}</TableCell>
                                     <TableCell>
                                         <Badge variant="secondary">{voucher.items.length} Items</Badge>
+                                    </TableCell>
+                                    <TableCell className="text-right font-medium">
+                                        {new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(Number(voucher.totalAmount || 0))}
                                     </TableCell>
                                     <TableCell>
                                         <StatusBadge status={voucher.status} />

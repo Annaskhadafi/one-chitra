@@ -331,9 +331,11 @@ function formatCompactCurrency(value: number) {
 
 function calculateGrandTotal(quotation: QuotationWithRelations) {
     const itemsTotal = quotation.items.reduce((sum, item) => {
-        return sum + (item.quantity * Number(item.unitPrice) - Number(item.discount) + Number(item.tax))
+        return sum + (item.quantity * Number(item.unitPrice) - Number(item.discount))
     }, 0)
-    return itemsTotal - Number(quotation.discount) + Number(quotation.tax) + Number(quotation.shipping)
+    const itemTaxTotal = quotation.items.reduce((sum, item) => sum + Number(item.tax || 0), 0)
+    const quotationTaxAmount = Number(quotation.tax) > 0 ? Number(quotation.tax) : itemTaxTotal
+    return itemsTotal - Number(quotation.discount) + quotationTaxAmount + Number(quotation.shipping)
 }
 
 function formatDate(date: Date) {

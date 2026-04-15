@@ -17,6 +17,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Loader2, ScanText, CheckCircle2, AlertCircle, ExternalLink, Upload } from "lucide-react"
 import { triggerVendorQuotationOcr, type TriggerOcrResult } from "@/app/actions/vendor-quotation"
 import { uploadFile } from "@/app/actions/upload"
+import { toAbsoluteUploadDocumentUrl } from "@/lib/upload-url"
 
 type OcrResultData = NonNullable<TriggerOcrResult["data"]>
 
@@ -37,7 +38,7 @@ function formatCurrency(value: number) {
 
 export function VendorQuotationOcrDialog({ open, onOpenChange, initialUrl = "", onSuccess }: Props) {
     const fileInputRef = useRef<HTMLInputElement | null>(null)
-    const [fileUrl, setFileUrl] = useState(initialUrl)
+    const [fileUrl, setFileUrl] = useState(() => toAbsoluteUploadDocumentUrl(initialUrl) ?? initialUrl)
     const [loading, setLoading] = useState(false)
     const [uploading, setUploading] = useState(false)
     const [result, setResult] = useState<OcrResultData | null>(null)
@@ -45,7 +46,7 @@ export function VendorQuotationOcrDialog({ open, onOpenChange, initialUrl = "", 
 
     // Sync fileUrl with initialUrl prop when it changes
     useEffect(() => {
-        setFileUrl(initialUrl)
+        setFileUrl(toAbsoluteUploadDocumentUrl(initialUrl) ?? initialUrl)
     }, [initialUrl])
 
     function handleClose() {
@@ -53,7 +54,7 @@ export function VendorQuotationOcrDialog({ open, onOpenChange, initialUrl = "", 
             onOpenChange(false)
             setResult(null)
             setSavedId(null)
-            setFileUrl(initialUrl)
+            setFileUrl(toAbsoluteUploadDocumentUrl(initialUrl) ?? initialUrl)
             setUploading(false)
             if (fileInputRef.current) {
                 fileInputRef.current.value = ""
@@ -92,7 +93,7 @@ export function VendorQuotationOcrDialog({ open, onOpenChange, initialUrl = "", 
                 return
             }
 
-            setFileUrl(uploadResult.url)
+            setFileUrl(toAbsoluteUploadDocumentUrl(uploadResult.url) ?? uploadResult.url)
             toast.success("File berhasil diupload. Lanjutkan Extract Sekarang untuk menjalankan OCR.")
         } catch {
             toast.error("Terjadi kesalahan saat upload file")
@@ -111,7 +112,10 @@ export function VendorQuotationOcrDialog({ open, onOpenChange, initialUrl = "", 
         setResult(null)
         setSavedId(null)
         try {
-            const res = await triggerVendorQuotationOcr(fileUrl.trim())
+            const normalizedFileUrl = toAbsoluteUploadDocumentUrl(fileUrl) ?? fileUrl.trim()
+            setFileUrl(normalizedFileUrl)
+
+            const res = await triggerVendorQuotationOcr(normalizedFileUrl)
             if (!res.success) {
                 toast.error(res.error ?? "OCR gagal")
                 return
