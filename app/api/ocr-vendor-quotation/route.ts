@@ -253,45 +253,48 @@ function normalizeExtractedQuotation(
 export async function POST(req: NextRequest) {
     let trackedQuotationId: number | null = null
     try {
-        const body = await req.json().catch(() => null) as { fileUrl?: string; eprEntryId?: string; userId?: string } | null
+        const body = await req.json().catch(() => null) as { fileUrl?: string; eprEntryId?: string; userId?: string; persist?: boolean } | null
         if (!body) {
             return Response.json({ error: "Invalid JSON" }, { status: 400 })
         }
 
         const { fileUrl, eprEntryId, userId } = body
+        const persist = body.persist !== false
         if (!fileUrl) {
             return Response.json({ error: "fileUrl wajib diisi" }, { status: 400 })
         }
 
         const sanitizedFileUrl = fileUrl.slice(0, 2000)
-        const existingBeforeProcess = await db.query.vendorQuotations.findFirst({
-            where: eq(vendorQuotations.fileUrl, sanitizedFileUrl),
-            columns: { id: true },
-        })
+        if (persist) {
+            const existingBeforeProcess = await db.query.vendorQuotations.findFirst({
+                where: eq(vendorQuotations.fileUrl, sanitizedFileUrl),
+                columns: { id: true },
+            })
 
-        if (existingBeforeProcess) {
-            trackedQuotationId = existingBeforeProcess.id
-            await db
-                .update(vendorQuotations)
-                .set({
-                    eprEntryId: eprEntryId ?? null,
-                    ocrStatus: "processing",
-                    updatedAt: new Date(),
-                })
-                .where(eq(vendorQuotations.id, trackedQuotationId))
-        } else {
-            const [createdPendingRecord] = await db
-                .insert(vendorQuotations)
-                .values({
-                    eprEntryId: eprEntryId ?? null,
-                    fileUrl: sanitizedFileUrl,
-                    fileName: fileUrl.split("/").pop()?.split("?")[0] || "Quotation",
-                    ocrStatus: "processing",
-                    createdBy: userId ?? null,
-                })
-                .returning({ id: vendorQuotations.id })
+            if (existingBeforeProcess) {
+                trackedQuotationId = existingBeforeProcess.id
+                await db
+                    .update(vendorQuotations)
+                    .set({
+                        eprEntryId: eprEntryId ?? null,
+                        ocrStatus: "processing",
+                        updatedAt: new Date(),
+                    })
+                    .where(eq(vendorQuotations.id, trackedQuotationId))
+            } else {
+                const [createdPendingRecord] = await db
+                    .insert(vendorQuotations)
+                    .values({
+                        eprEntryId: eprEntryId ?? null,
+                        fileUrl: sanitizedFileUrl,
+                        fileName: fileUrl.split("/").pop()?.split("?")[0] || "Quotation",
+                        ocrStatus: "processing",
+                        createdBy: userId ?? null,
+                    })
+                    .returning({ id: vendorQuotations.id })
 
-            trackedQuotationId = createdPendingRecord.id
+                trackedQuotationId = createdPendingRecord.id
+            }
         }
 
         // Fetch file dari URL
@@ -321,66 +324,67 @@ export async function POST(req: NextRequest) {
 
         const normalizedExtracted = normalizeExtractedQuotation(extracted)
 
-        const existingRecord = await db.query.vendorQuotations.findFirst({
-            where: eq(vendorQuotations.fileUrl, sanitizedFileUrl),
-            columns: { id: true },
-        })
+        let quotationId: number | undefined
 
-        let quotationId: number
+        if (persist) {
+            const existingRecord = await db.query.vendorQuotations.findFirst({
+                where: eq(vendorQuotations.fileUrl, sanitizedFileUrl),
+                columns: { id: true },
+            })
 
-        if (existingRecord) {
-            quotationId = existingRecord.id
+            if (existingRecord) {
+                quotationId = existingRecord.id
 
-            await db
-                .update(vendorQuotations)
-                .set({
-                    eprEntryId: eprEntryId ?? null,
-                    fileName: filename.slice(0, 500),
-                    vendorName: normalizedExtracted.vendorName?.slice(0, 500) ?? null,
-                    quoteNumber: normalizedExtracted.quoteNumber?.slice(0, 200) ?? null,
-                    quoteDate: normalizedExtracted.quoteDate?.slice(0, 100) ?? null,
-                    remark: normalizedExtracted.remark ?? null,
-                    ocrStatus: "done",
-                    extractedAt: new Date(),
-                    createdBy: userId ?? null,
-                    updatedAt: new Date(),
-                })
-                .where(eq(vendorQuotations.id, quotationId))
+                await db
+                    .update(vendorQuotations)
+                    .set({
+                        eprEntryId: eprEntryId ?? null,
+                        fileName: filename.slice(0, 500),
+                        vendorName: normalizedExtracted.vendorName?.slice(0, 500) ?? null,
+                        quoteNumber: normalizedExtracted.quoteNumber?.slice(0, 200) ?? null,
+                        quoteDate: normalizedExtracted.quoteDate?.slice(0, 100) ?? null,
+                        remark: normalizedExtracted.remark ?? null,
+                        ocrStatus: "done",
+                        extractedAt: new Date(),
+                        createdBy: userId ?? null,
+                        updatedAt: new Date(),
+                    })
+                    .where(eq(vendorQuotations.id, quotationId))
 
-            await db.delete(vendorQuotationItems).where(eq(vendorQuotationItems.vendorQuotationId, quotationId))
-        } else {
-            const [newRecord] = await db
-                .insert(vendorQuotations)
-                .values({
-                    eprEntryId: eprEntryId ?? null,
-                    fileUrl: sanitizedFileUrl,
-                    fileName: filename.slice(0, 500),
-                    vendorName: normalizedExtracted.vendorName?.slice(0, 500) ?? null,
-                    quoteNumber: normalizedExtracted.quoteNumber?.slice(0, 200) ?? null,
-                    quoteDate: normalizedExtracted.quoteDate?.slice(0, 100) ?? null,
-                    remark: normalizedExtracted.remark ?? null,
-                    ocrStatus: "done",
-                    extractedAt: new Date(),
-                    createdBy: userId ?? null,
-                })
-                .returning({ id: vendorQuotations.id })
+                await db.delete(vendorQuotationItems).where(eq(vendorQuotationItems.vendorQuotationId, quotationId))
+            } else {
+                const [newRecord] = await db
+                    .insert(vendorQuotations)
+                    .values({
+                        eprEntryId: eprEntryId ?? null,
+                        fileUrl: sanitizedFileUrl,
+                        fileName: filename.slice(0, 500),
+                        vendorName: normalizedExtracted.vendorName?.slice(0, 500) ?? null,
+                        quoteNumber: normalizedExtracted.quoteNumber?.slice(0, 200) ?? null,
+                        quoteDate: normalizedExtracted.quoteDate?.slice(0, 100) ?? null,
+                        remark: normalizedExtracted.remark ?? null,
+                        ocrStatus: "done",
+                        extractedAt: new Date(),
+                        createdBy: userId ?? null,
+                    })
+                    .returning({ id: vendorQuotations.id })
 
-            quotationId = newRecord.id
-        }
+                quotationId = newRecord.id
+            }
 
-        // Simpan items jika ada
-        if (normalizedExtracted.items.length > 0) {
-            await db.insert(vendorQuotationItems).values(
-                normalizedExtracted.items.map((item) => ({
-                    vendorQuotationId: quotationId,
-                    itemName: item.itemName,
-                    qty: String(item.qty),
-                    unit: item.unit,
-                    unitPrice: String(item.unitPrice),
-                    totalPrice: String(item.totalPrice),
-                    remark: item.remark,
-                }))
-            )
+            if (quotationId && normalizedExtracted.items.length > 0) {
+                await db.insert(vendorQuotationItems).values(
+                    normalizedExtracted.items.map((item) => ({
+                        vendorQuotationId: quotationId!,
+                        itemName: item.itemName,
+                        qty: String(item.qty),
+                        unit: item.unit,
+                        unitPrice: String(item.unitPrice),
+                        totalPrice: String(item.totalPrice),
+                        remark: item.remark,
+                    }))
+                )
+            }
         }
 
         return Response.json({
