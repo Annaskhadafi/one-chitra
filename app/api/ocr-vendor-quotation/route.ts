@@ -3,6 +3,8 @@ import { db } from "@/db"
 import { vendorQuotations, vendorQuotationItems } from "@/db/schema"
 import { eq } from "drizzle-orm"
 import { extractVendorQuotationViaOllama } from "@/lib/ollama-vendor-quotation"
+import fs from "fs"
+import path from "path"
 
 export const runtime = "nodejs"
 
@@ -34,33 +36,66 @@ const vendorQuotationAnnotationFormat = {
 }
 
 async function fetchFileFromUrl(fileUrl: string): Promise<{ buffer: Buffer; filename: string; contentType: string }> {
+    console.log(`[OCR-API] Fetching file: ${fileUrl}`)
+    
+    // Check if it's a local/internal upload URL
+    const isInternalUpload = fileUrl.includes("/api/uploads/")
+    
+    if (isInternalUpload) {
+        try {
+            const filename = decodeURIComponent(fileUrl.split("/").pop()?.split("?")[0] || "")
+            if (filename) {
+                // Production (Dokploy) uses /mnt/data/one-chitra/uploads
+                // Local dev uses public/uploads
+                // We'll try common paths
+                const possiblePaths = [
+                    path.join(process.cwd(), "public", "uploads", filename),
+                    path.join("/mnt/data/one-chitra/uploads", filename),
+                    path.join(process.cwd(), "..", "uploads", filename),
+                ]
+
+                for (const filePath of possiblePaths) {
+                    if (fs.existsSync(filePath)) {
+                        console.log(`[OCR-API] Local file fallback: Found at ${filePath}`)
+                        const buffer = fs.readFileSync(filePath)
+                        const ext = path.extname(filename).toLowerCase()
+                        const contentType = ext === ".pdf" ? "application/pdf" : 
+                                          ext === ".png" ? "image/png" : 
+                                          ext === ".jpg" || ext === ".jpeg" ? "image/jpeg" : 
+                                          "application/octet-stream"
+                                          
+                        return { buffer, filename, contentType }
+                    }
+                }
+            }
+        } catch (localErr) {
+            console.error("[OCR-API] Local file fallback failed:", localErr)
+        }
+    }
+
+    // Standard Fetch if local failed or not internal
+    console.log(`[OCR-API] Standard fetch from: ${fileUrl}`)
     const response = await fetch(fileUrl, { redirect: "follow" })
     if (!response.ok) {
-        throw new Error(`Gagal mengambil file dari URL: HTTP ${response.status}`)
+        throw new Error(`Gagal mengambil file dari URL: HTTP ${response.status} (${response.statusText})`)
     }
     const contentType = response.headers.get("content-type") ?? "application/octet-stream"
     const arrayBuffer = await response.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
+    console.log(`[OCR-API] Fetch success. Bytes: ${buffer.length}`)
 
-    // Coba ambil filename dari URL
+    // Extract filename logic
     let filename = "quotation"
     try {
         const url = new URL(fileUrl)
         const pathParts = url.pathname.split("/")
-        const last = pathParts[pathParts.length - 1]
-        if (last && last.includes(".")) {
-            filename = decodeURIComponent(last)
-        }
-    } catch {
-        // fallback
-    }
+        filename = decodeURIComponent(pathParts.pop()?.split("?")[0] || "quotation")
+    } catch { /* skip */ }
 
-    // Tentukan ekstensi dari content type jika filename tidak punya
     if (!filename.includes(".")) {
         if (contentType.includes("pdf")) filename += ".pdf"
         else if (contentType.includes("png")) filename += ".png"
         else if (contentType.includes("jpeg") || contentType.includes("jpg")) filename += ".jpg"
-        else filename += ".pdf"
     }
 
     return { buffer, filename, contentType }
@@ -87,10 +122,13 @@ async function extractVendorQuotationOcr(fileBuffer: Buffer, filename: string): 
         throw new Error("MISTRAL_API_KEY is not set")
     }
 
+    console.log(`[OCR-API] Preparing Mistral OCR request for ${filename}...`)
+
     // Konversi gambar ke PDF jika perlu (sama seperti lib/mistral-ocr)
     let finalBuffer = fileBuffer
     const lower = filename.toLowerCase()
     if (lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg")) {
+        console.log(`[OCR-API] Converting image to PDF for Mistral OCR compatibility...`)
         const { PDFDocument } = await import("pdf-lib")
         const pdf = await PDFDocument.create()
         const embeddedImage = lower.endsWith(".png")
@@ -252,14 +290,17 @@ function normalizeExtractedQuotation(
 
 export async function POST(req: NextRequest) {
     let trackedQuotationId: number | null = null
+    console.log("[OCR-API] Received POST request.")
     try {
         const body = await req.json().catch(() => null) as { fileUrl?: string; eprEntryId?: string; userId?: string; persist?: boolean } | null
         if (!body) {
-            return Response.json({ error: "Invalid JSON" }, { status: 400 })
+            return Response.json({ error: "Invalid JSON body" }, { status: 400 })
         }
 
         const { fileUrl, eprEntryId, userId } = body
         const persist = body.persist !== false
+        console.log(`[OCR-API] Request Body: { fileUrl: ${fileUrl?.slice(0, 50)}..., persist: ${persist}, userId: ${userId} }`)
+
         if (!fileUrl) {
             return Response.json({ error: "fileUrl wajib diisi" }, { status: 400 })
         }
@@ -273,6 +314,7 @@ export async function POST(req: NextRequest) {
 
             if (existingBeforeProcess) {
                 trackedQuotationId = existingBeforeProcess.id
+                console.log(`[OCR-API] Updating existing record ID ${trackedQuotationId} to 'processing'`)
                 await db
                     .update(vendorQuotations)
                     .set({
@@ -282,6 +324,7 @@ export async function POST(req: NextRequest) {
                     })
                     .where(eq(vendorQuotations.id, trackedQuotationId))
             } else {
+                console.log("[OCR-API] Creating new 'processing' record")
                 const [createdPendingRecord] = await db
                     .insert(vendorQuotations)
                     .values({
@@ -305,24 +348,27 @@ export async function POST(req: NextRequest) {
         let ocrError: string | null = null
 
         try {
-            console.log(`Mulai OCR dengan Ollama untuk ${filename}...`)
+            console.log(`[OCR-API] Starting OCR with Ollama for ${filename}...`)
             extracted = await extractVendorQuotationViaOllama({ fileBuffer: buffer, filename })
-            console.log("Ollama OCR Berhasil")
+            console.log("[OCR-API] Ollama OCR Success")
         } catch (ollamaErr) {
-            console.error("Ollama OCR Gagal, fallback ke Mistral:", ollamaErr)
+            console.error("[OCR-API] Ollama OCR Failed, falling back to Mistral:", ollamaErr)
             try {
                 extracted = await extractVendorQuotationOcr(buffer, filename)
-                console.log("Mistral OCR Berhasil (Fallback)")
+                console.log("[OCR-API] Mistral OCR Success (Fallback)")
             } catch (mistralErr) {
+                console.error("[OCR-API] Mistral OCR also failed:", mistralErr)
                 ocrError = mistralErr instanceof Error ? mistralErr.message : "Semua engine OCR gagal"
             }
         }
 
         if (!extracted) {
-            return Response.json({ error: ocrError || "Gagal mengekstrak data dari dokumen" }, { status: 500 })
+            console.error(`[OCR-API] OCR extraction failed completely: ${ocrError}`)
+            return Response.json({ error: ocrError || "Gagal mengekstrak data dari dokumen. Pastikan dokumen terbaca jelas." }, { status: 500 })
         }
 
         const normalizedExtracted = normalizeExtractedQuotation(extracted)
+        console.log(`[OCR-API] Extraction Result: Vendor=${normalizedExtracted.vendorName}, Items=${normalizedExtracted.items.length}`)
 
         let quotationId: number | undefined
 
@@ -334,7 +380,7 @@ export async function POST(req: NextRequest) {
 
             if (existingRecord) {
                 quotationId = existingRecord.id
-
+                console.log(`[OCR-API] Persistence: Updating record ID ${quotationId}`)
                 await db
                     .update(vendorQuotations)
                     .set({
@@ -353,6 +399,7 @@ export async function POST(req: NextRequest) {
 
                 await db.delete(vendorQuotationItems).where(eq(vendorQuotationItems.vendorQuotationId, quotationId))
             } else {
+                console.log("[OCR-API] Persistence: Creating new final record")
                 const [newRecord] = await db
                     .insert(vendorQuotations)
                     .values({
@@ -373,6 +420,7 @@ export async function POST(req: NextRequest) {
             }
 
             if (quotationId && normalizedExtracted.items.length > 0) {
+                console.log(`[OCR-API] Inserting ${normalizedExtracted.items.length} extracted items...`)
                 await db.insert(vendorQuotationItems).values(
                     normalizedExtracted.items.map((item) => ({
                         vendorQuotationId: quotationId!,
@@ -392,7 +440,8 @@ export async function POST(req: NextRequest) {
             data: normalizedExtracted,
         })
     } catch (error) {
-        const message = error instanceof Error ? error.message : "OCR gagal"
+        const message = error instanceof Error ? error.message : "OCR gagal fatal"
+        console.error(`[OCR-API] Fatal Catch Error:`, message)
         if (trackedQuotationId) {
             await db
                 .update(vendorQuotations)

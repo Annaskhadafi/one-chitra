@@ -30,7 +30,7 @@ import {
 } from "lucide-react"
 import { saveVendorQuotationDraft, triggerVendorQuotationOcr, type TriggerOcrResult } from "@/app/actions/vendor-quotation"
 import { uploadFile } from "@/app/actions/upload"
-import { toAbsoluteUploadDocumentUrl } from "@/lib/upload-url"
+import { toAbsoluteUploadDocumentUrl, isUploadImageFile } from "@/lib/upload-url"
 
 type OcrResultData = NonNullable<TriggerOcrResult["data"]>
 
@@ -182,7 +182,8 @@ export function VendorQuotationOcrDialog({ open, onOpenChange, initialUrl = "", 
 
             const res = await triggerVendorQuotationOcr(normalizedFileUrl, undefined, !isManualFlow)
             if (!res.success || !res.data) {
-                toast.error(res.error ?? "OCR gagal")
+                console.error("[OCR-Client] Server Action failed:", res.error)
+                toast.error(res.error ?? "OCR gagal mengekstrak data dari dokumen ini.", { duration: 6000 })
                 return
             }
 
@@ -195,8 +196,9 @@ export function VendorQuotationOcrDialog({ open, onOpenChange, initialUrl = "", 
                 onSuccess?.()
                 handleClose(false)
             }
-        } catch {
-            toast.error("Terjadi kesalahan saat menjalankan OCR")
+        } catch (err) {
+            console.error("[OCR-Client] Action catch block:", err)
+            toast.error("Terjadi kesalahan sistem saat menjalankan OCR. Periksa koneksi internet Anda.")
         } finally {
             setLoading(false)
         }
@@ -297,7 +299,7 @@ export function VendorQuotationOcrDialog({ open, onOpenChange, initialUrl = "", 
 
     return (
         <Dialog open={open} onOpenChange={handleClose}>
-            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-6xl">
+            <DialogContent className="max-h-[95vh] overflow-y-auto sm:max-w-7xl">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         <ScanText className="h-5 w-5 text-indigo-500" />
@@ -340,32 +342,31 @@ export function VendorQuotationOcrDialog({ open, onOpenChange, initialUrl = "", 
                         </div>
                     </div>
 
-                    <div className="space-y-2">
-                        <Label htmlFor="vq-file-url">URL File Quotation (PDF / Gambar)</Label>
-                        <div className="flex gap-2">
-                            <Input
-                                id="vq-file-url"
-                                placeholder="https://example.com/quotation.pdf"
-                                value={fileUrl}
-                                onChange={(e) => setFileUrl(e.target.value)}
-                                disabled={loading || uploading || saving}
-                                className="flex-1"
-                            />
-                            {fileUrl && (
-                                <Button
-                                    variant="outline"
-                                    size="icon"
-                                    type="button"
-                                    onClick={() => window.open(fileUrl, "_blank")}
-                                    title="Buka file di tab baru"
-                                >
-                                    <ExternalLink className="h-4 w-4" />
-                                </Button>
-                            )}
+                    <div className="space-y-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="vq-file-url">URL File Quotation (PDF / Gambar)</Label>
+                            <div className="flex gap-2">
+                                <Input
+                                    id="vq-file-url"
+                                    placeholder="https://example.com/quotation.pdf"
+                                    value={fileUrl}
+                                    onChange={(e) => setFileUrl(e.target.value)}
+                                    disabled={loading || uploading || saving}
+                                    className="flex-1"
+                                />
+                                {fileUrl && (
+                                    <Button
+                                        variant="outline"
+                                        size="icon"
+                                        type="button"
+                                        onClick={() => window.open(fileUrl, "_blank")}
+                                        title="Buka file di tab baru"
+                                    >
+                                        <ExternalLink className="h-4 w-4" />
+                                    </Button>
+                                )}
+                            </div>
                         </div>
-                        <p className="text-xs text-muted-foreground">
-                            Bisa isi URL langsung, atau upload file manual di atas lalu URL akan terisi otomatis.
-                        </p>
                     </div>
 
                     {(loading || uploading || saving) && (
@@ -384,191 +385,239 @@ export function VendorQuotationOcrDialog({ open, onOpenChange, initialUrl = "", 
                         </div>
                     )}
 
+                    {/* Side-by-Side: ONLY for MANUAL FLOW and when DRAFT exist */}
                     {isManualFlow && draft && !loading && !uploading && (
-                        <div className="space-y-4">
-                            <div className="flex items-start gap-2 rounded-lg bg-blue-50 px-4 py-3 dark:bg-blue-950/30">
-                                <PencilLine className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
-                                <div className="space-y-1">
-                                    <p className="text-sm font-medium text-blue-700 dark:text-blue-300">
-                                        Hasil OCR siap direview
-                                    </p>
-                                    <p className="text-xs text-blue-700/80 dark:text-blue-300/80">
-                                        Data belum masuk database. Silakan edit jika perlu, lalu klik Simpan ke Database.
-                                    </p>
+                        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                            {/* Panel Kiri: Preview Dokumen */}
+                            <div className="space-y-4">
+                                <div className="sticky top-0 space-y-2">
+                                    <div className="flex items-center justify-between">
+                                        <Label className="font-semibold">Preview Dokumen</Label>
+                                        <Badge variant="outline" className="text-[10px] h-5">
+                                            {isUploadImageFile(fileUrl) ? "Image" : "PDF"}
+                                        </Badge>
+                                    </div>
+                                    <div className="relative overflow-hidden rounded-lg border bg-muted/30 shadow-inner" style={{ height: "calc(95vh - 300px)" }}>
+                                        {fileUrl ? (
+                                            isUploadImageFile(fileUrl) ? (
+                                                <div className="flex h-full w-full items-center justify-center overflow-auto p-4 scroller-thin">
+                                                    <img 
+                                                        src={fileUrl} 
+                                                        alt="Quotation Preview" 
+                                                        className="h-auto max-w-full rounded shadow-md"
+                                                    />
+                                                </div>
+                                            ) : (
+                                                <embed 
+                                                    src={`${fileUrl}#view=FitH&toolbar=0`} 
+                                                    type="application/pdf"
+                                                    className="h-full w-full border-0"
+                                                />
+                                            )
+                                        ) : (
+                                            <div className="flex h-full flex-col items-center justify-center text-muted-foreground p-6 text-center">
+                                                <AlertCircle className="mb-2 h-8 w-8 opacity-20" />
+                                                <p className="text-xs">Preview gagal dimuat atau URL tidak valid.</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="flex items-center justify-between gap-2 px-1">
+                                        <p className="text-[10px] text-muted-foreground">
+                                            Preview bermasalah?
+                                        </p>
+                                        <Button 
+                                            variant="link" 
+                                            className="h-auto p-0 text-[10px] text-indigo-500"
+                                            onClick={() => window.open(fileUrl, "_blank")}
+                                        >
+                                            Buka di Tab Baru <ExternalLink className="ml-1 h-3 w-3" />
+                                        </Button>
+                                    </div>
                                 </div>
                             </div>
 
-                            <div className="grid gap-4 rounded-lg border bg-muted/20 p-4 md:grid-cols-2">
-                                <div className="space-y-2">
-                                    <Label htmlFor="vendor-name">Nama Vendor</Label>
-                                    <Input
-                                        id="vendor-name"
-                                        value={draft.vendorName}
-                                        onChange={(e) => updateDraftField("vendorName", e.target.value)}
-                                        placeholder="Nama vendor"
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="quote-number">Nomor Quote</Label>
-                                    <Input
-                                        id="quote-number"
-                                        value={draft.quoteNumber}
-                                        onChange={(e) => updateDraftField("quoteNumber", e.target.value)}
-                                        placeholder="Nomor quotation"
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="quote-date">Tanggal Quote</Label>
-                                    <Input
-                                        id="quote-date"
-                                        value={draft.quoteDate}
-                                        onChange={(e) => updateDraftField("quoteDate", e.target.value)}
-                                        placeholder="YYYY-MM-DD atau sesuai dokumen"
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Total Item</Label>
-                                    <div className="flex h-10 items-center rounded-md border bg-background px-3 text-sm font-medium">
-                                        {draft.items.length} item
+                            {/* Panel Kanan: Form Edit Hasil OCR */}
+                            <div className="space-y-4">
+                                <div className="flex items-start gap-2 rounded-lg bg-blue-50 px-4 py-3 dark:bg-blue-950/30">
+                                    <PencilLine className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
+                                    <div className="space-y-1">
+                                        <p className="text-sm font-medium text-blue-700 dark:text-blue-300">
+                                            Hasil OCR siap direview
+                                        </p>
+                                        <p className="text-xs text-blue-700/80 dark:text-blue-300/80 text-[11px]">
+                                            Data belum masuk database. Bandingkan dengan dokumen di samping, edit bila perlu, lalu simpan.
+                                        </p>
                                     </div>
                                 </div>
-                                <div className="space-y-2 md:col-span-2">
-                                    <Label htmlFor="quote-remark">Remark</Label>
-                                    <Textarea
-                                        id="quote-remark"
-                                        value={draft.remark}
-                                        onChange={(e) => updateDraftField("remark", e.target.value)}
-                                        placeholder="Remark, syarat pembayaran, validity, atau catatan lain"
-                                        rows={3}
-                                    />
-                                </div>
-                            </div>
 
-                            <div className="rounded-md border">
-                                <div className="flex items-center justify-between border-b px-4 py-3">
-                                    <div>
-                                        <p className="text-sm font-semibold">Item quotation</p>
-                                        <p className="text-xs text-muted-foreground">Edit hasil OCR per baris sebelum disimpan.</p>
+                                <div className="grid gap-3 rounded-lg border bg-muted/20 p-4 md:grid-cols-2">
+                                    <div className="space-y-1.5">
+                                        <Label htmlFor="vendor-name" className="text-xs">Nama Vendor</Label>
+                                        <Input
+                                            id="vendor-name"
+                                            value={draft.vendorName}
+                                            onChange={(e) => updateDraftField("vendorName", e.target.value)}
+                                            placeholder="Nama vendor"
+                                            className="h-8 text-sm"
+                                        />
                                     </div>
-                                    <Button type="button" variant="outline" size="sm" onClick={handleAddItem} className="gap-2">
-                                        <Plus className="h-4 w-4" />
-                                        Tambah Item
-                                    </Button>
+                                    <div className="space-y-1.5">
+                                        <Label htmlFor="quote-number" className="text-xs">Nomor Quote</Label>
+                                        <Input
+                                            id="quote-number"
+                                            value={draft.quoteNumber}
+                                            onChange={(e) => updateDraftField("quoteNumber", e.target.value)}
+                                            placeholder="Nomor quotation"
+                                            className="h-8 text-sm"
+                                        />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <Label htmlFor="quote-date" className="text-xs">Tanggal Quote</Label>
+                                        <Input
+                                            id="quote-date"
+                                            value={draft.quoteDate}
+                                            onChange={(e) => updateDraftField("quoteDate", e.target.value)}
+                                            placeholder="YYYY-MM-DD"
+                                            className="h-8 text-sm"
+                                        />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <Label className="text-xs">Total Item</Label>
+                                        <div className="flex h-8 items-center rounded-md border bg-background px-3 text-sm font-medium">
+                                            {draft.items.length} item
+                                        </div>
+                                    </div>
+                                    <div className="space-y-1.5 md:col-span-2">
+                                        <Label htmlFor="quote-remark" className="text-xs">Remark</Label>
+                                        <Textarea
+                                            id="quote-remark"
+                                            value={draft.remark}
+                                            onChange={(e) => updateDraftField("remark", e.target.value)}
+                                            placeholder="Catatan..."
+                                            rows={2}
+                                            className="text-sm min-h-[60px]"
+                                        />
+                                    </div>
                                 </div>
 
-                                <div className="overflow-x-auto">
-                                    <Table className="min-w-[1080px]">
-                                        <TableHeader>
-                                            <TableRow className="bg-muted/50">
-                                                <TableHead className="min-w-[280px]">Item</TableHead>
-                                                <TableHead className="min-w-[100px]">Qty</TableHead>
-                                                <TableHead className="min-w-[110px]">Satuan</TableHead>
-                                                <TableHead className="min-w-[160px]">Harga Satuan</TableHead>
-                                                <TableHead className="min-w-[160px]">Total</TableHead>
-                                                <TableHead className="min-w-[220px]">Remark</TableHead>
-                                                <TableHead className="w-[80px] text-right">Aksi</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {draft.items.length > 0 ? (
-                                                draft.items.map((item, idx) => (
-                                                    <TableRow key={`draft-item-${idx}`}>
-                                                        <TableCell>
-                                                            <Input
-                                                                value={item.itemName}
-                                                                onChange={(e) => updateDraftItem(idx, { itemName: e.target.value })}
-                                                                placeholder="Nama item"
-                                                            />
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            <Input
-                                                                type="number"
-                                                                value={String(item.qty)}
-                                                                onChange={(e) => updateDraftItem(idx, { qty: normalizeNumber(e.target.value) })}
-                                                                placeholder="0"
-                                                            />
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            <Input
-                                                                value={String(item.unit ?? "")}
-                                                                onChange={(e) => updateDraftItem(idx, { unit: e.target.value })}
-                                                                placeholder="pcs"
-                                                            />
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            <Input
-                                                                type="number"
-                                                                value={String(item.unitPrice)}
-                                                                onChange={(e) => updateDraftItem(idx, { unitPrice: normalizeNumber(e.target.value) })}
-                                                                placeholder="0"
-                                                            />
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            <Input
-                                                                type="number"
-                                                                value={String(item.totalPrice)}
-                                                                onChange={(e) => updateDraftItem(idx, { totalPrice: normalizeNumber(e.target.value) })}
-                                                                placeholder="0"
-                                                            />
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            <Input
-                                                                value={String(item.remark ?? "")}
-                                                                onChange={(e) => updateDraftItem(idx, { remark: e.target.value })}
-                                                                placeholder="Catatan item"
-                                                            />
-                                                        </TableCell>
-                                                        <TableCell className="text-right">
-                                                            <Button
-                                                                type="button"
-                                                                variant="ghost"
-                                                                size="icon"
-                                                                onClick={() => handleRemoveItem(idx)}
-                                                                className="text-red-600 hover:bg-red-50 hover:text-red-700"
-                                                                title="Hapus item"
-                                                            >
-                                                                <Trash2 className="h-4 w-4" />
-                                                            </Button>
+                                <div className="rounded-md border">
+                                    <div className="flex items-center justify-between border-b px-4 py-2">
+                                        <p className="text-xs font-semibold">Tabel Item</p>
+                                        <Button type="button" variant="outline" size="xs" onClick={handleAddItem} className="gap-1 h-7 text-[10px]">
+                                            <Plus className="h-3 w-3" />
+                                            Tambah Item
+                                        </Button>
+                                    </div>
+
+                                    <div className="overflow-x-auto scroller-thin">
+                                        <Table className="min-w-[700px]">
+                                            <TableHeader>
+                                                <TableRow className="bg-muted/50 h-8">
+                                                    <TableHead className="min-w-[180px] text-[11px] h-8">Item</TableHead>
+                                                    <TableHead className="w-[60px] text-[11px] h-8 text-center">Qty</TableHead>
+                                                    <TableHead className="w-[80px] text-[11px] h-8 text-center">Satuan</TableHead>
+                                                    <TableHead className="w-[120px] text-[11px] h-8 text-right">Harga</TableHead>
+                                                    <TableHead className="w-[120px] text-[11px] h-8 text-right">Total</TableHead>
+                                                    <TableHead className="w-[40px] text-right h-8"></TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {draft.items.length > 0 ? (
+                                                    draft.items.map((item, idx) => (
+                                                        <TableRow key={`draft-item-${idx}`} className="h-9">
+                                                            <TableCell className="p-1 pl-4">
+                                                                <Input
+                                                                    value={item.itemName}
+                                                                    onChange={(e) => updateDraftItem(idx, { itemName: e.target.value })}
+                                                                    className="h-7 text-[12px]"
+                                                                />
+                                                            </TableCell>
+                                                            <TableCell className="p-1">
+                                                                <Input
+                                                                    type="number"
+                                                                    value={String(item.qty)}
+                                                                    onChange={(e) => updateDraftItem(idx, { qty: normalizeNumber(e.target.value) })}
+                                                                    className="h-7 text-[12px] text-center"
+                                                                />
+                                                            </TableCell>
+                                                            <TableCell className="p-1">
+                                                                <Input
+                                                                    value={String(item.unit ?? "")}
+                                                                    onChange={(e) => updateDraftItem(idx, { unit: e.target.value })}
+                                                                    className="h-7 text-[12px] text-center px-1"
+                                                                />
+                                                            </TableCell>
+                                                            <TableCell className="p-1 text-right">
+                                                                <Input
+                                                                    type="number"
+                                                                    value={String(item.unitPrice)}
+                                                                    onChange={(e) => updateDraftItem(idx, { unitPrice: normalizeNumber(e.target.value) })}
+                                                                    className="h-7 text-[12px] text-right"
+                                                                />
+                                                            </TableCell>
+                                                            <TableCell className="p-1 text-right">
+                                                                <Input
+                                                                    type="number"
+                                                                    value={String(item.totalPrice)}
+                                                                    onChange={(e) => updateDraftItem(idx, { totalPrice: normalizeNumber(e.target.value) })}
+                                                                    className="h-7 text-[12px] text-right font-medium text-emerald-600"
+                                                                />
+                                                            </TableCell>
+                                                            <TableCell className="p-1 pr-4 text-right">
+                                                                <Button
+                                                                    type="button"
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    onClick={() => handleRemoveItem(idx)}
+                                                                    className="h-7 w-7 text-red-600 hover:bg-red-50"
+                                                                >
+                                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                                </Button>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))
+                                                ) : (
+                                                    <TableRow>
+                                                        <TableCell colSpan={6} className="py-6 text-center text-xs text-muted-foreground">
+                                                            Belum ada item. Tambahkan item manual.
                                                         </TableCell>
                                                     </TableRow>
-                                                ))
-                                            ) : (
-                                                <TableRow>
-                                                    <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
-                                                        Belum ada item. Tambahkan item manual sebelum simpan.
-                                                    </TableCell>
+                                                )}
+                                                <TableRow className="bg-muted/30 font-semibold text-[13px]">
+                                                    <TableHead colSpan={4} className="text-right h-8">Grand Total</TableHead>
+                                                    <TableCell className="text-indigo-600 h-8 text-right pr-4">{formatCurrency(totalNilai)}</TableCell>
+                                                    <TableCell className="h-8" />
                                                 </TableRow>
-                                            )}
-                                            <TableRow className="bg-muted/30 font-semibold">
-                                                <TableCell colSpan={4} className="text-right text-sm">Grand Total</TableCell>
-                                                <TableCell className="text-sm">{formatCurrency(totalNilai)}</TableCell>
-                                                <TableCell colSpan={2} />
-                                            </TableRow>
-                                        </TableBody>
-                                    </Table>
+                                            </TableBody>
+                                        </Table>
+                                    </div>
                                 </div>
-                            </div>
 
-                            {result && (
-                                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                                    <Badge variant="outline" className="border-emerald-300 bg-emerald-50 text-emerald-700">
-                                        <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
-                                        OCR sukses
-                                    </Badge>
-                                    <span>Draft dibuat dari hasil OCR dan masih bisa Anda ubah sebelum disimpan.</span>
-                                </div>
-                            )}
+                                {result && (
+                                    <div className="flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground px-1">
+                                        <Badge variant="outline" className="border-emerald-300 bg-emerald-50 text-emerald-700 py-0 h-4">
+                                            OCR Berhasil
+                                        </Badge>
+                                        <span>Data diekstrak otomatis. Cek manual untuk akurasi maksimal.</span>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     )}
 
-                    {!draft && !loading && !uploading && (
-                        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800 dark:bg-amber-950/20">
-                            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-                            <p className="text-xs text-amber-700 dark:text-amber-400">
-                                {isManualFlow
-                                    ? "OCR akan mengekstrak data dari file PDF/gambar. Setelah hasil muncul, Anda bisa edit dulu sebelum menyimpannya ke Vendor Quotation Database."
-                                    : "OCR akan mengekstrak data dari file PDF/gambar dan langsung menyimpannya ke Vendor Quotation Database untuk flow auto."}
-                            </p>
+                    {/* Default Flow for AUTO OCR or when draft not exist */}
+                    {(!isManualFlow || !draft) && !loading && !uploading && (
+                        <div className="space-y-4">
+                            {!draft && (
+                                <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800 dark:bg-amber-950/20">
+                                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                                    <p className="text-xs text-amber-700 dark:text-amber-400">
+                                        {isManualFlow
+                                            ? "OCR akan mengekstrak data dari file PDF/gambar. Setelah hasil muncul, Anda bisa edit dulu sebelum menyimpannya."
+                                            : "OCR akan mengekstrak data dari file PDF/gambar dan langsung menyimpannya ke Vendor Quotation Database."}
+                                    </p>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>

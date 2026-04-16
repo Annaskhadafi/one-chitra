@@ -114,23 +114,34 @@ export async function triggerVendorQuotationOcr(
     persist = true
 ): Promise<TriggerOcrResult> {
     try {
+        console.log(`[OCR-Action] triggerVendorQuotationOcr called for: ${fileUrl}`)
         const headersList = await headers()
         const session = await auth.api.getSession({ headers: headersList })
         const userId = session?.user?.id ?? null
 
         const forwardedProto = headersList.get("x-forwarded-proto")
         const forwardedHost = headersList.get("x-forwarded-host") ?? headersList.get("host")
-        const baseUrl = process.env.NEXT_PUBLIC_APP_URL
-            ?? (forwardedHost ? `${forwardedProto ?? "https"}://${forwardedHost}` : "http://localhost:3000")
-        const response = await fetch(`${baseUrl}/api/ocr-vendor-quotation`, {
+        
+        const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || "").trim() 
+            || (forwardedHost ? `${forwardedProto || "https"}://${forwardedHost}` : "http://localhost:3000")
+        
+        console.log(`[OCR-Action] Using Base URL: ${baseUrl}`)
+
+        const targetUrl = `${baseUrl.replace(/\/$/, "")}/api/ocr-vendor-quotation`
+        
+        const response = await fetch(targetUrl, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ fileUrl, eprEntryId, userId, persist }),
+        }).catch(err => {
+            console.error(`[OCR-Action] Fetch failed for ${targetUrl}:`, err)
+            throw new Error(`Koneksi internal gagal: ${err.message}`)
         })
 
         if (!response.ok) {
             const errData = await response.json().catch(() => ({}))
-            return { success: false, error: (errData as { error?: string }).error ?? `HTTP ${response.status}` }
+            console.error(`[OCR-Action] API error status ${response.status}:`, errData)
+            return { success: false, error: (errData as { error?: string }).error ?? `HTTP ${response.status}: Server gagal memproses OCR` }
         }
 
         const result = await response.json() as {
@@ -138,10 +149,12 @@ export async function triggerVendorQuotationOcr(
             data: TriggerOcrResult["data"]
         }
 
+        console.log(`[OCR-Action] OCR Trigger success! ID: ${result.id}`)
         revalidatePath("/dashboard/vendor-quotations")
         return { success: true, id: result.id, data: result.data }
     } catch (error) {
         const message = error instanceof Error ? error.message : "Gagal memulai OCR"
+        console.error(`[OCR-Action] Critical error:`, message)
         return { success: false, error: message }
     }
 }
@@ -263,7 +276,6 @@ export async function syncVendorQuotationsFromEpr(): Promise<{ success: boolean;
         const session = await auth.api.getSession({ headers: headersList });
         const userId = session?.user?.id ?? null;
 
-        // Get existing URLs to avoid duplicates
         const existing = await db.query.vendorQuotations.findMany({
             columns: { fileUrl: true }
         });
@@ -273,7 +285,6 @@ export async function syncVendorQuotationsFromEpr(): Promise<{ success: boolean;
 
         for (const entry of entries) {
             const eprEntryId = entry["18"] || entry["id"];
-            // Columns 22 and 23 are attachments
             const urls = [entry["22"], entry["23"]].flatMap(v => Array.isArray(v) ? v : [v]).filter(Boolean) as string[];
 
             for (const url of urls) {
