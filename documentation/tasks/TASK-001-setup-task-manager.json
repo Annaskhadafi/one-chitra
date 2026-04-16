@@ -1,0 +1,9 @@
+{
+  "id": "TASK-001",
+  "status": "pending",
+  "priority": "P0",
+  "title": "Setup Task Manager",
+  "description": "Menyelesaikan konfigurasi awal sistem task-manager di proyek one-chitra.",
+  "createdAt": "2026-04-16T10:49:00.000Z",
+  "updatedAt": "2026-04-16T10:49:00.000Z"
+}

@@ -35,6 +35,9 @@
     "navbar:sync-approvals": "npx tsx scripts/sync-navbar-approvals.ts",
     "storage:smoke": "npx tsx scripts/test-object-storage-smoke.ts",
     "storage:migrate": "npx tsx scripts/migrate-uploads-to-object-storage.ts",
+    "task": "task-manager list-tasks",
+    "task:start": "task-manager start-task",
+    "task:complete": "task-manager complete-task",
     "prepare": "husky",
     "check-types": "tsc --noEmit"
   },

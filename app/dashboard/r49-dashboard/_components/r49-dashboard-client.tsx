@@ -106,10 +106,10 @@ export function R49DashboardClient({ initialFilterOptions }: R49DashboardClientP
     return (
         <div className="space-y-6">
             {/* Header section with minimal filters */}
-            <div className="flex flex-col md:flex-row gap-4 items-end bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+            <div className="flex flex-col md:flex-row gap-4 items-end bg-card p-4 rounded-xl shadow-sm border border-border">
                 <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-3">
                     <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Tahun</label>
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase ml-1">Tahun</label>
                         <DropdownFilter
                             label="Tahun"
                             icon={<Calendar className="h-3 w-3" />}
@@ -119,7 +119,7 @@ export function R49DashboardClient({ initialFilterOptions }: R49DashboardClientP
                         />
                     </div>
                     <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Bulan</label>
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase ml-1">Bulan</label>
                         <DropdownFilter
                             label="Bulan"
                             icon={<Calendar className="h-3 w-3" />}
@@ -133,7 +133,7 @@ export function R49DashboardClient({ initialFilterOptions }: R49DashboardClientP
                         />
                     </div>
                     <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Salesman</label>
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase ml-1">Salesman</label>
                         <DropdownFilter
                             label="Salesman"
                             icon={<User className="h-3 w-3" />}
@@ -143,7 +143,7 @@ export function R49DashboardClient({ initialFilterOptions }: R49DashboardClientP
                         />
                     </div>
                     <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Customer</label>
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase ml-1">Customer</label>
                         <DropdownFilter
                             label="Customer"
                             icon={<Building2 className="h-3 w-3" />}
@@ -182,7 +182,7 @@ export function R49DashboardClient({ initialFilterOptions }: R49DashboardClientP
             </div>
 
             {/* Pivot Table Section */}
-            <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+            <div className="bg-card rounded-xl shadow-sm border border-border overflow-hidden">
                 <div className="bg-[#0052CC] px-4 py-2 flex justify-between items-center text-white">
                     <h2 className="text-xs font-bold uppercase tracking-wider">EARTHMOVER TIRES R49 SALES ANALYSIS</h2>
                     <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded">REV. TYPE: TRADING</span>
@@ -196,7 +196,7 @@ export function R49DashboardClient({ initialFilterOptions }: R49DashboardClientP
 
                 {/* Pagination */}
                 {totalPages > 1 && (
-                    <div className="p-4 border-t border-slate-100 bg-slate-50/30">
+                    <div className="p-4 border-t border-border bg-muted/20">
                         <Pagination>
                             <PaginationContent>
                                 <PaginationItem>
@@ -258,7 +258,7 @@ function DropdownFilter({ label, icon, options, selected, onToggle, formatOption
             <PopoverTrigger asChild>
                 <Button
                     variant="outline"
-                    className="h-10 px-3 gap-2 border-slate-200 rounded-lg justify-between w-full bg-white text-slate-600 hover:bg-slate-50"
+                    className="h-10 px-3 gap-2 border-border rounded-lg justify-between w-full bg-background text-foreground hover:bg-muted"
                 >
                     <div className="flex items-center gap-2 overflow-hidden">
                         {icon}

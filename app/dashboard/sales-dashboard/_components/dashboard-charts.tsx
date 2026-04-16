@@ -60,7 +60,8 @@ const renderLabel = (props: any) => {
             x={x + width / 2} 
             y={barTop - 5} 
             textAnchor="middle" 
-            fill="#172B4D" 
+            fill="currentColor" 
+            className="fill-foreground"
             fontSize={10} 
             fontWeight={600}
         >
@@ -97,7 +98,8 @@ const CustomLabel = (props: CustomLabelProps) => {
             x={x + width / 2} 
             y={y + yOffset} 
             textAnchor="middle" 
-            fill="#172B4D" 
+            fill="currentColor" 
+            className="fill-foreground"
             fontSize={9} 
             fontWeight={600}
         >
@@ -166,7 +168,7 @@ export function DashboardCharts({ categoryStats, salesStats, monthlyStats, years
             {/* Category Chart */}
             <Card className="lg:col-span-1 shadow-sm border-slate-100 rounded-xl">
                 <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-bold text-center text-[#172B4D] uppercase">Revenue by Category</CardTitle>
+                    <CardTitle className="text-sm font-bold text-center text-foreground uppercase">Revenue by Category</CardTitle>
                 </CardHeader>
                 <CardContent className="h-[400px]">
                     <ResponsiveContainer width="100%" height="100%">
@@ -187,7 +189,7 @@ export function DashboardCharts({ categoryStats, salesStats, monthlyStats, years
             {/* Salesman Chart */}
             <Card className="lg:col-span-2 shadow-sm border-slate-100 rounded-xl">
                 <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-bold text-center text-[#172B4D] uppercase">Revenue by Sales Name</CardTitle>
+                    <CardTitle className="text-sm font-bold text-center text-foreground uppercase">Revenue by Sales Name</CardTitle>
                 </CardHeader>
                 <CardContent className="h-[450px]">
                     <ResponsiveContainer width="100%" height="100%">
@@ -210,7 +212,7 @@ export function DashboardCharts({ categoryStats, salesStats, monthlyStats, years
             {/* Monthly Trend Chart */}
             <Card className="lg:col-span-3 shadow-sm border-slate-100 rounded-xl">
                 <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-bold text-center text-[#172B4D] uppercase">Revenue by Month</CardTitle>
+                    <CardTitle className="text-sm font-bold text-center text-foreground uppercase">Revenue by Month</CardTitle>
                 </CardHeader>
                 <CardContent className="h-[450px]">
                     <ResponsiveContainer width="100%" height="100%">

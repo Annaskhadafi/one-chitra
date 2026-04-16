@@ -191,8 +191,8 @@ export function DashboardModernOverview({
   }))
 
   return (
-    <div className="rounded-3xl border border-slate-200 bg-slate-100/70 p-4 md:p-5">
-      <div className="mb-4 flex flex-col gap-3 rounded-2xl border bg-white px-4 py-3 md:flex-row md:items-center md:justify-between">
+    <div className="rounded-3xl border border-border bg-muted/40 p-4 md:p-5">
+      <div className="mb-4 flex flex-col gap-3 rounded-2xl border bg-card px-4 py-3 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-bold tracking-tight">Overview</h1>
           {isMounted ? (
@@ -226,7 +226,7 @@ export function DashboardModernOverview({
         <div className="space-y-4 xl:col-span-9">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {statCards.map((item) => (
-              <Card key={item.title} className="border-none bg-white shadow-sm">
+              <Card key={item.title} className="border bg-card shadow-sm">
                 <CardContent className="flex items-center justify-between p-4">
                   <div>
                     <p className="text-xs font-medium text-muted-foreground">{item.title}</p>
@@ -242,7 +242,7 @@ export function DashboardModernOverview({
           </div>
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-            <Card className="border-none bg-white shadow-sm lg:col-span-2">
+            <Card className="border bg-card shadow-sm lg:col-span-2">
               <CardHeader className="pb-0">
                 <CardTitle className="text-xl">Overall Sales Performance</CardTitle>
                 <p className="text-xs text-muted-foreground">
@@ -269,7 +269,7 @@ export function DashboardModernOverview({
               </CardContent>
             </Card>
 
-            <Card className="border-none bg-white shadow-sm">
+            <Card className="border bg-card shadow-sm">
               <CardHeader className="pb-0">
                 <CardTitle className="text-xl">Quotation Status</CardTitle>
               </CardHeader>
@@ -314,7 +314,7 @@ export function DashboardModernOverview({
           </div>
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <Card className="border-none bg-white shadow-sm">
+            <Card className="border bg-card shadow-sm">
               <CardHeader className="pb-0">
                 <CardTitle className="text-xl">SCM Priority Items</CardTitle>
               </CardHeader>
@@ -323,7 +323,7 @@ export function DashboardModernOverview({
                   <div className="text-sm text-muted-foreground">No low stock alerts</div>
                 ) : (
                   stats.stockAlerts.slice(0, 5).map((item, index) => (
-                    <div key={`${item.materialNumber}-${index}`} className="rounded-xl bg-slate-50 p-3">
+                    <div key={`${item.materialNumber}-${index}`} className="rounded-xl bg-accent/50 p-3">
                       <div className="flex items-center justify-between gap-2">
                         <p className="truncate text-sm font-semibold">{item.productName}</p>
                         <Badge variant="outline" className="text-[10px]">{item.currentStock}/{item.minStock}</Badge>
@@ -337,7 +337,7 @@ export function DashboardModernOverview({
               </CardContent>
             </Card>
 
-            <Card className="border-none bg-white shadow-sm">
+            <Card className="border bg-card shadow-sm">
               <CardHeader className="pb-0">
                 <CardTitle className="text-xl">Top 5 Customer</CardTitle>
               </CardHeader>

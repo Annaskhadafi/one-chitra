@@ -240,17 +240,17 @@ export function SalesDashboardClient({ initialFilterOptions }: SalesDashboardCli
     const totalPages = data ? Math.ceil(data.totalCustomers / filters.pageSize) : 0;
 
     return (
-        <div className="flex flex-col gap-6 w-full max-w-[1600px] mx-auto bg-[#F8F9FC] min-h-screen p-6">
+        <div className="flex flex-col gap-6 w-full max-w-[1600px] mx-auto bg-background min-h-screen p-6">
             {/* Header Section */}
-            <div className="flex flex-col gap-4 bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+            <div className="flex flex-col gap-4 bg-card p-6 rounded-xl shadow-sm border border-border">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
                         <div className="bg-[#0052CC] p-3 rounded-lg">
                             <Building2 className="text-white h-6 w-6" />
                         </div>
                         <div>
-                            <h1 className="text-2xl font-bold text-[#172B4D]">DASHBOARD SALES</h1>
-                            <p className="text-[#6B778C] font-semibold text-lg">PT CHITRA PARATAMA</p>
+                            <h1 className="text-2xl font-bold text-foreground">DASHBOARD SALES</h1>
+                            <p className="text-muted-foreground font-semibold text-lg">PT CHITRA PARATAMA</p>
                         </div>
                     </div>
 
@@ -261,7 +261,7 @@ export function SalesDashboardClient({ initialFilterOptions }: SalesDashboardCli
                                 value={searchInput}
                                 onChange={(event) => setSearchInput(event.target.value)}
                                 placeholder="Cari customer, salesman, rev. type, atau area..."
-                                className="pl-10 h-10 border-slate-200 focus:ring-blue-500 rounded-lg"
+                                className="pl-10 h-10 border-border focus:ring-blue-500 rounded-lg bg-background"
                             />
                         </div>
                         <Button variant="outline" onClick={handleReset} className="h-10 gap-2 border-slate-200 hover:bg-slate-50">
@@ -464,7 +464,7 @@ export function SalesDashboardClient({ initialFilterOptions }: SalesDashboardCli
 
                         {/* Pagination Controls */}
                         {!isLoading && totalPages > 1 && (
-                            <div className="flex items-center justify-between p-4 bg-white border-t border-slate-100">
+                            <div className="flex items-center justify-between p-4 bg-card border-t border-border">
                                 <p className="text-sm text-slate-500">
                                     Showing <span className="font-semibold">{((filters.page - 1) * filters.pageSize) + 1}</span> to <span className="font-semibold">{Math.min(filters.page * filters.pageSize, data?.totalCustomers || 0)}</span> of <span className="font-semibold">{data?.totalCustomers}</span> Customers
                                 </p>
@@ -577,9 +577,9 @@ function SummaryCard({
             <CardContent className="p-5">
                 <div className="flex items-start justify-between gap-4">
                     <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</p>
-                        <p className="mt-2 text-2xl font-bold text-[#172B4D]">{value}</p>
-                        <p className="mt-1 text-xs text-slate-500">{subtitle}</p>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</p>
+                        <p className="mt-2 text-2xl font-bold text-foreground">{value}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>
                     </div>
                     <div className={`flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br ${gradient} text-white shadow-sm`}>
                         {icon}
@@ -642,7 +642,7 @@ function TopSalesmenTable({
         <div className="overflow-x-auto">
             <Table>
                 <TableHeader>
-                    <TableRow className="bg-slate-50">
+                    <TableRow className="bg-muted/50">
                         <TableHead className="w-16 text-center">Rank</TableHead>
                         <TableHead>Sales Name</TableHead>
                         <TableHead className="text-right">Revenue</TableHead>
@@ -663,8 +663,8 @@ function TopSalesmenTable({
                         return (
                             <Fragment key={`${row.salesman}-${absoluteIndex}`}>
                                 <TableRow key={`${row.salesman}-${absoluteIndex}`}>
-                                    <TableCell className="text-center font-semibold text-[#0052CC]">#{absoluteIndex + 1}</TableCell>
-                                    <TableCell className="font-semibold text-[#172B4D]">{row.salesman || "-"}</TableCell>
+                                    <TableCell className="text-center font-semibold text-blue-600">#{absoluteIndex + 1}</TableCell>
+                                    <TableCell className="font-semibold text-foreground">{row.salesman || "-"}</TableCell>
                                     <TableCell className="text-right">{formatCurrencyCompact(row.revenue)}</TableCell>
                                     <TableCell className="text-right">{formatCurrencyCompact(row.grossProfit)}</TableCell>
                                     <TableCell className="text-right">{formatPercent(row.marginPct)}</TableCell>
@@ -712,8 +712,8 @@ function TopSalesmenTable({
                                                         <TableBody>
                                                             {row.topProducts.map((product, productIndex) => (
                                                                 <TableRow key={`${row.salesman}-${absoluteIndex}-${product.materialDescription}-${productIndex}`}>
-                                                                    <TableCell className="text-center text-xs text-slate-500">{productIndex + 1}</TableCell>
-                                                                    <TableCell className="text-xs font-medium text-[#172B4D]">
+                                                                    <TableCell className="text-center text-xs text-muted-foreground">{productIndex + 1}</TableCell>
+                                                                    <TableCell className="text-xs font-medium text-foreground">
                                                                         {product.materialDescription || "-"}
                                                                     </TableCell>
                                                                     <TableCell className="text-xs">{product.customerName || "-"}</TableCell>

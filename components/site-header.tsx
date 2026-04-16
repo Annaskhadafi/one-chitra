@@ -18,7 +18,7 @@ export function SiteHeader() {
       <div className="flex w-full items-center justify-between gap-1 px-4 lg:gap-2 lg:px-6">
         <div className="flex items-center gap-1 lg:gap-2">
           <SidebarTrigger
-            className="-ml-1 bg-[var(--sidebar-accent)] text-white hover:bg-[var(--sidebar-accent)]/90 hover:text-white rounded-md shadow-sm"
+            className="-ml-1 bg-sidebar-accent text-sidebar-accent-foreground hover:bg-sidebar-accent/90 hover:text-sidebar-accent-foreground rounded-md shadow-sm"
           />
           <Separator
             orientation="vertical"

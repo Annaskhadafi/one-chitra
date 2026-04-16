@@ -4,11 +4,11 @@ import { redirect } from "next/navigation"
 
 import {
   SidebarInset,
-  SidebarProvider,
 } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/app-sidebar"
 import { DashboardShortcutsCommand } from "@/components/dashboard-shortcuts-command"
 import { SiteHeader } from "@/components/site-header"
+import { DashboardThemeProvider } from "@/components/dashboard-theme-provider"
 
 import "@/app/dashboard/theme.css"
 
@@ -414,19 +414,9 @@ export default async function DashboardLayout({
   return (
     <PermissionsProvider permissions={permissions}>
       <Providers>
-        <SidebarProvider
+        <DashboardThemeProvider
           defaultOpen={defaultOpen}
-          style={
-            {
-              "--sidebar-width": "calc(var(--spacing) * 72)",
-              "--sidebar": navbarTheme.navbarBg,
-              "--sidebar-foreground": navbarTheme.fontColor,
-              "--sidebar-accent": navbarTheme.activeBg,
-              "--sidebar-accent-foreground": "#ffffff",
-              "--app-navbar-active-bg": navbarTheme.activeBg,
-              "--app-navbar-section-color": navbarTheme.sectionColor,
-            } as React.CSSProperties
-          }
+          navbarTheme={navbarTheme}
         >
           <AppSidebar variant="inset" permissions={permissions} navigationSections={navigationSectionsWithStockSapNew} user={
             user ? {
@@ -441,7 +431,7 @@ export default async function DashboardLayout({
             <div className="flex flex-1 flex-col" suppressHydrationWarning>{children}</div>
             <ChatWidget currentUserId={session.user.id} />
           </SidebarInset>
-        </SidebarProvider>
+        </DashboardThemeProvider>
       </Providers>
     </PermissionsProvider>
   )

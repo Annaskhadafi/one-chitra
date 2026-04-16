@@ -65,7 +65,7 @@ export function AppSidebar({ permissions: _perms = [], user, ...props }: AppSide
         >
             <SidebarHeader suppressHydrationWarning>
                 <div suppressHydrationWarning className="flex items-center gap-2 px-4 py-2 text-sidebar-foreground group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:justify-center">
-                    <div className="flex aspect-square size-8 shrink-0 items-center justify-center rounded-lg bg-white shadow-sm overflow-hidden border border-white/10 dark:bg-white">
+                    <div className="flex aspect-square size-8 shrink-0 items-center justify-center rounded-lg bg-white shadow-sm overflow-hidden border border-sidebar-border">
                         <Image
                             src={logo}
                             alt="One Chitra Logo"
@@ -88,8 +88,7 @@ export function AppSidebar({ permissions: _perms = [], user, ...props }: AppSide
                                 <>
                                     <SidebarSeparator className="mx-2" />
                                     <div
-                                        className="px-4 py-2 text-xs font-semibold uppercase tracking-wider"
-                                        style={{ color: "var(--app-navbar-section-color)" }}
+                                        className="px-4 py-2 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/50"
                                         suppressHydrationWarning
                                     >
                                         {section.title}
@@ -105,8 +104,7 @@ export function AppSidebar({ permissions: _perms = [], user, ...props }: AppSide
                                 <>
                                     <SidebarSeparator className="mx-2" />
                                     <div
-                                        className="px-4 py-2 text-xs font-semibold uppercase tracking-wider"
-                                        style={{ color: "var(--app-navbar-section-color)" }}
+                                        className="px-4 py-2 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/50"
                                         suppressHydrationWarning
                                     >
                                         {section.title}
