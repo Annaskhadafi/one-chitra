@@ -3,6 +3,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools"
 import { useEffect } from "react"
+import { PwaInstallPrompt } from "@/components/pwa-install-prompt"
 import { isServiceWorkerEnabled, unregisterServiceWorkers } from "@/lib/service-worker"
 
 function makeQueryClient() {
@@ -65,6 +66,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     return (
         <QueryClientProvider client={queryClient}>
             {children}
+            <PwaInstallPrompt />
             <ReactQueryDevtools initialIsOpen={false} />
         </QueryClientProvider>
     )
