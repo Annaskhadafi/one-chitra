@@ -27,7 +27,7 @@ export default async function SalesDashboardPage() {
     };
 
     return (
-        <div className="flex-1 space-y-4 p-8 pt-6">
+        <div className="flex-1 space-y-4 px-3 py-4 sm:px-4 sm:py-5 lg:p-8 lg:pt-6">
             <Suspense fallback={<div>Loading Dashboard...</div>}>
                 <SalesDashboardClient initialFilterOptions={filterOptions} />
             </Suspense>

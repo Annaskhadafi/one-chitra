@@ -1,9 +1,12 @@
 {
   "id": "TASK-001",
-  "status": "pending",
+  "status": "completed",
   "priority": "P0",
   "title": "Setup Task Manager",
   "description": "Menyelesaikan konfigurasi awal sistem task-manager di proyek one-chitra.",
   "createdAt": "2026-04-16T10:49:00.000Z",
-  "updatedAt": "2026-04-16T10:49:00.000Z"
+  "updatedAt": "2026-04-17T05:23:24.149Z",
+  "startedAt": "2026-04-17T05:15:25.180Z",
+  "completedAt": "2026-04-17T05:23:24.149Z",
+  "completionDetails": "Adjusted desktop sales dashboard filters to match the original web layout again, restored month filter, and tightened Revenue by Sales Name chart spacing so bars use more of the plot width."
 }

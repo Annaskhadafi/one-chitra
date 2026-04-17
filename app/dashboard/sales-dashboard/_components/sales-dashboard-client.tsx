@@ -240,106 +240,112 @@ export function SalesDashboardClient({ initialFilterOptions }: SalesDashboardCli
     const totalPages = data ? Math.ceil(data.totalCustomers / filters.pageSize) : 0;
 
     return (
-        <div className="flex flex-col gap-6 w-full max-w-[1600px] mx-auto bg-background min-h-screen p-6">
+        <div className="mx-auto flex min-h-screen w-full max-w-[1600px] flex-col gap-4 bg-background px-0 py-0 sm:gap-5 lg:gap-6">
             {/* Header Section */}
-            <div className="flex flex-col gap-4 bg-card p-6 rounded-xl shadow-sm border border-border">
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                        <div className="bg-[#0052CC] p-3 rounded-lg">
-                            <Building2 className="text-white h-6 w-6" />
+            <div className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5 lg:gap-4 lg:p-6">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="flex items-start gap-3 sm:gap-4">
+                        <div className="rounded-2xl bg-[#0052CC] p-3 shadow-sm sm:p-3.5">
+                            <Building2 className="h-5 w-5 text-white sm:h-6 sm:w-6" />
                         </div>
-                        <div>
-                            <h1 className="text-2xl font-bold text-foreground">DASHBOARD SALES</h1>
-                            <p className="text-muted-foreground font-semibold text-lg">PT CHITRA PARATAMA</p>
+                        <div className="min-w-0 space-y-1">
+                            <h1 className="text-2xl font-bold leading-tight text-foreground sm:text-[2rem]">DASHBOARD SALES</h1>
+                            <p className="text-base font-semibold text-muted-foreground sm:text-lg">PT CHITRA PARATAMA</p>
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-3">
-                        <div className="relative w-96">
+                    <div className="flex w-full flex-col gap-3 lg:w-auto lg:min-w-[520px]">
+                        <div className="relative w-full lg:w-96">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                             <Input
                                 value={searchInput}
                                 onChange={(event) => setSearchInput(event.target.value)}
                                 placeholder="Cari customer, salesman, rev. type, atau area..."
-                                className="pl-10 h-10 border-border focus:ring-blue-500 rounded-lg bg-background"
+                                className="h-11 rounded-xl border-border bg-background pl-10 text-sm focus:ring-blue-500"
                             />
                         </div>
-                        <Button variant="outline" onClick={handleReset} className="h-10 gap-2 border-slate-200 hover:bg-slate-50">
-                            <RotateCcw className="h-4 w-4" /> Reset
-                        </Button>
-                        <Button variant="outline" className="h-10 gap-2 border-slate-200">
-                            <Share2 className="h-4 w-4" /> Bagikan <ChevronDown className="h-4 w-4" />
-                        </Button>
-                        <Button className="h-10 gap-2 bg-[#0052CC] hover:bg-[#0047b3] text-white">
-                            <Edit2 className="h-4 w-4" /> Edit
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-10 w-10 text-slate-400">
-                            <MoreVertical className="h-5 w-5" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-10 w-10 text-slate-400">
-                            <HelpCircle className="h-5 w-5" />
-                        </Button>
+                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:flex lg:flex-wrap lg:justify-end">
+                            <Button variant="outline" onClick={handleReset} className="h-10 gap-2 rounded-xl border-slate-200 hover:bg-slate-50">
+                                <RotateCcw className="h-4 w-4" /> Reset
+                            </Button>
+                            <Button variant="outline" className="hidden h-10 gap-2 rounded-xl border-slate-200 sm:inline-flex">
+                                <Share2 className="h-4 w-4" /> Bagikan <ChevronDown className="h-4 w-4" />
+                            </Button>
+                            <Button className="h-10 gap-2 rounded-xl bg-[#0052CC] text-white hover:bg-[#0047b3]">
+                                <Edit2 className="h-4 w-4" /> Edit
+                            </Button>
+                            <div className="flex items-center justify-end gap-2">
+                                <Button variant="ghost" size="icon" className="hidden h-10 w-10 text-slate-400 lg:inline-flex">
+                                    <MoreVertical className="h-5 w-5" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="hidden h-10 w-10 text-slate-400 sm:inline-flex">
+                                    <HelpCircle className="h-5 w-5" />
+                                </Button>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
                 {/* Filters Bar */}
-                <div className="flex flex-wrap items-center gap-3 mt-2">
-                    <DropdownFilter
-                        label="Tahun"
-                        icon={<Calendar className="h-4 w-4" />}
-                        options={initialFilterOptions.years}
-                        selected={filters.years}
-                        onFilterChange={(values) => updateMultiSelectFilter('years', values)}
-                        primary
-                    />
+                <div className="mt-1 flex flex-col gap-3 sm:mt-2">
+                    <div className="grid grid-cols-2 gap-2 xl:flex xl:flex-wrap xl:items-center xl:gap-3">
+                        <DropdownFilter
+                            label="Tahun"
+                            icon={<Calendar className="h-4 w-4" />}
+                            options={initialFilterOptions.years}
+                            selected={filters.years}
+                            onFilterChange={(values) => updateMultiSelectFilter('years', values)}
+                            primary
+                        />
 
-                    <DropdownFilter
-                        label="BULAN"
-                        icon={<Calendar className="h-4 w-4" />}
-                        options={initialFilterOptions.months}
-                        selected={filters.months}
-                        onFilterChange={(values) => updateMultiSelectFilter('months', values)}
-                        primary
-                        formatOption={monthFormatter}
-                    />
+                        <DropdownFilter
+                            label="BULAN"
+                            icon={<Calendar className="h-4 w-4" />}
+                            options={initialFilterOptions.months}
+                            selected={filters.months}
+                            onFilterChange={(values) => updateMultiSelectFilter('months', values)}
+                            primary
+                            formatOption={monthFormatter}
+                        />
 
-                    <div className="h-8 w-[1px] bg-slate-200 mx-2" />
+                        <div className="hidden h-8 w-px bg-slate-200 xl:block" />
 
-                    <DropdownFilter
-                        label="Salesman"
-                        icon={<User className="h-4 w-4 text-slate-500" />}
-                        options={dynamicFilterOptions.salesmen}
-                        selected={filters.salesman}
-                        onFilterChange={(values) => updateMultiSelectFilter('salesman', values)}
-                    />
+                        <DropdownFilter
+                            label="Salesman"
+                            icon={<User className="h-4 w-4 text-slate-500" />}
+                            options={dynamicFilterOptions.salesmen}
+                            selected={filters.salesman}
+                            onFilterChange={(values) => updateMultiSelectFilter('salesman', values)}
+                        />
 
-                    <DropdownFilter
-                        label="Customer N..."
-                        icon={<Building2 className="h-4 w-4 text-slate-500" />}
-                        options={dynamicFilterOptions.customers}
-                        selected={filters.customers}
-                        onFilterChange={(values) => updateMultiSelectFilter('customers', values)}
-                    />
+                        <DropdownFilter
+                            label="Customer"
+                            icon={<Building2 className="h-4 w-4 text-slate-500" />}
+                            options={dynamicFilterOptions.customers}
+                            selected={filters.customers}
+                            onFilterChange={(values) => updateMultiSelectFilter('customers', values)}
+                        />
 
-                    <DropdownFilter
-                        label="Rev. Type"
-                        icon={<LayoutGrid className="h-4 w-4 text-slate-500" />}
-                        options={initialFilterOptions.revTypes}
-                        selected={filters.revTypes}
-                        onFilterChange={(values) => updateMultiSelectFilter('revTypes', values)}
-                    />
+                        <DropdownFilter
+                            label="Rev. Type"
+                            icon={<LayoutGrid className="h-4 w-4 text-slate-500" />}
+                            options={initialFilterOptions.revTypes}
+                            selected={filters.revTypes}
+                            onFilterChange={(values) => updateMultiSelectFilter('revTypes', values)}
+                        />
 
-                    <DropdownFilter
-                        label="AREA PENJU..."
-                        icon={<MapPin className="h-4 w-4 text-slate-500" />}
-                        options={initialFilterOptions.areas}
-                        selected={filters.areas}
-                        onFilterChange={(values) => updateMultiSelectFilter('areas', values)}
-                    />
+                        <DropdownFilter
+                            label="Area Penjualan"
+                            icon={<MapPin className="h-4 w-4 text-slate-500" />}
+                            options={initialFilterOptions.areas}
+                            selected={filters.areas}
+                            onFilterChange={(values) => updateMultiSelectFilter('areas', values)}
+                        />
 
-                    <div className="ml-auto inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700">
-                        <ShieldCheck className="h-4 w-4" />
-                        Logic aligned with Revenue vs Forecast
+                        <div className="col-span-2 inline-flex w-full items-start gap-2 rounded-2xl border border-blue-100 bg-blue-50 px-3 py-3 text-xs font-semibold text-blue-700 xl:ml-auto xl:w-auto xl:items-center xl:rounded-full xl:py-2">
+                            <ShieldCheck className="h-4 w-4" />
+                            Logic aligned with Revenue vs Forecast
+                        </div>
                     </div>
                 </div>
             </div>
@@ -347,7 +353,7 @@ export function SalesDashboardClient({ initialFilterOptions }: SalesDashboardCli
             {/* Main Content Sections */}
             <div className="flex flex-col gap-6">
                 {data?.summary && (
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3 2xl:grid-cols-6">
                         <SummaryCard
                             title="Total Revenue"
                             value={formatCurrencyCompact(data.summary.totalRevenue)}
@@ -410,11 +416,11 @@ export function SalesDashboardClient({ initialFilterOptions }: SalesDashboardCli
                 )}
 
                 {data && (
-                    <Card className="border-none shadow-md overflow-hidden rounded-xl">
-                        <CardHeader className="bg-gradient-to-r from-[#0052CC] to-[#1d4ed8] py-4 text-white flex flex-row items-center justify-between">
-                            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                                <Trophy className="h-4 w-4" /> Top Salesman Performance
-                            </CardTitle>
+                        <Card className="overflow-hidden rounded-xl border-none shadow-md">
+                            <CardHeader className="flex flex-col gap-1 bg-gradient-to-r from-[#0052CC] to-[#1d4ed8] py-4 text-white sm:flex-row sm:items-center sm:justify-between">
+                                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                                    <Trophy className="h-4 w-4" /> Top Salesman Performance
+                                </CardTitle>
                             <div className="text-xs opacity-90">
                                 Menampilkan 10 salesman terbaik dari filter aktif
                             </div>
@@ -426,11 +432,11 @@ export function SalesDashboardClient({ initialFilterOptions }: SalesDashboardCli
                 )}
 
                 {data && (
-                    <Card className="border-none shadow-md overflow-hidden rounded-xl">
-                        <CardHeader className="bg-gradient-to-r from-[#0f766e] to-[#14b8a6] py-4 text-white flex flex-row items-center justify-between">
-                            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                                <Users className="h-4 w-4" /> Top Customer Performance
-                            </CardTitle>
+                        <Card className="overflow-hidden rounded-xl border-none shadow-md">
+                            <CardHeader className="flex flex-col gap-1 bg-gradient-to-r from-[#0f766e] to-[#14b8a6] py-4 text-white sm:flex-row sm:items-center sm:justify-between">
+                                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                                    <Users className="h-4 w-4" /> Top Customer Performance
+                                </CardTitle>
                             <div className="text-xs opacity-90">
                                 Menampilkan 10 customer terbesar dari filter aktif
                             </div>
@@ -442,8 +448,8 @@ export function SalesDashboardClient({ initialFilterOptions }: SalesDashboardCli
                 )}
 
                 {/* Pivot Table Section */}
-                <Card className="border-none shadow-md overflow-hidden rounded-xl">
-                    <CardHeader className="bg-[#0052CC] py-3 text-white flex flex-row items-center justify-between">
+                <Card className="overflow-hidden rounded-xl border-none shadow-md">
+                    <CardHeader className="flex flex-col gap-2 bg-[#0052CC] py-3 text-white sm:flex-row sm:items-center sm:justify-between">
                         <CardTitle className="text-sm font-semibold flex items-center gap-2">
                             <LayoutGrid className="h-4 w-4" /> Date Billing (Tahun) / Revenue in Doc Curr.
                         </CardTitle>
@@ -464,11 +470,11 @@ export function SalesDashboardClient({ initialFilterOptions }: SalesDashboardCli
 
                         {/* Pagination Controls */}
                         {!isLoading && totalPages > 1 && (
-                            <div className="flex items-center justify-between p-4 bg-card border-t border-border">
-                                <p className="text-sm text-slate-500">
+                            <div className="flex flex-col gap-3 border-t border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
+                                <p className="text-sm leading-relaxed text-slate-500">
                                     Showing <span className="font-semibold">{((filters.page - 1) * filters.pageSize) + 1}</span> to <span className="font-semibold">{Math.min(filters.page * filters.pageSize, data?.totalCustomers || 0)}</span> of <span className="font-semibold">{data?.totalCustomers}</span> Customers
                                 </p>
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 self-end sm:self-auto">
                                     <Button
                                         variant="outline"
                                         size="sm"
@@ -516,9 +522,9 @@ export function SalesDashboardClient({ initialFilterOptions }: SalesDashboardCli
             </div>
 
             {/* Footer Brand */}
-            <div className="mt-4 flex items-center justify-between bg-[#0052CC] p-4 rounded-lg text-white">
-                <p className="font-italic text-lg italic font-semibold">Serve Better Value of Tire</p>
-                <p className="font-bold tracking-widest uppercase">PT CHITRA PARATAMA</p>
+            <div className="mt-2 flex flex-col gap-2 rounded-xl bg-[#0052CC] p-4 text-white sm:mt-4 sm:flex-row sm:items-center sm:justify-between">
+                <p className="font-italic text-base italic font-semibold sm:text-lg">Serve Better Value of Tire</p>
+                <p className="text-sm font-bold uppercase tracking-[0.18em] sm:text-base">PT CHITRA PARATAMA</p>
             </div>
         </div>
     );
@@ -542,9 +548,9 @@ function DropdownFilter({ label, icon, options, selected, onFilterChange, primar
             onFilterChange={onFilterChange}
             formatOption={formatOption}
             searchPlaceholder={`Cari ${label.toLowerCase()}...`}
-            triggerClassName={`h-11 min-w-[140px] justify-between rounded-lg border-slate-200 px-4 ${primary ? "border-none bg-[#0052CC] text-white hover:bg-[#0047b3] hover:text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}
+            triggerClassName={`h-11 w-full min-w-0 justify-between rounded-xl border-slate-200 px-3 text-left text-sm sm:px-4 xl:w-auto xl:min-w-[160px] ${primary ? "border-none bg-[#0052CC] text-white hover:bg-[#0047b3] hover:text-white xl:min-w-[180px]" : "bg-white text-slate-600 hover:bg-slate-50 xl:min-w-[170px]"}`}
             badgeClassName={primary ? "border-none bg-white font-bold text-[#0052CC]" : ""}
-            contentClassName="w-72"
+            contentClassName="w-[min(20rem,calc(100vw-2rem))]"
         />
     );
 }
@@ -573,15 +579,15 @@ function SummaryCard({
     const { gradient, bg } = accentStyles[accent];
 
     return (
-        <Card className="border border-slate-100 shadow-sm rounded-xl overflow-hidden">
-            <CardContent className="p-5">
+        <Card className="overflow-hidden rounded-xl border border-slate-100 shadow-sm">
+            <CardContent className="p-4 sm:p-5">
                 <div className="flex items-start justify-between gap-4">
                     <div>
                         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</p>
-                        <p className="mt-2 text-2xl font-bold text-foreground">{value}</p>
+                        <p className="mt-2 text-[1.75rem] font-bold leading-none text-foreground sm:text-2xl">{value}</p>
                         <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>
                     </div>
-                    <div className={`flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br ${gradient} text-white shadow-sm`}>
+                    <div className={`flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br ${gradient} text-white shadow-sm sm:h-12 sm:w-12`}>
                         {icon}
                     </div>
                 </div>

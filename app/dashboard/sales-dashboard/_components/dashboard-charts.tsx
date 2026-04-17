@@ -191,16 +191,31 @@ export function DashboardCharts({ categoryStats, salesStats, monthlyStats, years
                 <CardHeader className="pb-2">
                     <CardTitle className="text-sm font-bold text-center text-foreground uppercase">Revenue by Sales Name</CardTitle>
                 </CardHeader>
-                <CardContent className="h-[450px]">
+                <CardContent className="h-[450px] px-3 pb-4 sm:px-5">
                     <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={salesChartData} barGap={2} margin={{ top: 20, right: 30, bottom: 80, left: 20 }}>
+                        <BarChart
+                            data={salesChartData}
+                            barGap={4}
+                            barCategoryGap="10%"
+                            margin={{ top: 20, right: 8, bottom: 80, left: 0 }}
+                        >
                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
-                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: '#64748B' }} angle={-45} textAnchor="end" interval={0} />
+                            <XAxis
+                                dataKey="name"
+                                axisLine={false}
+                                tickLine={false}
+                                tick={{ fontSize: 9, fill: '#64748B' }}
+                                angle={-45}
+                                textAnchor="end"
+                                interval={0}
+                                tickMargin={6}
+                                padding={{ left: 0, right: 0 }}
+                            />
                             <YAxis tickFormatter={formatRevenue} axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748B' }} />
                             <Tooltip formatter={(val: number) => formatRevenue(val)} cursor={{ fill: '#F1F5F9' }} />
                             <Legend verticalAlign="top" iconType="rect" iconSize={10} wrapperStyle={{ fontSize: '10px', paddingTop: '0px', paddingBottom: '20px' }} />
                             {sortedYears.map((year, idx) => (
-                                <Bar key={year} dataKey={year} fill={YEAR_COLORS[year] || "#CBD5E1"} radius={[2, 2, 0, 0]}>
+                                <Bar key={year} dataKey={year} fill={YEAR_COLORS[year] || "#CBD5E1"} radius={[2, 2, 0, 0]} maxBarSize={44}>
                                     <LabelList dataKey={year} content={<CustomLabel />} />
                                 </Bar>
                             ))}
