@@ -141,6 +141,8 @@ type CompetitionData = {
     grandChampion: CompetitionRow | null
 }
 
+type SoldProduct = CompetitionRow["soldProducts"][number]
+
 type TargetSetupData = {
     period: string
     periodLabel: string
@@ -205,6 +207,213 @@ function periodBadgeTone(points: number) {
         return "bg-blue-50 text-blue-700 ring-blue-200"
     }
     return "bg-slate-50 text-slate-700 ring-slate-200"
+}
+
+function PointSummaryCard({
+    title,
+    value,
+    accent = false,
+}: {
+    title: string
+    value: number
+    accent?: boolean
+}) {
+    return (
+        <div className={`rounded-xl border p-3 ${accent ? "border-[#0052CC]/20 bg-[#0052CC]/5" : "bg-white"}`}>
+            <div className={`text-[11px] font-semibold uppercase tracking-[0.16em] ${accent ? "text-[#0052CC]" : "text-muted-foreground"}`}>
+                {title}
+            </div>
+            <div className={`mt-2 text-lg font-black ${accent ? "text-[#0052CC]" : "text-slate-950"}`}>
+                {formatNumber(value)}
+            </div>
+        </div>
+    )
+}
+
+function ProductDetailSection({
+    row,
+    soldProducts,
+    detailPointTotal,
+}: {
+    row: CompetitionRow
+    soldProducts: SoldProduct[]
+    detailPointTotal: number
+}) {
+    return (
+        <div className="space-y-4">
+            <div>
+                <div className="text-sm font-semibold text-slate-900">
+                    Detail Product {row.salesman}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                    Total {formatNumber(soldProducts.length)} product terjual pada periode aktif. Poin product ditampilkan untuk material kategori TYRE.
+                </div>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                <PointSummaryCard title="27R49" value={row.r49Points} />
+                <PointSummaryCard title="Cosmetic" value={row.cosmeticPoints} />
+                <PointSummaryCard title="Inventory" value={row.inventoryPoints} />
+                <PointSummaryCard title="Slow Moving" value={row.slowMovingPoints} />
+                <PointSummaryCard title="Total Detail" value={detailPointTotal} accent />
+            </div>
+            <div className="hidden overflow-hidden rounded-xl border bg-white md:block">
+                <div className="overflow-x-auto">
+                    <Table className="min-w-[980px]">
+                        <TableHeader>
+                            <TableRow className="bg-slate-100/80">
+                                <TableHead className="w-16 text-center">No</TableHead>
+                                <TableHead>Material</TableHead>
+                                <TableHead>Category</TableHead>
+                                <TableHead>Product</TableHead>
+                                <TableHead className="text-right">Qty</TableHead>
+                                <TableHead className="text-right">Revenue</TableHead>
+                                <TableHead className="text-right">Customer</TableHead>
+                                <TableHead>Periode</TableHead>
+                                <TableHead className="text-right">Poin</TableHead>
+                                <TableHead>Detail Poin</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {soldProducts.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={10} className="h-24 text-center text-sm text-muted-foreground">
+                                        Belum ada detail product untuk sales ini.
+                                    </TableCell>
+                                </TableRow>
+                            ) : (
+                                soldProducts.map((product, productIndex) => {
+                                    const customers = Array.isArray(product.customers) ? product.customers : []
+                                    const periods = Array.isArray(product.periods) ? product.periods : []
+                                    const isTyre = product.category === "TYRE" || Number(product.totalPoints || 0) > 0
+                                    const pointDetails = [
+                                        product.r49Points > 0 ? `27.00R49 ${formatNumber(product.r49Points)} pt` : null,
+                                        product.cosmeticPoints > 0 ? `Cosmetic ${formatNumber(product.cosmeticPoints)} pt` : null,
+                                        product.inventoryPoints > 0 ? `Existing Inventory ${formatNumber(product.inventoryPoints)} pt` : null,
+                                        product.slowMovingPoints > 0 ? `Slow Moving ${formatNumber(product.slowMovingPoints)} pt` : null,
+                                    ].filter((value): value is string => Boolean(value))
+
+                                    return (
+                                        <TableRow key={`${row.salesman}-${product.materialNo}-${productIndex}`}>
+                                            <TableCell className="text-center text-xs text-muted-foreground">
+                                                {productIndex + 1}
+                                            </TableCell>
+                                            <TableCell className="font-mono text-xs font-medium text-[#0052CC]">
+                                                {product.materialNo}
+                                            </TableCell>
+                                            <TableCell>
+                                                <Badge variant={isTyre ? "default" : "outline"} className={isTyre ? "bg-[#0052CC] hover:bg-[#0052CC]" : ""}>
+                                                    {isTyre ? "TYRE" : product.category || "-"}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell>
+                                                <div className="space-y-1">
+                                                    <div className="text-xs font-medium text-slate-900">
+                                                        {product.materialDescription}
+                                                    </div>
+                                                    <div className="text-xs text-muted-foreground">
+                                                        {customers.slice(0, 3).join(", ") || "-"}
+                                                        {customers.length > 3 ? ` +${customers.length - 3} customer` : ""}
+                                                    </div>
+                                                </div>
+                                            </TableCell>
+                                            <TableCell className="text-right text-xs">
+                                                {formatNumber(product.qty)}
+                                            </TableCell>
+                                            <TableCell className="text-right text-xs font-medium">
+                                                {formatCurrency(product.revenue)}
+                                            </TableCell>
+                                            <TableCell className="text-right text-xs">
+                                                {formatNumber(product.customerCount)}
+                                            </TableCell>
+                                            <TableCell className="text-xs">
+                                                {periods.join(", ") || "-"}
+                                            </TableCell>
+                                            <TableCell className="text-right text-xs font-semibold text-[#0052CC]">
+                                                {isTyre ? formatNumber(product.totalPoints) : "-"}
+                                            </TableCell>
+                                            <TableCell className="text-xs text-muted-foreground">
+                                                {isTyre
+                                                    ? pointDetails.join(" • ") || "Belum ada poin product"
+                                                    : "Poin hanya ditampilkan untuk category TYRE"}
+                                            </TableCell>
+                                        </TableRow>
+                                    )
+                                })
+                            )}
+                        </TableBody>
+                    </Table>
+                </div>
+            </div>
+            <div className="space-y-3 md:hidden">
+                {soldProducts.length === 0 ? (
+                    <div className="rounded-xl border bg-white px-4 py-6 text-center text-sm text-muted-foreground">
+                        Belum ada detail product untuk sales ini.
+                    </div>
+                ) : (
+                    soldProducts.map((product, productIndex) => {
+                        const customers = Array.isArray(product.customers) ? product.customers : []
+                        const periods = Array.isArray(product.periods) ? product.periods : []
+                        const isTyre = product.category === "TYRE" || Number(product.totalPoints || 0) > 0
+                        const pointDetails = [
+                            product.r49Points > 0 ? `27.00R49 ${formatNumber(product.r49Points)} pt` : null,
+                            product.cosmeticPoints > 0 ? `Cosmetic ${formatNumber(product.cosmeticPoints)} pt` : null,
+                            product.inventoryPoints > 0 ? `Existing Inventory ${formatNumber(product.inventoryPoints)} pt` : null,
+                            product.slowMovingPoints > 0 ? `Slow Moving ${formatNumber(product.slowMovingPoints)} pt` : null,
+                        ].filter((value): value is string => Boolean(value))
+
+                        return (
+                            <div key={`${row.salesman}-${product.materialNo}-${productIndex}`} className="rounded-2xl border bg-white p-4 shadow-sm">
+                                <div className="flex items-start justify-between gap-3">
+                                    <div>
+                                        <div className="text-xs text-muted-foreground">#{productIndex + 1}</div>
+                                        <div className="mt-1 font-mono text-xs font-semibold text-[#0052CC]">{product.materialNo}</div>
+                                    </div>
+                                    <Badge variant={isTyre ? "default" : "outline"} className={isTyre ? "bg-[#0052CC] hover:bg-[#0052CC]" : ""}>
+                                        {isTyre ? "TYRE" : product.category || "-"}
+                                    </Badge>
+                                </div>
+                                <div className="mt-3 text-sm font-semibold text-slate-900">{product.materialDescription}</div>
+                                <div className="mt-2 grid grid-cols-2 gap-3 text-xs">
+                                    <div>
+                                        <div className="text-muted-foreground">Qty</div>
+                                        <div className="mt-1 font-semibold text-slate-900">{formatNumber(product.qty)}</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-muted-foreground">Customer</div>
+                                        <div className="mt-1 font-semibold text-slate-900">{formatNumber(product.customerCount)}</div>
+                                    </div>
+                                    <div className="col-span-2">
+                                        <div className="text-muted-foreground">Revenue</div>
+                                        <div className="mt-1 font-semibold text-slate-900">{formatCurrency(product.revenue)}</div>
+                                    </div>
+                                    <div className="col-span-2">
+                                        <div className="text-muted-foreground">Periode</div>
+                                        <div className="mt-1 font-semibold text-slate-900">{periods.join(", ") || "-"}</div>
+                                    </div>
+                                    <div className="col-span-2">
+                                        <div className="text-muted-foreground">Customer Name</div>
+                                        <div className="mt-1 text-slate-900">{customers.join(", ") || "-"}</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-muted-foreground">Poin</div>
+                                        <div className="mt-1 font-semibold text-[#0052CC]">{isTyre ? formatNumber(product.totalPoints) : "-"}</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-muted-foreground">Detail Poin</div>
+                                        <div className="mt-1 text-slate-900">
+                                            {isTyre
+                                                ? pointDetails.join(" • ") || "Belum ada poin product"
+                                                : "Poin hanya untuk TYRE"}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )
+                    })
+                )}
+            </div>
+        </div>
+    )
 }
 
 function MonthToggle({
@@ -658,7 +867,123 @@ export function A2RCompetitionClient({
                                 </CardDescription>
                             </CardHeader>
                             <CardContent className="px-0">
-                                <div className="overflow-x-auto">
+                                <div className="space-y-4 px-4 md:hidden">
+                                    {data.rows.length === 0 ? (
+                                        <div className="rounded-2xl border bg-white px-4 py-10 text-center text-sm text-muted-foreground">
+                                            Belum ada data peserta pada filter yang dipilih.
+                                        </div>
+                                    ) : (
+                                        data.rows.map((row, index) => {
+                                            const isExpanded = expandedSalesmen.includes(row.salesman)
+                                            const monthlyBreakdown = Array.isArray(row.monthlyBreakdown) ? row.monthlyBreakdown : []
+                                            const soldProducts = Array.isArray(row.soldProducts) ? row.soldProducts : []
+                                            const detailPointTotal = soldProducts.reduce(
+                                                (total, product) => total + Number(product.totalPoints || 0),
+                                                0
+                                            )
+
+                                            return (
+                                                <div key={row.salesman} className="overflow-hidden rounded-2xl border bg-white shadow-sm">
+                                                    <div className="space-y-4 p-4">
+                                                        <div className="flex items-start justify-between gap-3">
+                                                            <div>
+                                                                <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[#0052CC]">
+                                                                    Rank #{index + 1}
+                                                                </div>
+                                                                <div className="mt-1 text-base font-semibold text-slate-900">
+                                                                    {row.salesman}
+                                                                </div>
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <div className="text-xs text-muted-foreground">Total Poin</div>
+                                                                <div className="text-2xl font-black text-[#0052CC]">
+                                                                    {formatNumber(row.totalPoints)}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex flex-wrap gap-2">
+                                                            {monthlyBreakdown.map((period) => (
+                                                                <span
+                                                                    key={`${row.salesman}-${period.period}`}
+                                                                    className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ${periodBadgeTone(period.totalPoints)}`}
+                                                                >
+                                                                    {period.period.slice(0, 2)}: {formatNumber(period.totalPoints)} pts
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                        <div className="grid grid-cols-2 gap-3 text-sm">
+                                                            <div className="rounded-xl bg-slate-50 p-3">
+                                                                <div className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Revenue</div>
+                                                                <div className="mt-1 font-semibold text-slate-900">{formatCurrency(row.revenueActual)}</div>
+                                                            </div>
+                                                            <div className="rounded-xl bg-slate-50 p-3">
+                                                                <div className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Target</div>
+                                                                <div className="mt-1 font-semibold text-slate-900">{formatCurrency(row.revenueTarget)}</div>
+                                                            </div>
+                                                            <div className="rounded-xl bg-slate-50 p-3">
+                                                                <div className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Achievement</div>
+                                                                <div className="mt-1 font-semibold text-slate-900">{formatPercent(row.achievementPct)}</div>
+                                                            </div>
+                                                            <div className="rounded-xl bg-slate-50 p-3">
+                                                                <div className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Revenue Pts</div>
+                                                                <div className="mt-1 font-semibold text-slate-900">{formatNumber(row.revenuePoints)}</div>
+                                                            </div>
+                                                            <div className="rounded-xl bg-slate-50 p-3">
+                                                                <div className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">27R49 Pts</div>
+                                                                <div className="mt-1 font-semibold text-slate-900">{formatNumber(row.r49Points)}</div>
+                                                                <div className="mt-1 text-xs text-muted-foreground">{row.r49HighCustomers} high / {row.r49MidCustomers} mid</div>
+                                                            </div>
+                                                            <div className="rounded-xl bg-slate-50 p-3">
+                                                                <div className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Cosmetic Pts</div>
+                                                                <div className="mt-1 font-semibold text-slate-900">{formatNumber(row.cosmeticPoints)}</div>
+                                                                <div className="mt-1 text-xs text-muted-foreground">{formatNumber(row.cosmeticCustomers)} customer</div>
+                                                            </div>
+                                                            <div className="rounded-xl bg-slate-50 p-3">
+                                                                <div className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Inventory Pts</div>
+                                                                <div className="mt-1 font-semibold text-slate-900">{formatNumber(row.inventoryPoints)}</div>
+                                                                <div className="mt-1 text-xs text-muted-foreground">{formatNumber(row.inventoryItems)} material</div>
+                                                            </div>
+                                                            <div className="rounded-xl bg-slate-50 p-3">
+                                                                <div className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Slow Moving Pts</div>
+                                                                <div className="mt-1 font-semibold text-slate-900">{formatNumber(row.slowMovingPoints)}</div>
+                                                                <div className="mt-1 text-xs text-muted-foreground">{formatNumber(row.slowMovingItems)} material</div>
+                                                            </div>
+                                                        </div>
+                                                        <Button
+                                                            type="button"
+                                                            variant="outline"
+                                                            size="sm"
+                                                            onClick={() => toggleSalesmanDetails(row.salesman)}
+                                                            className="w-full rounded-full"
+                                                        >
+                                                            {isExpanded ? (
+                                                                <>
+                                                                    <ChevronUp className="mr-2 h-4 w-4" />
+                                                                    Tutup Detail Product
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <ChevronDown className="mr-2 h-4 w-4" />
+                                                                    Lihat Detail Product
+                                                                </>
+                                                            )}
+                                                        </Button>
+                                                    </div>
+                                                    {isExpanded ? (
+                                                        <div className="border-t bg-slate-50/70 p-4">
+                                                            <ProductDetailSection
+                                                                row={row}
+                                                                soldProducts={soldProducts}
+                                                                detailPointTotal={detailPointTotal}
+                                                            />
+                                                        </div>
+                                                    ) : null}
+                                                </div>
+                                            )
+                                        })
+                                    )}
+                                </div>
+                                <div className="hidden overflow-x-auto md:block">
                                     <Table className="min-w-[1180px]">
                                         <TableHeader>
                                             <TableRow className="bg-slate-50">
@@ -771,124 +1096,11 @@ export function A2RCompetitionClient({
                                                             {isExpanded ? (
                                                                 <TableRow className="bg-slate-50/70">
                                                                     <TableCell colSpan={11} className="px-6 py-5">
-                                                                        <div className="space-y-4">
-                                                                            <div>
-                                                                                <div className="text-sm font-semibold text-slate-900">
-                                                                                    Detail Product {row.salesman}
-                                                                                </div>
-                                                                                <div className="text-xs text-muted-foreground">
-                                                                                    Total {formatNumber(soldProducts.length)} product terjual pada periode aktif. Poin product ditampilkan untuk material kategori TYRE.
-                                                                                </div>
-                                                                            </div>
-                                                                            <div className="grid gap-3 md:grid-cols-5">
-                                                                                <div className="rounded-xl border bg-white p-3">
-                                                                                    <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">27R49</div>
-                                                                                    <div className="mt-2 text-lg font-black text-slate-950">{formatNumber(row.r49Points)}</div>
-                                                                                </div>
-                                                                                <div className="rounded-xl border bg-white p-3">
-                                                                                    <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Cosmetic</div>
-                                                                                    <div className="mt-2 text-lg font-black text-slate-950">{formatNumber(row.cosmeticPoints)}</div>
-                                                                                </div>
-                                                                                <div className="rounded-xl border bg-white p-3">
-                                                                                    <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Inventory</div>
-                                                                                    <div className="mt-2 text-lg font-black text-slate-950">{formatNumber(row.inventoryPoints)}</div>
-                                                                                </div>
-                                                                                <div className="rounded-xl border bg-white p-3">
-                                                                                    <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Slow Moving</div>
-                                                                                    <div className="mt-2 text-lg font-black text-slate-950">{formatNumber(row.slowMovingPoints)}</div>
-                                                                                </div>
-                                                                                <div className="rounded-xl border border-[#0052CC]/20 bg-[#0052CC]/5 p-3">
-                                                                                    <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#0052CC]">Total Detail</div>
-                                                                                    <div className="mt-2 text-lg font-black text-[#0052CC]">{formatNumber(detailPointTotal)}</div>
-                                                                                </div>
-                                                                            </div>
-                                                                            <div className="overflow-hidden rounded-xl border bg-white">
-                                                                                <Table>
-                                                                                    <TableHeader>
-                                                                                        <TableRow className="bg-slate-100/80">
-                                                                                            <TableHead className="w-16 text-center">No</TableHead>
-                                                                                            <TableHead>Material</TableHead>
-                                                                                            <TableHead>Category</TableHead>
-                                                                                            <TableHead>Product</TableHead>
-                                                                                            <TableHead className="text-right">Qty</TableHead>
-                                                                                            <TableHead className="text-right">Revenue</TableHead>
-                                                                                            <TableHead className="text-right">Customer</TableHead>
-                                                                                            <TableHead>Periode</TableHead>
-                                                                                            <TableHead className="text-right">Poin</TableHead>
-                                                                                            <TableHead>Detail Poin</TableHead>
-                                                                                        </TableRow>
-                                                                                    </TableHeader>
-                                                                                    <TableBody>
-                                                                                        {soldProducts.length === 0 ? (
-                                                                                            <TableRow>
-                                                                                                <TableCell colSpan={10} className="h-24 text-center text-sm text-muted-foreground">
-                                                                                                    Belum ada detail product untuk sales ini.
-                                                                                                </TableCell>
-                                                                                            </TableRow>
-                                                                                        ) : (
-                                                                                            soldProducts.map((product, productIndex) => {
-                                                                                                const customers = Array.isArray(product.customers) ? product.customers : []
-                                                                                                const periods = Array.isArray(product.periods) ? product.periods : []
-                                                                                                const isTyre = product.category === "TYRE" || Number(product.totalPoints || 0) > 0
-                                                                                                const pointDetails = [
-                                                                                                    product.r49Points > 0 ? `27.00R49 ${formatNumber(product.r49Points)} pt` : null,
-                                                                                                    product.cosmeticPoints > 0 ? `Cosmetic ${formatNumber(product.cosmeticPoints)} pt` : null,
-                                                                                                    product.inventoryPoints > 0 ? `Existing Inventory ${formatNumber(product.inventoryPoints)} pt` : null,
-                                                                                                    product.slowMovingPoints > 0 ? `Slow Moving ${formatNumber(product.slowMovingPoints)} pt` : null,
-                                                                                                ].filter((value): value is string => Boolean(value))
-
-                                                                                                return (
-                                                                                                <TableRow key={`${row.salesman}-${product.materialNo}-${productIndex}`}>
-                                                                                                    <TableCell className="text-center text-xs text-muted-foreground">
-                                                                                                        {productIndex + 1}
-                                                                                                    </TableCell>
-                                                                                                    <TableCell className="font-mono text-xs font-medium text-[#0052CC]">
-                                                                                                        {product.materialNo}
-                                                                                                    </TableCell>
-                                                                                                    <TableCell>
-                                                                                                        <Badge variant={isTyre ? "default" : "outline"} className={isTyre ? "bg-[#0052CC] hover:bg-[#0052CC]" : ""}>
-                                                                                                            {isTyre ? "TYRE" : product.category || "-"}
-                                                                                                        </Badge>
-                                                                                                    </TableCell>
-                                                                                                    <TableCell>
-                                                                                                        <div className="space-y-1">
-                                                                                                            <div className="text-xs font-medium text-slate-900">
-                                                                                                                {product.materialDescription}
-                                                                                                            </div>
-                                                                                                            <div className="text-xs text-muted-foreground">
-                                                                                                                {customers.slice(0, 3).join(", ") || "-"}
-                                                                                                                {customers.length > 3 ? ` +${customers.length - 3} customer` : ""}
-                                                                                                            </div>
-                                                                                                        </div>
-                                                                                                    </TableCell>
-                                                                                                    <TableCell className="text-right text-xs">
-                                                                                                        {formatNumber(product.qty)}
-                                                                                                    </TableCell>
-                                                                                                    <TableCell className="text-right text-xs font-medium">
-                                                                                                        {formatCurrency(product.revenue)}
-                                                                                                    </TableCell>
-                                                                                                    <TableCell className="text-right text-xs">
-                                                                                                        {formatNumber(product.customerCount)}
-                                                                                                    </TableCell>
-                                                                                                    <TableCell className="text-xs">
-                                                                                                        {periods.join(", ") || "-"}
-                                                                                                    </TableCell>
-                                                                                                    <TableCell className="text-right text-xs font-semibold text-[#0052CC]">
-                                                                                                        {isTyre ? formatNumber(product.totalPoints) : "-"}
-                                                                                                    </TableCell>
-                                                                                                    <TableCell className="text-xs text-muted-foreground">
-                                                                                                        {isTyre
-                                                                                                            ? pointDetails.join(" • ") || "Belum ada poin product"
-                                                                                                            : "Poin hanya ditampilkan untuk category TYRE"}
-                                                                                                    </TableCell>
-                                                                                                </TableRow>
-                                                                                                )
-                                                                                            })
-                                                                                        )}
-                                                                                    </TableBody>
-                                                                                </Table>
-                                                                            </div>
-                                                                        </div>
+                                                                        <ProductDetailSection
+                                                                            row={row}
+                                                                            soldProducts={soldProducts}
+                                                                            detailPointTotal={detailPointTotal}
+                                                                        />
                                                                     </TableCell>
                                                                 </TableRow>
                                                             ) : null}
