@@ -137,6 +137,8 @@ export {
     costSettlementSignatoriesRelations,
 } from "./cost-settlements";
 export { marketingCampaigns, campaignRecipients, marketingCampaignsRelations, campaignRecipientsRelations } from "./marketing-campaigns";
+export { slowMovingProducts, slowMovingProductsRelations } from "./slow-moving-products";
+export { cosmeticTires, cosmeticTiresRelations } from "./cosmetic-tires";
 export { zmc9StockSap, me2lPurchDocsSap, zvendorPoReportSap, salesRevenueSap, salesRevenueSap as historyOrders, coverLetterSigners } from "./sap";
 export { aiInventoryPredictions, restockNotifications, aiSettings } from "./ai-predictions";
 export { inventoryVendorLeadTimes, inventoryVendorLeadTimeMaterials } from "./inventory-vendors";

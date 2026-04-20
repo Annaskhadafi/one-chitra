@@ -278,6 +278,11 @@ export const navigationConfig: NavSection[] = [
                         resource: "marketing",
                     },
                     {
+                        title: "Slow Moving",
+                        url: "/dashboard/marketing/slow-moving",
+                        resource: "marketing",
+                    },
+                    {
                         title: "Marketing Calendar",
                         url: "/dashboard/calendar",
                         resource: "calendar-events",

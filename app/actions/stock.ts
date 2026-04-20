@@ -278,6 +278,8 @@ export async function getStocks() {
                 totalStock: true,
                 minStock: true,
                 valuationValue: true,
+                createdAt: true,
+                updatedAt: true,
             },
             with: {
                 product: true,
