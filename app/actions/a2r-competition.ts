@@ -474,7 +474,7 @@ export async function getA2RCompetitionData(rawFilters: z.input<typeof a2rCompet
     const { startDate, endDateExclusive } = getRangeBounds(filters.year, selectedMonths)
     const selectedPeriodsSql = sql.join(selectedPeriods.map((period) => sql`${period}`), sql`, `)
 
-    const [salesResult, slowMovingResult, inventoryResult, cosmeticMatchResult, targetResult, materialCategoryResult] = await Promise.all([
+    const [salesResult, slowMovingResult, cosmeticMatchResult, targetResult, materialCategoryResult] = await Promise.all([
         db.execute(sql`
             SELECT
                 TO_CHAR(billing_date, 'MM.YYYY') AS period,
@@ -507,15 +507,6 @@ export async function getA2RCompetitionData(rawFilters: z.input<typeof a2rCompet
             FROM slow_moving_products
             WHERE material_number IS NOT NULL
               AND TRIM(material_number) <> ''
-        `),
-        db.execute(sql`
-            SELECT DISTINCT UPPER(TRIM(products.material_number)) AS "materialNumber"
-            FROM stock_levels
-            JOIN products ON products.id = stock_levels.product_id
-            WHERE stock_levels.total_stock > 0
-              AND UPPER(TRIM(products.category)) = 'TYRE'
-              AND products.material_number IS NOT NULL
-              AND TRIM(products.material_number) <> ''
         `),
         db.execute(sql`
             SELECT DISTINCT
@@ -561,11 +552,6 @@ export async function getA2RCompetitionData(rawFilters: z.input<typeof a2rCompet
         (materialCategoryResult.rows as Array<{ materialNumber: string | null; category: string | null }>)
             .map((row) => [normalizeMaterialKey(row.materialNumber), normalizeCategoryKey(row.category)] as const)
             .filter(([materialNumber]) => Boolean(materialNumber))
-    )
-    const inventorySet = new Set(
-        (inventoryResult.rows as Array<{ materialNumber: string | null }>)
-            .map((row) => normalizeMaterialKey(row.materialNumber))
-            .filter(Boolean)
     )
     const cosmeticMatchSet = new Set<string>()
 
@@ -642,7 +628,7 @@ export async function getA2RCompetitionData(rawFilters: z.input<typeof a2rCompet
         if (materialKey && isTyre && !isR49) {
             if (slowMovingSet.has(materialKey)) {
                 accumulator.slowMovingMaterialKeys.add(materialKey)
-            } else if (inventorySet.has(materialKey)) {
+            } else {
                 accumulator.inventoryMaterialKeys.add(materialKey)
             }
         }
