@@ -283,6 +283,11 @@ export const navigationConfig: NavSection[] = [
                         resource: "marketing",
                     },
                     {
+                        title: "A2R Competition",
+                        url: "/dashboard/sales-dashboard/a2r-competition",
+                        resource: "sales-dashboard",
+                    },
+                    {
                         title: "Marketing Calendar",
                         url: "/dashboard/calendar",
                         resource: "calendar-events",

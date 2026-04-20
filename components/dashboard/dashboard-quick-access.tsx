@@ -12,6 +12,7 @@ import {
   PackageCheck,
   ShoppingCart,
   TrendingUp,
+  Trophy,
   TriangleAlert,
   Truck,
   Users,
@@ -108,6 +109,14 @@ const QUICK_ACCESS_ITEMS: QuickAccessItem[] = [
     accentClassName: "from-lime-400/80 to-emerald-400/80",
   },
   {
+    title: "A2R Competition",
+    href: "/dashboard/sales-dashboard/a2r-competition",
+    description: "Leaderboard poin sales untuk program A2R.",
+    icon: Trophy,
+    iconClassName: "bg-blue-50 text-blue-600",
+    accentClassName: "from-blue-400/80 to-indigo-400/80",
+  },
+  {
     title: "Approvals",
     href: "/dashboard/approvals",
     description: "Cek approval yang menunggu tindakan.",
@@ -135,7 +144,7 @@ export function DashboardQuickAccess({
             ) : null}
           </div>
           <Badge variant="outline" className="w-fit rounded-full px-3 py-1 text-[11px]">
-            10 shortcut utama
+            11 shortcut utama
           </Badge>
         </div>
       </CardHeader>
