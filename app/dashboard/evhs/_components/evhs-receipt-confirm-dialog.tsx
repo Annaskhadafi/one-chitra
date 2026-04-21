@@ -140,83 +140,85 @@ export function EvhsReceiptConfirmDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[700px] max-h-[90vh] flex flex-col p-0 overflow-hidden">
+            <DialogContent className="sm:max-w-[700px] max-h-[90dvh] flex flex-col p-0 overflow-hidden">
                 <DialogHeader className="p-6 pb-0">
                     <DialogTitle>Konfirmasi Penerimaan Barang</DialogTitle>
                 </DialogHeader>
 
-                <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col flex-1 overflow-hidden">
-                    <ScrollArea className="flex-1 p-6">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                            <div className="space-y-2">
-                                <Label htmlFor="receivedDate">Tanggal Datang</Label>
-                                <Input
-                                    id="receivedDate"
-                                    type="date"
-                                    {...form.register("receivedDate")}
-                                />
-                                {form.formState.errors.receivedDate && (
-                                    <p className="text-xs text-red-500">{form.formState.errors.receivedDate.message}</p>
-                                )}
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="doChitraNo">No DO Chitra</Label>
-                                <Input
-                                    id="doChitraNo"
-                                    placeholder="Contoh: DO-2024-001"
-                                    {...form.register("doChitraNo")}
-                                />
-                            </div>
-                        </div>
-
-                        <div className="space-y-4">
-                            <Label className="text-base font-bold">Item & Validasi Serial Number</Label>
-                            {form.watch("items").map((item, index) => (
-                                <div key={item.productId} className="p-4 border rounded-lg bg-muted/30 space-y-3">
-                                    <div className="flex justify-between items-start">
-                                        <div>
-                                            <p className="text-sm font-bold">{item.materialNumber}</p>
-                                            <p className="text-xs text-muted-foreground">{item.materialDescription}</p>
-                                        </div>
-                                        <div className="text-right">
-                                            <p className="text-xs font-bold text-muted-foreground uppercase">Target Qty</p>
-                                            <p className="text-sm font-mono font-bold">{item.confirmedQty}</p>
-                                        </div>
-                                    </div>
-
-                                    <div className="grid grid-cols-1 gap-3">
-                                        <div className="space-y-2">
-                                            <Label className="text-xs">Ubah Qty Diterima (jika berbeda)</Label>
-                                            <Input
-                                                type="number"
-                                                className="h-8 w-24"
-                                                {...form.register(`items.${index}.confirmedQty`, { valueAsNumber: true })}
-                                            />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label className="text-xs font-semibold">Serial Numbers (Pisahkan dengan Baris Baru/Koma)</Label>
-                                            <Textarea
-                                                placeholder="Input SN di sini jika ada..."
-                                                className="text-xs font-mono"
-                                                {...form.register(`items.${index}.serialNumbers`)}
-                                            />
-                                        </div>
-                                    </div>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                    <ScrollArea className="min-h-0 flex-1">
+                        <div className="space-y-6 p-6">
+                            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                <div className="space-y-2">
+                                    <Label htmlFor="receivedDate">Tanggal Datang</Label>
+                                    <Input
+                                        id="receivedDate"
+                                        type="date"
+                                        {...form.register("receivedDate")}
+                                    />
+                                    {form.formState.errors.receivedDate && (
+                                        <p className="text-xs text-red-500">{form.formState.errors.receivedDate.message}</p>
+                                    )}
                                 </div>
-                            ))}
-                        </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="doChitraNo">No DO Chitra</Label>
+                                    <Input
+                                        id="doChitraNo"
+                                        placeholder="Contoh: DO-2024-001"
+                                        {...form.register("doChitraNo")}
+                                    />
+                                </div>
+                            </div>
 
-                        <div className="mt-6 space-y-2">
-                            <Label htmlFor="notes">Catatan (Opsional)</Label>
-                            <Textarea
-                                id="notes"
-                                placeholder="Tambahkan catatan tambahan jika perlu..."
-                                {...form.register("notes")}
-                            />
+                            <div className="space-y-4">
+                                <Label className="text-base font-bold">Item & Validasi Serial Number</Label>
+                                {form.watch("items").map((item, index) => (
+                                    <div key={item.productId} className="space-y-3 rounded-lg border bg-muted/30 p-4">
+                                        <div className="flex items-start justify-between">
+                                            <div>
+                                                <p className="text-sm font-bold">{item.materialNumber}</p>
+                                                <p className="text-xs text-muted-foreground">{item.materialDescription}</p>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-xs font-bold text-muted-foreground uppercase">Target Qty</p>
+                                                <p className="text-sm font-mono font-bold">{item.confirmedQty}</p>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 gap-3">
+                                            <div className="space-y-2">
+                                                <Label className="text-xs">Ubah Qty Diterima (jika berbeda)</Label>
+                                                <Input
+                                                    type="number"
+                                                    className="h-8 w-24"
+                                                    {...form.register(`items.${index}.confirmedQty`, { valueAsNumber: true })}
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label className="text-xs font-semibold">Serial Numbers (Pisahkan dengan Baris Baru/Koma)</Label>
+                                                <Textarea
+                                                    placeholder="Input SN di sini jika ada..."
+                                                    className="min-h-40 max-h-64 overflow-y-auto text-xs font-mono"
+                                                    {...form.register(`items.${index}.serialNumbers`)}
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="notes">Catatan (Opsional)</Label>
+                                <Textarea
+                                    id="notes"
+                                    placeholder="Tambahkan catatan tambahan jika perlu..."
+                                    {...form.register("notes")}
+                                />
+                            </div>
                         </div>
                     </ScrollArea>
 
-                    <DialogFooter className="p-6 pt-0 border-t bg-muted/10">
+                    <DialogFooter className="shrink-0 border-t bg-muted/10 p-6 pt-4">
                         <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
                             Batal
                         </Button>
