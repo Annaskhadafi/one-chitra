@@ -12,7 +12,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
@@ -146,8 +145,8 @@ export function EvhsReceiptConfirmDialog({
                 </DialogHeader>
 
                 <form onSubmit={form.handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                    <ScrollArea className="min-h-0 flex-1">
-                        <div className="space-y-6 p-6">
+                    <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-24">
+                        <div className="space-y-6 py-6">
                             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                                 <div className="space-y-2">
                                     <Label htmlFor="receivedDate">Tanggal Datang</Label>
@@ -198,7 +197,7 @@ export function EvhsReceiptConfirmDialog({
                                                 <Label className="text-xs font-semibold">Serial Numbers (Pisahkan dengan Baris Baru/Koma)</Label>
                                                 <Textarea
                                                     placeholder="Input SN di sini jika ada..."
-                                                    className="min-h-40 max-h-64 overflow-y-auto text-xs font-mono"
+                                                    className="h-32 resize-y overflow-y-auto text-xs font-mono"
                                                     {...form.register(`items.${index}.serialNumbers`)}
                                                 />
                                             </div>
@@ -212,13 +211,14 @@ export function EvhsReceiptConfirmDialog({
                                 <Textarea
                                     id="notes"
                                     placeholder="Tambahkan catatan tambahan jika perlu..."
+                                    className="min-h-24"
                                     {...form.register("notes")}
                                 />
                             </div>
                         </div>
-                    </ScrollArea>
+                    </div>
 
-                    <DialogFooter className="shrink-0 border-t bg-muted/10 p-6 pt-4">
+                    <DialogFooter className="relative z-10 shrink-0 border-t bg-background p-6 pt-4 shadow-[0_-8px_24px_rgba(15,23,42,0.08)]">
                         <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
                             Batal
                         </Button>
