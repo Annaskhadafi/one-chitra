@@ -4,6 +4,7 @@ import { forecasts } from "@/db/schema/forecasts"
 import { eq, sql, and, isNotNull, or, isNull, notIlike, ilike } from "drizzle-orm"
 import { settings } from "@/db/schema/settings"
 import { normalizeRevenueReportConfig, type RevenueReportConfig } from "@/lib/revenue-report-config"
+import { mergeRevenueTypeTotals } from "@/lib/revenue-type"
 import { salesRevenueCountableQty } from "@/lib/sales-revenue-sql"
 
 
@@ -191,12 +192,12 @@ export async function fetchDashboardRevenueForecast(filters: DashboardRevenueFil
         total: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInLocCurr}, 0))`
     }).from(salesRevenueSap).where(baseFilter).groupBy(salesRevenueSap.revType);
 
-    const revTypeTable = revTypeData
-        .filter(r => Boolean(r.type?.trim()))
-        .map(r => ({
-            type: r.type?.trim() || "Unknown",
-            total: Number(r.total)
-        }));
+    const revTypeTable = mergeRevenueTypeTotals(
+        revTypeData.map((item) => ({
+            type: item.type,
+            total: Number(item.total),
+        }))
+    );
 
     const revTypeMap = new Map(
         revTypeTable.map((item) => [item.type.toUpperCase(), item.total])
