@@ -53,8 +53,8 @@ interface EvhsVoucherPreviewProps {
 
 const voucherCss = `
     .pdf-wrapper {
-        font-size: 8pt;
-        line-height: 1.15;
+        font-size: 9pt;
+        line-height: 1.22;
         width: 100%;
         color: #1f2937;
     }
@@ -68,7 +68,7 @@ const voucherCss = `
         gap: 10px;
     }
     .pdf-title {
-        font-size: 13pt;
+        font-size: 15pt;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.06em;
@@ -76,7 +76,7 @@ const voucherCss = `
         color: #1e3a8a;
     }
     .pdf-number {
-        font-size: 11pt;
+        font-size: 12pt;
         font-weight: 700;
         line-height: 1.1;
     }
@@ -100,7 +100,7 @@ const voucherCss = `
     }
     .pdf-label {
         font-weight: 700;
-        min-width: 62px;
+        min-width: 68px;
     }
     .pdf-table {
         width: 100%;
@@ -109,30 +109,30 @@ const voucherCss = `
     }
     .pdf-table th, .pdf-table td {
         border: 1px solid #d1d5db;
-        padding: 4px 6px;
+        padding: 5px 6px;
         vertical-align: top;
     }
     .pdf-table th {
         background-color: #f8fafc;
         font-weight: 700;
         text-transform: uppercase;
-        font-size: 7pt;
+        font-size: 8pt;
         letter-spacing: 0.04em;
     }
     .pdf-table td {
-        font-size: 7.5pt;
+        font-size: 8.5pt;
     }
     .pdf-material-cp {
-        font-size: 6.5pt;
+        font-size: 7.2pt;
         color: #64748b;
     }
     .pdf-material-ck {
-        font-size: 8pt;
+        font-size: 9pt;
         color: #1e3a8a;
         font-weight: 700;
     }
     .pdf-material-desc {
-        font-size: 6.5pt;
+        font-size: 7.2pt;
         color: #475569;
         font-style: italic;
         margin-top: 1px;
@@ -141,7 +141,7 @@ const voucherCss = `
         margin-top: 6px;
         padding-top: 4px;
         border-top: 1px dotted #cbd5e1;
-        font-size: 6.5pt;
+        font-size: 7.2pt;
         color: #475569;
     }
     .pdf-note strong {
@@ -158,7 +158,7 @@ const voucherCss = `
     }
     .signature-title {
         font-weight: 700;
-        font-size: 7pt;
+        font-size: 8pt;
     }
     .signature-line {
         margin-top: 42px;
@@ -168,22 +168,22 @@ const voucherCss = `
     }
     .signature-name {
         margin-top: 5px;
-        font-size: 7pt;
+        font-size: 8pt;
         font-weight: 700;
     }
     .signature-company {
-        font-size: 6.5pt;
+        font-size: 7pt;
         color: #64748b;
     }
     .logo-img {
-        height: 38px;
+        height: 42px;
         width: auto;
         max-width: 140px;
         object-fit: contain;
         display: block;
     }
     .logo-fallback {
-        font-size: 9pt;
+        font-size: 10pt;
         font-weight: 700;
         color: #1e3a8a;
         letter-spacing: 0.04em;
