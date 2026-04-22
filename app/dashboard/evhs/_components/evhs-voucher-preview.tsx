@@ -53,7 +53,7 @@ interface EvhsVoucherPreviewProps {
 
 const voucherCss = `
     .pdf-wrapper {
-        font-size: 9pt;
+        font-size: 10pt;
         line-height: 1.22;
         width: 100%;
         color: #1f2937;
@@ -68,7 +68,7 @@ const voucherCss = `
         gap: 10px;
     }
     .pdf-title {
-        font-size: 15pt;
+        font-size: 17pt;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.06em;
@@ -76,7 +76,7 @@ const voucherCss = `
         color: #1e3a8a;
     }
     .pdf-number {
-        font-size: 12pt;
+        font-size: 14pt;
         font-weight: 700;
         line-height: 1.1;
     }
@@ -109,30 +109,30 @@ const voucherCss = `
     }
     .pdf-table th, .pdf-table td {
         border: 1px solid #d1d5db;
-        padding: 5px 6px;
+        padding: 6px 7px;
         vertical-align: top;
     }
     .pdf-table th {
         background-color: #f8fafc;
         font-weight: 700;
         text-transform: uppercase;
-        font-size: 8pt;
+        font-size: 9pt;
         letter-spacing: 0.04em;
     }
     .pdf-table td {
-        font-size: 8.5pt;
+        font-size: 10pt;
     }
     .pdf-material-cp {
-        font-size: 7.2pt;
+        font-size: 8.4pt;
         color: #64748b;
     }
     .pdf-material-ck {
-        font-size: 9pt;
+        font-size: 10.8pt;
         color: #1e3a8a;
         font-weight: 700;
     }
     .pdf-material-desc {
-        font-size: 7.2pt;
+        font-size: 8.4pt;
         color: #475569;
         font-style: italic;
         margin-top: 1px;
@@ -141,7 +141,7 @@ const voucherCss = `
         margin-top: 6px;
         padding-top: 4px;
         border-top: 1px dotted #cbd5e1;
-        font-size: 7.2pt;
+        font-size: 8.4pt;
         color: #475569;
     }
     .pdf-note strong {
@@ -153,37 +153,37 @@ const voucherCss = `
         display: grid;
         grid-template-columns: 1fr 1fr 1fr;
         gap: 4px;
-        margin-top: 14px;
+        margin-top: 18px;
         text-align: center;
     }
     .signature-title {
         font-weight: 700;
-        font-size: 8pt;
+        font-size: 9.5pt;
     }
     .signature-line {
-        margin-top: 42px;
+        margin-top: 60px;
         border-top: 1px solid #334155;
         display: inline-block;
         width: 94%;
     }
     .signature-name {
         margin-top: 5px;
-        font-size: 8pt;
+        font-size: 10pt;
         font-weight: 700;
     }
     .signature-company {
-        font-size: 7pt;
+        font-size: 8.5pt;
         color: #64748b;
     }
     .logo-img {
-        height: 42px;
+        height: 46px;
         width: auto;
         max-width: 140px;
         object-fit: contain;
         display: block;
     }
     .logo-fallback {
-        font-size: 10pt;
+        font-size: 11.5pt;
         font-weight: 700;
         color: #1e3a8a;
         letter-spacing: 0.04em;
@@ -451,7 +451,7 @@ function openVoucherPrintWindow(title: string, bodyHtml: string) {
                     width: 210mm;
                     min-height: 297mm;
                     margin: 0 auto;
-                    padding: 8mm 9mm;
+                    padding: 6mm 7mm;
                     display: flex;
                     flex-direction: column;
                     gap: 5mm;
