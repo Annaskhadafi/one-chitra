@@ -26,6 +26,8 @@ const confirmSchema = z.object({
         productId: z.number(),
         materialNumber: z.string(),
         materialDescription: z.string().optional(),
+        productCategory: z.string().optional(),
+        requiresSerialNumber: z.boolean().optional(),
         confirmedQty: z.number().min(0),
         serialNumbers: z.string().optional(), // String of SNs separated by comma/newline
     }))
@@ -35,11 +37,17 @@ type ConfirmValues = z.infer<typeof confirmSchema>
 type TransferDeliveryItem = {
     productId: number
     serialNumbers?: string[] | null
+    product?: {
+        category?: string | null
+        materialNumber?: string | null
+        materialDescription?: string | null
+    } | null
 }
 type TransferItem = {
     productId: number
     quantity: number
     product: {
+        category?: string | null
         materialNumber: string
         materialDescription: string | null
     }
@@ -51,6 +59,37 @@ type PendingReceiptTransfer = {
         items?: TransferDeliveryItem[]
     } | null
     items: TransferItem[]
+}
+
+function isTyreCategory(category?: string | null) {
+    const normalizedCategory = category?.trim().toUpperCase() ?? ""
+    return normalizedCategory === "TYRE" || normalizedCategory === "TIRE" || normalizedCategory.includes("TYRE") || normalizedCategory.includes("TIRE")
+}
+
+function shouldRequireSerialNumber(input: {
+    productCategory?: string | null
+    materialNumber?: string | null
+    materialDescription?: string | null
+    deliveryCategory?: string | null
+    existingSerialNumbers?: string[] | null
+}) {
+    if (input.existingSerialNumbers?.length) {
+        return true
+    }
+
+    if (isTyreCategory(input.productCategory) || isTyreCategory(input.deliveryCategory)) {
+        return true
+    }
+
+    const searchableText = [
+        input.materialNumber,
+        input.materialDescription,
+    ]
+        .filter(Boolean)
+        .join(" ")
+        .toUpperCase()
+
+    return /\bTYRE\b|\bTIRE\b/.test(searchableText)
 }
 
 export function EvhsReceiptConfirmDialog({
@@ -86,13 +125,22 @@ export function EvhsReceiptConfirmDialog({
                         (deliveryEntry) => deliveryEntry.productId === item.productId
                     )
                     const existingSn = deliveryItem?.serialNumbers?.join("\n") || ""
+                    const requiresSerialNumber = shouldRequireSerialNumber({
+                        productCategory: item.product.category,
+                        materialNumber: item.product.materialNumber,
+                        materialDescription: item.product.materialDescription,
+                        deliveryCategory: deliveryItem?.product?.category,
+                        existingSerialNumbers: deliveryItem?.serialNumbers,
+                    })
 
                     return {
                         productId: item.productId,
                         materialNumber: item.product.materialNumber,
                         materialDescription: item.product.materialDescription ?? undefined,
+                        productCategory: item.product.category ?? undefined,
+                        requiresSerialNumber,
                         confirmedQty: item.quantity,
-                        serialNumbers: existingSn
+                        serialNumbers: requiresSerialNumber ? existingSn : ""
                     }
                 })
             })
@@ -115,8 +163,10 @@ export function EvhsReceiptConfirmDialog({
                 items: values.items.map(item => ({
                     productId: item.productId,
                     confirmedQty: item.confirmedQty,
-                    serialNumbers: item.serialNumbers
+                    serialNumbers: item.requiresSerialNumber
+                        ? item.serialNumbers
                         ? item.serialNumbers.split(/[\n,]+/).map(sn => sn.trim()).filter(Boolean)
+                        : []
                         : []
                 }))
             }
@@ -193,14 +243,16 @@ export function EvhsReceiptConfirmDialog({
                                                     {...form.register(`items.${index}.confirmedQty`, { valueAsNumber: true })}
                                                 />
                                             </div>
-                                            <div className="space-y-2">
-                                                <Label className="text-xs font-semibold">Serial Numbers (Pisahkan dengan Baris Baru/Koma)</Label>
-                                                <Textarea
-                                                    placeholder="Input SN di sini jika ada..."
-                                                    className="h-32 resize-y overflow-y-auto text-xs font-mono"
-                                                    {...form.register(`items.${index}.serialNumbers`)}
-                                                />
-                                            </div>
+                                            {item.requiresSerialNumber ? (
+                                                <div className="space-y-2">
+                                                    <Label className="text-xs font-semibold">Serial Numbers (Pisahkan dengan Baris Baru/Koma)</Label>
+                                                    <Textarea
+                                                        placeholder="Input SN tyre di sini..."
+                                                        className="h-32 resize-y overflow-y-auto text-xs font-mono"
+                                                        {...form.register(`items.${index}.serialNumbers`)}
+                                                    />
+                                                </div>
+                                            ) : null}
                                         </div>
                                     </div>
                                 ))}

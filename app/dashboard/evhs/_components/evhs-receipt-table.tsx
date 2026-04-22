@@ -107,6 +107,7 @@ interface PendingTransfer {
         productId: number
         quantity: number
         product: {
+            category?: string | null
             materialNumber: string
             materialDescription: string | null
         }

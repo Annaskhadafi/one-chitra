@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
     Table,
     TableBody,
@@ -11,8 +11,9 @@ import {
 } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Search, FileText, MoreHorizontal, Edit, Trash2, PackagePlus, ClipboardEdit } from "lucide-react"
+import { Search, FileText, MoreHorizontal, Edit, Trash2, PackagePlus, ClipboardEdit, Printer } from "lucide-react"
 import { Input } from "@/components/ui/input"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
     Select,
     SelectContent,
@@ -22,7 +23,7 @@ import {
 } from "@/components/ui/select"
 import { Card, CardContent } from "@/components/ui/card"
 import { format } from "date-fns"
-import { EvhsVoucherPreview } from "./evhs-voucher-preview"
+import { EvhsVoucherPreview, openBulkVoucherPrint } from "./evhs-voucher-preview"
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -107,6 +108,44 @@ function formatWarehouseLabel(warehouse?: { sloc?: string | null; description?: 
     return [warehouse.sloc, warehouse.description].filter(Boolean).join(" - ") || "Tanpa Warehouse"
 }
 
+function normalizePosValue(pos?: string | null) {
+    return pos?.trim() || ""
+}
+
+function getPosSortMeta(pos?: string | null) {
+    const normalized = normalizePosValue(pos).toUpperCase()
+    const numericMatch = normalized.match(/\d+/)
+
+    return {
+        numeric: numericMatch ? Number.parseInt(numericMatch[0], 10) : Number.MAX_SAFE_INTEGER,
+        text: normalized || "ZZZ",
+    }
+}
+
+function summarizeVoucherPos(voucher: VoucherRow) {
+    const values = Array.from(new Set(
+        voucher.items
+            .map((item) => normalizePosValue(item.pos))
+            .filter(Boolean)
+    )).sort((left, right) => {
+        const leftMeta = getPosSortMeta(left)
+        const rightMeta = getPosSortMeta(right)
+
+        if (leftMeta.numeric !== rightMeta.numeric) {
+            return leftMeta.numeric - rightMeta.numeric
+        }
+
+        return leftMeta.text.localeCompare(rightMeta.text)
+    })
+
+    if (values.length === 0) {
+        return "-"
+    }
+
+    const visibleValues = values.slice(0, 3)
+    return values.length > 3 ? `${visibleValues.join(", ")} +${values.length - 3}` : visibleValues.join(", ")
+}
+
 function StatusBadge({ status }: { status: string }) {
     if (status === "draft") {
         return (
@@ -147,7 +186,13 @@ export function EvhsVoucherTable({
     const [isDeleting, setIsDeleting] = useState(false)
     const [addManualOpen, setAddManualOpen] = useState(false)
     const [fillDraftOpen, setFillDraftOpen] = useState(false)
+    const [selectedVoucherIds, setSelectedVoucherIds] = useState<number[]>([])
     const router = useRouter()
+
+    useEffect(() => {
+        const validIds = new Set(vouchers.map((voucher) => voucher.id))
+        setSelectedVoucherIds((current) => current.filter((id) => validIds.has(id)))
+    }, [vouchers])
 
     // Cek apakah ada warehouse VHS CK yang tersedia untuk tombol Add Manual
     const hasVhsWarehouse = warehouses.some((w) => {
@@ -206,6 +251,37 @@ export function EvhsVoucherTable({
         ]
     }, [filteredVouchers])
 
+    const filteredVoucherIds = useMemo(
+        () => filteredVouchers.map((voucher) => voucher.id),
+        [filteredVouchers]
+    )
+
+    const selectedFilteredVouchers = useMemo(
+        () => filteredVouchers.filter((voucher) => selectedVoucherIds.includes(voucher.id)),
+        [filteredVouchers, selectedVoucherIds]
+    )
+
+    const selectedFilteredCount = selectedFilteredVouchers.length
+    const isAllFilteredSelected = filteredVouchers.length > 0 && selectedFilteredCount === filteredVouchers.length
+    const isSomeFilteredSelected = selectedFilteredCount > 0 && selectedFilteredCount < filteredVouchers.length
+
+    const toggleVoucherSelection = (voucherId: number, checked: boolean) => {
+        setSelectedVoucherIds((current) => (
+            checked
+                ? Array.from(new Set([...current, voucherId]))
+                : current.filter((id) => id !== voucherId)
+        ))
+    }
+
+    const toggleAllFilteredSelection = (checked: boolean) => {
+        if (!checked) {
+            setSelectedVoucherIds((current) => current.filter((id) => !filteredVoucherIds.includes(id)))
+            return
+        }
+
+        setSelectedVoucherIds((current) => Array.from(new Set([...current, ...filteredVoucherIds])))
+    }
+
     const handleDelete = async () => {
         if (!selectedVoucher) return
 
@@ -224,6 +300,15 @@ export function EvhsVoucherTable({
         } finally {
             setIsDeleting(false)
         }
+    }
+
+    const handleBulkPrint = () => {
+        if (selectedFilteredVouchers.length === 0) {
+            toast.error("Pilih voucher yang ingin dicetak terlebih dulu.")
+            return
+        }
+
+        openBulkVoucherPrint(selectedFilteredVouchers)
     }
 
     return (
@@ -314,27 +399,58 @@ export function EvhsVoucherTable({
                     </Select>
                 </div>
 
-                {/* Tombol Add Voucher Manual — hanya tampil jika ada warehouse VHS CK */}
-                {hasVhsWarehouse && (
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                     <Button
-                        id="btn-add-manual-voucher"
-                        onClick={() => setAddManualOpen(true)}
-                        className="bg-amber-500 hover:bg-amber-600 text-white shadow-sm gap-2"
+                        type="button"
+                        variant="outline"
                         size="sm"
+                        onClick={handleBulkPrint}
+                        disabled={selectedFilteredCount === 0}
+                        className="gap-2"
                     >
-                        <PackagePlus className="h-4 w-4" />
-                        Tambah Voucher Manual
+                        <Printer className="h-4 w-4" />
+                        Cetak PDF Bulk
+                        {selectedFilteredCount > 0 ? ` (${selectedFilteredCount})` : ""}
                     </Button>
-                )}
+
+                    {hasVhsWarehouse && (
+                        <Button
+                            id="btn-add-manual-voucher"
+                            onClick={() => setAddManualOpen(true)}
+                            className="bg-amber-500 hover:bg-amber-600 text-white shadow-sm gap-2"
+                            size="sm"
+                        >
+                            <PackagePlus className="h-4 w-4" />
+                            Tambah Voucher Manual
+                        </Button>
+                    )}
+                </div>
+            </div>
+
+            <div className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 sm:flex-row sm:items-center sm:justify-between">
+                <span>
+                    Pilih voucher lalu cetak bulk. Urutan print otomatis mengikuti POS terkecil: `#1`, `#2`, `#3`, dst.
+                </span>
+                <span className="font-semibold text-slate-700">
+                    {selectedFilteredCount} voucher dipilih
+                </span>
             </div>
 
             <div className="rounded-md border bg-card overflow-x-auto">
-                <Table className="min-w-[1020px]">
+                <Table className="min-w-[1120px]">
                     <TableHeader>
                         <TableRow>
+                            <TableHead className="w-12">
+                                <Checkbox
+                                    checked={isAllFilteredSelected ? true : isSomeFilteredSelected ? "indeterminate" : false}
+                                    onCheckedChange={(checked) => toggleAllFilteredSelection(checked === true)}
+                                    aria-label="Pilih semua voucher hasil filter"
+                                />
+                            </TableHead>
                             <TableHead>Voucher No</TableHead>
                             <TableHead>Date</TableHead>
                             <TableHead>WO Number</TableHead>
+                            <TableHead>Pos</TableHead>
                             <TableHead>Warehouse</TableHead>
                             <TableHead>Items</TableHead>
                             <TableHead className="text-right">Amount</TableHead>
@@ -345,7 +461,7 @@ export function EvhsVoucherTable({
                     <TableBody>
                         {filteredVouchers.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
+                                <TableCell colSpan={10} className="h-24 text-center text-muted-foreground">
                                     Belum ada voucher yang di-generate.
                                 </TableCell>
                             </TableRow>
@@ -355,9 +471,17 @@ export function EvhsVoucherTable({
                                     key={voucher.id}
                                     className={voucher.status === "draft" ? "bg-amber-50/30 dark:bg-amber-950/10" : undefined}
                                 >
+                                    <TableCell>
+                                        <Checkbox
+                                            checked={selectedVoucherIds.includes(voucher.id)}
+                                            onCheckedChange={(checked) => toggleVoucherSelection(voucher.id, checked === true)}
+                                            aria-label={`Pilih voucher ${voucher.vhsNo}`}
+                                        />
+                                    </TableCell>
                                     <TableCell className="font-mono font-bold text-xs">{voucher.vhsNo}</TableCell>
                                     <TableCell suppressHydrationWarning>{format(new Date(voucher.date), "dd MMM yyyy")}</TableCell>
                                     <TableCell className="font-medium">{voucher.woNo || "—"}</TableCell>
+                                    <TableCell className="text-xs font-medium text-slate-700">{summarizeVoucherPos(voucher)}</TableCell>
                                     <TableCell>{formatWarehouseLabel(voucher.warehouse)}</TableCell>
                                     <TableCell>
                                         <Badge variant="secondary">{voucher.items.length} Items</Badge>
