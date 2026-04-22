@@ -65,6 +65,10 @@ interface FleetTripWithRelations {
     deliveries: {
         id: number
         deliveryNumber: string | null
+        isExternal: boolean | null
+        vendorName: string | null
+        awbNumber: string | null
+        shippingCost: string | null
         salesOrder?: {
             id: number
             invoiceNumber: string | null
@@ -115,7 +119,7 @@ export function FleetTripTable({ data: initialData }: FleetTripTableProps) {
     const canDelete = hasResourcePermission('fleet-management', 'delete')
 
     const calculateTotalCost = (trip: FleetTripWithRelations) => {
-        return (Number(trip.costGasolineDexlite) || 0) +
+        const internalCost = (Number(trip.costGasolineDexlite) || 0) +
             (Number(trip.costGasolineBio) || 0) +
             (Number(trip.costToll) || 0) +
             (Number(trip.costParking) || 0) +
@@ -127,6 +131,16 @@ export function FleetTripTable({ data: initialData }: FleetTripTableProps) {
             (Number(trip.costPortal) || 0) +
             (Number(trip.costWashing) || 0) +
             (Number(trip.costEscort) || 0)
+
+        const externalCost = trip.deliveries.reduce((sum, delivery) => {
+            if (!delivery.isExternal) {
+                return sum
+            }
+
+            return sum + (Number(delivery.shippingCost) || 0)
+        }, 0)
+
+        return internalCost + externalCost
     }
 
     const getTripSalesOrders = (trip: FleetTripWithRelations) => {
@@ -146,6 +160,33 @@ export function FleetTripTable({ data: initialData }: FleetTripTableProps) {
 
             return [{ label, poNumber, customerName }]
         })
+    }
+
+    const getExternalDeliverySummary = (trip: FleetTripWithRelations) => {
+        const vendorMap = new Map<string, { awbNumbers: Set<string>; totalCost: number }>()
+
+        for (const delivery of trip.deliveries) {
+            if (!delivery.isExternal || !delivery.vendorName) {
+                continue
+            }
+
+            const existing = vendorMap.get(delivery.vendorName) ?? {
+                awbNumbers: new Set<string>(),
+                totalCost: 0,
+            }
+
+            if (delivery.awbNumber) {
+                existing.awbNumbers.add(delivery.awbNumber)
+            }
+            existing.totalCost += Number(delivery.shippingCost) || 0
+            vendorMap.set(delivery.vendorName, existing)
+        }
+
+        return Array.from(vendorMap.entries()).map(([vendorName, value]) => ({
+            vendorName,
+            awbNumbers: Array.from(value.awbNumbers),
+            totalCost: value.totalCost,
+        }))
     }
 
     const columns = useMemo<ColumnDef<FleetTripWithRelations>[]>(() => [
@@ -258,6 +299,17 @@ export function FleetTripTable({ data: initialData }: FleetTripTableProps) {
                             </div>
                         ))
                     )}
+                    {getExternalDeliverySummary(row.original).map((vendor) => (
+                        <div key={`${row.original.id}-${vendor.vendorName}`} className="rounded-md border border-dashed bg-muted/20 px-2 py-1 text-xs">
+                            <div className="font-medium text-foreground">External Vendor: {vendor.vendorName}</div>
+                            <div className="text-muted-foreground">
+                                AWB: {vendor.awbNumbers.length > 0 ? vendor.awbNumbers.join(", ") : "-"}
+                            </div>
+                            <div className="text-muted-foreground">
+                                Cost: {new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(vendor.totalCost)}
+                            </div>
+                        </div>
+                    ))}
                 </div>
             ),
         },
@@ -359,6 +411,10 @@ export function FleetTripTable({ data: initialData }: FleetTripTableProps) {
                 trip.driver?.name?.toLowerCase().includes(term) ||
                 trip.vehicle?.policeNumber?.toLowerCase().includes(term) ||
                 trip.status?.toLowerCase().includes(term) ||
+                getExternalDeliverySummary(trip).some((vendor) =>
+                    vendor.vendorName.toLowerCase().includes(term) ||
+                    vendor.awbNumbers.some((awb) => awb.toLowerCase().includes(term))
+                ) ||
                 getTripSalesOrders(trip).some((salesOrder) =>
                     salesOrder.label.toLowerCase().includes(term) ||
                     salesOrder.poNumber.toLowerCase().includes(term) ||
@@ -386,12 +442,14 @@ export function FleetTripTable({ data: initialData }: FleetTripTableProps) {
         : [0, 0]
 
     const handleExport = () => {
-        const headers = ["Trip Number", "Date", "Status", "Driver", "Vehicle", "Deliveries", "List SO", "BBM (Dexlite)", "BBM (Bio Solar)", "Toll", "Parkir", "Meals", "Maintenance", "Rapid Test", "Ferry", "Portal", "Washing", "Escort", "Others", "Total Cost"]
+        const headers = ["Trip Number", "Date", "Status", "Driver", "Vehicle", "Deliveries", "List SO", "External Vendor", "AWB", "BBM (Dexlite)", "BBM (Bio Solar)", "Toll", "Parkir", "Meals", "Maintenance", "Rapid Test", "Ferry", "Portal", "Washing", "Escort", "Others", "External Cost", "Total Cost"]
         const csvData = table.getFilteredRowModel().rows.map(row => {
             const trip = row.original
             const salesOrderList = getTripSalesOrders(trip)
                 .map((salesOrder) => `${salesOrder.label} / PO ${salesOrder.poNumber} / ${salesOrder.customerName}`)
                 .join(" | ")
+            const externalSummary = getExternalDeliverySummary(trip)
+            const externalCost = trip.deliveries.reduce((sum, delivery) => sum + (delivery.isExternal ? (Number(delivery.shippingCost) || 0) : 0), 0)
 
             return [
                 trip.tripNumber,
@@ -401,6 +459,8 @@ export function FleetTripTable({ data: initialData }: FleetTripTableProps) {
                 trip.vehicle?.policeNumber || "",
                 trip.deliveries.length,
                 salesOrderList,
+                externalSummary.map((vendor) => vendor.vendorName).join(" | "),
+                externalSummary.flatMap((vendor) => vendor.awbNumbers).join(" | "),
                 trip.costGasolineDexlite || 0,
                 trip.costGasolineBio || 0,
                 trip.costToll || 0,
@@ -413,6 +473,7 @@ export function FleetTripTable({ data: initialData }: FleetTripTableProps) {
                 trip.costWashing || 0,
                 trip.costEscort || 0,
                 trip.costOthers || 0,
+                externalCost,
                 calculateTotalCost(trip)
             ]
         })

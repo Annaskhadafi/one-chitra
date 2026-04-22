@@ -1,14 +1,12 @@
 "use server"
 
 import { db } from "@/db"
-import { fleetTrips, deliveries, deliveryItems, salesOrders, salesOrderItems, stockLevels, fleetDrivers, fleetVehicles } from "@/db/schema"
-import { eq, desc, and, sql, inArray } from "drizzle-orm"
+import { fleetTrips, deliveries, deliveryItems, salesOrders, salesOrderItems, fleetDrivers, fleetVehicles } from "@/db/schema"
+import { eq, desc, sql, inArray } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { fleetTripSchema } from "@/lib/schemas"
 import { checkPermission } from "@/lib/rbac"
-import { auth } from "@/lib/auth"
-import { headers } from "next/headers"
 
 export async function getFleetTrips() {
     return await db.query.fleetTrips.findMany({
@@ -66,40 +64,81 @@ export async function generateTripNumber() {
     return `TRIP-${dateStr}-${String(nextNum).padStart(4, "0")}`
 }
 
+function allocateSharedAmount(totalAmount: number, weights: number[]) {
+    if (weights.length === 0) return []
+
+    const normalizedWeights = weights.some((weight) => weight > 0)
+        ? weights.map((weight) => Math.max(weight, 0))
+        : weights.map(() => 1)
+
+    const totalWeight = normalizedWeights.reduce((sum, weight) => sum + weight, 0) || normalizedWeights.length
+    const totalCents = Math.round((Number(totalAmount) || 0) * 100)
+
+    let allocatedCents = 0
+
+    return normalizedWeights.map((weight, index) => {
+        if (index === normalizedWeights.length - 1) {
+            return Number(((totalCents - allocatedCents) / 100).toFixed(2))
+        }
+
+        const shareCents = Math.round(totalCents * (weight / totalWeight))
+        allocatedCents += shareCents
+
+        return Number((shareCents / 100).toFixed(2))
+    })
+}
+
 export async function createFleetTrip(data: z.infer<typeof fleetTripSchema>) {
     try {
         await checkPermission('fleet-management', 'create')
         const tripNumber = await generateTripNumber()
+        const isExternal = Boolean(data.isExternal)
 
         return await db.transaction(async (tx) => {
             // 1. Create Fleet Trip
             const [newTrip] = await tx.insert(fleetTrips)
                 .values({
                     tripNumber,
-                    driverId: data.driverId,
-                    vehicleId: data.vehicleId,
+                    driverId: isExternal ? null : (data.driverId ?? null),
+                    vehicleId: isExternal ? null : (data.vehicleId ?? null),
                     status: data.status,
                     date: new Date(data.date),
                     notes: data.notes || null,
-                    tripDestination: data.tripDestination || null,
-                    costGasolineDexlite: String(data.costGasolineDexlite ?? 0),
-                    costGasolineBio: String(data.costGasolineBio ?? 0),
-                    costToll: String(data.costToll ?? 0),
-                    costParking: String(data.costParking ?? 0),
-                    costMeals: String(data.costMeals ?? 0),
-                    costMaintenance: String(data.costMaintenance ?? 0),
-                    costOthers: String(data.costOthers ?? 0),
-                    costRapidTest: String(data.costRapidTest ?? 0),
-                    costFerry: String(data.costFerry ?? 0),
-                    costPortal: String(data.costPortal ?? 0),
-                    costWashing: String(data.costWashing ?? 0),
-                    costEscort: String(data.costEscort ?? 0),
+                    tripDestination: isExternal ? null : (data.tripDestination || null),
+                    costGasolineDexlite: String(isExternal ? 0 : (data.costGasolineDexlite ?? 0)),
+                    costGasolineBio: String(isExternal ? 0 : (data.costGasolineBio ?? 0)),
+                    costToll: String(isExternal ? 0 : (data.costToll ?? 0)),
+                    costParking: String(isExternal ? 0 : (data.costParking ?? 0)),
+                    costMeals: String(isExternal ? 0 : (data.costMeals ?? 0)),
+                    costMaintenance: String(isExternal ? 0 : (data.costMaintenance ?? 0)),
+                    costOthers: String(isExternal ? 0 : (data.costOthers ?? 0)),
+                    costRapidTest: String(isExternal ? 0 : (data.costRapidTest ?? 0)),
+                    costFerry: String(isExternal ? 0 : (data.costFerry ?? 0)),
+                    costPortal: String(isExternal ? 0 : (data.costPortal ?? 0)),
+                    costWashing: String(isExternal ? 0 : (data.costWashing ?? 0)),
+                    costEscort: String(isExternal ? 0 : (data.costEscort ?? 0)),
                 })
                 .returning()
 
             // 2. Fetch Driver & Vehicle details for denormalized fields in Delivery
-            const driver = await tx.query.fleetDrivers.findFirst({ where: eq(fleetDrivers.id, data.driverId) })
-            const vehicle = await tx.query.fleetVehicles.findFirst({ where: eq(fleetVehicles.id, data.vehicleId) })
+            const driver = data.driverId
+                ? await tx.query.fleetDrivers.findFirst({ where: eq(fleetDrivers.id, data.driverId) })
+                : null
+            const vehicle = data.vehicleId
+                ? await tx.query.fleetVehicles.findFirst({ where: eq(fleetVehicles.id, data.vehicleId) })
+                : null
+
+            const pendingDeliveries: Array<{
+                soId: number
+                warehouseId: number | null
+                itemsToDeliver: Array<{
+                    salesOrderItemId: number
+                    productId: number
+                    remainingQuantity: number
+                    productCategory: string | null
+                }>
+                totalQuantity: number
+            }> = []
 
             // 3. Create Deliveries for each selected SO
             // First, get info about SO items to calculate remaining quantities
@@ -140,6 +179,25 @@ export async function createFleetTrip(data: z.infer<typeof fleetTripSchema>) {
 
                 if (itemsToDeliver.length === 0) continue // Skip if fully delivered
 
+                // Fetch warehouseId from SO
+                const so = await tx.query.salesOrders.findFirst({
+                    where: eq(salesOrders.id, soId),
+                    columns: { warehouseId: true }
+                })
+
+                pendingDeliveries.push({
+                    soId,
+                    warehouseId: so?.warehouseId ?? null,
+                    itemsToDeliver,
+                    totalQuantity: itemsToDeliver.reduce((sum, item) => sum + item.remainingQuantity, 0),
+                })
+            }
+
+            const externalShippingShares = isExternal
+                ? allocateSharedAmount(Number(data.shippingCost) || 0, pendingDeliveries.map((delivery) => delivery.totalQuantity))
+                : []
+
+            for (const [index, pendingDelivery] of pendingDeliveries.entries()) {
                 // Generate unique delivery number manually to ensure uniqueness in loop/transaction
                 const now = new Date()
                 const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`
@@ -149,28 +207,22 @@ export async function createFleetTrip(data: z.infer<typeof fleetTripSchema>) {
                 const randomSuffix = Math.floor(Math.random() * 1000000).toString().padStart(6, "0")
                 const deliveryNumber = `DLV-${dateStr}-${randomSuffix}`
 
-                // Fetch warehouseId from SO
-                const so = await tx.query.salesOrders.findFirst({
-                    where: eq(salesOrders.id, soId),
-                    columns: { warehouseId: true }
-                })
-
                 const [newDelivery] = await tx.insert(deliveries)
                     .values({
                         deliveryNumber,
-                        salesOrderId: soId,
+                        salesOrderId: pendingDelivery.soId,
                         scheduledDate: new Date(data.date),
                         status: "scheduled",
                         deliveryType: "full", // Defaulting to full
-                        // Internal Fleet
                         fleetTripId: newTrip.id,
-                        driverName: driver?.name,
-                        vehicleNumber: vehicle?.policeNumber,
-                        vehicleType: vehicle?.type,
-                        isExternal: false,
-                        shippingCost: "0", // Cost is on Trip
-                        // Cost breakdown 0 on delivery
-                        tripDestination: data.tripDestination || null,
+                        driverName: isExternal ? null : (driver?.name || null),
+                        vehicleNumber: isExternal ? null : (vehicle?.policeNumber || null),
+                        vehicleType: isExternal ? null : (vehicle?.type || null),
+                        isExternal,
+                        vendorName: isExternal ? (data.vendorName || null) : null,
+                        awbNumber: isExternal ? (data.awbNumber || null) : null,
+                        shippingCost: isExternal ? String(externalShippingShares[index] ?? 0) : "0",
+                        tripDestination: isExternal ? null : (data.tripDestination || null),
                         costGasoline: "0",
                         costGasolineDexlite: "0",
                         costGasolineBio: "0",
@@ -185,19 +237,14 @@ export async function createFleetTrip(data: z.infer<typeof fleetTripSchema>) {
                         costWashing: "0",
                         costEscort: "0",
 
-                        warehouseId: so?.warehouseId,
+                        warehouseId: pendingDelivery.warehouseId,
                     })
                     .returning()
 
-                // Oops, `generateDeliveryNumber` returns a string.
-                // Let's just use `crypto.randomUUID` or similar if we don't care about sequential perfectly.
-                // User expects sequential? "DLV-YYYYMMDD-XXXX".
-                // I will update the delivery number AFTER loop or just use a placeholder and rely on trigger? No trigger.
-
                 // Create Delivery Items
-                if (itemsToDeliver.length > 0) {
+                if (pendingDelivery.itemsToDeliver.length > 0) {
                     await tx.insert(deliveryItems)
-                        .values(itemsToDeliver.map(item => ({
+                        .values(pendingDelivery.itemsToDeliver.map(item => ({
                             deliveryId: newDelivery.id,
                             salesOrderItemId: item.salesOrderItemId,
                             productId: item.productId,
@@ -222,46 +269,72 @@ export async function updateFleetTrip(id: number, data: z.infer<typeof fleetTrip
     try {
         await checkPermission('fleet-management', 'edit')
         await db.transaction(async (tx) => {
+            const isExternal = Boolean(data.isExternal)
+
             await tx.update(fleetTrips)
                 .set({
                     tripNumber: data.tripNumber,
-                    driverId: data.driverId,
-                    vehicleId: data.vehicleId,
+                    driverId: isExternal ? null : (data.driverId ?? null),
+                    vehicleId: isExternal ? null : (data.vehicleId ?? null),
                     status: data.status,
                     date: new Date(data.date),
                     notes: data.notes || null,
-                    tripDestination: data.tripDestination || null,
-                    costGasolineDexlite: String(data.costGasolineDexlite ?? 0),
-                    costGasolineBio: String(data.costGasolineBio ?? 0),
-                    costToll: String(data.costToll ?? 0),
-                    costParking: String(data.costParking ?? 0),
-                    costMeals: String(data.costMeals ?? 0),
-                    costMaintenance: String(data.costMaintenance ?? 0),
-                    costOthers: String(data.costOthers ?? 0),
-                    costRapidTest: String(data.costRapidTest ?? 0),
-                    costFerry: String(data.costFerry ?? 0),
-                    costPortal: String(data.costPortal ?? 0),
-                    costWashing: String(data.costWashing ?? 0),
-                    costEscort: String(data.costEscort ?? 0),
+                    tripDestination: isExternal ? null : (data.tripDestination || null),
+                    costGasolineDexlite: String(isExternal ? 0 : (data.costGasolineDexlite ?? 0)),
+                    costGasolineBio: String(isExternal ? 0 : (data.costGasolineBio ?? 0)),
+                    costToll: String(isExternal ? 0 : (data.costToll ?? 0)),
+                    costParking: String(isExternal ? 0 : (data.costParking ?? 0)),
+                    costMeals: String(isExternal ? 0 : (data.costMeals ?? 0)),
+                    costMaintenance: String(isExternal ? 0 : (data.costMaintenance ?? 0)),
+                    costOthers: String(isExternal ? 0 : (data.costOthers ?? 0)),
+                    costRapidTest: String(isExternal ? 0 : (data.costRapidTest ?? 0)),
+                    costFerry: String(isExternal ? 0 : (data.costFerry ?? 0)),
+                    costPortal: String(isExternal ? 0 : (data.costPortal ?? 0)),
+                    costWashing: String(isExternal ? 0 : (data.costWashing ?? 0)),
+                    costEscort: String(isExternal ? 0 : (data.costEscort ?? 0)),
                     updatedAt: new Date(),
                 })
                 .where(eq(fleetTrips.id, id))
 
-            // Sync driver/vehicle to linked deliveries?
-            // Yes, if trip driver changes, deliveries should reflect that?
-            // "Satu Armada bisa membawa beberapa Po". Yes.
-            const driver = await tx.query.fleetDrivers.findFirst({ where: eq(fleetDrivers.id, data.driverId) })
-            const vehicle = await tx.query.fleetVehicles.findFirst({ where: eq(fleetVehicles.id, data.vehicleId) })
+            const driver = data.driverId
+                ? await tx.query.fleetDrivers.findFirst({ where: eq(fleetDrivers.id, data.driverId) })
+                : null
+            const vehicle = data.vehicleId
+                ? await tx.query.fleetVehicles.findFirst({ where: eq(fleetVehicles.id, data.vehicleId) })
+                : null
 
-            await tx.update(deliveries)
-                .set({
-                    driverName: driver?.name,
-                    vehicleNumber: vehicle?.policeNumber,
-                    vehicleType: vehicle?.type,
-                    scheduledDate: new Date(data.date), // Sync date?
-                    tripDestination: data.tripDestination || null,
-                })
-                .where(eq(deliveries.fleetTripId, id))
+            const linkedDeliveries = await tx.query.deliveries.findMany({
+                where: eq(deliveries.fleetTripId, id),
+                with: {
+                    items: true,
+                },
+            })
+
+            const shippingShares = isExternal
+                ? allocateSharedAmount(
+                    Number(data.shippingCost) || 0,
+                    linkedDeliveries.map((delivery) =>
+                        delivery.items.reduce((sum, item) => sum + Number(item.deliveredQuantity || 0), 0)
+                    )
+                )
+                : []
+
+            for (const [index, delivery] of linkedDeliveries.entries()) {
+                await tx.update(deliveries)
+                    .set({
+                        driverName: isExternal ? null : (driver?.name || null),
+                        vehicleNumber: isExternal ? null : (vehicle?.policeNumber || null),
+                        vehicleType: isExternal ? null : (vehicle?.type || null),
+                        isExternal,
+                        vendorName: isExternal ? (data.vendorName || null) : null,
+                        awbNumber: isExternal ? (data.awbNumber || null) : null,
+                        shippingCost: isExternal ? String(shippingShares[index] ?? 0) : "0",
+                        scheduledDate: new Date(data.date),
+                        tripDestination: isExternal ? null : (data.tripDestination || null),
+                        updatedAt: new Date(),
+                    })
+                    .where(eq(deliveries.id, delivery.id))
+            }
         })
 
         revalidatePath("/dashboard/fleet-management")
@@ -292,7 +365,7 @@ export async function deleteFleetTrip(id: number) {
 
         revalidatePath("/dashboard/fleet-management")
         return { success: true }
-    } catch (error) {
+    } catch (_error) {
         return { success: false, error: "Failed to delete fleet trip" }
     }
 }

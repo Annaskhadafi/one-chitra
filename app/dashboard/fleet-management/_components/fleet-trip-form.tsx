@@ -38,6 +38,8 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Calendar } from "@/components/ui/calendar"
+import { Switch } from "@/components/ui/switch"
+import { Separator } from "@/components/ui/separator"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
     Table,
@@ -95,7 +97,6 @@ export function FleetTripForm({ drivers, vehicles, salesOrders }: FleetTripFormP
     const [customerFilter, setCustomerFilter] = useState("all")
 
     const form = useForm<z.infer<typeof fleetTripSchema>>({
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         resolver: zodResolver(fleetTripSchema) as any,
         defaultValues: {
             driverId: 0,
@@ -103,6 +104,10 @@ export function FleetTripForm({ drivers, vehicles, salesOrders }: FleetTripFormP
             date: new Date(),
             status: "scheduled",
             notes: "",
+            isExternal: false,
+            vendorName: "",
+            awbNumber: "",
+            shippingCost: 0,
             costGasolineDexlite: 0,
             costGasolineBio: 0,
             costToll: 0,
@@ -140,7 +145,22 @@ export function FleetTripForm({ drivers, vehicles, salesOrders }: FleetTripFormP
         }
     }
 
+    const isExternal = form.watch("isExternal")
     const selectedSalesOrderIds = form.watch("salesOrderIds")
+    const totalInternalCost = [
+        form.watch("costGasolineDexlite"),
+        form.watch("costGasolineBio"),
+        form.watch("costToll"),
+        form.watch("costParking"),
+        form.watch("costMeals"),
+        form.watch("costMaintenance"),
+        form.watch("costOthers"),
+        form.watch("costRapidTest"),
+        form.watch("costFerry"),
+        form.watch("costPortal"),
+        form.watch("costWashing"),
+        form.watch("costEscort"),
+    ].reduce((sum, value) => sum + (Number(value) || 0), 0)
 
     const customerOptions = Array.from(
         new Set(
@@ -194,7 +214,6 @@ export function FleetTripForm({ drivers, vehicles, salesOrders }: FleetTripFormP
                                 <CardTitle>Trip Details</CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-4">
-                                {/* Date */}
                                 <FormField
                                     control={form.control}
                                     name="date"
@@ -234,131 +253,206 @@ export function FleetTripForm({ drivers, vehicles, salesOrders }: FleetTripFormP
                                     )}
                                 />
 
-                                {/* Driver Selection */}
+                                <Separator />
+
                                 <FormField
                                     control={form.control}
-                                    name="driverId"
+                                    name="isExternal"
                                     render={({ field }) => (
-                                        <FormItem className="flex flex-col">
-                                            <FormLabel>Driver</FormLabel>
-                                            <Popover open={openDriver} onOpenChange={setOpenDriver}>
-                                                <PopoverTrigger asChild>
-                                                    <FormControl>
-                                                        <Button
-                                                            variant="outline"
-                                                            role="combobox"
-                                                            className={cn(
-                                                                "w-full justify-between",
-                                                                !field.value && "text-muted-foreground"
-                                                            )}
-                                                        >
-                                                            {field.value
-                                                                ? drivers.find(
-                                                                    (driver) => driver.id === field.value
-                                                                )?.name
-                                                                : "Select driver"}
-                                                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                                        </Button>
-                                                    </FormControl>
-                                                </PopoverTrigger>
-                                                <PopoverContent className="w-[300px] p-0">
-                                                    <Command>
-                                                        <CommandInput placeholder="Search driver..." />
-                                                        <CommandList>
-                                                            <CommandEmpty>No driver found.</CommandEmpty>
-                                                            <CommandGroup>
-                                                                {drivers.map((driver) => (
-                                                                    <CommandItem
-                                                                        value={driver.name}
-                                                                        key={driver.id}
-                                                                        onSelect={() => {
-                                                                            form.setValue("driverId", driver.id)
-                                                                            setOpenDriver(false)
-                                                                        }}
-                                                                    >
-                                                                        <Check
-                                                                            className={cn(
-                                                                                "mr-2 h-4 w-4",
-                                                                                driver.id === field.value
-                                                                                    ? "opacity-100"
-                                                                                    : "opacity-0"
-                                                                            )}
-                                                                        />
-                                                                        {driver.name}
-                                                                    </CommandItem>
-                                                                ))}
-                                                            </CommandGroup>
-                                                        </CommandList>
-                                                    </Command>
-                                                </PopoverContent>
-                                            </Popover>
-                                            <FormMessage />
+                                        <FormItem className="flex items-center justify-between rounded-lg border p-4">
+                                            <div className="space-y-1">
+                                                <FormLabel className="text-base">Delivery Mode</FormLabel>
+                                                <p className="text-sm text-muted-foreground">
+                                                    Gunakan armada internal atau simpan detail vendor external seperti di form delivery.
+                                                </p>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <span className={cn("text-sm", !field.value && "font-semibold")}>Internal Fleet</span>
+                                                <FormControl>
+                                                    <Switch checked={field.value} onCheckedChange={field.onChange} />
+                                                </FormControl>
+                                                <span className={cn("text-sm", field.value && "font-semibold")}>External Vendor</span>
+                                            </div>
                                         </FormItem>
                                     )}
                                 />
 
-                                {/* Vehicle Selection */}
-                                <FormField
-                                    control={form.control}
-                                    name="vehicleId"
-                                    render={({ field }) => (
-                                        <FormItem className="flex flex-col">
-                                            <FormLabel>Vehicle</FormLabel>
-                                            <Popover open={openVehicle} onOpenChange={setOpenVehicle}>
-                                                <PopoverTrigger asChild>
+                                {!isExternal ? (
+                                    <>
+                                        <FormField
+                                            control={form.control}
+                                            name="driverId"
+                                            render={({ field }) => (
+                                                <FormItem className="flex flex-col">
+                                                    <FormLabel>Driver</FormLabel>
+                                                    <Popover open={openDriver} onOpenChange={setOpenDriver}>
+                                                        <PopoverTrigger asChild>
+                                                            <FormControl>
+                                                                <Button
+                                                                    variant="outline"
+                                                                    role="combobox"
+                                                                    className={cn(
+                                                                        "w-full justify-between",
+                                                                        !field.value && "text-muted-foreground"
+                                                                    )}
+                                                                >
+                                                                    {field.value
+                                                                        ? drivers.find((driver) => driver.id === field.value)?.name
+                                                                        : "Select driver"}
+                                                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                                                </Button>
+                                                            </FormControl>
+                                                        </PopoverTrigger>
+                                                        <PopoverContent className="w-[300px] p-0">
+                                                            <Command>
+                                                                <CommandInput placeholder="Search driver..." />
+                                                                <CommandList>
+                                                                    <CommandEmpty>No driver found.</CommandEmpty>
+                                                                    <CommandGroup>
+                                                                        {drivers.map((driver) => (
+                                                                            <CommandItem
+                                                                                value={driver.name}
+                                                                                key={driver.id}
+                                                                                onSelect={() => {
+                                                                                    form.setValue("driverId", driver.id)
+                                                                                    setOpenDriver(false)
+                                                                                }}
+                                                                            >
+                                                                                <Check
+                                                                                    className={cn(
+                                                                                        "mr-2 h-4 w-4",
+                                                                                        driver.id === field.value ? "opacity-100" : "opacity-0"
+                                                                                    )}
+                                                                                />
+                                                                                {driver.name}
+                                                                            </CommandItem>
+                                                                        ))}
+                                                                    </CommandGroup>
+                                                                </CommandList>
+                                                            </Command>
+                                                        </PopoverContent>
+                                                    </Popover>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+
+                                        <FormField
+                                            control={form.control}
+                                            name="vehicleId"
+                                            render={({ field }) => (
+                                                <FormItem className="flex flex-col">
+                                                    <FormLabel>Vehicle</FormLabel>
+                                                    <Popover open={openVehicle} onOpenChange={setOpenVehicle}>
+                                                        <PopoverTrigger asChild>
+                                                            <FormControl>
+                                                                <Button
+                                                                    variant="outline"
+                                                                    role="combobox"
+                                                                    className={cn(
+                                                                        "w-full justify-between",
+                                                                        !field.value && "text-muted-foreground"
+                                                                    )}
+                                                                >
+                                                                    {field.value
+                                                                        ? vehicles.find((vehicle) => vehicle.id === field.value)?.policeNumber
+                                                                        : "Select vehicle"}
+                                                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                                                </Button>
+                                                            </FormControl>
+                                                        </PopoverTrigger>
+                                                        <PopoverContent className="w-[300px] p-0">
+                                                            <Command>
+                                                                <CommandInput placeholder="Search vehicle..." />
+                                                                <CommandList>
+                                                                    <CommandEmpty>No vehicle found.</CommandEmpty>
+                                                                    <CommandGroup>
+                                                                        {vehicles.map((vehicle) => (
+                                                                            <CommandItem
+                                                                                value={vehicle.policeNumber}
+                                                                                key={vehicle.id}
+                                                                                onSelect={() => {
+                                                                                    form.setValue("vehicleId", vehicle.id)
+                                                                                    setOpenVehicle(false)
+                                                                                }}
+                                                                            >
+                                                                                <Check
+                                                                                    className={cn(
+                                                                                        "mr-2 h-4 w-4",
+                                                                                        vehicle.id === field.value ? "opacity-100" : "opacity-0"
+                                                                                    )}
+                                                                                />
+                                                                                {vehicle.policeNumber} ({vehicle.type})
+                                                                            </CommandItem>
+                                                                        ))}
+                                                                    </CommandGroup>
+                                                                </CommandList>
+                                                            </Command>
+                                                        </PopoverContent>
+                                                    </Popover>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+
+                                        <FormField
+                                            control={form.control}
+                                            name="tripDestination"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel>Trip Destination</FormLabel>
                                                     <FormControl>
-                                                        <Button
-                                                            variant="outline"
-                                                            role="combobox"
-                                                            className={cn(
-                                                                "w-full justify-between",
-                                                                !field.value && "text-muted-foreground"
-                                                            )}
-                                                        >
-                                                            {field.value
-                                                                ? vehicles.find(
-                                                                    (v) => v.id === field.value
-                                                                )?.policeNumber
-                                                                : "Select vehicle"}
-                                                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                                        </Button>
+                                                        <Input
+                                                            placeholder="e.g. Jakarta Pusat, Bandung..."
+                                                            {...field}
+                                                            value={field.value || ""}
+                                                        />
                                                     </FormControl>
-                                                </PopoverTrigger>
-                                                <PopoverContent className="w-[300px] p-0">
-                                                    <Command>
-                                                        <CommandInput placeholder="Search vehicle..." />
-                                                        <CommandList>
-                                                            <CommandEmpty>No vehicle found.</CommandEmpty>
-                                                            <CommandGroup>
-                                                                {vehicles.map((vehicle) => (
-                                                                    <CommandItem
-                                                                        value={vehicle.policeNumber}
-                                                                        key={vehicle.id}
-                                                                        onSelect={() => {
-                                                                            form.setValue("vehicleId", vehicle.id)
-                                                                            setOpenVehicle(false)
-                                                                        }}
-                                                                    >
-                                                                        <Check
-                                                                            className={cn(
-                                                                                "mr-2 h-4 w-4",
-                                                                                vehicle.id === field.value
-                                                                                    ? "opacity-100"
-                                                                                    : "opacity-0"
-                                                                            )}
-                                                                        />
-                                                                        {vehicle.policeNumber} ({vehicle.type})
-                                                                    </CommandItem>
-                                                                ))}
-                                                            </CommandGroup>
-                                                        </CommandList>
-                                                    </Command>
-                                                </PopoverContent>
-                                            </Popover>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                    </>
+                                ) : (
+                                    <>
+                                        <FormField
+                                            control={form.control}
+                                            name="vendorName"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel>Vendor Name</FormLabel>
+                                                    <FormControl>
+                                                        <Input
+                                                            placeholder="e.g. JNE, Dakota, GoBox..."
+                                                            {...field}
+                                                            value={field.value || ""}
+                                                        />
+                                                    </FormControl>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+
+                                        <FormField
+                                            control={form.control}
+                                            name="awbNumber"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel>AWB / Receipt No.</FormLabel>
+                                                    <FormControl>
+                                                        <Input
+                                                            placeholder="Tracking Number"
+                                                            {...field}
+                                                            value={field.value || ""}
+                                                            className="font-mono"
+                                                        />
+                                                    </FormControl>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                    </>
+                                )}
 
                                 <FormField
                                     control={form.control}
@@ -378,251 +472,279 @@ export function FleetTripForm({ drivers, vehicles, salesOrders }: FleetTripFormP
                                         </FormItem>
                                     )}
                                 />
-
-                                <FormField
-                                    control={form.control}
-                                    name="tripDestination"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Trip Destination</FormLabel>
-                                            <FormControl>
-                                                <Input
-                                                    placeholder="e.g. Jakarta Pusat, Bandung..."
-                                                    {...field}
-                                                    value={field.value || ""}
-                                                />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
                             </CardContent>
                         </Card>
 
-                        {/* Operational Costs */}
                         <Card>
                             <CardHeader>
-                                <CardTitle>Operational Costs</CardTitle>
+                                <CardTitle>{isExternal ? "External Delivery Cost" : "Operational Costs"}</CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-4">
-                                <div className="grid grid-cols-2 gap-4">
-                                    <FormField
-                                        control={form.control}
-                                        name="costGasolineDexlite"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                                <FormLabel>Gasoline (Dexlite)</FormLabel>
-                                                <FormControl>
-                                                    <Input
-                                                        type="number"
-                                                        placeholder="0"
-                                                        {...field}
-                                                        onChange={e => field.onChange(Number(e.target.value))}
-                                                    />
-                                                </FormControl>
-                                                <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
-                                    <FormField
-                                        control={form.control}
-                                        name="costGasolineBio"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                                <FormLabel>Gasoline (Bio Solar)</FormLabel>
-                                                <FormControl>
-                                                    <Input
-                                                        type="number"
-                                                        placeholder="0"
-                                                        {...field}
-                                                        onChange={e => field.onChange(Number(e.target.value))}
-                                                    />
-                                                </FormControl>
-                                                <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
-                                    <FormField
-                                        control={form.control}
-                                        name="costToll"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                                <FormLabel>Toll</FormLabel>
-                                                <FormControl>
-                                                    <Input
-                                                        type="number"
-                                                        placeholder="0"
-                                                        {...field}
-                                                        onChange={e => field.onChange(Number(e.target.value))}
-                                                    />
-                                                </FormControl>
-                                                <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
-                                    <FormField
-                                        control={form.control}
-                                        name="costParking"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                                <FormLabel>Parking</FormLabel>
-                                                <FormControl>
-                                                    <Input
-                                                        type="number"
-                                                        placeholder="0"
-                                                        {...field}
-                                                        onChange={e => field.onChange(Number(e.target.value))}
-                                                    />
-                                                </FormControl>
-                                                <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
-                                    <FormField
-                                        control={form.control}
-                                        name="costMeals"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                                <FormLabel>Meals</FormLabel>
-                                                <FormControl>
-                                                    <Input
-                                                        type="number"
-                                                        placeholder="0"
-                                                        {...field}
-                                                        onChange={e => field.onChange(Number(e.target.value))}
-                                                    />
-                                                </FormControl>
-                                                <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
-                                    <FormField
-                                        control={form.control}
-                                        name="costMaintenance"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                                <FormLabel>Maintenance</FormLabel>
-                                                <FormControl>
-                                                    <Input
-                                                        type="number"
-                                                        placeholder="0"
-                                                        {...field}
-                                                        onChange={e => field.onChange(Number(e.target.value))}
-                                                    />
-                                                </FormControl>
-                                                <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
-                                    <FormField
-                                        control={form.control}
-                                        name="costOthers"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                                <FormLabel>Others</FormLabel>
-                                                <FormControl>
-                                                    <Input
-                                                        type="number"
-                                                        placeholder="0"
-                                                        {...field}
-                                                        onChange={e => field.onChange(Number(e.target.value))}
-                                                    />
-                                                </FormControl>
-                                                <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
-                                    <FormField
-                                        control={form.control}
-                                        name="costRapidTest"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                                <FormLabel>Rapid Test</FormLabel>
-                                                <FormControl>
-                                                    <Input
-                                                        type="number"
-                                                        placeholder="0"
-                                                        {...field}
-                                                        onChange={e => field.onChange(Number(e.target.value))}
-                                                    />
-                                                </FormControl>
-                                                <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
-                                    <FormField
-                                        control={form.control}
-                                        name="costFerry"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                                <FormLabel>Ferry Ticket</FormLabel>
-                                                <FormControl>
-                                                    <Input
-                                                        type="number"
-                                                        placeholder="0"
-                                                        {...field}
-                                                        onChange={e => field.onChange(Number(e.target.value))}
-                                                    />
-                                                </FormControl>
-                                                <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
-                                    <FormField
-                                        control={form.control}
-                                        name="costPortal"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                                <FormLabel>Portal (Gate)</FormLabel>
-                                                <FormControl>
-                                                    <Input
-                                                        type="number"
-                                                        placeholder="0"
-                                                        {...field}
-                                                        onChange={e => field.onChange(Number(e.target.value))}
-                                                    />
-                                                </FormControl>
-                                                <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
-                                    <FormField
-                                        control={form.control}
-                                        name="costWashing"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                                <FormLabel>Car Washing</FormLabel>
-                                                <FormControl>
-                                                    <Input
-                                                        type="number"
-                                                        placeholder="0"
-                                                        {...field}
-                                                        onChange={e => field.onChange(Number(e.target.value))}
-                                                    />
-                                                </FormControl>
-                                                <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
-                                    <FormField
-                                        control={form.control}
-                                        name="costEscort"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                                <FormLabel>Escort (Pengawalan)</FormLabel>
-                                                <FormControl>
-                                                    <Input
-                                                        type="number"
-                                                        placeholder="0"
-                                                        {...field}
-                                                        onChange={e => field.onChange(Number(e.target.value))}
-                                                    />
-                                                </FormControl>
-                                                <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
-                                </div>
+                                {!isExternal ? (
+                                    <>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <FormField
+                                                control={form.control}
+                                                name="costGasolineDexlite"
+                                                render={({ field }) => (
+                                                    <FormItem>
+                                                        <FormLabel>Gasoline (Dexlite)</FormLabel>
+                                                        <FormControl>
+                                                            <Input
+                                                                type="number"
+                                                                placeholder="0"
+                                                                {...field}
+                                                                onChange={e => field.onChange(Number(e.target.value))}
+                                                            />
+                                                        </FormControl>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}
+                                            />
+                                            <FormField
+                                                control={form.control}
+                                                name="costGasolineBio"
+                                                render={({ field }) => (
+                                                    <FormItem>
+                                                        <FormLabel>Gasoline (Bio Solar)</FormLabel>
+                                                        <FormControl>
+                                                            <Input
+                                                                type="number"
+                                                                placeholder="0"
+                                                                {...field}
+                                                                onChange={e => field.onChange(Number(e.target.value))}
+                                                            />
+                                                        </FormControl>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}
+                                            />
+                                            <FormField
+                                                control={form.control}
+                                                name="costToll"
+                                                render={({ field }) => (
+                                                    <FormItem>
+                                                        <FormLabel>Toll</FormLabel>
+                                                        <FormControl>
+                                                            <Input
+                                                                type="number"
+                                                                placeholder="0"
+                                                                {...field}
+                                                                onChange={e => field.onChange(Number(e.target.value))}
+                                                            />
+                                                        </FormControl>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}
+                                            />
+                                            <FormField
+                                                control={form.control}
+                                                name="costParking"
+                                                render={({ field }) => (
+                                                    <FormItem>
+                                                        <FormLabel>Parking</FormLabel>
+                                                        <FormControl>
+                                                            <Input
+                                                                type="number"
+                                                                placeholder="0"
+                                                                {...field}
+                                                                onChange={e => field.onChange(Number(e.target.value))}
+                                                            />
+                                                        </FormControl>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}
+                                            />
+                                            <FormField
+                                                control={form.control}
+                                                name="costMeals"
+                                                render={({ field }) => (
+                                                    <FormItem>
+                                                        <FormLabel>Meals</FormLabel>
+                                                        <FormControl>
+                                                            <Input
+                                                                type="number"
+                                                                placeholder="0"
+                                                                {...field}
+                                                                onChange={e => field.onChange(Number(e.target.value))}
+                                                            />
+                                                        </FormControl>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}
+                                            />
+                                            <FormField
+                                                control={form.control}
+                                                name="costMaintenance"
+                                                render={({ field }) => (
+                                                    <FormItem>
+                                                        <FormLabel>Maintenance</FormLabel>
+                                                        <FormControl>
+                                                            <Input
+                                                                type="number"
+                                                                placeholder="0"
+                                                                {...field}
+                                                                onChange={e => field.onChange(Number(e.target.value))}
+                                                            />
+                                                        </FormControl>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}
+                                            />
+                                            <FormField
+                                                control={form.control}
+                                                name="costOthers"
+                                                render={({ field }) => (
+                                                    <FormItem>
+                                                        <FormLabel>Others</FormLabel>
+                                                        <FormControl>
+                                                            <Input
+                                                                type="number"
+                                                                placeholder="0"
+                                                                {...field}
+                                                                onChange={e => field.onChange(Number(e.target.value))}
+                                                            />
+                                                        </FormControl>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}
+                                            />
+                                            <FormField
+                                                control={form.control}
+                                                name="costRapidTest"
+                                                render={({ field }) => (
+                                                    <FormItem>
+                                                        <FormLabel>Rapid Test</FormLabel>
+                                                        <FormControl>
+                                                            <Input
+                                                                type="number"
+                                                                placeholder="0"
+                                                                {...field}
+                                                                onChange={e => field.onChange(Number(e.target.value))}
+                                                            />
+                                                        </FormControl>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}
+                                            />
+                                            <FormField
+                                                control={form.control}
+                                                name="costFerry"
+                                                render={({ field }) => (
+                                                    <FormItem>
+                                                        <FormLabel>Ferry Ticket</FormLabel>
+                                                        <FormControl>
+                                                            <Input
+                                                                type="number"
+                                                                placeholder="0"
+                                                                {...field}
+                                                                onChange={e => field.onChange(Number(e.target.value))}
+                                                            />
+                                                        </FormControl>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}
+                                            />
+                                            <FormField
+                                                control={form.control}
+                                                name="costPortal"
+                                                render={({ field }) => (
+                                                    <FormItem>
+                                                        <FormLabel>Portal (Gate)</FormLabel>
+                                                        <FormControl>
+                                                            <Input
+                                                                type="number"
+                                                                placeholder="0"
+                                                                {...field}
+                                                                onChange={e => field.onChange(Number(e.target.value))}
+                                                            />
+                                                        </FormControl>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}
+                                            />
+                                            <FormField
+                                                control={form.control}
+                                                name="costWashing"
+                                                render={({ field }) => (
+                                                    <FormItem>
+                                                        <FormLabel>Car Washing</FormLabel>
+                                                        <FormControl>
+                                                            <Input
+                                                                type="number"
+                                                                placeholder="0"
+                                                                {...field}
+                                                                onChange={e => field.onChange(Number(e.target.value))}
+                                                            />
+                                                        </FormControl>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}
+                                            />
+                                            <FormField
+                                                control={form.control}
+                                                name="costEscort"
+                                                render={({ field }) => (
+                                                    <FormItem>
+                                                        <FormLabel>Escort (Pengawalan)</FormLabel>
+                                                        <FormControl>
+                                                            <Input
+                                                                type="number"
+                                                                placeholder="0"
+                                                                {...field}
+                                                                onChange={e => field.onChange(Number(e.target.value))}
+                                                            />
+                                                        </FormControl>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}
+                                            />
+                                        </div>
+                                        <div className="flex justify-end border-t pt-4">
+                                            <div className="flex flex-col items-end gap-1">
+                                                <span className="text-sm font-semibold text-muted-foreground">Total Operational Cost</span>
+                                                <div className="text-xl font-bold">
+                                                    {new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR" }).format(totalInternalCost)}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <>
+                                        <FormField
+                                            control={form.control}
+                                            name="shippingCost"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel>Total Shipping Cost</FormLabel>
+                                                    <FormControl>
+                                                        <Input
+                                                            type="number"
+                                                            min={0}
+                                                            placeholder="0"
+                                                            {...field}
+                                                            onChange={e => field.onChange(Number(e.target.value))}
+                                                            value={field.value ?? 0}
+                                                            className="font-mono text-right"
+                                                        />
+                                                    </FormControl>
+                                                    <p className="text-xs text-muted-foreground">
+                                                        Total biaya vendor ini akan dibagi proporsional ke delivery yang dibuat dari trip ini.
+                                                    </p>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                        <div className="flex justify-end border-t pt-4">
+                                            <div className="flex flex-col items-end gap-1">
+                                                <span className="text-sm font-semibold text-muted-foreground">Total External Cost</span>
+                                                <div className="text-xl font-bold">
+                                                    {new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR" }).format(Number(form.watch("shippingCost")) || 0)}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
                             </CardContent>
                         </Card>
                     </div>

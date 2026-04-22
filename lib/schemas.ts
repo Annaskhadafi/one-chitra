@@ -158,11 +158,15 @@ export const quotationSchema = z.object({
 
 export const fleetTripSchema = z.object({
     tripNumber: z.string().optional(),
-    driverId: z.number().min(1, "Driver is required"),
-    vehicleId: z.number().min(1, "Vehicle is required"),
+    driverId: z.number().optional().nullable(),
+    vehicleId: z.number().optional().nullable(),
     status: z.enum(["scheduled", "in_transit", "completed", "cancelled"]).default("scheduled"),
     date: z.string().or(z.date()),
     notes: z.string().optional().nullable(),
+    isExternal: z.boolean().default(false),
+    vendorName: z.string().optional().nullable(),
+    awbNumber: z.string().optional().nullable(),
+    shippingCost: z.number().min(0).default(0),
     // Costs
     tripDestination: z.string().optional().nullable(),
     costGasolineDexlite: z.number().min(0).default(0),
@@ -179,6 +183,33 @@ export const fleetTripSchema = z.object({
     costEscort: z.number().min(0).default(0),
     // Linked Deliveries (Sales Orders to deliver)
     salesOrderIds: z.array(z.number()).min(1, "At least one Sales Order is required"),
+}).superRefine((data, ctx) => {
+    if (data.isExternal) {
+        if (!data.vendorName?.trim()) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "Vendor name is required for external delivery",
+                path: ["vendorName"],
+            })
+        }
+        return
+    }
+
+    if (!data.driverId || data.driverId < 1) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Driver is required",
+            path: ["driverId"],
+        })
+    }
+
+    if (!data.vehicleId || data.vehicleId < 1) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Vehicle is required",
+            path: ["vehicleId"],
+        })
+    }
 })
 
 export const costSettlementItemSchema = z.object({

@@ -14,7 +14,7 @@ export default async function FleetManagementPage() {
                 <div className="flex flex-col gap-1">
                     <h1 className="text-2xl font-bold tracking-tight">Fleet Management</h1>
                     <p className="text-muted-foreground">
-                        Manage internal fleet trips, assign drivers, and track operational costs.
+                        Manage internal fleet trips, external delivery vendors, and track logistics costs.
                     </p>
                 </div>
                 <PermissionGuard resource="fleet-management" action="create">
