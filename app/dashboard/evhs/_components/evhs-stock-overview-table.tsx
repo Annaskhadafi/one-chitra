@@ -1,10 +1,19 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { Fragment, useMemo, useState } from "react"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Search, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
+import {
+    Pagination,
+    PaginationContent,
+    PaginationEllipsis,
+    PaginationItem,
+    PaginationLink,
+    PaginationNext,
+    PaginationPrevious,
+} from "@/components/ui/pagination"
 import {
     Table,
     TableBody,
@@ -61,6 +70,8 @@ type OverviewSortKey =
 
 type OverviewSortDirection = "asc" | "desc"
 
+const PAGE_SIZE = 10
+
 const hasRecordedSn = (sn?: string | null) => Boolean(sn && sn !== "-")
 
 const isCkVhsWarehouse = (warehouse?: WarehouseOption | null) => {
@@ -74,6 +85,7 @@ export function EvhsStockOverviewTable({ trackingData }: { trackingData: Trackin
     const [searchQuery, setSearchQuery] = useState("")
     const [sortKey, setSortKey] = useState<OverviewSortKey>("warehouseLabel")
     const [sortDirection, setSortDirection] = useState<OverviewSortDirection>("asc")
+    const [page, setPage] = useState(1)
 
     const groupedRows = useMemo(() => {
         const grouped = new Map<string, StockOverviewRow>()
@@ -158,17 +170,49 @@ export function EvhsStockOverviewTable({ trackingData }: { trackingData: Trackin
         return sorted
     }, [filteredRows, sortDirection, sortKey])
 
+    const totalPages = Math.max(1, Math.ceil(sortedRows.length / PAGE_SIZE))
+    const currentPage = Math.min(page, totalPages)
+
+    const paginatedRows = useMemo(() => {
+        const startIndex = (currentPage - 1) * PAGE_SIZE
+        return sortedRows.slice(startIndex, startIndex + PAGE_SIZE)
+    }, [currentPage, sortedRows])
+
+    const visiblePageItems = useMemo(() => {
+        if (totalPages <= 5) {
+            return Array.from({ length: totalPages }, (_, index) => index + 1)
+        }
+
+        const pages = new Set<number>([1, totalPages, currentPage, currentPage - 1, currentPage + 1])
+        return Array.from(pages)
+            .filter((value) => value >= 1 && value <= totalPages)
+            .sort((left, right) => left - right)
+    }, [currentPage, totalPages])
+
+    const startRow = sortedRows.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1
+    const endRow = sortedRows.length === 0 ? 0 : Math.min(currentPage * PAGE_SIZE, sortedRows.length)
+
     const requestSort = (nextSortKey: OverviewSortKey) => {
         if (sortKey === nextSortKey) {
             setSortDirection((currentDirection) => currentDirection === "asc" ? "desc" : "asc")
+            setPage(1)
             return
         }
 
         setSortKey(nextSortKey)
         setSortDirection("asc")
+        setPage(1)
     }
 
-    const SortableHeader = ({ label, headerKey, align = "left" }: { label: string; headerKey: OverviewSortKey; align?: "left" | "right" }) => {
+    const renderSortableHeader = ({
+        label,
+        headerKey,
+        align = "left",
+    }: {
+        label: string
+        headerKey: OverviewSortKey
+        align?: "left" | "right"
+    }) => {
         const active = sortKey === headerKey
         const Icon = !active ? ArrowUpDown : sortDirection === "asc" ? ArrowUp : ArrowDown
 
@@ -196,7 +240,10 @@ export function EvhsStockOverviewTable({ trackingData }: { trackingData: Trackin
                         placeholder="Cari site, material CP/CK, deskripsi..."
                         className="pl-8"
                         value={searchQuery}
-                        onChange={(event) => setSearchQuery(event.target.value)}
+                        onChange={(event) => {
+                            setSearchQuery(event.target.value)
+                            setPage(1)
+                        }}
                     />
                 </div>
                 <Badge variant="outline" className="px-3 py-1.5 font-normal text-sm">
@@ -208,15 +255,15 @@ export function EvhsStockOverviewTable({ trackingData }: { trackingData: Trackin
                 <Table>
                     <TableHeader>
                         <TableRow>
-                            <TableHead><SortableHeader label="Site VHS" headerKey="warehouseLabel" /></TableHead>
-                            <TableHead><SortableHeader label="Material CP" headerKey="materialNumberCp" /></TableHead>
-                            <TableHead><SortableHeader label="Material CK" headerKey="materialNumberCk" /></TableHead>
-                            <TableHead><SortableHeader label="Deskripsi" headerKey="materialDescription" /></TableHead>
-                            <TableHead className="text-right"><SortableHeader label="Stok Masuk" headerKey="totalReceived" align="right" /></TableHead>
-                            <TableHead className="text-right"><SortableHeader label="Stok Available" headerKey="totalAvailable" align="right" /></TableHead>
-                            <TableHead className="text-right"><SortableHeader label="Stok Terpakai" headerKey="totalUsed" align="right" /></TableHead>
-                            <TableHead className="text-right"><SortableHeader label="SN Terekam" headerKey="withSn" align="right" /></TableHead>
-                            <TableHead className="text-right"><SortableHeader label="SN Belum Terekam" headerKey="withoutSn" align="right" /></TableHead>
+                            <TableHead>{renderSortableHeader({ label: "Site VHS", headerKey: "warehouseLabel" })}</TableHead>
+                            <TableHead>{renderSortableHeader({ label: "Material CP", headerKey: "materialNumberCp" })}</TableHead>
+                            <TableHead>{renderSortableHeader({ label: "Material CK", headerKey: "materialNumberCk" })}</TableHead>
+                            <TableHead>{renderSortableHeader({ label: "Deskripsi", headerKey: "materialDescription" })}</TableHead>
+                            <TableHead className="text-right">{renderSortableHeader({ label: "Stok Masuk", headerKey: "totalReceived", align: "right" })}</TableHead>
+                            <TableHead className="text-right">{renderSortableHeader({ label: "Stok Available", headerKey: "totalAvailable", align: "right" })}</TableHead>
+                            <TableHead className="text-right">{renderSortableHeader({ label: "Stok Terpakai", headerKey: "totalUsed", align: "right" })}</TableHead>
+                            <TableHead className="text-right">{renderSortableHeader({ label: "SN Terekam", headerKey: "withSn", align: "right" })}</TableHead>
+                            <TableHead className="text-right">{renderSortableHeader({ label: "SN Belum Terekam", headerKey: "withoutSn", align: "right" })}</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -227,7 +274,7 @@ export function EvhsStockOverviewTable({ trackingData }: { trackingData: Trackin
                                 </TableCell>
                             </TableRow>
                         ) : (
-                            sortedRows.map((row) => (
+                            paginatedRows.map((row) => (
                                 <TableRow key={row.key}>
                                     <TableCell>{row.warehouseLabel}</TableCell>
                                     <TableCell className="font-mono text-xs">{row.materialNumberCp}</TableCell>
@@ -243,6 +290,71 @@ export function EvhsStockOverviewTable({ trackingData }: { trackingData: Trackin
                         )}
                     </TableBody>
                 </Table>
+            </div>
+
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="text-sm text-muted-foreground">
+                    Menampilkan {startRow}-{endRow} dari {sortedRows.length} material-site
+                </div>
+
+                <Pagination className="mx-0 w-full justify-start sm:w-auto sm:justify-end">
+                    <PaginationContent>
+                        <PaginationItem>
+                            <PaginationPrevious
+                                href="#"
+                                onClick={(event) => {
+                                    event.preventDefault()
+                                    if (currentPage > 1) {
+                                        setPage(currentPage - 1)
+                                    }
+                                }}
+                                aria-disabled={currentPage === 1}
+                                className={currentPage === 1 ? "pointer-events-none opacity-50" : ""}
+                            />
+                        </PaginationItem>
+
+                        {visiblePageItems.map((pageNumber, index) => {
+                            const previousPageNumber = visiblePageItems[index - 1]
+                            const needsEllipsis = previousPageNumber && pageNumber - previousPageNumber > 1
+
+                            return (
+                                <Fragment key={`page-group-${pageNumber}`}>
+                                    {needsEllipsis ? (
+                                        <PaginationItem key={`ellipsis-${pageNumber}`}>
+                                            <PaginationEllipsis />
+                                        </PaginationItem>
+                                    ) : null}
+                                    <PaginationItem key={`page-${pageNumber}`}>
+                                        <PaginationLink
+                                            href="#"
+                                            isActive={pageNumber === currentPage}
+                                            onClick={(event) => {
+                                                event.preventDefault()
+                                                setPage(pageNumber)
+                                            }}
+                                        >
+                                            {pageNumber}
+                                        </PaginationLink>
+                                    </PaginationItem>
+                                </Fragment>
+                            )
+                        })}
+
+                        <PaginationItem>
+                            <PaginationNext
+                                href="#"
+                                onClick={(event) => {
+                                    event.preventDefault()
+                                    if (currentPage < totalPages) {
+                                        setPage(currentPage + 1)
+                                    }
+                                }}
+                                aria-disabled={currentPage === totalPages}
+                                className={currentPage === totalPages ? "pointer-events-none opacity-50" : ""}
+                            />
+                        </PaginationItem>
+                    </PaginationContent>
+                </Pagination>
             </div>
         </div>
     )
