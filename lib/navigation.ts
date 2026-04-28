@@ -403,7 +403,12 @@ export const navigationConfig: NavSection[] = [
                 resource: "wip-repair",
                 items: [
                     {
-                        title: "WIP Repair",
+                        title: "WIP Dashboard",
+                        url: "/dashboard/wip-repair/dashboard",
+                        resource: "wip-repair",
+                    },
+                    {
+                        title: "WIP Repair Table",
                         url: "/dashboard/wip-repair",
                         resource: "wip-repair",
                     },

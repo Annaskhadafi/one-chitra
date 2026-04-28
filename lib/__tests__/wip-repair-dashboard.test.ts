@@ -1,0 +1,325 @@
+import { describe, expect, it } from "vitest"
+
+import { buildWipRepairDashboardData } from "@/lib/wip-repair-dashboard"
+import { normalizeWipRepairBrand } from "@/lib/wip-repair-brand"
+import type { WipRepairRecord, WipRepairWorkOrderDetailRecord } from "@/lib/types/wip-repair"
+
+const workOrders: WipRepairRecord[] = [
+  {
+    id_wo: "wo-1",
+    wo: "8001",
+    job_type: "REPAIR",
+    status: "Progress",
+    size: "27.00R49",
+    brand: " Bridgestone ",
+    pattern: "VMTP",
+    type: "RADIAL",
+    nocargo: null,
+    tire_sn: "SN-1",
+    injury: "R2",
+    remark: null,
+    customer: "PT Cipta Kridatama",
+    site: "CK BIB",
+    store_loc: "CK-BIB",
+    inspect_date: "2026-04-01",
+    inspector: "A",
+    createby: "B",
+    wo_date: "2026-04-03",
+    received_date: "2026-04-01",
+    receiver: "C",
+    po: null,
+    bast: null,
+    po_date: null,
+    bast_date: null,
+    invoice: null,
+    invoice_date: null,
+  },
+  {
+    id_wo: "wo-2",
+    wo: "8002",
+    job_type: "REPAIR",
+    status: "Complete",
+    size: "24.00R35",
+    brand: "Michelin",
+    pattern: "XDR",
+    type: "RADIAL",
+    nocargo: null,
+    tire_sn: "SN-2",
+    injury: "R1",
+    remark: null,
+    customer: "PT Cipta Kridatama",
+    site: "CK KIM",
+    store_loc: "CK-KIM",
+    inspect_date: "2026-04-10",
+    inspector: "A",
+    createby: "B",
+    wo_date: "2026-04-11",
+    received_date: "2026-04-10",
+    receiver: "C",
+    po: null,
+    bast: null,
+    po_date: null,
+    bast_date: null,
+    invoice: null,
+    invoice_date: null,
+  },
+  {
+    id_wo: "wo-3",
+    wo: "8003",
+    job_type: "REPAIR",
+    status: "Reject",
+    size: "27.00R49",
+    brand: "Goodyear",
+    pattern: "RT3B",
+    type: "RADIAL",
+    nocargo: null,
+    tire_sn: "SN-3",
+    injury: "R2",
+    remark: null,
+    customer: "PT Saptaindra Sejati",
+    site: "SIS ADMO",
+    store_loc: "SIS",
+    inspect_date: "2026-03-20",
+    inspector: "A",
+    createby: "B",
+    wo_date: "2026-03-22",
+    received_date: "2026-03-20",
+    receiver: "C",
+    po: null,
+    bast: null,
+    po_date: null,
+    bast_date: null,
+    invoice: null,
+    invoice_date: null,
+  },
+  {
+    id_wo: "wo-4",
+    wo: "8003",
+    job_type: "REPAIR",
+    status: "Progress",
+    size: "27.00R49",
+    brand: "Goodyear",
+    pattern: "RT3B",
+    type: "RADIAL",
+    nocargo: null,
+    tire_sn: "SN-4",
+    injury: "R1",
+    remark: null,
+    customer: "PT Saptaindra Sejati",
+    site: "SIS ADMO",
+    store_loc: "SIS",
+    inspect_date: "2026-03-21",
+    inspector: "A",
+    createby: "B",
+    wo_date: "2026-03-23",
+    received_date: "2026-03-21",
+    receiver: "C",
+    po: null,
+    bast: null,
+    po_date: null,
+    bast_date: null,
+    invoice: null,
+    invoice_date: null,
+  },
+  {
+    id_wo: "wo-5",
+    wo: "WAITING WO",
+    job_type: "REPAIR",
+    status: "Progress",
+    size: "27.00R49",
+    brand: "bridgstone",
+    pattern: "VMTP",
+    type: "RADIAL",
+    nocargo: null,
+    tire_sn: "WAIT-SN-1",
+    injury: "R2",
+    remark: null,
+    customer: "PT Cipta Kridatama",
+    site: "CK BIB",
+    store_loc: "CK-BIB",
+    inspect_date: "2026-04-20",
+    inspector: "A",
+    createby: "B",
+    wo_date: "2026-04-20",
+    received_date: "2026-04-20",
+    receiver: "C",
+    po: null,
+    bast: null,
+    po_date: null,
+    bast_date: null,
+    invoice: null,
+    invoice_date: null,
+  },
+  {
+    id_wo: "wo-6",
+    wo: "WAITING WO",
+    job_type: "REPAIR",
+    status: "Complete",
+    size: "24.00R35",
+    brand: "Michelin",
+    pattern: "XDR",
+    type: "RADIAL",
+    nocargo: null,
+    tire_sn: "WAIT-SN-2",
+    injury: "R3",
+    remark: null,
+    customer: "PT Saptaindra Sejati",
+    site: "SIS ADMO",
+    store_loc: "SIS",
+    inspect_date: "2026-04-21",
+    inspector: "A",
+    createby: "B",
+    wo_date: "2026-04-21",
+    received_date: "2026-04-21",
+    receiver: "C",
+    po: null,
+    bast: null,
+    po_date: null,
+    bast_date: null,
+    invoice: null,
+    invoice_date: null,
+  },
+]
+
+const details: WipRepairWorkOrderDetailRecord[] = [
+  {
+    id_job: "job-1",
+    wo: "8001",
+    job: "Install Patch",
+    material_id: "27",
+    material_name: "CRP-52",
+    category: "PATCH",
+    smu: "PC",
+    qty: "2",
+    time: "60",
+  },
+  {
+    id_job: "job-2",
+    wo: "8001",
+    job: "Built Up",
+    material_id: "45",
+    material_name: "ROPE RUBBER",
+    category: "RUBBER",
+    smu: "KG",
+    qty: "3.50",
+    time: "120",
+  },
+  {
+    id_job: "job-3",
+    wo: "8002",
+    job: "Cementing",
+    material_id: "11",
+    material_name: "BLACK CEMENT 946 ML",
+    category: "CEMENT",
+    smu: "mL",
+    qty: "250",
+    time: "45",
+  },
+  {
+    id_job: "job-4",
+    wo: "8003",
+    job: "Built Up",
+    material_id: "45",
+    material_name: "ROPE RUBBER",
+    category: "RUBBER",
+    smu: "KG",
+    qty: "1.50",
+    time: "90",
+  },
+  {
+    id_job: "job-5",
+    wo: "WAITING WO",
+    job: "Waiting Registration",
+    material_id: "99",
+    material_name: "WAITING MATERIAL",
+    category: "WAITING",
+    smu: "PC",
+    qty: "1",
+    time: "1",
+  },
+]
+
+describe("buildWipRepairDashboardData", () => {
+  it("normalizes common tire brand casing, spacing, and typo variants", () => {
+    expect(
+      [
+        "BRIDGESTONE",
+        "bridgestone",
+        "bridgstone",
+        "bridgsetone",
+        "BERIDGESTONE",
+        "BRIGESTONE",
+        "BS",
+      ].map(normalizeWipRepairBrand)
+    ).toEqual(Array(7).fill("BRIDGESTONE"))
+    expect(["GOOD YEAR", "GOOD YEAR ", "Goodyear"].map(normalizeWipRepairBrand)).toEqual(Array(3).fill("GOODYEAR"))
+    expect(["Michelin", "mechelin", "michellin"].map(normalizeWipRepairBrand)).toEqual(Array(3).fill("MICHELIN"))
+    expect(["AELUS", "Aeolus"].map(normalizeWipRepairBrand)).toEqual(Array(2).fill("AEOLUS"))
+    expect(["MAXXAM", "maxam"].map(normalizeWipRepairBrand)).toEqual(Array(2).fill("MAXAM"))
+  })
+
+  it("summarizes WO, status, injury, customer, material, and time metrics", () => {
+    const dashboard = buildWipRepairDashboardData(workOrders, details, new Date("2026-04-28T00:00:00Z"))
+
+    expect(dashboard.summary).toMatchObject({
+      totalWorkOrders: 6,
+      progressWorkOrders: 3,
+      completeWorkOrders: 2,
+      rejectWorkOrders: 1,
+      totalDetailRows: 5,
+      totalMaterialRows: 5,
+      totalMinutes: 405,
+      averageMinutesPerWorkOrder: 67.5,
+      activeCustomers: 2,
+      activeSites: 3,
+    })
+    expect(dashboard.statusBreakdown.map((item) => [item.name, item.value])).toEqual([
+      ["Progress", 3],
+      ["Complete", 2],
+      ["Reject", 1],
+    ])
+    expect(dashboard.injuryBreakdown[0]).toMatchObject({ name: "R2", value: 3, percentage: 50 })
+    expect(dashboard.topCustomers[0]).toMatchObject({ name: "PT Cipta Kridatama", value: 3 })
+    expect(dashboard.topBrands).toEqual([
+      { name: "BRIDGESTONE", value: 2, percentage: 33.33 },
+      { name: "GOODYEAR", value: 2, percentage: 33.33 },
+      { name: "MICHELIN", value: 2, percentage: 33.33 },
+    ])
+    expect(dashboard.materialUsage[0]).toMatchObject({
+      name: "ROPE RUBBER",
+      category: "RUBBER",
+      unit: "KG",
+      quantity: 5,
+      rows: 2,
+    })
+    expect(dashboard.jobTimeBreakdown[0]).toMatchObject({ name: "Built Up", value: 210, rows: 2 })
+  })
+
+  it("builds drilldown rows with material counts and aging buckets", () => {
+    const dashboard = buildWipRepairDashboardData(workOrders, details, new Date("2026-04-28T00:00:00Z"))
+
+    expect(dashboard.agingBuckets.map((item) => [item.name, item.value])).toEqual([
+      ["0-7 hari", 1],
+      ["8-14 hari", 1],
+      ["15-30 hari", 2],
+      [">30 hari", 2],
+      ["Tanpa tanggal", 0],
+    ])
+    expect(dashboard.workOrderInsights[0]).toMatchObject({
+      wo: "8001",
+      status: "Progress",
+      customer: "PT Cipta Kridatama",
+      brand: "BRIDGESTONE",
+      totalMinutes: 180,
+      detailRows: 2,
+      materialRows: 2,
+      agingDays: 27,
+    })
+    expect(new Set(dashboard.workOrderInsights.map((item) => item.insightKey)).size).toBe(dashboard.workOrderInsights.length)
+    expect(dashboard.workOrderInsights.filter((item) => item.wo === "8003").map((item) => item.idWo).sort()).toEqual(["wo-3", "wo-4"])
+    expect(dashboard.workOrderInsights.filter((item) => item.wo === "WAITING WO").map((item) => [item.tireSn, item.totalMinutes])).toEqual([
+      ["WAIT-SN-1", 0],
+      ["WAIT-SN-2", 0],
+    ])
+  })
+})

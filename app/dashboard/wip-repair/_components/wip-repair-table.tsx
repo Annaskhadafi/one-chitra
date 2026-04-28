@@ -32,6 +32,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
+import { normalizeWipRepairBrand } from "@/lib/wip-repair-brand"
 import type { WipRepairRecord, WipRepairWorkOrderDetailRecord } from "@/lib/types/wip-repair"
 
 type WipRepairTableProps = {
@@ -48,6 +49,10 @@ type MultiSelectOption = {
 
 function normalizeValue(value: string | null | undefined) {
   return value?.trim() || "-"
+}
+
+function normalizeTireSn(value: string | null | undefined) {
+  return normalizeValue(value).toUpperCase()
 }
 
 function getNormalizedText(value: string | null | undefined) {
@@ -322,7 +327,7 @@ export function WipRepairTable({ data, workOrderDetails }: WipRepairTableProps) 
     [data]
   )
   const brandOptions = useMemo(
-    () => Array.from(new Set(data.map((item) => normalizeValue(item.brand)).filter((item) => item !== "-"))).sort(),
+    () => Array.from(new Set(data.map((item) => normalizeWipRepairBrand(item.brand)).filter((item) => item !== "-"))).sort(),
     [data]
   )
   const customerOptions = useMemo<MultiSelectOption[]>(
@@ -353,6 +358,7 @@ export function WipRepairTable({ data, workOrderDetails }: WipRepairTableProps) 
             item.customer,
             item.site,
             item.brand,
+            normalizeWipRepairBrand(item.brand),
             item.pattern,
             item.injury,
             item.receiver,
@@ -377,7 +383,7 @@ export function WipRepairTable({ data, workOrderDetails }: WipRepairTableProps) 
 
         const matchesStatus = statusFilter === ALL_FILTER || normalizeValue(item.status) === statusFilter
         const matchesSite = siteFilter === ALL_FILTER || normalizeValue(item.site) === siteFilter
-        const matchesBrand = brandFilter === ALL_FILTER || normalizeValue(item.brand) === brandFilter
+        const matchesBrand = brandFilter === ALL_FILTER || normalizeWipRepairBrand(item.brand) === brandFilter
         const matchesCustomer = customerFilters.length === 0 || customerFilters.includes(normalizeValue(item.customer))
         const matchesSize = sizeFilters.length === 0 || sizeFilters.includes(normalizeValue(item.size))
         const matchesInjury = injuryFilters.length === 0 || injuryFilters.includes(normalizeValue(item.injury))
@@ -532,6 +538,7 @@ export function WipRepairTable({ data, workOrderDetails }: WipRepairTableProps) 
                     item.customer,
                     item.site,
                     item.brand,
+                    normalizeWipRepairBrand(item.brand),
                     item.pattern,
                     item.injury,
                     item.receiver,
@@ -589,10 +596,10 @@ export function WipRepairTable({ data, workOrderDetails }: WipRepairTableProps) 
                             <span className="text-xs text-muted-foreground">{normalizeValue(item.site)}</span>
                           </div>
                         </TableCell>
-                        <TableCell className="px-4 py-3 font-mono text-xs">{normalizeValue(item.tire_sn)}</TableCell>
+                        <TableCell className="px-4 py-3 font-mono text-xs">{normalizeTireSn(item.tire_sn)}</TableCell>
                         <TableCell className="px-4 py-3">
                           <div className="flex flex-col">
-                            <span className="font-medium">{normalizeValue(item.brand)}</span>
+                            <span className="font-medium">{normalizeWipRepairBrand(item.brand)}</span>
                             <span className="text-xs text-muted-foreground">{normalizeValue(item.pattern)}</span>
                           </div>
                         </TableCell>
