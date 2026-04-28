@@ -1,7 +1,7 @@
 import { Suspense } from "react"
 import { ClipboardList, Loader2, Wrench } from "lucide-react"
 
-import { getWipRepairData } from "@/app/actions/wip-repair"
+import { getWipRepairData, getWipRepairWorkOrderDetails } from "@/app/actions/wip-repair"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { WipRepairTable } from "./_components/wip-repair-table"
 
@@ -10,7 +10,10 @@ function normalizeValue(value: string | null | undefined) {
 }
 
 async function WipRepairContent() {
-  const data = await getWipRepairData()
+  const [data, workOrderDetails] = await Promise.all([
+    getWipRepairData(),
+    getWipRepairWorkOrderDetails(),
+  ])
 
   const progressCount = data.filter((item) => item.status.toLowerCase().includes("progress")).length
   const siteCount = new Set(data.map((item) => normalizeValue(item.site)).filter((item) => item !== "-")).size
@@ -50,7 +53,7 @@ async function WipRepairContent() {
         </Card>
       </div>
 
-      <WipRepairTable data={data} />
+      <WipRepairTable data={data} workOrderDetails={workOrderDetails} />
     </div>
   )
 }

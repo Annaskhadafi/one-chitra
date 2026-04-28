@@ -31,3 +31,19 @@ export type WipRepairRecord = {
 export type WipRepairApiResponse = {
   data: WipRepairRecord[]
 }
+
+export type WipRepairWorkOrderDetailRecord = {
+  id_job: string
+  wo: string
+  job: string | null
+  material_id: string | null
+  material_name: string | null
+  category: string | null
+  smu: string | null
+  qty: string | null
+  time: string | null
+}
+
+export type WipRepairWorkOrderDetailApiResponse = {
+  data: WipRepairWorkOrderDetailRecord[]
+}

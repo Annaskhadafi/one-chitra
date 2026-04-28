@@ -1,11 +1,21 @@
 "use client"
 
-import { useMemo, useState } from "react"
-import { Search, Wrench } from "lucide-react"
+import { Fragment, useMemo, useState } from "react"
+import { Check, ChevronDown, Search, Wrench, X } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command"
 import { Input } from "@/components/ui/input"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import {
   Select,
   SelectContent,
@@ -22,16 +32,142 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
-import type { WipRepairRecord } from "@/lib/types/wip-repair"
+import type { WipRepairRecord, WipRepairWorkOrderDetailRecord } from "@/lib/types/wip-repair"
 
 type WipRepairTableProps = {
   data: WipRepairRecord[]
+  workOrderDetails: WipRepairWorkOrderDetailRecord[]
 }
 
 const ALL_FILTER = "__all__"
 
+type MultiSelectOption = {
+  value: string
+  label: string
+}
+
 function normalizeValue(value: string | null | undefined) {
   return value?.trim() || "-"
+}
+
+function getNormalizedText(value: string | null | undefined) {
+  return normalizeValue(value).toLowerCase()
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+}
+
+function HighlightText({ value, query }: { value: string | null | undefined; query: string }) {
+  const text = normalizeValue(value)
+  const normalizedQuery = query.trim()
+
+  if (!normalizedQuery) {
+    return text
+  }
+
+  const parts = text.split(new RegExp(`(${escapeRegExp(normalizedQuery)})`, "ig"))
+
+  return (
+    <>
+      {parts.map((part, index) =>
+        part.toLowerCase() === normalizedQuery.toLowerCase() ? (
+          <mark key={`${part}-${index}`} className="rounded bg-yellow-200 px-0.5 text-yellow-950 dark:bg-yellow-400/30 dark:text-yellow-100">
+            {part}
+          </mark>
+        ) : (
+          <Fragment key={`${part}-${index}`}>{part}</Fragment>
+        )
+      )}
+    </>
+  )
+}
+
+function MultiSelectFilter({
+  title,
+  placeholder,
+  options,
+  value,
+  onChange,
+}: {
+  title: string
+  placeholder: string
+  options: MultiSelectOption[]
+  value: string[]
+  onChange: (nextValue: string[]) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const selectedSet = useMemo(() => new Set(value), [value])
+  const selectedLabels = options.filter((option) => selectedSet.has(option.value)).map((option) => option.label)
+  const summaryText =
+    selectedLabels.length === 0
+      ? title
+      : selectedLabels.length <= 2
+        ? selectedLabels.join(", ")
+        : `${selectedLabels.slice(0, 2).join(", ")} +${selectedLabels.length - 2}`
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          className={cn("h-10 w-full justify-between rounded-xl font-normal sm:min-w-44", selectedLabels.length === 0 && "text-muted-foreground")}
+        >
+          <span className="truncate text-left">{summaryText}</span>
+          <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-60" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[min(420px,calc(100vw-2rem))] p-0" align="start">
+        <Command>
+          <CommandInput placeholder={placeholder} />
+          <div className="flex items-center justify-between border-b px-2 py-1.5">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => onChange(options.map((option) => option.value))}
+            >
+              Pilih Semua
+            </Button>
+            <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" onClick={() => onChange([])}>
+              Kosongkan
+            </Button>
+          </div>
+          <CommandList>
+            <CommandEmpty>Data tidak ditemukan.</CommandEmpty>
+            <CommandGroup>
+              {options.map((option) => {
+                const isSelected = selectedSet.has(option.value)
+
+                return (
+                  <CommandItem
+                    key={option.value}
+                    value={option.label}
+                    onSelect={() => {
+                      const next = new Set(value)
+
+                      if (next.has(option.value)) {
+                        next.delete(option.value)
+                      } else {
+                        next.add(option.value)
+                      }
+
+                      onChange(Array.from(next))
+                    }}
+                  >
+                    <Check className={cn("mr-2 h-4 w-4", isSelected ? "opacity-100" : "opacity-0")} />
+                    <span className="truncate">{option.label}</span>
+                  </CommandItem>
+                )
+              })}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  )
 }
 
 function formatDate(value: string | null) {
@@ -50,6 +186,70 @@ function formatDate(value: string | null) {
     month: "short",
     year: "numeric",
   }).format(parsed)
+}
+
+function formatQty(value: string | null, smu: string | null) {
+  const normalizedValue = normalizeValue(value)
+  const normalizedSmu = normalizeValue(smu)
+
+  if (normalizedValue === "-") {
+    return "-"
+  }
+
+  const parsed = Number(normalizedValue)
+  const formattedValue = Number.isFinite(parsed)
+    ? parsed.toLocaleString("id-ID", { maximumFractionDigits: 2 })
+    : normalizedValue
+
+  return normalizedSmu === "-" ? formattedValue : `${formattedValue} ${normalizedSmu}`
+}
+
+function parseMinutes(value: string | null) {
+  const normalizedValue = normalizeValue(value)
+
+  if (normalizedValue === "-") {
+    return null
+  }
+
+  const parsed = Number(normalizedValue)
+
+  if (!Number.isFinite(parsed)) {
+    return null
+  }
+
+  return parsed
+}
+
+function formatDurationFromMinutes(value: number) {
+  const totalMinutes = Math.max(0, Math.round(value))
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+
+  if (hours > 0 && minutes > 0) {
+    return `${hours.toLocaleString("id-ID")} jam ${minutes.toLocaleString("id-ID")} menit`
+  }
+
+  if (hours > 0) {
+    return `${hours.toLocaleString("id-ID")} jam`
+  }
+
+  return `${minutes.toLocaleString("id-ID")} menit`
+}
+
+function formatMinutes(value: string | null) {
+  const parsed = parseMinutes(value)
+
+  if (parsed === null) {
+    const normalizedValue = normalizeValue(value)
+
+    if (normalizedValue !== "-") {
+      return normalizedValue
+    }
+
+    return "-"
+  }
+
+  return formatDurationFromMinutes(parsed)
 }
 
 function getStatusClasses(status: string) {
@@ -88,11 +288,30 @@ function getSortTimestamp(item: WipRepairRecord) {
   return 0
 }
 
-export function WipRepairTable({ data }: WipRepairTableProps) {
+export function WipRepairTable({ data, workOrderDetails }: WipRepairTableProps) {
   const [query, setQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState(ALL_FILTER)
   const [siteFilter, setSiteFilter] = useState(ALL_FILTER)
   const [brandFilter, setBrandFilter] = useState(ALL_FILTER)
+  const [customerFilters, setCustomerFilters] = useState<string[]>([])
+  const [sizeFilters, setSizeFilters] = useState<string[]>([])
+  const [injuryFilters, setInjuryFilters] = useState<string[]>([])
+  const [expandedWorkOrders, setExpandedWorkOrders] = useState<Set<string>>(() => new Set())
+
+  const detailsByWorkOrder = useMemo(() => {
+    return workOrderDetails.reduce<Record<string, WipRepairWorkOrderDetailRecord[]>>((accumulator, detail) => {
+      const wo = normalizeValue(detail.wo)
+
+      if (wo === "-") {
+        return accumulator
+      }
+
+      accumulator[wo] ??= []
+      accumulator[wo].push(detail)
+
+      return accumulator
+    }, {})
+  }, [workOrderDetails])
 
   const statusOptions = useMemo(
     () => Array.from(new Set(data.map((item) => normalizeValue(item.status)).filter((item) => item !== "-"))).sort(),
@@ -106,12 +325,26 @@ export function WipRepairTable({ data }: WipRepairTableProps) {
     () => Array.from(new Set(data.map((item) => normalizeValue(item.brand)).filter((item) => item !== "-"))).sort(),
     [data]
   )
+  const customerOptions = useMemo<MultiSelectOption[]>(
+    () => Array.from(new Set(data.map((item) => normalizeValue(item.customer)).filter((item) => item !== "-"))).sort().map((value) => ({ value, label: value })),
+    [data]
+  )
+  const sizeOptions = useMemo<MultiSelectOption[]>(
+    () => Array.from(new Set(data.map((item) => normalizeValue(item.size)).filter((item) => item !== "-"))).sort().map((value) => ({ value, label: value })),
+    [data]
+  )
+  const injuryOptions = useMemo<MultiSelectOption[]>(
+    () => Array.from(new Set(data.map((item) => normalizeValue(item.injury)).filter((item) => item !== "-"))).sort().map((value) => ({ value, label: value })),
+    [data]
+  )
 
   const filteredData = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase()
 
     return data
       .filter((item) => {
+        const workOrder = normalizeValue(item.wo)
+        const details = detailsByWorkOrder[workOrder] ?? []
         const matchesQuery =
           normalizedQuery.length === 0 ||
           [
@@ -125,17 +358,48 @@ export function WipRepairTable({ data }: WipRepairTableProps) {
             item.receiver,
             item.store_loc,
           ]
-            .map((value) => normalizeValue(value).toLowerCase())
-            .some((value) => value.includes(normalizedQuery))
+            .map((value) => getNormalizedText(value))
+            .some((value) => value.includes(normalizedQuery)) ||
+          details.some((detail) =>
+            [
+              detail.id_job,
+              detail.job,
+              detail.material_id,
+              detail.material_name,
+              detail.category,
+              detail.smu,
+              detail.qty,
+              detail.time,
+            ]
+              .map((value) => getNormalizedText(value))
+              .some((value) => value.includes(normalizedQuery))
+          )
 
         const matchesStatus = statusFilter === ALL_FILTER || normalizeValue(item.status) === statusFilter
         const matchesSite = siteFilter === ALL_FILTER || normalizeValue(item.site) === siteFilter
         const matchesBrand = brandFilter === ALL_FILTER || normalizeValue(item.brand) === brandFilter
+        const matchesCustomer = customerFilters.length === 0 || customerFilters.includes(normalizeValue(item.customer))
+        const matchesSize = sizeFilters.length === 0 || sizeFilters.includes(normalizeValue(item.size))
+        const matchesInjury = injuryFilters.length === 0 || injuryFilters.includes(normalizeValue(item.injury))
 
-        return matchesQuery && matchesStatus && matchesSite && matchesBrand
+        return matchesQuery && matchesStatus && matchesSite && matchesBrand && matchesCustomer && matchesSize && matchesInjury
       })
       .sort((left, right) => getSortTimestamp(right) - getSortTimestamp(left))
-  }, [brandFilter, data, query, siteFilter, statusFilter])
+  }, [brandFilter, customerFilters, data, detailsByWorkOrder, injuryFilters, query, siteFilter, sizeFilters, statusFilter])
+
+  function toggleWorkOrder(wo: string) {
+    setExpandedWorkOrders((current) => {
+      const next = new Set(current)
+
+      if (next.has(wo)) {
+        next.delete(wo)
+      } else {
+        next.add(wo)
+      }
+
+      return next
+    })
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -152,7 +416,7 @@ export function WipRepairTable({ data }: WipRepairTableProps) {
               />
             </div>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:w-auto">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-6">
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger className="h-10 w-full rounded-xl sm:min-w-40">
                   <SelectValue placeholder="Semua status" />
@@ -194,8 +458,46 @@ export function WipRepairTable({ data }: WipRepairTableProps) {
                   ))}
                 </SelectContent>
               </Select>
+
+              <MultiSelectFilter
+                title="Semua customer"
+                placeholder="Cari customer..."
+                options={customerOptions}
+                value={customerFilters}
+                onChange={setCustomerFilters}
+              />
+
+              <MultiSelectFilter
+                title="Semua size"
+                placeholder="Cari size..."
+                options={sizeOptions}
+                value={sizeFilters}
+                onChange={setSizeFilters}
+              />
+
+              <MultiSelectFilter
+                title="Semua injury"
+                placeholder="Cari injury..."
+                options={injuryOptions}
+                value={injuryFilters}
+                onChange={setInjuryFilters}
+              />
             </div>
           </div>
+          {customerFilters.length > 0 || sizeFilters.length > 0 || injuryFilters.length > 0 ? (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {[...customerFilters.map((value) => ({ type: "Customer", value, onClear: () => setCustomerFilters(customerFilters.filter((item) => item !== value)) })),
+                ...sizeFilters.map((value) => ({ type: "Size", value, onClear: () => setSizeFilters(sizeFilters.filter((item) => item !== value)) })),
+                ...injuryFilters.map((value) => ({ type: "Injury", value, onClear: () => setInjuryFilters(injuryFilters.filter((item) => item !== value)) }))].map((filter) => (
+                <Badge key={`${filter.type}-${filter.value}`} variant="secondary" className="gap-1 rounded-full px-2.5 py-1">
+                  <span>{filter.type}: {filter.value}</span>
+                  <button type="button" className="rounded-full p-0.5 hover:bg-background/80" onClick={filter.onClear} aria-label={`Hapus filter ${filter.type} ${filter.value}`}>
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+              ))}
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -204,49 +506,165 @@ export function WipRepairTable({ data }: WipRepairTableProps) {
           <Table>
             <TableHeader className="bg-muted/40">
               <TableRow>
+                <TableHead className="w-12 px-4 py-3" aria-label="Detail pekerjaan" />
                 <TableHead className="px-4 py-3">WO</TableHead>
                 <TableHead className="px-4 py-3">Status</TableHead>
+                <TableHead className="px-4 py-3">Customer / Site</TableHead>
                 <TableHead className="px-4 py-3">Tire SN</TableHead>
                 <TableHead className="px-4 py-3">Brand / Pattern</TableHead>
                 <TableHead className="px-4 py-3">Size</TableHead>
                 <TableHead className="px-4 py-3">Injury</TableHead>
-                <TableHead className="px-4 py-3">Customer / Site</TableHead>
+                <TableHead className="px-4 py-3">Total Waktu</TableHead>
                 <TableHead className="px-4 py-3">Received</TableHead>
                 <TableHead className="px-4 py-3">WO Date</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredData.length > 0 ? (
-                filteredData.map((item) => (
-                  <TableRow key={item.id_wo}>
-                    <TableCell className="px-4 py-3 font-medium tabular-nums">{normalizeValue(item.wo)}</TableCell>
-                    <TableCell className="px-4 py-3">
-                      <Badge variant="outline" className={cn("rounded-full px-2.5 py-1 text-xs font-medium", getStatusClasses(item.status))}>
-                        {normalizeValue(item.status)}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="px-4 py-3 font-mono text-xs">{normalizeValue(item.tire_sn)}</TableCell>
-                    <TableCell className="px-4 py-3">
-                      <div className="flex flex-col">
-                        <span className="font-medium">{normalizeValue(item.brand)}</span>
-                        <span className="text-xs text-muted-foreground">{normalizeValue(item.pattern)}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="px-4 py-3">{normalizeValue(item.size)}</TableCell>
-                    <TableCell className="px-4 py-3">{normalizeValue(item.injury)}</TableCell>
-                    <TableCell className="px-4 py-3">
-                      <div className="flex flex-col">
-                        <span className="font-medium">{normalizeValue(item.customer)}</span>
-                        <span className="text-xs text-muted-foreground">{normalizeValue(item.site)}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="px-4 py-3 text-muted-foreground">{formatDate(item.received_date)}</TableCell>
-                    <TableCell className="px-4 py-3 text-muted-foreground">{formatDate(item.wo_date)}</TableCell>
-                  </TableRow>
-                ))
+                filteredData.map((item) => {
+                  const workOrder = normalizeValue(item.wo)
+                  const details = detailsByWorkOrder[workOrder] ?? []
+                  const normalizedQuery = query.trim().toLowerCase()
+                  const hasSearch = normalizedQuery.length > 0
+                  const isSearchMatched = hasSearch && [
+                    item.wo,
+                    item.tire_sn,
+                    item.customer,
+                    item.site,
+                    item.brand,
+                    item.pattern,
+                    item.injury,
+                    item.receiver,
+                    item.store_loc,
+                  ].map((value) => getNormalizedText(value)).some((value) => value.includes(normalizedQuery))
+                  const matchingDetailIds = new Set(
+                    hasSearch
+                      ? details
+                        .filter((detail) =>
+                          [
+                            detail.id_job,
+                            detail.job,
+                            detail.material_id,
+                            detail.material_name,
+                            detail.category,
+                            detail.smu,
+                            detail.qty,
+                            detail.time,
+                          ]
+                            .map((value) => getNormalizedText(value))
+                            .some((value) => value.includes(normalizedQuery))
+                        )
+                        .map((detail) => detail.id_job)
+                      : []
+                  )
+                  const isExpanded = expandedWorkOrders.has(workOrder) || (hasSearch && details.length > 0 && (isSearchMatched || matchingDetailIds.size > 0))
+                  const totalMinutes = details.reduce((sum, detail) => sum + (parseMinutes(detail.time) ?? 0), 0)
+
+                  return (
+                    <Fragment key={item.id_wo}>
+                      <TableRow>
+                        <TableCell className="px-4 py-3">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-full"
+                            disabled={details.length === 0}
+                            aria-expanded={isExpanded}
+                            aria-label={`Detail pekerjaan WO ${workOrder}`}
+                            onClick={() => toggleWorkOrder(workOrder)}
+                          >
+                            <ChevronDown className={cn("h-4 w-4 transition-transform", isExpanded && "rotate-180")} />
+                          </Button>
+                        </TableCell>
+                        <TableCell className="px-4 py-3 font-medium tabular-nums">{workOrder}</TableCell>
+                        <TableCell className="px-4 py-3">
+                          <Badge variant="outline" className={cn("rounded-full px-2.5 py-1 text-xs font-medium", getStatusClasses(item.status))}>
+                            {normalizeValue(item.status)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="px-4 py-3">
+                          <div className="flex flex-col">
+                            <span className="font-medium">{normalizeValue(item.customer)}</span>
+                            <span className="text-xs text-muted-foreground">{normalizeValue(item.site)}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="px-4 py-3 font-mono text-xs">{normalizeValue(item.tire_sn)}</TableCell>
+                        <TableCell className="px-4 py-3">
+                          <div className="flex flex-col">
+                            <span className="font-medium">{normalizeValue(item.brand)}</span>
+                            <span className="text-xs text-muted-foreground">{normalizeValue(item.pattern)}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="px-4 py-3">{normalizeValue(item.size)}</TableCell>
+                        <TableCell className="px-4 py-3">{normalizeValue(item.injury)}</TableCell>
+                        <TableCell className="px-4 py-3 font-medium tabular-nums">
+                          {details.length > 0 ? formatDurationFromMinutes(totalMinutes) : "-"}
+                        </TableCell>
+                        <TableCell className="px-4 py-3 text-muted-foreground">{formatDate(item.received_date)}</TableCell>
+                        <TableCell className="px-4 py-3 text-muted-foreground">{formatDate(item.wo_date)}</TableCell>
+                      </TableRow>
+                      {isExpanded ? (
+                        <TableRow className="bg-muted/20 hover:bg-muted/20">
+                          <TableCell colSpan={11} className="px-4 py-4">
+                            <div className="rounded-xl border bg-background p-4">
+                              <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                                <div>
+                                  <p className="font-medium">Detail pekerjaan WO {workOrder}</p>
+                                  <p className="text-sm text-muted-foreground">
+                                    {details.length.toLocaleString("id-ID")} aktivitas pekerjaan dan material dari API detail.
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="overflow-x-auto rounded-lg border">
+                                <Table>
+                                  <TableHeader className="bg-muted/40">
+                                    <TableRow>
+                                      <TableHead className="px-3 py-2">Job ID</TableHead>
+                                      <TableHead className="px-3 py-2">Pekerjaan</TableHead>
+                                      <TableHead className="px-3 py-2">Material</TableHead>
+                                      <TableHead className="px-3 py-2">Kategori</TableHead>
+                                      <TableHead className="px-3 py-2">Qty</TableHead>
+                                      <TableHead className="px-3 py-2">Waktu</TableHead>
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
+                                    {details.map((detail) => (
+                                      <TableRow key={detail.id_job} className={cn(matchingDetailIds.has(detail.id_job) && "bg-yellow-50/80 dark:bg-yellow-400/10")}>
+                                        <TableCell className="px-3 py-2 font-mono text-xs">
+                                          <HighlightText value={detail.id_job} query={query} />
+                                        </TableCell>
+                                        <TableCell className="px-3 py-2 font-medium">
+                                          <HighlightText value={detail.job} query={query} />
+                                        </TableCell>
+                                        <TableCell className="px-3 py-2">
+                                          <HighlightText value={detail.material_name} query={query} />
+                                        </TableCell>
+                                        <TableCell className="px-3 py-2">
+                                          <HighlightText value={detail.category} query={query} />
+                                        </TableCell>
+                                        <TableCell className="px-3 py-2 tabular-nums">
+                                          <HighlightText value={formatQty(detail.qty, detail.smu)} query={query} />
+                                        </TableCell>
+                                        <TableCell className="px-3 py-2 tabular-nums text-muted-foreground">
+                                          <HighlightText value={formatMinutes(detail.time)} query={query} />
+                                        </TableCell>
+                                      </TableRow>
+                                    ))}
+                                  </TableBody>
+                                </Table>
+                              </div>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ) : null}
+                    </Fragment>
+                  )
+                })
               ) : (
                 <TableRow>
-                  <TableCell colSpan={9} className="h-40 px-4 py-3 text-center">
+                  <TableCell colSpan={11} className="h-40 px-4 py-3 text-center">
                     <div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
                       <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
                         <Wrench className="h-5 w-5" />
