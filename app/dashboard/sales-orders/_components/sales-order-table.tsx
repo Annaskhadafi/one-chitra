@@ -363,7 +363,10 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
     }, [data])
 
     const uniqueCustomers = useMemo(() => Array.from(new Set(data.map(o => o.customer?.name).filter(Boolean))) as string[], [data])
-    const uniqueTripDestinations = useMemo(() => Array.from(new Set(data.map(o => o.tripDestination).filter(Boolean))) as string[], [data])
+    const uniqueTripDestinations = useMemo(
+        () => Array.from(new Set(data.map((o) => o.tripDestination || "-"))) as string[],
+        [data]
+    )
     const uniqueCategories = useMemo(() => Array.from(new Set(data.map(o => o.categoryProduct).filter(Boolean))) as string[], [data])
     const uniqueRemarks = useMemo(() => Array.from(new Set(data.map(o => o.remarks?.label).filter(Boolean))) as string[], [data])
     const uniqueYears = useMemo(() => Array.from(new Set(data.map(o => new Date(o.salesDate).getFullYear().toString()))) as string[], [data])
@@ -1011,7 +1014,7 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
 
             const matchesStatus = statusFilter.length === 0 || statusFilter.includes(order.status)
             const matchesCustomer = customerFilter.length === 0 || customerFilter.includes(order.customer?.name || "")
-            const matchesTripDestination = tripDestinationFilter.length === 0 || tripDestinationFilter.includes(order.tripDestination || "")
+            const matchesTripDestination = tripDestinationFilter.length === 0 || tripDestinationFilter.includes(order.tripDestination || "-")
             const matchesCategory = categoryFilter.length === 0 || categoryFilter.includes(order.categoryProduct || "")
             const matchesRemark = remarkFilter.length === 0 || remarkFilter.includes(order.remarks?.label || "")
             const matchesYear = yearFilter.length === 0 || yearFilter.includes(orderYear)

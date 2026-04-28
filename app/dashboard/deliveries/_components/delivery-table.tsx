@@ -105,6 +105,8 @@ interface DeliveryWithRelations {
     shippingAddress: string | null
     tripDestination?: string | null
     fleetTripId?: number | null
+    isExternal: boolean
+    vendorName: string | null
     notes: string | null
     createdAt: Date
     salesOrder: {
@@ -187,7 +189,7 @@ function matchesDeliverySearch(delivery: DeliveryWithRelations, filterValue: str
         delivery.doSap?.toLowerCase().includes(search) ||
         delivery.salesOrder?.invoiceNumber?.toLowerCase().includes(search) ||
         delivery.salesOrder?.customer?.name?.toLowerCase().includes(search) ||
-        delivery.driverName?.toLowerCase().includes(search) ||
+        (delivery.driverName || delivery.vendorName)?.toLowerCase().includes(search) ||
         delivery.vehicleNumber?.toLowerCase().includes(search) ||
         delivery.createdByUser?.name?.toLowerCase().includes(search) ||
         delivery.salesOrder?.customerPo?.toLowerCase().includes(search)
@@ -977,7 +979,9 @@ function DeliveryTableContent({ data: initialData, itemsData = [], fleetTripsDat
                     {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
                 </Button>
             ),
-            cell: ({ row }) => row.original.driverName || "-",
+            cell: ({ row }) => row.original.isExternal
+                ? row.original.vendorName || "-"
+                : row.original.driverName || "-",
         },
         {
             accessorKey: "vehicleNumber",

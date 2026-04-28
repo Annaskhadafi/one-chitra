@@ -47,11 +47,11 @@ function buildSalesOrderColumns(hasPicColumn: boolean, hasTripDestinationColumn:
     }
 }
 
-function normalizeSalesOrderRecord<T extends {
+function normalizeSalesOrderRecord(order: {
     tripDestination?: string | null
     salesPersonId?: string | null
     salesPerson?: SalesPersonRecord | null
-}>(order: T, hasPicColumn: boolean, hasTripDestinationColumn: boolean) {
+}, hasPicColumn: boolean, hasTripDestinationColumn: boolean) {
     const tripDestination: string | null = hasTripDestinationColumn
         ? order.tripDestination ?? null
         : null
@@ -218,6 +218,7 @@ export async function getSalesOrders() {
                 status: true,
                 deliveryNumber: true,
                 createdAt: true,
+                tripDestination: true,
             },
             orderBy: [desc(deliveries.createdAt)],
         })
@@ -242,6 +243,11 @@ export async function getSalesOrders() {
 
             const orderDeliveries = deliveryMap.get(order.id) ?? []
             const activeDeliveries = orderDeliveries.filter((delivery) => delivery.status !== "cancelled")
+            const tripDestinationFallback = activeDeliveries.find((delivery) => delivery.tripDestination)?.tripDestination ?? null
+            const effectiveOrder = {
+                ...order,
+                tripDestination: order.tripDestination || tripDestinationFallback,
+            }
             const deliveredQuantities = new Map<number, number>()
 
             if (items.length > 0) {
@@ -353,7 +359,7 @@ export async function getSalesOrders() {
                             items: outstandingItems,
                         }
 
-            const normalizedOrder = normalizeSalesOrderRecord(order, hasPicColumn, hasTripDestinationColumn)
+            const normalizedOrder = normalizeSalesOrderRecord(effectiveOrder, hasPicColumn, hasTripDestinationColumn)
 
             return {
                 ...normalizedOrder,
