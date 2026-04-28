@@ -13,6 +13,7 @@ import {
     Mail,
     ShoppingCart,
     Truck,
+    Wrench,
 } from "lucide-react"
 
 import { navigationConfig } from "@/lib/navigation"
@@ -33,6 +34,7 @@ export const NAVBAR_ICON_OPTIONS = [
     "Mail",
     "CreditCard",
     "Link2",
+    "Wrench",
 ] as const
 
 const ICON_REGISTRY: Record<string, LucideIcon> = {
@@ -48,6 +50,7 @@ const ICON_REGISTRY: Record<string, LucideIcon> = {
     Mail,
     CreditCard,
     Link2,
+    Wrench,
 }
 
 export type LinkType = "internal" | "external"

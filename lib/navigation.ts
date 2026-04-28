@@ -10,6 +10,7 @@ import {
     Mail,
     ClipboardList,
     Lock,
+    Wrench,
     type LucideIcon
 } from "lucide-react"
 
@@ -387,6 +388,24 @@ export const navigationConfig: NavSection[] = [
                         title: "Quotation Analysis",
                         url: "/dashboard/quotation-analysis",
                         resource: "quotation-analysis",
+                    },
+                ],
+            },
+        ],
+    },
+    {
+        title: "Central Services",
+        items: [
+            {
+                title: "WIP Repair",
+                url: "#",
+                icon: Wrench,
+                resource: "wip-repair",
+                items: [
+                    {
+                        title: "WIP Repair",
+                        url: "/dashboard/wip-repair",
+                        resource: "wip-repair",
                     },
                 ],
             },
