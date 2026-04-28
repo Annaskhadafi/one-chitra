@@ -187,6 +187,7 @@ function DeliverySingleView({ delivery, withBackground }: { delivery: DeliveryPd
     const address = delivery.shippingAddress || customerAddress
     const isCiptaKridatama = customer?.name?.toUpperCase()?.includes("CIPTA KRIDATAMA")
     const printableItems = delivery.items.filter((item) => Number(item.deliveredQuantity) > 0)
+    const isExternalJne = delivery.isExternal && delivery.vendorName?.toUpperCase().includes("JNE")
 
     return (
         <div 
@@ -448,7 +449,7 @@ function DeliverySingleView({ delivery, withBackground }: { delivery: DeliveryPd
                             </div>
                             <div className="sig-placeholder">
                                 {delivery.isExternal ? (
-                                    <div style={{ fontSize: "24pt", fontWeight: "black", marginBottom: "10px" }}>
+                                    <div style={{ fontSize: isExternalJne ? "24pt" : "12pt", fontWeight: "black", marginBottom: "10px" }}>
                                         {delivery.awbNumber || "-"}
                                     </div>
                                 ) : (
