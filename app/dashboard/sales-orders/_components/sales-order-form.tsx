@@ -77,6 +77,7 @@ interface SalesOrderFormProps {
         id: number
         invoiceNumber: string | null
         customerPo: string | null
+        tripDestination?: string | null
         customerId: number
         salesPersonId?: string | null
         warehouseId?: number | null
@@ -138,6 +139,7 @@ export function SalesOrderForm({
     // Form State
     const [invoiceNumber, setInvoiceNumber] = useState(initialData?.invoiceNumber || "")
     const [customerPo, setCustomerPo] = useState(initialData?.customerPo || "")
+    const [tripDestination, setTripDestination] = useState(initialData?.tripDestination || "")
     const [customerId, setCustomerId] = useState<number | undefined>(initialData?.customerId || undefined)
     const [salesPersonId, setSalesPersonId] = useState(initialData?.salesPersonId || "")
     const [warehouseId, setWarehouseId] = useState<number | undefined>(initialData?.warehouseId || undefined)
@@ -531,6 +533,7 @@ export function SalesOrderForm({
             const payload = {
                 invoiceNumber: invoiceNumber || undefined,
                 customerPo: customerPo || undefined,
+                tripDestination: tripDestination || undefined,
                 customerId: customerId as number,
                 salesPersonId: salesPersonId || undefined,
                 warehouseId,
@@ -982,6 +985,16 @@ export function SalesOrderForm({
                             )}
                         </div>
 
+
+                        {/* Trip Destination */}
+                        <div className="space-y-2">
+                            <Label className="font-semibold">Trip Destination</Label>
+                            <Input
+                                placeholder="e.g. Jakarta Pusat, Bandung..."
+                                value={tripDestination}
+                                onChange={(e) => setTripDestination(e.target.value)}
+                            />
+                        </div>
 
                         {/* Sales Date / Date PO */}
                         <div className="space-y-2">

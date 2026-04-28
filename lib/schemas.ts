@@ -58,6 +58,7 @@ export const salesOrderItemSchema = z.object({
 export const salesOrderSchema = z.object({
     invoiceNumber: z.string().optional(),
     customerPo: z.string().optional(),
+    tripDestination: z.string().optional().nullable(),
     customerId: z.number().min(1, "Customer is required"),
     salesPersonId: z.string().optional().nullable(),
     warehouseId: z.number().optional(),

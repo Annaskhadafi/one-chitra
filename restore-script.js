@@ -1,6 +1,8 @@
-"use client"
+const fs = require('fs');
 
-import { useState, useMemo, useEffect, useCallback } from "react"
+const part1 = `"use client"
+
+import { Fragment, useState, useMemo, useEffect, useCallback } from "react"
 import * as XLSX from "xlsx"
 import { cn } from "@/lib/utils"
 import { useMounted } from "@/hooks/use-mounted"
@@ -149,19 +151,19 @@ function formatRemarkDetailForExport(order: SalesOrderListItem) {
     if (!remarks) return ""
 
     const lines = [
-        `Outstanding Qty: ${remarks.outstandingQty.toLocaleString("id-ID")} | Items: ${remarks.outstandingItemsCount.toLocaleString("id-ID")}`,
-        `Aging dari PO Receive: ${remarks.outstandingDays != null ? `${remarks.outstandingDays} hari` : "-"}`,
+        \`Outstanding Qty: \${remarks.outstandingQty.toLocaleString("id-ID")} | Items: \${remarks.outstandingItemsCount.toLocaleString("id-ID")}\`,
+        \`Aging dari PO Receive: \${remarks.outstandingDays != null ? \`\${remarks.outstandingDays} hari\` : "-"}\`,
     ]
 
     if (remarks.items.length > 0) {
         lines.push(
             ...remarks.items.map((item) =>
-                `${item.productName}: stock ${item.availableStock.toLocaleString("id-ID")} / outstanding ${item.remainingQuantity.toLocaleString("id-ID")}`
+                \`\${item.productName}: stock \${item.availableStock.toLocaleString("id-ID")} / outstanding \${item.remainingQuantity.toLocaleString("id-ID")}\`
             )
         )
     }
 
-    return lines.join("\n")
+    return lines.join("\\n")
 }
 
 function formatNumber(value: number) {
@@ -180,29 +182,12 @@ function getDeliveryStatusVariant(item: SalesOrderListItem["remarks"]["items"][n
     return "secondary"
 }
 
-function getOrderItemDeliverySummary(order: SalesOrderListItem, item: SalesOrderListItem["items"][number]) {
-    const outstandingItem = order.remarks?.items.find((remarkItem) => remarkItem.itemId === item.id)
-    const remainingQuantity = outstandingItem?.remainingQuantity ?? 0
-    const deliveredQuantity = item.quantity - remainingQuantity
-    const availableStock = outstandingItem?.availableStock ?? 0
-    const stockStatus = outstandingItem?.stockStatus ?? "done"
-    const deliveryStatus = remainingQuantity <= 0 ? "Complete" : deliveredQuantity > 0 ? "Parsial" : "Belum Terkirim"
-
-    return {
-        remainingQuantity,
-        deliveredQuantity,
-        availableStock,
-        stockStatus,
-        deliveryStatus,
-    }
-}
-
 function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
     const queryClient = useQueryClient()
     const searchParams = useSearchParams()
     const { data: session } = useSession()
     const currentUserId = session?.user?.id || "anonymous"
-    const columnVisibilityStorageKey = `sales-orders:column-visibility:${currentUserId}`
+    const columnVisibilityStorageKey = \`sales-orders:column-visibility:\${currentUserId}\`
     const mounted = useMounted()
     const [showSuccessDialog, setShowSuccessDialog] = useState(false)
     const [successMessage, setSuccessMessage] = useState("")
@@ -211,10 +196,10 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
         queryKey: ["sales-orders"],
         queryFn: async () => (await getSalesOrders()) as SalesOrderListItem[],
         initialData,
-        initialDataUpdatedAt: 0,    // Tandai initialData sebagai stale → langsung refetch
-        staleTime: 0,               // Selalu anggap data stale setelah fetched
-        refetchOnMount: true,       // Selalu refetch saat komponen mount
-        refetchOnWindowFocus: true, // Refetch saat window kembali aktif
+        initialDataUpdatedAt: 0,
+        staleTime: 0,
+        refetchOnMount: true,
+        refetchOnWindowFocus: true,
         refetchInterval: 15_000,
         refetchIntervalInBackground: true,
     })
@@ -222,7 +207,6 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
     useEffect(() => {
         const queryState = queryClient.getQueryState<SalesOrderListItem[]>(["sales-orders"])
 
-        // Jangan timpa hasil refetch/mutasi client dengan server payload yang lebih lama.
         if ((queryState?.dataUpdatedAt ?? 0) > 0) {
             return
         }
@@ -280,7 +264,7 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
         const nextUrl = new URL(window.location.href)
         nextUrl.searchParams.delete("refresh")
         nextUrl.searchParams.delete("focusId")
-        window.history.replaceState(window.history.state, "", `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`)
+        window.history.replaceState(window.history.state, "", \`\${nextUrl.pathname}\${nextUrl.search}\${nextUrl.hash}\`)
     }, [])
 
     useEffect(() => {
@@ -471,7 +455,7 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
 
     const handleUpdateStatus = useCallback(async (id: number, status: string) => {
         updateStatusMutation.mutate({ ids: [id], status })
-        setSuccessMessage(`Status pesanan berhasil diubah menjadi ${status}`)
+        setSuccessMessage(\`Status pesanan berhasil diubah menjadi \${status}\`)
         setShowSuccessDialog(true)
     }, [updateStatusMutation])
 
@@ -557,7 +541,7 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
                     order.status === "confirmed" &&
                     (deliverySummary?.hasOutstandingDeliveryItems ?? true)
                 const deliveryTitle = hasActiveDelivery
-                    ? `SO ini sudah punya ${deliverySummary?.activeCount ?? 0} delivery aktif${deliverySummary?.latestDeliveryNumber ? ` • terakhir ${deliverySummary.latestDeliveryNumber}` : ""}`
+                    ? \`SO ini sudah punya \${deliverySummary?.activeCount ?? 0} delivery aktif\${deliverySummary?.latestDeliveryNumber ? \` • terakhir \${deliverySummary.latestDeliveryNumber}\` : ""}\`
                     : hasCancelledDeliveryOnly
                         ? "SO ini pernah punya delivery, tetapi semuanya dibatalkan"
                         : canCreateDelivery
@@ -582,7 +566,7 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
                             <FileText className="h-4 w-4" />
                         </Button>
                         {canCreateDelivery ? (
-                            <Link href={`/dashboard/deliveries/create?so=${order.id}`}>
+                            <Link href={\`/dashboard/deliveries/create?so=\${order.id}\`}>
                                 <Button
                                     type="button"
                                     variant="ghost"
@@ -654,7 +638,7 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
                                     Cetak Proforma Invoice
                                 </DropdownMenuItem>
                                 {canCreateDelivery && (
-                                    <Link href={`/dashboard/deliveries/create?so=${order.id}`}>
+                                    <Link href={\`/dashboard/deliveries/create?so=\${order.id}\`}>
                                         <DropdownMenuItem>
                                             <Truck className="mr-2 h-4 w-4" />
                                             {hasActiveDelivery ? "Tambah Delivery Order" : "Jadikan Delivery Order"}
@@ -663,7 +647,7 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
                                 )}
                                 {(order.status === "draft" || order.status === "confirmed") && (
                                     canEdit ? (
-                                        <Link href={`/dashboard/sales-orders/${order.id}/edit`}>
+                                        <Link href={\`/dashboard/sales-orders/\${order.id}/edit\`}>
                                             <DropdownMenuItem>
                                                 <Pencil className="mr-2 h-4 w-4" />
                                                 Edit
@@ -780,6 +764,18 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
             cell: ({ row }) => row.getValue("customerPo") || "-",
         },
         {
+            accessorKey: "tripDestination",
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                    Trip Destination
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                </Button>
+            ),
+            cell: ({ row }) => (
+                <span className="text-sm">{row.original.tripDestination || "-"}</span>
+            ),
+        },
+        {
             id: "customerName",
             accessorFn: (row) => row.customer?.name,
             header: ({ column }) => (
@@ -789,20 +785,6 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
                 </Button>
             ),
             cell: ({ row }) => <span className="font-medium">{row.original.customer?.name || "-"}</span>,
-        },
-        {
-            accessorKey: "tripDestination",
-            header: ({ column }) => (
-                <Button
-                    variant="ghost"
-                    onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-                    className="-ml-4 h-8"
-                >
-                    Trip Destination
-                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
-                </Button>
-            ),
-            cell: ({ row }) => row.original.tripDestination || "-",
         },
         {
             accessorKey: "salesDate",
@@ -958,7 +940,7 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
                             Outstanding Qty: {remarks.outstandingQty.toLocaleString()} | Items: {remarks.outstandingItemsCount.toLocaleString()}
                         </div>
                         <div className="text-xs text-muted-foreground">
-                            Aging dari PO Receive: {remarks.outstandingDays != null ? `${remarks.outstandingDays} hari` : "-"}
+                            Aging dari PO Receive: {remarks.outstandingDays != null ? \`\${remarks.outstandingDays} hari\` : "-"}
                         </div>
                         {remarks.items.length > 0 ? (
                             <div className="space-y-0.5 text-xs text-muted-foreground">
@@ -990,7 +972,7 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
                 </div>
             ),
         },
-    ], [expandedRows, mounted, canEdit, canView, canDelete, handleDelete, handleUpdateStatus])
+    ], [mounted, canEdit, canView, canDelete, handleDelete, handleUpdateStatus])
 
     const filteredData = useMemo(() => {
         const term = globalFilter.trim().toLowerCase()
@@ -1003,6 +985,7 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
             const matchesSearch = term.length === 0 || (
                 order.invoiceNumber?.toLowerCase().includes(term) ||
                 order.customerPo?.toLowerCase().includes(term) ||
+                order.tripDestination?.toLowerCase().includes(term) ||
                 order.customer?.name.toLowerCase().includes(term) ||
                 order.salesPerson?.name?.toLowerCase().includes(term) ||
                 order.createdByUser?.name?.toLowerCase().includes(term) ||
@@ -1043,103 +1026,10 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
     })
 
     const rows = table.getRowModel().rows
-    const visibleColumnCount = table.getVisibleFlatColumns().length
-
-    const tableRowElements = rows.flatMap((row) => {
-        const order = row.original
-        const isExpanded = expandedRows[row.id] === true
-
-        const mainRow = (
-            <TableRow key={row.id} data-state={row.getIsSelected() && "selected"}>
-                {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </TableCell>
-                ))}
-            </TableRow>
-        )
-
-        if (!isExpanded) {
-            return [mainRow]
-        }
-
-        return [
-            mainRow,
-            <TableRow key={`detail-${row.id}`} className="bg-slate-50">
-                <TableCell colSpan={visibleColumnCount} className="p-0">
-                    <div className="rounded-b-xl border border-t-0 border-slate-200 bg-white p-4">
-                        <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                            <div className="rounded-xl border bg-slate-50 p-3">
-                                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Remark</p>
-                                <p className="mt-2 text-sm font-medium">{order.remarks?.label ?? "No Remarks"}</p>
-                            </div>
-                            <div className="rounded-xl border bg-slate-50 p-3">
-                                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Outstanding Qty</p>
-                                <p className="mt-2 text-sm font-medium">{order.remarks?.outstandingQty.toLocaleString() ?? 0}</p>
-                            </div>
-                            <div className="rounded-xl border bg-slate-50 p-3">
-                                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Outstanding Items</p>
-                                <p className="mt-2 text-sm font-medium">{order.remarks?.outstandingItemsCount ?? 0}</p>
-                            </div>
-                        </div>
-
-                        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-slate-50">
-                            <table className="min-w-full text-sm">
-                                <thead className="border-b bg-slate-100 text-left text-xs uppercase tracking-[0.16em] text-slate-500">
-                                    <tr>
-                                        <th className="px-3 py-2">Item</th>
-                                        <th className="px-3 py-2">Order Qty</th>
-                                        <th className="px-3 py-2">Delivered</th>
-                                        <th className="px-3 py-2">Outstanding</th>
-                                        <th className="px-3 py-2">Stock Available</th>
-                                        <th className="px-3 py-2">Status</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y">
-                                    {order.items.map((item) => {
-                                        const {
-                                            remainingQuantity,
-                                            deliveredQuantity,
-                                            availableStock,
-                                            stockStatus,
-                                            deliveryStatus,
-                                        } = getOrderItemDeliverySummary(order, item)
-
-                                        return (
-                                            <tr key={item.id} className="border-b last:border-b-0">
-                                                <td className="px-3 py-2 align-top">
-                                                    <div className="font-medium">
-                                                        {item.product?.materialDescription || item.description || item.product?.materialNumber || "Unknown product"}
-                                                    </div>
-                                                    <div className="text-xs text-muted-foreground">
-                                                        {item.product?.materialNumber || "-"}
-                                                    </div>
-                                                </td>
-                                                <td className="px-3 py-2 align-top">{item.quantity.toLocaleString()}</td>
-                                                <td className="px-3 py-2 align-top">{deliveredQuantity.toLocaleString()}</td>
-                                                <td className="px-3 py-2 align-top">{remainingQuantity.toLocaleString()}</td>
-                                                <td className="px-3 py-2 align-top">{availableStock.toLocaleString()}</td>
-                                                <td className="px-3 py-2 align-top">
-                                                    <Badge variant={STOCK_STATUS_VARIANTS[stockStatus] ?? "secondary"}>
-                                                        {stockStatus === "done" ? "Complete" : STOCK_STATUS_LABELS[stockStatus]}
-                                                    </Badge>
-                                                    <div className="mt-1 text-xs text-muted-foreground">{deliveryStatus}</div>
-                                                </td>
-                                            </tr>
-                                        )
-                                    })}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </TableCell>
-            </TableRow>,
-        ]
-    })
 
     const handleBulkDelete = async () => {
         const selectedIds = table.getSelectedRowModel().flatRows.map(r => r.original.id)
-        if (confirm(`Are you sure you want to delete ${selectedIds.length} selected sales orders?`)) {
+        if (confirm(\`Are you sure you want to delete \${selectedIds.length} selected sales orders?\`)) {
             deleteMutation.mutate(selectedIds, {
                 onSuccess: (result) => {
                     if (result.success) {
@@ -1177,6 +1067,7 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
                 "Created Date": new Date(order.createdAt).toLocaleDateString("id-ID"),
                 "Invoice Number": order.invoiceNumber || "",
                 "Customer PO": order.customerPo || "",
+                "Trip Destination": order.tripDestination || "",
                 Customer: order.customer?.name || "",
                 "PIC Sales": order.salesPerson?.name || "",
                 "Date PO": new Date(order.salesDate).toLocaleDateString("id-ID"),
@@ -1196,12 +1087,14 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
             { wch: 14 },
             { wch: 18 },
             { wch: 18 },
+            { wch: 24 },
             { wch: 28 },
             { wch: 20 },
             { wch: 14 },
             { wch: 12 },
             { wch: 18 },
             { wch: 18 },
+            { wch: 24 },
             { wch: 80 },
             { wch: 10 },
             { wch: 18 },
@@ -1211,7 +1104,7 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
 
         const workbook = XLSX.utils.book_new()
         XLSX.utils.book_append_sheet(workbook, worksheet, "Sales Orders")
-        XLSX.writeFile(workbook, `sales-orders-${new Date().toISOString().slice(0, 10)}.xlsx`)
+        XLSX.writeFile(workbook, \`sales-orders-\${new Date().toISOString().slice(0, 10)}.xlsx\`)
     }
 
     const handleKanbanStatusChange = useCallback(async (id: number, status: string) => {
@@ -1228,629 +1121,26 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
             toast.error("Email customer tidak tersedia")
             return
         }
-        const subject = encodeURIComponent(`Sales Order ${order.invoiceNumber || `SO-${order.id}`}`)
-        const body = encodeURIComponent(`Halo ${order.customer.name},\n\nMohon tinjau dokumen Sales Order ${order.invoiceNumber || `SO-${order.id}`}.\n\nTerima kasih.`)
-        window.location.href = `mailto:${email}?subject=${subject}&body=${body}`
+        const subject = encodeURIComponent(\`Sales Order \${order.invoiceNumber || \`SO-\${order.id}\`}\`)
+        const orderNumber = order.invoiceNumber || \`SO-\${order.id}\`
+        const body = encodeURIComponent(\`Halo \${order.customer.name},\\n\\nMohon tinjau dokumen Sales Order \${orderNumber}.\\n\\nTerima kasih.\`)
+        window.location.href = \`mailto:\${email}?subject=\${subject}&body=\${body}\`
     }, [])
+
     useEffect(() => {
         setPagination((prev) => ({ ...prev, pageIndex: 0 }))
-    }, [globalFilter, statusFilter, customerFilter, categoryFilter, yearFilter, monthFilter, createdByFilter])
+    }, [globalFilter, statusFilter, customerFilter, tripDestinationFilter, categoryFilter, yearFilter, monthFilter, createdByFilter])
 
     return (
         <div className="space-y-6">
             <ActionBlockedDialog
-                open={blockedDialog !== null}
-                onOpenChange={(open) => {
-                    if (!open) setBlockedDialog(null)
-                }}
-                title={blockedDialog?.title || "Aksi tidak bisa dilakukan"}
-                description={blockedDialog?.description || ""}
-                reasons={blockedDialog?.reasons || []}
-            />
-            <div className="flex items-center justify-between gap-2">
-                <Tabs value={viewMode} onValueChange={(value) => setViewMode(value as "table" | "kanban")}>
-                    <TabsList>
-                        <TabsTrigger value="table">Table</TabsTrigger>
-                        <TabsTrigger value="kanban">Kanban</TabsTrigger>
-                    </TabsList>
-                </Tabs>
-            </div>
+                open={blockedDialog !== null}`;
 
-            <Accordion type="single" collapsible className="w-full">
-                <AccordionItem value="analytics" className="border-none">
-                    <AccordionTrigger className="flex items-center gap-2 hover:no-underline py-3 px-6 bg-card border rounded-xl shadow-sm hover:bg-accent/50 transition-all [&[data-state=open]]:rounded-b-none [&[data-state=open]]:border-b-0">
-                        <div className="flex items-center gap-3">
-                            <div className="p-2 rounded-lg bg-primary/10 text-primary">
-                                <BarChart3 className="h-5 w-5" />
-                            </div>
-                            <div className="text-left">
-                                <h3 className="text-base font-bold text-foreground/90">Ringkasan & Dashboard Analitik</h3>
-                                <p className="text-xs text-muted-foreground font-normal">Klik untuk melihat statistik penjualan, tren bulanan, dan performa pesanan.</p>
-                            </div>
-                        </div>
-                    </AccordionTrigger>
-                    <AccordionContent className="bg-card border border-t-0 rounded-b-xl shadow-sm p-6 overflow-visible">
-                        <div className="space-y-8 animate-in fade-in slide-in-from-top-4 duration-500">
-                            <div className="grid gap-4 md:grid-cols-3">
-                                <ScoreCard
-                                    title="Total Orders"
-                                    value={totalOrders}
-                                    icon={ShoppingCart}
-                                    description="All sales orders"
-                                    gradient="from-blue-500/10 via-blue-400/5 to-indigo-500/10 border-blue-200/50 dark:from-blue-500/20 dark:via-blue-400/10 dark:to-indigo-500/20 dark:border-blue-500/30 hover:shadow-lg hover:shadow-blue-500/20"
-                                    iconColor="text-blue-600 dark:text-blue-400"
-                                    textColor="text-blue-900 dark:text-blue-100"
-                                />
-                                <ScoreCard
-                                    title="Completed"
-                                    value={completedOrders}
-                                    icon={CheckCircle}
-                                    description="Successfully fulfilled"
-                                    gradient="from-emerald-500/10 via-emerald-400/5 to-teal-500/10 border-emerald-200/50 dark:from-emerald-500/20 dark:via-emerald-400/10 dark:to-teal-500/20 dark:border-emerald-500/30 hover:shadow-lg hover:shadow-emerald-500/20"
-                                    iconColor="text-emerald-600 dark:text-emerald-400"
-                                    textColor="text-emerald-900 dark:text-emerald-100"
-                                />
-                                <ScoreCard
-                                    title="Pending"
-                                    value={pendingOrders}
-                                    icon={Clock}
-                                    description="Draft or confirmed orders"
-                                    gradient="from-amber-500/10 via-amber-400/5 to-orange-500/10 border-amber-200/50 dark:from-amber-500/20 dark:via-amber-400/10 dark:to-orange-500/20 dark:border-amber-500/30 hover:shadow-lg hover:shadow-amber-500/20"
-                                    iconColor="text-amber-600 dark:text-amber-400"
-                                    textColor="text-amber-900 dark:text-amber-100"
-                                />
-                            </div>
+const targetPath = "app/dashboard/sales-orders/_components/sales-order-table.tsx";
+const currentFile = fs.readFileSync(targetPath, 'utf8');
+const lines = currentFile.split('\\n');
 
-                            {/* Charts Row */}
-                            {data.length > 0 && (
-                                <div className="grid gap-4 md:grid-cols-3">
-                    {/* Status Chart */}
-                    <Card>
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-base">Order Status Overview</CardTitle>
-                            <CardDescription>{data.length} total orders</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <ResponsiveContainer width="100%" height={180}>
-                                <BarChart data={chartData} layout="vertical" margin={{ left: 20, right: 20 }}>
-                                    <XAxis type="number" tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} />
-                                    <YAxis dataKey="status" type="category" width={80} tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} />
-                                    <Tooltip
-                                        contentStyle={{
-                                            backgroundColor: "hsl(var(--card))",
-                                            border: "1px solid hsl(var(--border))",
-                                            borderRadius: "8px",
-                                            color: "hsl(var(--foreground))",
-                                        }}
-                                    />
-                                    <Bar dataKey="count" radius={[0, 4, 4, 0]}>
-                                        {chartData.map((entry, index) => (
-                                            <Cell key={`cell-${index}`} fill={entry.fill} />
-                                        ))}
-                                    </Bar>
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </CardContent>
-                    </Card>
+const restOfFile = lines.slice(227).join('\\n');
 
-                    {/* Revenue by Category Chart */}
-                    <Card>
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-base">Revenue by Category</CardTitle>
-                            <CardDescription>Top categories by revenue</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <ResponsiveContainer width="100%" height={180}>
-                                <BarChart data={categoryChartData} layout="vertical" margin={{ left: 20, right: 20 }}>
-                                    <XAxis type="number" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => `${(v / 1_000_000).toFixed(0)}M`} />
-                                    <YAxis dataKey="category" type="category" width={90} tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
-                                    <Tooltip
-                                        contentStyle={{
-                                            backgroundColor: "hsl(var(--card))",
-                                            border: "1px solid hsl(var(--border))",
-                                            borderRadius: "8px",
-                                            color: "hsl(var(--foreground))",
-                                        }}
-                                        formatter={(value: number) => [new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(value), "Revenue"]}
-                                    />
-                                    <Bar dataKey="revenue" fill="hsl(217, 91%, 60%)" radius={[0, 4, 4, 0]} />
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </CardContent>
-                    </Card>
-
-                    {/* Monthly Orders Chart */}
-                    <Card>
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-base">Monthly Orders</CardTitle>
-                            <CardDescription>Orders per month (all years)</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <ResponsiveContainer width="100%" height={180}>
-                                <BarChart data={monthlyOrdersData} margin={{ left: 0, right: 10 }}>
-                                    <XAxis dataKey="month" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} />
-                                    <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} allowDecimals={false} />
-                                    <Tooltip
-                                        contentStyle={{
-                                            backgroundColor: "hsl(var(--card))",
-                                            border: "1px solid hsl(var(--border))",
-                                            borderRadius: "8px",
-                                            color: "hsl(var(--foreground))",
-                                        }}
-                                    />
-                                    <Bar dataKey="count" fill="hsl(160, 84%, 39%)" radius={[4, 4, 0, 0]} />
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </CardContent>
-                    </Card>
-                </div>
-                            )}
-                        </div>
-                    </AccordionContent>
-                </AccordionItem>
-            </Accordion>
-
-            {viewMode === "kanban" && (
-                <ProcessKanbanBoard
-                    records={data}
-                    statuses={[
-                        { key: "draft", label: "Draft", variant: "secondary" },
-                        { key: "confirmed", label: "Confirmed", variant: "warning" },
-                        { key: "completed", label: "Done", variant: "success" },
-                        { key: "cancelled", label: "Cancelled", variant: "destructive" },
-                    ]}
-                    transitionMap={SALES_ORDER_TRANSITIONS}
-                    mapRecord={(order) => ({
-                        id: order.id,
-                        status: order.status,
-                        documentNumber: order.invoiceNumber || `SO-${order.id}`,
-                        customerName: order.customer?.name || "-",
-                        totalAmount: calculateGrandTotal(order),
-                        dueDate: order.poReceive || order.salesDate,
-                        assignedPerson: order.salesPerson?.name || order.createdByUser?.name || null,
-                        priority: order.categoryPo || null,
-                        raw: order,
-                    })}
-                    canEdit={canEdit}
-                    onStatusChange={handleKanbanStatusChange}
-                    onRefresh={() => { void refetch() }}
-                    onQuickPrint={(order) => {
-                        setProformaOrder(order as ProformaInvoiceOrder)
-                        setIsProformaOpen(true)
-                    }}
-                    onQuickCancel={(order) => {
-                        void handleKanbanStatusChange(order.id, "cancelled")
-                    }}
-                    onQuickEmail={handleEmailSalesOrder}
-                />
-            )}
-
-            {viewMode === "table" && (
-                <>
-            <div className="flex justify-end mb-2">
-                <div className="flex items-center gap-2 text-sm">
-                    <span className="text-muted-foreground">Rows</span>
-                    <Select
-                        value={String(pagination.pageSize)}
-                        onValueChange={(value) => table.setPageSize(Number(value))}
-                    >
-                        <SelectTrigger className="w-[90px] h-8">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {PAGE_SIZE_OPTIONS.map((size) => (
-                                <SelectItem key={size} value={String(size)}>{size}</SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                    <span className="text-muted-foreground whitespace-nowrap">
-                        Page {table.getState().pagination.pageIndex + 1} / {Math.max(1, table.getPageCount())}
-                    </span>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => table.previousPage()}
-                        disabled={!table.getCanPreviousPage()}
-                    >
-                        Prev
-                    </Button>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => table.nextPage()}
-                        disabled={!table.getCanNextPage()}
-                    >
-                        Next
-                    </Button>
-                </div>
-            </div>
-
-            {/* Filters */}
-            <div className="flex flex-col gap-4">
-                {/* Mobile Filters */}
-                <div className="sm:hidden space-y-3">
-                    <div className="flex items-center gap-2">
-                        <div className="relative flex-1">
-                            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                            <Input
-                                placeholder="Search invoice, customer, PO, user..."
-                                className="pl-8"
-                                value={globalFilter ?? ""}
-                                onChange={(e) => setGlobalFilter(e.target.value)}
-                            />
-                        </div>
-                        <Button variant="outline" onClick={() => { void refetch() }} size="icon">
-                            <RefreshCcw className="h-4 w-4" />
-                        </Button>
-                        <Button variant="outline" onClick={handleExport} size="icon">
-                            <Download className="h-4 w-4" />
-                        </Button>
-                    </div>
-
-                    <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                        <DataTableFacetedFilter
-                            title="Status"
-                            options={["draft", "confirmed", "completed", "cancelled"]}
-                            selectedValues={statusFilter}
-                            onFilterChange={setStatusFilter}
-                        />
-                        {uniqueCustomers.length > 0 && (
-                            <DataTableFacetedFilter
-                                title="Customer"
-                                options={uniqueCustomers}
-                                selectedValues={customerFilter}
-                                onFilterChange={setCustomerFilter}
-                            />
-                        )}
-                        {uniqueTripDestinations.length > 0 && (
-                            <DataTableFacetedFilter
-                                title="Trip Destination"
-                                options={uniqueTripDestinations}
-                                selectedValues={tripDestinationFilter}
-                                onFilterChange={setTripDestinationFilter}
-                            />
-                        )}
-                        {uniqueCategories.length > 0 && (
-                            <DataTableFacetedFilter
-                                title="Category"
-                                options={uniqueCategories}
-                                selectedValues={categoryFilter}
-                                onFilterChange={setCategoryFilter}
-                            />
-                        )}
-                        {uniqueRemarks.length > 0 && (
-                            <DataTableFacetedFilter
-                                title="Remark"
-                                options={uniqueRemarks}
-                                selectedValues={remarkFilter}
-                                onFilterChange={setRemarkFilter}
-                            />
-                        )}
-                        {uniqueYears.length > 0 && (
-                            <DataTableFacetedFilter
-                                title="Year"
-                                options={uniqueYears}
-                                selectedValues={yearFilter}
-                                onFilterChange={setYearFilter}
-                            />
-                        )}
-                        {uniqueMonths.length > 0 && (
-                            <DataTableFacetedFilter
-                                title="Month"
-                                options={uniqueMonths}
-                                selectedValues={monthFilter}
-                                onFilterChange={setMonthFilter}
-                            />
-                        )}
-                        {uniqueCreatedBy.length > 0 && (
-                            <DataTableFacetedFilter
-                                title="Created By"
-                                options={uniqueCreatedBy}
-                                selectedValues={createdByFilter}
-                                onFilterChange={setCreatedByFilter}
-                            />
-                        )}
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="outline" size="sm" className="h-[36px] whitespace-nowrap">
-                                    View <ChevronDown className="ml-2 h-4 w-4" />
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-56">
-                                <div className="px-2 py-1.5 text-sm font-medium">Toggle columns</div>
-                                {table
-                                    .getAllColumns()
-                                    .filter((column) => column.getCanHide())
-                                    .map((column) => {
-                                        const label = {
-                                            createdAt: "Created Date",
-                                            invoiceNumber: "Invoice Number",
-                                            customerPo: "No PO Customer",
-                                            customerName: "Customer",
-                                            salesDate: "Date PO",
-                                            poReceive: "PO Receive",
-                                            remarks: "Remarks",
-                                            salesPerson: "PIC Sales",
-                                            categoryPo: "Cat. PO",
-                                            categoryProduct: "Category",
-                                            itemsCount: "Items",
-                                            grandTotal: "Grand Total",
-                                            status: "Status",
-                                            createdBy: "Created By",
-                                        }[column.id] || column.id
-
-                                        return (
-                                            <DropdownMenuCheckboxItem
-                                                key={column.id}
-                                                checked={column.getIsVisible()}
-                                                onCheckedChange={(value) => column.toggleVisibility(!!value)}
-                                            >
-                                                {label}
-                                            </DropdownMenuCheckboxItem>
-                                        )
-                                    })}
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                    </div>
-                </div>
-
-                {/* Desktop Filters */}
-                <div className="hidden sm:flex flex-row gap-3 justify-between items-center">
-                    <div className="relative w-full sm:w-72 shrink-0">
-                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                        <Input
-                            placeholder="Search invoice, customer, PO, user..."
-                            className="pl-8"
-                            value={globalFilter ?? ""}
-                            onChange={(e) => setGlobalFilter(e.target.value)}
-                        />
-                    </div>
-                    <div className="flex items-center gap-2 flex-wrap justify-end">
-                        <DataTableFacetedFilter
-                            title="Status"
-                            options={["draft", "confirmed", "completed", "cancelled"]}
-                            selectedValues={statusFilter}
-                            onFilterChange={setStatusFilter}
-                        />
-                        {uniqueCustomers.length > 0 && (
-                            <DataTableFacetedFilter
-                                title="Customer"
-                                options={uniqueCustomers}
-                                selectedValues={customerFilter}
-                                onFilterChange={setCustomerFilter}
-                            />
-                        )}
-                        {uniqueTripDestinations.length > 0 && (
-                            <DataTableFacetedFilter
-                                title="Trip Destination"
-                                options={uniqueTripDestinations}
-                                selectedValues={tripDestinationFilter}
-                                onFilterChange={setTripDestinationFilter}
-                            />
-                        )}
-                        {uniqueCategories.length > 0 && (
-                            <DataTableFacetedFilter
-                                title="Category"
-                                options={uniqueCategories}
-                                selectedValues={categoryFilter}
-                                onFilterChange={setCategoryFilter}
-                            />
-                        )}
-                        {uniqueRemarks.length > 0 && (
-                            <DataTableFacetedFilter
-                                title="Remark"
-                                options={uniqueRemarks}
-                                selectedValues={remarkFilter}
-                                onFilterChange={setRemarkFilter}
-                            />
-                        )}
-                        {uniqueYears.length > 0 && (
-                            <DataTableFacetedFilter
-                                title="Year"
-                                options={uniqueYears}
-                                selectedValues={yearFilter}
-                                onFilterChange={setYearFilter}
-                            />
-                        )}
-                        {uniqueMonths.length > 0 && (
-                            <DataTableFacetedFilter
-                                title="Month"
-                                options={uniqueMonths}
-                                selectedValues={monthFilter}
-                                onFilterChange={setMonthFilter}
-                            />
-                        )}
-                        {uniqueCreatedBy.length > 0 && (
-                            <DataTableFacetedFilter
-                                title="Created By"
-                                options={uniqueCreatedBy}
-                                selectedValues={createdByFilter}
-                                onFilterChange={setCreatedByFilter}
-                            />
-                        )}
-                        <Button variant="outline" size="icon" onClick={() => refetch()}>
-                            <RefreshCcw className="h-4 w-4" />
-                        </Button>
-                        <Button variant="outline" onClick={handleExport}>
-                            <Download className="mr-2 h-4 w-4" />
-                            Export CSV
-                        </Button>
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="outline">
-                                    View <ChevronDown className="ml-2 h-4 w-4" />
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-56">
-                                <div className="px-2 py-1.5 text-sm font-medium">Toggle columns</div>
-                                {table
-                                    .getAllColumns()
-                                    .filter((column) => column.getCanHide())
-                                    .map((column) => {
-                                        const label = {
-                                            createdAt: "Created Date",
-                                            invoiceNumber: "Invoice Number",
-                                            customerPo: "No PO Customer",
-                                            customerName: "Customer",
-                                            salesDate: "Date PO",
-                                            poReceive: "PO Receive",
-                                            remarks: "Remarks",
-                                            salesPerson: "PIC Sales",
-                                            categoryPo: "Cat. PO",
-                                            categoryProduct: "Category",
-                                            itemsCount: "Items",
-                                            grandTotal: "Grand Total",
-                                            status: "Status",
-                                            createdBy: "Created By",
-                                        }[column.id] || column.id
-
-                                        return (
-                                            <DropdownMenuCheckboxItem
-                                                key={column.id}
-                                                checked={column.getIsVisible()}
-                                                onCheckedChange={(value) => column.toggleVisibility(!!value)}
-                                            >
-                                                {label}
-                                            </DropdownMenuCheckboxItem>
-                                        )
-                                    })}
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                    </div>
-                </div>
-            </div>
-
-            <div className="rounded-md border">
-                <div
-                    className="overflow-x-auto relative scrollbar-thin scrollbar-thumb-accent"
-                >
-                    <Table>
-                        <TableHeader className="bg-background shadow-sm">
-                            {table.getHeaderGroups().map((headerGroup) => (
-                                <TableRow key={headerGroup.id}>
-                                    {headerGroup.headers.map((header) => (
-                                        <TableHead key={header.id} className="bg-background shadow-[inset_0_-1px_0_hsl(var(--border))]"
-                                            sortable={header.column.getCanSort()}
-                                            sorted={header.column.getIsSorted()}
-                                            onSort={header.column.getToggleSortingHandler()}
-                                            showSortIndicator={typeof header.column.columnDef.header === "string"}
-                                        >
-                                            {header.isPlaceholder
-                                                ? null
-                                                : flexRender(
-                                                    header.column.columnDef.header,
-                                                    header.getContext()
-                                                )}
-                                        </TableHead>
-                                    ))}
-                                </TableRow>
-                            ))}
-                        </TableHeader>
-                        <TableBody>
-                            {tableRowElements.length > 0 ? (
-                                tableRowElements
-                            ) : (
-                                <TableRow>
-                                    <TableCell colSpan={table.getVisibleFlatColumns().length} className="h-24 text-center">
-                                        No sales orders found.
-                                    </TableCell>
-                                </TableRow>
-                            )}
-                        </TableBody>
-                    </Table>
-                </div>
-            </div>
-
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-sm">
-                <div className="text-muted-foreground">
-                    Showing {table.getRowModel().rows.length} of {table.getFilteredRowModel().rows.length} records
-                </div>
-                <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground">Rows</span>
-                    <Select
-                        value={String(pagination.pageSize)}
-                        onValueChange={(value) => table.setPageSize(Number(value))}
-                    >
-                        <SelectTrigger className="w-[90px] h-8">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {PAGE_SIZE_OPTIONS.map((size) => (
-                                <SelectItem key={size} value={String(size)}>{size}</SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-
-                    <span className="text-muted-foreground whitespace-nowrap">
-                        Page {table.getState().pagination.pageIndex + 1} / {Math.max(1, table.getPageCount())}
-                    </span>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => table.previousPage()}
-                        disabled={!table.getCanPreviousPage()}
-                    >
-                        Prev
-                    </Button>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => table.nextPage()}
-                        disabled={!table.getCanNextPage()}
-                    >
-                        Next
-                    </Button>
-                </div>
-            </div>
-
-            {
-                table.getSelectedRowModel().flatRows.length > 0 && (canEdit || canDelete) && (
-                    <BulkActions
-                        selectedCount={table.getSelectedRowModel().flatRows.length}
-                        onDelete={canDelete ? handleBulkDelete : () => { }}
-                        onEdit={canEdit ? handleBulkUpdateStatus : () => { }}
-                        entityName="sales order"
-                    />
-                )
-            }
-                </>
-            )}
-
-            <SalesOrderDetail
-                open={isViewOpen}
-                onOpenChange={setIsViewOpen}
-                order={viewOrder}
-            />
-
-            <PoPreviewDialog
-                open={isPoPreviewOpen}
-                onOpenChange={setIsPoPreviewOpen}
-                poDocument={poPreviewOrder?.poDocument || null}
-                title={`PO Preview: ${poPreviewOrder?.invoiceNumber || "Customer PO"}`}
-                editUrl={poPreviewOrder ? `/dashboard/sales-orders/${poPreviewOrder.id}/edit` : undefined}
-            />
-
-            <ProformaInvoiceDialog
-                open={isProformaOpen}
-                onOpenChange={setIsProformaOpen}
-                order={proformaOrder}
-            />
-
-            <SuccessAlertDialog
-                open={showSuccessDialog}
-                onOpenChange={setShowSuccessDialog}
-                title="Status Diperbarui"
-                description={successMessage}
-            />
-        </div>
-    )
-}
-
-export function SalesOrderTable(props: SalesOrderTableProps) {
-    return (
-        <Providers>
-            <SalesOrderTableContent {...props} />
-        </Providers>
-    )
-}
-
+fs.writeFileSync(targetPath, part1 + '\\n' + restOfFile);
+console.log("Restored successfully!");

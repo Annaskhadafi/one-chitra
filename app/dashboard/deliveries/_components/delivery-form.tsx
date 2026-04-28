@@ -89,6 +89,7 @@ interface SalesOrderForDelivery {
     customerId: number
     salesDate: Date
     categoryPo: string | null
+    tripDestination?: string | null
     status: string
     customer: Customer
     warehouseId: number | null
@@ -665,6 +666,9 @@ export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSale
             const addr = [so.customer.address1, so.customer.address2, so.customer.address3, so.customer.address4, so.customer.address5]
                 .filter(Boolean).join(", ")
             setShippingAddress(addr)
+
+            // Auto-fill trip destination from Sales Order
+            setTripDestination(so.tripDestination || "")
 
             // Reset stock check
             setStockResults([])

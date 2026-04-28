@@ -14,8 +14,72 @@ import { recordActivity } from "@/lib/audit"
 import { restoreStockBookingsForDelivery } from "@/lib/stock-bookings"
 
 let hasSalesPersonColumnCache: boolean | null = null
+const salesOrderColumnCache = new Map<string, boolean>()
 type SalesPersonRecord = typeof user.$inferSelect
 const DUPLICATE_CUSTOMER_PO_ERROR = "No PO Customer ini sudah pernah diinput. Gunakan nomor PO Customer yang berbeda."
+
+const baseSalesOrderColumns = {
+    id: true,
+    invoiceNumber: true,
+    customerPo: true,
+    customerId: true,
+    warehouseId: true,
+    salesDate: true,
+    poReceive: true,
+    categoryPo: true,
+    categoryProduct: true,
+    poDocument: true,
+    status: true,
+    termsConditions: true,
+    notes: true,
+    discount: true,
+    shipping: true,
+    createdBy: true,
+    createdAt: true,
+    updatedAt: true,
+} as const
+
+function buildSalesOrderColumns(hasPicColumn: boolean, hasTripDestinationColumn: boolean) {
+    return {
+        ...baseSalesOrderColumns,
+        ...(hasTripDestinationColumn ? { tripDestination: true } : {}),
+        ...(hasPicColumn ? { salesPersonId: true } : {}),
+    }
+}
+
+function normalizeSalesOrderRecord<T extends {
+    tripDestination?: string | null
+    salesPersonId?: string | null
+    salesPerson?: SalesPersonRecord | null
+}>(order: T, hasPicColumn: boolean, hasTripDestinationColumn: boolean) {
+    const tripDestination: string | null = hasTripDestinationColumn
+        ? order.tripDestination ?? null
+        : null
+
+    const salesPersonId: string | null = hasPicColumn
+        ? order.salesPersonId ?? null
+        : null
+
+    return {
+        ...order,
+        tripDestination,
+        salesPersonId,
+        sourceType: null as string | null,
+        quotationId: null as number | null,
+        quotationNumber: null as string | null,
+        quotationRevision: null as number | null,
+        quotationSubject: null as string | null,
+        quotationReferenceNumber: null as string | null,
+        quotationValidUntil: null as Date | null,
+        quotationCurrency: null as string | null,
+        quotationDiscountType: null as string | null,
+        quotationTax: null as string | null,
+        quotationAdminNote: null as string | null,
+        quotationClientNote: null as string | null,
+        customerAttn: null as string | null,
+        salesPerson: normalizeSalesPerson(order),
+    }
+}
 
 function normalizeSalesPerson(order: unknown): SalesPersonRecord | null {
     if (typeof order === "object" && order !== null && "salesPerson" in order) {
@@ -66,9 +130,10 @@ function duplicateCustomerPoResult(existingOrder?: { invoiceNumber: string | nul
     }
 }
 
-async function hasSalesPersonColumn() {
-    if (hasSalesPersonColumnCache !== null) {
-        return hasSalesPersonColumnCache
+async function hasSalesOrderColumn(columnName: string) {
+    const cached = salesOrderColumnCache.get(columnName)
+    if (cached !== undefined) {
+        return cached
     }
 
     try {
@@ -77,16 +142,26 @@ async function hasSalesPersonColumn() {
             FROM information_schema.columns
             WHERE table_schema = 'public'
               AND table_name = 'sales_orders'
-              AND column_name = 'sales_person_id'
+              AND column_name = ${columnName}
             LIMIT 1
         `)
 
-        hasSalesPersonColumnCache = result.rows.length > 0
-        return hasSalesPersonColumnCache
+        const exists = result.rows.length > 0
+        salesOrderColumnCache.set(columnName, exists)
+        return exists
     } catch {
-        hasSalesPersonColumnCache = false
+        salesOrderColumnCache.set(columnName, false)
         return false
     }
+}
+
+async function hasSalesPersonColumn() {
+    if (hasSalesPersonColumnCache !== null) {
+        return hasSalesPersonColumnCache
+    }
+
+    hasSalesPersonColumnCache = await hasSalesOrderColumn("sales_person_id")
+    return hasSalesPersonColumnCache
 }
 
 async function getSalesOrderWarehouseStock(warehouseId: number, productId: number) {
@@ -106,11 +181,17 @@ async function getSalesOrderWarehouseStock(warehouseId: number, productId: numbe
 
 export async function getSalesOrders() {
     noStore()
-    const hasPicColumn = await hasSalesPersonColumn()
+    const [hasPicColumn, hasTripDestinationColumn] = await Promise.all([
+        hasSalesPersonColumn(),
+        hasSalesOrderColumn("trip_destination"),
+    ])
+
+    const orderColumns = buildSalesOrderColumns(hasPicColumn, hasTripDestinationColumn)
 
     // Fetch orders with customer and createdByUser first
     const orders = hasPicColumn
         ? await db.query.salesOrders.findMany({
+            columns: orderColumns,
             with: {
                 customer: true,
                 createdByUser: true,
@@ -119,6 +200,7 @@ export async function getSalesOrders() {
             orderBy: [desc(salesOrders.createdAt)],
         })
         : await db.query.salesOrders.findMany({
+            columns: orderColumns,
             with: {
                 customer: true,
                 createdByUser: true,
@@ -271,9 +353,10 @@ export async function getSalesOrders() {
                             items: outstandingItems,
                         }
 
+            const normalizedOrder = normalizeSalesOrderRecord(order, hasPicColumn, hasTripDestinationColumn)
+
             return {
-                ...order,
-                salesPerson: normalizeSalesPerson(order),
+                ...normalizedOrder,
                 items,
                 remarks,
                 deliverySummary: {
@@ -304,21 +387,30 @@ export async function getSalesOrderCategories() {
 
 export async function getSalesOrder(id: number) {
     noStore()
-    const hasPicColumn = await hasSalesPersonColumn()
+    const [hasPicColumn, hasTripDestinationColumn] = await Promise.all([
+        hasSalesPersonColumn(),
+        hasSalesOrderColumn("trip_destination"),
+    ])
+
+    const orderColumns = buildSalesOrderColumns(hasPicColumn, hasTripDestinationColumn)
 
     // Fetch order with customer first
     const order = hasPicColumn
         ? await db.query.salesOrders.findFirst({
             where: eq(salesOrders.id, id),
+            columns: orderColumns,
             with: {
                 customer: true,
+                createdByUser: true,
                 salesPerson: true,
             },
         })
         : await db.query.salesOrders.findFirst({
             where: eq(salesOrders.id, id),
+            columns: orderColumns,
             with: {
                 customer: true,
+                createdByUser: true,
             },
         })
 
@@ -333,8 +425,7 @@ export async function getSalesOrder(id: number) {
     })
 
     return {
-        ...order,
-        salesPerson: normalizeSalesPerson(order),
+        ...normalizeSalesOrderRecord(order, hasPicColumn, hasTripDestinationColumn),
         items,
     }
 }
@@ -400,6 +491,7 @@ export async function createSalesOrder(data: z.infer<typeof salesOrderSchema>) {
                 .values({
                     invoiceNumber: invoiceNumber!,
                     customerPo: normalizedCustomerPo || null,
+                    tripDestination: data.tripDestination || null,
                     createdBy: userId,
                     customerId: data.customerId,
                     ...(hasPicColumn ? { salesPersonId: data.salesPersonId || null } : {}),
@@ -579,6 +671,7 @@ export async function updateSalesOrder(id: number, data: z.infer<typeof salesOrd
                 .set({
                     invoiceNumber: data.invoiceNumber || undefined,
                     customerPo: normalizedCustomerPo || null,
+                    tripDestination: data.tripDestination || null,
                     customerId: data.customerId,
                     ...(hasPicColumn ? { salesPersonId: data.salesPersonId || null } : {}),
                     warehouseId: data.warehouseId,
@@ -1005,8 +1098,13 @@ export async function releaseExpiredDraftBookings() {
     try {
         const oneMonthAgo = new Date()
         oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1)
+        const [hasPicColumn, hasTripDestinationColumn] = await Promise.all([
+            hasSalesPersonColumn(),
+            hasSalesOrderColumn("trip_destination"),
+        ])
 
         const expiredDrafts = await db.query.salesOrders.findMany({
+            columns: buildSalesOrderColumns(hasPicColumn, hasTripDestinationColumn),
             where: and(
                 eq(salesOrders.status, "draft"),
                 sql`${salesOrders.createdAt} < ${oneMonthAgo}`

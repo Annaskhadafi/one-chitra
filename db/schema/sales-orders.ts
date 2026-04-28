@@ -9,6 +9,7 @@ export const salesOrders = pgTable("sales_orders", {
     id: serial("id").primaryKey(),
     invoiceNumber: varchar("invoice_number", { length: 50 }).unique(),
     customerPo: varchar("customer_po", { length: 100 }),
+    tripDestination: varchar("trip_destination", { length: 255 }),
     customerId: integer("customer_id").references(() => customers.id).notNull(),
     salesPersonId: text("sales_person_id").references(() => user.id),
     warehouseId: integer("warehouse_id").references(() => warehouses.id),
