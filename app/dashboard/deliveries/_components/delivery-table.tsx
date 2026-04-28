@@ -4,10 +4,12 @@ import * as React from "react"
 import { useState, useMemo, useCallback } from "react"
 import { useMounted } from "@/hooks/use-mounted"
 import { SuccessAlertDialog } from "@/components/success-alert-dialog"
-import { deleteDelivery, bulkDeleteDeliveries, bulkUpdateDeliveryStatus, getDeliveries, updateDeliveryDate } from "@/app/actions/delivery"
+import { deleteDelivery, bulkDeleteDeliveries, bulkUpdateDeliveryStatus, bulkUpdateDeliveryShipmentDetails, getDeliveries, updateDeliveryDate } from "@/app/actions/delivery"
+import { getDrivers, getVehicles } from "@/app/actions/fleet"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
 import { cn } from "@/lib/utils"
+import { BULK_DELIVERY_COST_FIELDS, BULK_DELIVERY_STATUS_OPTIONS, buildBulkDeliveryShipmentDetailsUpdate, normalizeBulkDeliveryStatus, type BulkDeliveryShipmentDetailsInput } from "@/lib/delivery-bulk-shipment"
 import { DeliveryPreview } from "./delivery-preview"
 import { DeliveryPdfPreview } from "./delivery-pdf-preview"
 import { DeliveryBulkPdf } from "./delivery-bulk-pdf"
@@ -42,6 +44,14 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
+import {
+    Command,
+    CommandEmpty,
+    CommandGroup,
+    CommandInput,
+    CommandItem,
+    CommandList,
+} from "@/components/ui/command"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import {
     AlertDialog,
@@ -54,7 +64,15 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Search, Pencil, Trash2, Truck, CalendarClock, MapPin, User, MoreHorizontal, Eye, FileDown, Download, FileText, RefreshCcw, ChevronUp, ChevronDown, Calendar as CalendarIcon, PackageSearch, AlertTriangle, FileStack } from "lucide-react"
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog"
+import { Search, Pencil, Trash2, Truck, CalendarClock, MapPin, User, MoreHorizontal, Eye, FileDown, Download, FileText, RefreshCcw, ChevronUp, ChevronDown, ChevronsUpDown, Check, Calendar as CalendarIcon, PackageSearch, AlertTriangle, FileStack } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
@@ -62,6 +80,9 @@ import { useSession } from "@/lib/auth-client"
 import type { Product, Warehouse, Customer } from "@/lib/types"
 import { usePermissions } from "@/hooks/use-permissions"
 import { PoPreviewDialog } from "@/components/po-preview-dialog"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Separator } from "@/components/ui/separator"
 import { XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LineChart, Line, PieChart, Pie, Legend } from "recharts"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { ReportPieChart, ReportBarChart } from "@/components/reports/report-charts"
@@ -101,12 +122,26 @@ interface DeliveryWithRelations {
     driverName: string | null
     vehicleNumber: string | null
     vehicleType: string | null
+    vendorName: string | null
+    awbNumber?: string | null
+    shippingCost?: string | null
+    costGasolineDexlite?: string | null
+    costGasolineBio?: string | null
+    costToll?: string | null
+    costParking?: string | null
+    costMeals?: string | null
+    costMaintenance?: string | null
+    costOthers?: string | null
+    costRapidTest?: string | null
+    costFerry?: string | null
+    costPortal?: string | null
+    costWashing?: string | null
+    costEscort?: string | null
     warehouseId: number | null
     shippingAddress: string | null
     tripDestination?: string | null
     fleetTripId?: number | null
     isExternal: boolean
-    vendorName: string | null
     notes: string | null
     createdAt: Date
     salesOrder: {
@@ -226,6 +261,377 @@ const STATUS_COLORS: Record<string, string> = {
     cancelled: "hsl(346, 77%, 49%)",
 }
 
+const bulkShipmentFieldLabels: Record<string, string> = {
+    driverName: "Driver",
+    vehicleNumber: "Vehicle Number",
+    vehicleType: "Vehicle Type",
+    vendorName: "Vendor",
+    awbNumber: "AWB Number",
+    tripDestination: "Trip Destination",
+    notes: "Notes",
+    shippingCost: "Shipping Cost",
+    costGasolineDexlite: "Gasoline Dexlite",
+    costGasolineBio: "Gasoline Bio",
+    costToll: "Toll",
+    costParking: "Parking",
+    costMeals: "Meals",
+    costMaintenance: "Maintenance",
+    costOthers: "Others",
+    costRapidTest: "Rapid Test",
+    costFerry: "Ferry",
+    costPortal: "Portal",
+    costWashing: "Washing",
+    costEscort: "Escort",
+}
+
+function BulkShipmentDetailsDialog({
+    open,
+    onOpenChange,
+    selectedCount,
+    isPending,
+    drivers,
+    vehicles,
+    onSubmit,
+}: {
+    open: boolean
+    onOpenChange: (open: boolean) => void
+    selectedCount: number
+    isPending: boolean
+    drivers: { id: number; name: string }[]
+    vehicles: { id: number; policeNumber: string; type: string }[]
+    onSubmit: (values: Record<string, string>) => void
+}) {
+    const [values, setValues] = useState<Record<string, string>>({})
+    const [driverOpen, setDriverOpen] = useState(false)
+    const [vehicleOpen, setVehicleOpen] = useState(false)
+    const [vehicleTypeOpen, setVehicleTypeOpen] = useState(false)
+    const [driverSearch, setDriverSearch] = useState("")
+    const [vehicleSearch, setVehicleSearch] = useState("")
+    const [vehicleTypeSearch, setVehicleTypeSearch] = useState("")
+
+    React.useEffect(() => {
+        if (!open) {
+            setValues({})
+            setDriverSearch("")
+            setVehicleSearch("")
+            setVehicleTypeSearch("")
+            setDriverOpen(false)
+            setVehicleOpen(false)
+            setVehicleTypeOpen(false)
+        }
+    }, [open])
+
+    const updateField = (field: string, value: string) => {
+        setValues((current) => ({ ...current, [field]: value }))
+    }
+
+    const submit = (event: React.FormEvent<HTMLFormElement>) => {
+        event.preventDefault()
+        onSubmit(values)
+    }
+
+    const driverName = values.driverName || ""
+    const vehicleNumber = values.vehicleNumber || ""
+    const vehicleType = values.vehicleType || ""
+    const selectedMode = values.isExternal === "true" ? "external" : values.isExternal === "false" ? "internal" : "unchanged"
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+                <DialogHeader>
+                    <DialogTitle>Bulk Edit Delivery</DialogTitle>
+                    <DialogDescription>
+                        Status dan field yang diisi akan mengganti nilai pada {selectedCount} delivery terpilih, termasuk yang sudah delivered.
+                    </DialogDescription>
+                </DialogHeader>
+                <form onSubmit={submit} className="space-y-5">
+                    <div className="space-y-3">
+                        <h3 className="text-sm font-semibold">Status</h3>
+                        <div className="max-w-sm space-y-1.5">
+                            <Label htmlFor="bulk-status">Delivery Status</Label>
+                            <Select
+                                value={values.status || "__unchanged__"}
+                                onValueChange={(value) => updateField("status", value === "__unchanged__" ? "" : value)}
+                            >
+                                <SelectTrigger id="bulk-status">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="__unchanged__">Tidak diubah</SelectItem>
+                                    {BULK_DELIVERY_STATUS_OPTIONS.map((status) => (
+                                        <SelectItem key={status} value={status}>
+                                            {statusLabels[status] || status}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+
+                    <Separator />
+
+                    <div className="space-y-3">
+                        <h3 className="text-sm font-semibold">Shipment Details</h3>
+                        <div className="flex items-center justify-between rounded-md border px-3 py-2">
+                            <Label className="text-sm font-medium">Delivery Mode</Label>
+                            <Select
+                                value={values.isExternal ?? "__unchanged__"}
+                                onValueChange={(value) => updateField("isExternal", value === "__unchanged__" ? "" : value)}
+                            >
+                                <SelectTrigger className="w-[190px]">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="__unchanged__">Tidak diubah</SelectItem>
+                                    <SelectItem value="false">Internal Fleet</SelectItem>
+                                    <SelectItem value="true">External Vendor</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        {selectedMode === "unchanged" && (
+                            <div className="rounded-md border border-dashed px-3 py-4 text-sm text-muted-foreground">
+                                Pilih `Delivery Mode` jika ingin menampilkan field `Internal Fleet` atau `External Vendor`.
+                            </div>
+                        )}
+
+                        {selectedMode === "internal" && (
+                            <div className="space-y-4 rounded-md border p-4">
+                                <div className="text-sm font-medium">Internal Fleet</div>
+                                <div className="grid gap-3 md:grid-cols-2">
+                                    <div className="space-y-1.5">
+                                        <Label>Driver Name</Label>
+                                        <Popover open={driverOpen} onOpenChange={setDriverOpen}>
+                                            <PopoverTrigger asChild>
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    role="combobox"
+                                                    className={cn("w-full justify-between", !driverName && "text-muted-foreground")}
+                                                >
+                                                    {driverName || "Select Driver..."}
+                                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                                </Button>
+                                            </PopoverTrigger>
+                                            <PopoverContent className="w-[300px] p-0" align="start">
+                                                <Command>
+                                                    <CommandInput
+                                                        placeholder="Search driver..."
+                                                        value={driverSearch}
+                                                        onValueChange={setDriverSearch}
+                                                    />
+                                                    <CommandList>
+                                                        <CommandEmpty>No driver found.</CommandEmpty>
+                                                        <CommandGroup>
+                                                            {drivers.map((driver) => (
+                                                                <CommandItem
+                                                                    key={driver.id}
+                                                                    value={driver.name}
+                                                                    onSelect={() => {
+                                                                        updateField("driverName", driver.name)
+                                                                        setDriverOpen(false)
+                                                                    }}
+                                                                >
+                                                                    <Check className={cn("mr-2 h-4 w-4", driverName === driver.name ? "opacity-100" : "opacity-0")} />
+                                                                    {driver.name}
+                                                                </CommandItem>
+                                                            ))}
+                                                        </CommandGroup>
+                                                    </CommandList>
+                                                </Command>
+                                            </PopoverContent>
+                                        </Popover>
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                        <Label>Vehicle No.</Label>
+                                        <Popover open={vehicleOpen} onOpenChange={setVehicleOpen}>
+                                            <PopoverTrigger asChild>
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    role="combobox"
+                                                    className={cn("w-full justify-between", !vehicleNumber && "text-muted-foreground")}
+                                                >
+                                                    {vehicleNumber || "Select Vehicle..."}
+                                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                                </Button>
+                                            </PopoverTrigger>
+                                            <PopoverContent className="w-[300px] p-0" align="start">
+                                                <Command>
+                                                    <CommandInput
+                                                        placeholder="Search police number..."
+                                                        value={vehicleSearch}
+                                                        onValueChange={setVehicleSearch}
+                                                    />
+                                                    <CommandList>
+                                                        <CommandEmpty>No vehicle found.</CommandEmpty>
+                                                        <CommandGroup>
+                                                            {vehicles.map((vehicle) => (
+                                                                <CommandItem
+                                                                    key={vehicle.id}
+                                                                    value={vehicle.policeNumber}
+                                                                    onSelect={() => {
+                                                                        updateField("vehicleNumber", vehicle.policeNumber)
+                                                                        updateField("vehicleType", vehicle.type)
+                                                                        setVehicleOpen(false)
+                                                                    }}
+                                                                >
+                                                                    <Check className={cn("mr-2 h-4 w-4", vehicleNumber === vehicle.policeNumber ? "opacity-100" : "opacity-0")} />
+                                                                    <span className="font-mono">{vehicle.policeNumber}</span>
+                                                                    <span className="ml-2 text-xs text-muted-foreground">({vehicle.type})</span>
+                                                                </CommandItem>
+                                                            ))}
+                                                        </CommandGroup>
+                                                    </CommandList>
+                                                </Command>
+                                            </PopoverContent>
+                                        </Popover>
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                        <Label>Vehicle Type</Label>
+                                        <Popover open={vehicleTypeOpen} onOpenChange={setVehicleTypeOpen}>
+                                            <PopoverTrigger asChild>
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    role="combobox"
+                                                    className={cn("w-full justify-between", !vehicleType && "text-muted-foreground")}
+                                                >
+                                                    {vehicleType || "Select Type..."}
+                                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                                </Button>
+                                            </PopoverTrigger>
+                                            <PopoverContent className="w-[300px] p-0" align="start">
+                                                <Command>
+                                                    <CommandInput
+                                                        placeholder="Search or type new..."
+                                                        value={vehicleTypeSearch}
+                                                        onValueChange={setVehicleTypeSearch}
+                                                    />
+                                                    <CommandList>
+                                                        <CommandEmpty>
+                                                            <div className="p-2">
+                                                                <Button
+                                                                    type="button"
+                                                                    variant="outline"
+                                                                    size="sm"
+                                                                    className="h-8 w-full"
+                                                                    onMouseDown={(event) => event.preventDefault()}
+                                                                    onClick={() => {
+                                                                        if (vehicleTypeSearch.trim()) {
+                                                                            updateField("vehicleType", vehicleTypeSearch.trim())
+                                                                            setVehicleTypeOpen(false)
+                                                                            setVehicleTypeSearch("")
+                                                                        }
+                                                                    }}
+                                                                >
+                                                                    Use &quot;{vehicleTypeSearch}&quot;
+                                                                </Button>
+                                                            </div>
+                                                        </CommandEmpty>
+                                                        <CommandGroup>
+                                                            {["Truk", "Pick-up", "Van", "Container", "Motor", "Other"].map((type) => (
+                                                                <CommandItem
+                                                                    key={type}
+                                                                    value={type}
+                                                                    onSelect={() => {
+                                                                        updateField("vehicleType", type)
+                                                                        setVehicleTypeOpen(false)
+                                                                        setVehicleTypeSearch("")
+                                                                    }}
+                                                                >
+                                                                    <Check className={cn("mr-2 h-4 w-4", vehicleType === type ? "opacity-100" : "opacity-0")} />
+                                                                    {type}
+                                                                </CommandItem>
+                                                            ))}
+                                                        </CommandGroup>
+                                                    </CommandList>
+                                                </Command>
+                                            </PopoverContent>
+                                        </Popover>
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                        <Label htmlFor="bulk-tripDestination">{bulkShipmentFieldLabels.tripDestination}</Label>
+                                        <Input
+                                            id="bulk-tripDestination"
+                                            value={values.tripDestination ?? ""}
+                                            onChange={(event) => updateField("tripDestination", event.target.value)}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {selectedMode === "external" && (
+                            <div className="space-y-4 rounded-md border p-4">
+                                <div className="text-sm font-medium">External Vendor</div>
+                                <div className="grid gap-3 md:grid-cols-2">
+                                    {(["vendorName", "awbNumber", "shippingCost"] as const).map((field) => (
+                                        <div key={field} className="space-y-1.5">
+                                            <Label htmlFor={`bulk-${field}`}>{bulkShipmentFieldLabels[field]}</Label>
+                                            <Input
+                                                id={`bulk-${field}`}
+                                                type={field === "shippingCost" ? "number" : undefined}
+                                                min={field === "shippingCost" ? "0" : undefined}
+                                                step={field === "shippingCost" ? "0.01" : undefined}
+                                                value={values[field] ?? ""}
+                                                onChange={(event) => updateField(field, event.target.value)}
+                                            />
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="space-y-1.5">
+                            <Label htmlFor="bulk-notes">Notes</Label>
+                            <Textarea
+                                id="bulk-notes"
+                                value={values.notes ?? ""}
+                                onChange={(event) => updateField("notes", event.target.value)}
+                                rows={3}
+                            />
+                        </div>
+                    </div>
+
+                    {selectedMode === "internal" && (
+                        <div className="space-y-3">
+                            <h3 className="text-sm font-semibold">Costs</h3>
+                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                {BULK_DELIVERY_COST_FIELDS.filter((field) => field !== "shippingCost").map((field) => (
+                                    <div key={field} className="space-y-1.5">
+                                        <Label htmlFor={`bulk-${field}`}>{bulkShipmentFieldLabels[field]}</Label>
+                                        <Input
+                                            id={`bulk-${field}`}
+                                            type="number"
+                                            min="0"
+                                            step="0.01"
+                                            value={values[field] ?? ""}
+                                            onChange={(event) => updateField(field, event.target.value)}
+                                        />
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    <DialogFooter>
+                        <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
+                            Cancel
+                        </Button>
+                        <Button type="submit" disabled={isPending || selectedCount === 0}>
+                            {isPending ? "Saving..." : "Apply to Selected"}
+                        </Button>
+                    </DialogFooter>
+                </form>
+            </DialogContent>
+        </Dialog>
+    )
+}
+
 function DeliveryTableContent({ data: initialData, itemsData = [], fleetTripsData = [] }: DeliveryTableProps) {
     const searchParams = useSearchParams()
     const { data: session } = useSession()
@@ -257,6 +663,7 @@ function DeliveryTableContent({ data: initialData, itemsData = [], fleetTripsDat
     const [poPreviewDelivery, setPoPreviewDelivery] = useState<DeliveryWithRelations | null>(null)
     const [isPoPreviewOpen, setIsPoPreviewOpen] = useState(false)
     const [isBulkPdfOpen, setIsBulkPdfOpen] = useState(false)
+    const [isBulkShipmentOpen, setIsBulkShipmentOpen] = useState(false)
 
     // Supply Chain Filters
     const [selectedYear, setSelectedYear] = useState<string>("all")
@@ -281,6 +688,16 @@ function DeliveryTableContent({ data: initialData, itemsData = [], fleetTripsDat
         refetchOnWindowFocus: true, // Refetch saat window kembali aktif
         refetchInterval: 15_000,
         refetchIntervalInBackground: true,
+    })
+    const { data: drivers = [] } = useQuery({
+        queryKey: ["fleet-drivers"],
+        queryFn: () => getDrivers(),
+        staleTime: 60_000,
+    })
+    const { data: vehicles = [] } = useQuery({
+        queryKey: ["fleet-vehicles"],
+        queryFn: () => getVehicles(),
+        staleTime: 60_000,
     })
 
     React.useEffect(() => {
@@ -428,6 +845,39 @@ function DeliveryTableContent({ data: initialData, itemsData = [], fleetTripsDat
                 queryClient.setQueryData(["deliveries"], context.previousDeliveries)
             }
             toast.error("Failed to update delivery date")
+        },
+        onSettled: () => {
+            queryClient.invalidateQueries({ queryKey: ["deliveries"] })
+        },
+    })
+
+    const updateShipmentDetailsMutation = useMutation({
+        mutationFn: ({ ids, values }: { ids: number[], values: BulkDeliveryShipmentDetailsInput }) =>
+            bulkUpdateDeliveryShipmentDetails(ids, values),
+        onMutate: async ({ ids, values }) => {
+            await queryClient.cancelQueries({ queryKey: ["deliveries"] })
+            const previousDeliveries = queryClient.getQueryData<DeliveryWithRelations[]>(["deliveries"])
+            let updateData: ReturnType<typeof buildBulkDeliveryShipmentDetailsUpdate> = {}
+
+            try {
+                updateData = buildBulkDeliveryShipmentDetailsUpdate(values)
+            } catch {
+                updateData = {}
+            }
+
+            if (previousDeliveries && Object.keys(updateData).length > 0) {
+                queryClient.setQueryData<DeliveryWithRelations[]>(["deliveries"], (old) =>
+                    old?.map((delivery) => ids.includes(delivery.id) ? { ...delivery, ...updateData } : delivery)
+                )
+            }
+
+            return { previousDeliveries }
+        },
+        onError: (_err, _variables, context) => {
+            if (context?.previousDeliveries) {
+                queryClient.setQueryData(["deliveries"], context.previousDeliveries)
+            }
+            toast.error("Failed to update shipment details")
         },
         onSettled: () => {
             queryClient.invalidateQueries({ queryKey: ["deliveries"] })
@@ -1375,20 +1825,59 @@ function DeliveryTableContent({ data: initialData, itemsData = [], fleetTripsDat
         }
     }
 
-    const handleBulkUpdateStatus = async () => {
+    const handleBulkUpdateShipmentDetails = async (values: Record<string, string>) => {
         const selectedIds = table.getSelectedRowModel().flatRows.map(r => r.original.id)
-        const status = prompt("Enter new status (scheduled/ready/partial/in_transit/delivered/cancelled):")
-        if (status) {
-            updateStatusMutation.mutate({ ids: selectedIds, status }, {
-                onSuccess: (result) => {
-                    if (result.success) {
-                        toast.success("Delivery statuses updated successfully")
-                        setRowSelection({})
-                    } else {
-                        toast.error((result as { success: false; error: string }).error)
-                    }
+        const status = normalizeBulkDeliveryStatus(values.status)
+        const shipmentValues: BulkDeliveryShipmentDetailsInput = { ...values }
+        if (values.isExternal === "true") {
+            shipmentValues.isExternal = true
+        } else if (values.isExternal === "false") {
+            shipmentValues.isExternal = false
+        } else {
+            delete shipmentValues.isExternal
+        }
+        let updateData: ReturnType<typeof buildBulkDeliveryShipmentDetailsUpdate>
+
+        try {
+            updateData = buildBulkDeliveryShipmentDetailsUpdate(shipmentValues)
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Invalid shipment details")
+            return
+        }
+
+        const hasShipmentDetailsUpdate = Object.keys(updateData).length > 0
+        if (!status && !hasShipmentDetailsUpdate) {
+            toast.error("Pilih status atau isi minimal satu field shipment details/cost")
+            return
+        }
+
+        if (values.status && !status) {
+            toast.error("Status delivery tidak valid")
+            return
+        }
+
+        try {
+            if (status) {
+                const statusResult = await updateStatusMutation.mutateAsync({ ids: selectedIds, status })
+                if (!statusResult.success) {
+                    toast.error((statusResult as { success: false; error: string }).error)
+                    return
                 }
-            })
+            }
+
+            if (hasShipmentDetailsUpdate) {
+                const shipmentResult = await updateShipmentDetailsMutation.mutateAsync({ ids: selectedIds, values: shipmentValues })
+                if (!shipmentResult.success) {
+                    toast.error((shipmentResult as { success: false; error: string }).error)
+                    return
+                }
+            }
+
+            toast.success("Delivery bulk edit updated successfully")
+            setRowSelection({})
+            setIsBulkShipmentOpen(false)
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Failed to update selected deliveries")
         }
     }
 
@@ -2674,7 +3163,7 @@ function DeliveryTableContent({ data: initialData, itemsData = [], fleetTripsDat
                                 <Button
                                     variant="outline"
                                     size="sm"
-                                    onClick={handleBulkUpdateStatus}
+                                    onClick={() => setIsBulkShipmentOpen(true)}
                                 >
                                     <Pencil className="mr-2 h-4 w-4" />
                                     Edit
@@ -2733,6 +3222,15 @@ function DeliveryTableContent({ data: initialData, itemsData = [], fleetTripsDat
                 deliveries={selectedDeliveries}
                 open={isBulkPdfOpen}
                 onClose={() => setIsBulkPdfOpen(false)}
+            />
+            <BulkShipmentDetailsDialog
+                open={isBulkShipmentOpen}
+                onOpenChange={setIsBulkShipmentOpen}
+                selectedCount={selectedCount}
+                isPending={updateShipmentDetailsMutation.isPending || updateStatusMutation.isPending}
+                drivers={drivers}
+                vehicles={vehicles}
+                onSubmit={handleBulkUpdateShipmentDetails}
             />
         </div>
     )

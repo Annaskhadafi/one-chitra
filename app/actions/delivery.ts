@@ -2,7 +2,7 @@
 
 import { db } from "@/db"
 import { deliveries, deliveryItems, salesOrders, stockLevels, products, stockTransfers, stockTransferItems, warehouses, fleetTrips } from "@/db/schema"
-import { eq, desc, and, sql, isNotNull } from "drizzle-orm"
+import { eq, desc, and, sql, isNotNull, inArray } from "drizzle-orm"
 import { revalidatePath, unstable_noStore as noStore } from "next/cache"
 import { z } from "zod"
 import { saveCustomerAddress } from "./customer"
@@ -15,6 +15,7 @@ import { formatWarehouseLabel, normalizeSlocFields } from "@/lib/sloc"
 import { recordActivity } from "@/lib/audit"
 import { normalizeCodeValue, normalizeSapDocumentFields } from "@/lib/formatters"
 import { consumeStockBookingsForDelivery, getStockBookingAvailability, restoreStockBookingsForDelivery } from "@/lib/stock-bookings"
+import { buildBulkDeliveryShipmentDetailsUpdate, type BulkDeliveryShipmentDetailsInput } from "@/lib/delivery-bulk-shipment"
 
 const isConsignmentCategory = (categoryPo: string | null | undefined) => {
     const normalized = (categoryPo ?? "").trim().toLowerCase()
@@ -1490,6 +1491,37 @@ export async function bulkUpdateDeliveryStatus(ids: number[], status: string) {
     } catch (_error) {
         console.error("Bulk update delivery status error:", _error)
         return { success: false, error: "Failed to update delivery status" }
+    }
+}
+
+export async function bulkUpdateDeliveryShipmentDetails(ids: number[], input: BulkDeliveryShipmentDetailsInput) {
+    try {
+        await checkPermission('deliveries', 'edit')
+
+        const deliveryIds = Array.from(new Set(ids.filter((id) => Number.isInteger(id) && id > 0)))
+        if (deliveryIds.length === 0) {
+            return { success: false, error: "Tidak ada delivery yang dipilih" }
+        }
+
+        const updateData = buildBulkDeliveryShipmentDetailsUpdate(input)
+        if (Object.keys(updateData).length === 0) {
+            return { success: false, error: "Tidak ada field shipment details atau cost yang diisi" }
+        }
+
+        await db.update(deliveries)
+            .set({ ...updateData, updatedAt: new Date() })
+            .where(inArray(deliveries.id, deliveryIds))
+
+        try {
+            revalidatePath("/dashboard/deliveries")
+            revalidatePath("/dashboard/logistics-costs")
+        } catch (_e) { }
+
+        return { success: true }
+    } catch (_error) {
+        console.error("Bulk update delivery shipment details error:", _error)
+        const message = _error instanceof Error ? _error.message : "Failed to update delivery shipment details"
+        return { success: false, error: message }
     }
 }
 
