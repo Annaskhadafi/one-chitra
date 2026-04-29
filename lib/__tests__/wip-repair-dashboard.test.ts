@@ -271,8 +271,8 @@ describe("buildWipRepairDashboardData", () => {
       progressWorkOrders: 3,
       completeWorkOrders: 2,
       rejectWorkOrders: 1,
-      totalDetailRows: 5,
-      totalMaterialRows: 5,
+      totalDetailRows: 4,
+      totalMaterialRows: 4,
       totalMinutes: 405,
       averageMinutesPerWorkOrder: 67.5,
       activeCustomers: 2,
@@ -324,6 +324,33 @@ describe("buildWipRepairDashboardData", () => {
     expect(dashboard.workOrderInsights.filter((item) => item.wo === "8003").map((item) => item.idWo).sort()).toEqual(["wo-3", "wo-4"])
     expect(dashboard.workOrderInsights.filter((item) => item.wo === "WAITING WO").map((item) => [item.tireSn, item.totalMinutes])).toEqual([
       ["WAIT-SN-1", 0],
+      ["WAIT-SN-2", 0],
+    ])
+  })
+
+  it("matches WAITING WO detail rows by tire SN when the detail API provides it", () => {
+    const dashboard = buildWipRepairDashboardData(
+      workOrders.filter((item) => item.wo === "WAITING WO"),
+      [
+        {
+          id_job: "waiting-job-1",
+          wo: "WAITING WO",
+          tire_sn: "WAIT-SN-1",
+          job: "Waiting Registration",
+          material_id: "99",
+          material_name: "WAITING MATERIAL",
+          category: "WAITING",
+          smu: "PC",
+          qty: "1",
+          time: "15",
+        },
+      ],
+      new Date("2026-04-28T00:00:00Z")
+    )
+
+    expect(dashboard.summary.totalDetailRows).toBe(1)
+    expect(dashboard.workOrderInsights.filter((item) => item.wo === "WAITING WO").map((item) => [item.tireSn, item.totalMinutes])).toEqual([
+      ["WAIT-SN-1", 15],
       ["WAIT-SN-2", 0],
     ])
   })

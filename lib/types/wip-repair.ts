@@ -35,6 +35,8 @@ export type WipRepairApiResponse = {
 export type WipRepairWorkOrderDetailRecord = {
   id_job: string
   wo: string
+  id_wo?: string | null
+  tire_sn?: string | null
   job: string | null
   material_id: string | null
   material_name: string | null

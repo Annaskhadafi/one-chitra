@@ -81,13 +81,39 @@ function isWaitingWorkOrder(value: string | null | undefined) {
   return normalizeValue(value).toLowerCase() === "waiting wo"
 }
 
+function isWaitingDetailWorkOrder(value: string | null | undefined) {
+  const normalized = normalizeValue(value).toLowerCase()
+
+  return normalized === "waiting wo" || normalized === "waiting"
+}
+
 function getHeaderDetailLookupKey(item: WipRepairRecord) {
   if (isWaitingWorkOrder(item.wo)) {
     const tireSn = normalizeTireSn(item.tire_sn)
-    return tireSn === UNKNOWN_VALUE ? `${normalizeValue(item.wo)}:${normalizeValue(item.id_wo)}` : `WAITING_SN:${tireSn}`
+    return tireSn === UNKNOWN_VALUE ? `WAITING_ID:${normalizeValue(item.id_wo)}` : `WAITING_SN:${tireSn}`
   }
 
   return normalizeValue(item.wo)
+}
+
+function getDetailLookupKeys(detail: WipRepairWorkOrderDetailRecord) {
+  if (!isWaitingDetailWorkOrder(detail.wo)) {
+    return [normalizeValue(detail.wo)]
+  }
+
+  const keys = new Set<string>()
+  const tireSn = normalizeTireSn(detail.tire_sn)
+  const idWo = normalizeValue(detail.id_wo)
+
+  if (tireSn !== UNKNOWN_VALUE) {
+    keys.add(`WAITING_SN:${tireSn}`)
+  }
+
+  if (idWo !== UNKNOWN_VALUE) {
+    keys.add(`WAITING_ID:${idWo}`)
+  }
+
+  return Array.from(keys)
 }
 
 function parseNumber(value: string | null | undefined) {
@@ -195,20 +221,22 @@ export function buildWipRepairDashboardData(
   workOrderDetails: WipRepairWorkOrderDetailRecord[],
   now = new Date()
 ): WipRepairDashboardData {
-  const visibleWorkOrderKeys = new Set(
-    data.flatMap((item) => [normalizeValue(item.wo), getHeaderDetailLookupKey(item)]).filter((value) => value !== UNKNOWN_VALUE)
+  const visibleWorkOrderKeys = new Set(data.map(getHeaderDetailLookupKey).filter((value) => value !== UNKNOWN_VALUE))
+  const visibleWorkOrderDetails = workOrderDetails.filter((detail) =>
+    getDetailLookupKeys(detail).some((key) => visibleWorkOrderKeys.has(key))
   )
-  const visibleWorkOrderDetails = workOrderDetails.filter((detail) => visibleWorkOrderKeys.has(normalizeValue(detail.wo)))
 
   const detailsByWorkOrder = visibleWorkOrderDetails.reduce<Record<string, WipRepairWorkOrderDetailRecord[]>>((accumulator, detail) => {
-    const wo = normalizeValue(detail.wo)
+    const keys = getDetailLookupKeys(detail)
 
-    if (wo === UNKNOWN_VALUE) {
+    if (keys.length === 0) {
       return accumulator
     }
 
-    accumulator[wo] ??= []
-    accumulator[wo].push(detail)
+    for (const key of keys) {
+      accumulator[key] ??= []
+      accumulator[key].push(detail)
+    }
 
     return accumulator
   }, {})

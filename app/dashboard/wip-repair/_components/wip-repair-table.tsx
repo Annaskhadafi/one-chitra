@@ -71,11 +71,43 @@ function getWorkOrderDetailKey(item: WipRepairRecord) {
 }
 
 function getDetailLookupKeys(item: WipRepairRecord) {
-  if (isWaitingWorkOrder(item.wo)) {
-    return [normalizeValue(item.wo), "waiting"]
+  if (!isWaitingWorkOrder(item.wo)) {
+    return [normalizeValue(item.wo)]
   }
 
-  return [normalizeValue(item.wo)]
+  const keys = new Set<string>()
+  const tireSn = normalizeTireSn(item.tire_sn)
+  const idWo = normalizeValue(item.id_wo)
+
+  if (tireSn !== "-") {
+    keys.add(`WAITING_SN:${tireSn}`)
+  }
+
+  if (idWo !== "-") {
+    keys.add(`WAITING_ID:${idWo}`)
+  }
+
+  return Array.from(keys)
+}
+
+function getDetailGroupingKeys(detail: WipRepairWorkOrderDetailRecord) {
+  if (!isWaitingWorkOrder(detail.wo) && normalizeValue(detail.wo).toLowerCase() !== "waiting") {
+    return [normalizeValue(detail.wo)]
+  }
+
+  const keys = new Set<string>()
+  const tireSn = normalizeTireSn(detail.tire_sn)
+  const idWo = normalizeValue(detail.id_wo)
+
+  if (tireSn !== "-") {
+    keys.add(`WAITING_SN:${tireSn}`)
+  }
+
+  if (idWo !== "-") {
+    keys.add(`WAITING_ID:${idWo}`)
+  }
+
+  return Array.from(keys)
 }
 
 function getNormalizedText(value: string | null | undefined) {
@@ -335,14 +367,16 @@ export function WipRepairTable({ data, workOrderDetails }: WipRepairTableProps) 
 
   const detailsByWorkOrder = useMemo(() => {
     const grouped = workOrderDetails.reduce<Record<string, WipRepairWorkOrderDetailRecord[]>>((accumulator, detail) => {
-      const wo = normalizeValue(detail.wo)
+      const keys = getDetailGroupingKeys(detail)
 
-      if (wo === "-") {
+      if (keys.length === 0) {
         return accumulator
       }
 
-      accumulator[wo] ??= []
-      accumulator[wo].push(detail)
+      for (const key of keys) {
+        accumulator[key] ??= []
+        accumulator[key].push(detail)
+      }
 
       return accumulator
     }, {})
