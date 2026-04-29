@@ -261,6 +261,23 @@ const ensureMasterDataMenu = (sections: RuntimeNavSection[]): RuntimeNavSection[
   }))
 }
 
+const placeCentralServicesBeforeApproval = (sections: RuntimeNavSection[]): RuntimeNavSection[] => {
+  const centralServicesIndex = sections.findIndex((section) => section.title === "Central Services")
+  const approvalIndex = sections.findIndex((section) => section.title === "Approval")
+
+  if (centralServicesIndex === -1 || approvalIndex === -1 || centralServicesIndex === approvalIndex - 1) {
+    return sections
+  }
+
+  const orderedSections = [...sections]
+  const [centralServicesSection] = orderedSections.splice(centralServicesIndex, 1)
+  const targetApprovalIndex = orderedSections.findIndex((section) => section.title === "Approval")
+
+  orderedSections.splice(targetApprovalIndex, 0, centralServicesSection)
+
+  return orderedSections
+}
+
 export default async function DashboardLayout({
   children,
 }: {
@@ -288,9 +305,11 @@ export default async function DashboardLayout({
     getNavbarMenuSettings(),
   ])
   const runtimeNavigationSections = dedupeRuntimeNavigationUrls(
-    normalizeBusinessNavigation(
-      ensureMasterDataMenu(
-        ensureLogisticsSettlementMenu(toRuntimeNavigationConfig(navbarMenuSettings)),
+    placeCentralServicesBeforeApproval(
+      normalizeBusinessNavigation(
+        ensureMasterDataMenu(
+          ensureLogisticsSettlementMenu(toRuntimeNavigationConfig(navbarMenuSettings)),
+        ),
       ),
     ),
   )

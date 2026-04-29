@@ -404,6 +404,18 @@ function MetricCard({
     violet: "#8b5cf6",
     rose: "#ef4444",
   }[tone]
+  const chartData =
+    sparklineData.length > 1
+      ? sparklineData
+      : sparklineData.length === 1
+        ? [
+            { ...sparklineData[0], name: `${sparklineData[0].name} start` },
+            { ...sparklineData[0], name: `${sparklineData[0].name} end` },
+          ]
+        : [
+            { name: "Start", workOrders: 0 },
+            { name: "End", workOrders: 0 },
+          ]
 
   return (
     <Card className="overflow-hidden rounded-lg border-slate-200 bg-white py-0 shadow-sm">
@@ -418,9 +430,9 @@ function MetricCard({
           </div>
         </div>
         <p className="min-h-5 text-xs text-slate-500">{detail}</p>
-        <ChartContainer config={chartConfig} className="h-10 w-full">
-          <AreaChart data={sparklineData} margin={{ left: 0, right: 0, top: 4, bottom: 0 }}>
-            <Area type="monotone" dataKey="workOrders" stroke={lineColor} fill={lineColor} fillOpacity={0.12} strokeWidth={2} dot={false} />
+        <ChartContainer config={chartConfig} className="!aspect-auto h-12 w-full">
+          <AreaChart data={chartData} margin={{ left: 0, right: 0, top: 4, bottom: 2 }}>
+            <Area type="monotone" dataKey="workOrders" stroke={lineColor} fill={lineColor} fillOpacity={0.12} strokeWidth={2.25} dot={false} isAnimationActive={false} />
           </AreaChart>
         </ChartContainer>
       </CardContent>
@@ -561,7 +573,7 @@ export function WipRepairDashboardClient({
   )
 
   const monthOptions = useMemo(() => {
-    const months = Array.from(
+    return Array.from(
       new Set(
         data
           .map(getWorkOrderDate)
@@ -569,9 +581,7 @@ export function WipRepairDashboardClient({
           .map(formatMonthKey)
       )
     ).sort((left, right) => right.localeCompare(left))
-
-    return months.includes(defaultMonthKey) ? months : [defaultMonthKey, ...months]
-  }, [data, defaultMonthKey])
+  }, [data])
 
   const detailsByWorkOrder = useMemo(() => {
     return workOrderDetails.reduce<Record<string, WipRepairWorkOrderDetailRecord[]>>((accumulator, detail) => {
@@ -915,6 +925,171 @@ export function WipRepairDashboardClient({
     [storeLocRows]
   )
 
+  const brandRepairRows = useMemo(() => {
+    const insightById = new Map(dashboard.workOrderInsights.map((item) => [item.idWo, item]))
+    const grouped = filteredWorkOrders.reduce<
+      Record<
+        string,
+        {
+          name: string
+          workOrders: number
+          progress: number
+          complete: number
+          reject: number
+          waitingWo: number
+          emptyWo: number
+          materialRows: number
+          totalMinutes: number
+          sizes: Record<string, number>
+          injuries: Record<string, number>
+          customers: Record<string, number>
+        }
+      >
+    >((accumulator, item) => {
+      const name = normalizeWipRepairBrand(item.brand)
+      const size = normalizeValue(item.size)
+      const injury = normalizeValue(item.injury)
+      const customer = normalizeValue(item.customer)
+      const status = normalizeValue(item.status).toLowerCase()
+      const insight = insightById.get(normalizeValue(item.id_wo))
+
+      accumulator[name] ??= {
+        name,
+        workOrders: 0,
+        progress: 0,
+        complete: 0,
+        reject: 0,
+        waitingWo: 0,
+        emptyWo: 0,
+        materialRows: 0,
+        totalMinutes: 0,
+        sizes: {},
+        injuries: {},
+        customers: {},
+      }
+
+      const row = accumulator[name]
+      row.workOrders += 1
+      row.materialRows += insight?.materialRows ?? 0
+      row.totalMinutes += insight?.totalMinutes ?? 0
+      row.sizes[size] = (row.sizes[size] ?? 0) + 1
+      row.injuries[injury] = (row.injuries[injury] ?? 0) + 1
+      row.customers[customer] = (row.customers[customer] ?? 0) + 1
+
+      if (status.includes("progress")) {
+        row.progress += 1
+      }
+
+      if (status.includes("complete") || status.includes("finish")) {
+        row.complete += 1
+      }
+
+      if (status.includes("reject")) {
+        row.reject += 1
+      }
+
+      if (isWaitingWorkOrder(item.wo)) {
+        row.waitingWo += 1
+      }
+
+      if (isEmptyWorkOrder(item.wo)) {
+        row.emptyWo += 1
+      }
+
+      return accumulator
+    }, {})
+
+    return Object.values(grouped)
+      .map((item) => ({
+        ...item,
+        topSize:
+          Object.entries(item.sizes)
+            .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))[0]?.[0] ?? "-",
+        topInjury:
+          Object.entries(item.injuries)
+            .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))[0]?.[0] ?? "-",
+        topCustomer:
+          Object.entries(item.customers)
+            .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))[0]?.[0] ?? "-",
+      }))
+      .sort((left, right) => right.workOrders - left.workOrders || right.totalMinutes - left.totalMinutes || left.name.localeCompare(right.name))
+  }, [dashboard.workOrderInsights, filteredWorkOrders])
+
+  const brandSizeRows = useMemo(() => {
+    const grouped = filteredWorkOrders.reduce<
+      Record<
+        string,
+        {
+          key: string
+          brand: string
+          size: string
+          workOrders: number
+          progress: number
+          complete: number
+          reject: number
+          waitingWo: number
+          emptyWo: number
+          injuries: Record<string, number>
+        }
+      >
+    >((accumulator, item) => {
+      const brand = normalizeWipRepairBrand(item.brand)
+      const size = normalizeValue(item.size)
+      const key = `${brand}__${size}`
+      const status = normalizeValue(item.status).toLowerCase()
+      const injury = normalizeValue(item.injury)
+
+      accumulator[key] ??= {
+        key,
+        brand,
+        size,
+        workOrders: 0,
+        progress: 0,
+        complete: 0,
+        reject: 0,
+        waitingWo: 0,
+        emptyWo: 0,
+        injuries: {},
+      }
+
+      const row = accumulator[key]
+      row.workOrders += 1
+      row.injuries[injury] = (row.injuries[injury] ?? 0) + 1
+
+      if (status.includes("progress")) {
+        row.progress += 1
+      }
+
+      if (status.includes("complete") || status.includes("finish")) {
+        row.complete += 1
+      }
+
+      if (status.includes("reject")) {
+        row.reject += 1
+      }
+
+      if (isWaitingWorkOrder(item.wo)) {
+        row.waitingWo += 1
+      }
+
+      if (isEmptyWorkOrder(item.wo)) {
+        row.emptyWo += 1
+      }
+
+      return accumulator
+    }, {})
+
+    return Object.values(grouped)
+      .map((item) => ({
+        ...item,
+        name: `${item.brand} / ${item.size}`,
+        topInjury:
+          Object.entries(item.injuries)
+            .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))[0]?.[0] ?? "-",
+      }))
+      .sort((left, right) => right.workOrders - left.workOrders || left.brand.localeCompare(right.brand) || left.size.localeCompare(right.size))
+  }, [filteredWorkOrders])
+
   const monthTrend = useMemo(() => {
     const buckets = filteredWorkOrders.reduce<Record<string, { name: string; workOrders: number; progress: number; material: number }>>(
       (accumulator, item) => {
@@ -1018,7 +1193,8 @@ export function WipRepairDashboardClient({
             <CalendarDays className="h-3.5 w-3.5 text-blue-600" />
             Bulan
           </div>
-          <div className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto">
+          <div className="min-w-0 flex-1 overflow-x-auto overflow-y-hidden [scrollbar-gutter:stable]">
+            <div className="flex w-max gap-1.5 pr-2">
             <Button
               type="button"
               variant={selectedMonth === ALL_FILTER ? "default" : "outline"}
@@ -1044,6 +1220,7 @@ export function WipRepairDashboardClient({
                 {formatMonthLabel(month)}
               </Button>
             ))}
+            </div>
           </div>
           <span className="shrink-0 text-[11px] text-slate-500">Default: {formatMonthLabel(defaultMonthKey)}</span>
         </div>
@@ -1081,12 +1258,15 @@ export function WipRepairDashboardClient({
       </div>
 
       <Tabs defaultValue="overview" className="mt-5 space-y-4">
-        <TabsList className="grid h-auto w-full grid-cols-2 rounded-lg bg-slate-200/70 p-1 lg:grid-cols-5">
+        <TabsList className="grid h-auto w-full grid-cols-2 rounded-lg bg-slate-200/70 p-1 lg:grid-cols-6">
           <TabsTrigger value="overview" className="rounded-md">
             Overview
           </TabsTrigger>
           <TabsTrigger value="store-loc" className="rounded-md">
             Per Store Loc
+          </TabsTrigger>
+          <TabsTrigger value="brand-repair" className="rounded-md">
+            Brand Repair
           </TabsTrigger>
           <TabsTrigger value="productivity" className="rounded-md">
             Produktivitas
@@ -1361,6 +1541,197 @@ export function WipRepairDashboardClient({
         </Card>
       </div>
 
+        </TabsContent>
+
+        <TabsContent value="brand-repair" className="space-y-4">
+          <div className="grid auto-rows-fr gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <WorkshopStatCard title="Brand Aktif" value={formatNumber(brandRepairRows.length)} detail="Jumlah brand repair pada filter aktif." icon={BadgeCheck} tone="blue" />
+            <WorkshopStatCard title="Tyre Size Aktif" value={formatNumber(dashboard.topSizes.length)} detail="Ukuran ban yang muncul di WO repair." icon={Gauge} tone="green" />
+            <WorkshopStatCard title="Brand / Size Mix" value={formatNumber(brandSizeRows.length)} detail="Kombinasi brand dan tyre size yang masuk workshop." icon={Boxes} tone="orange" />
+            <WorkshopStatCard title="Risk Brand" value={formatNumber(brandRepairRows.reduce((sum, item) => sum + item.reject + item.waitingWo + item.emptyWo, 0))} detail="Reject, Waiting WO, dan WO kosong per brand." icon={AlertTriangle} tone="rose" />
+          </div>
+
+          <div className="grid items-stretch gap-4 xl:grid-cols-[1fr_1fr]">
+            <Card className="flex h-full flex-col rounded-lg border-slate-200 bg-white py-0 shadow-sm">
+              <CardHeader className="px-5 py-4">
+                <CardTitle className="text-base text-slate-950">Brand Repair Mix</CardTitle>
+                <CardDescription>Komposisi WO repair berdasarkan brand, sudah mengikuti filter aktif.</CardDescription>
+              </CardHeader>
+              <CardContent className="flex-1 px-5 pb-5">
+                <ChartContainer config={chartConfig} className="h-[340px] w-full">
+                  <BarChart data={brandRepairRows.slice(0, 12)} layout="vertical" margin={{ left: 28, right: 24, top: 8, bottom: 8 }}>
+                    <CartesianGrid horizontal={false} strokeDasharray="3 3" />
+                    <XAxis type="number" tickLine={false} axisLine={false} fontSize={11} />
+                    <YAxis dataKey="name" type="category" tickLine={false} axisLine={false} width={126} fontSize={11} />
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <Bar dataKey="workOrders" name="WO" fill="#2563eb" radius={[0, 6, 6, 0]} />
+                  </BarChart>
+                </ChartContainer>
+              </CardContent>
+            </Card>
+
+            <Card className="flex h-full flex-col rounded-lg border-slate-200 bg-white py-0 shadow-sm">
+              <CardHeader className="px-5 py-4">
+                <CardTitle className="text-base text-slate-950">Tyre Size Mix</CardTitle>
+                <CardDescription>Ukuran ban dominan untuk repair; klik untuk filter Tire Size.</CardDescription>
+              </CardHeader>
+              <CardContent className="min-h-0 flex-1 px-5 pb-5">
+                <div className="max-h-[340px] space-y-3 overflow-y-auto pr-1">
+                  {dashboard.topSizes.map((item) => {
+                    const maxSize = Math.max(...dashboard.topSizes.map((row) => row.value), 1)
+
+                    return (
+                      <button
+                        key={item.name}
+                        type="button"
+                        className="grid w-full gap-2 rounded-md border border-slate-200 bg-white p-3 text-left transition-colors hover:border-emerald-200 hover:bg-emerald-50/40 active:scale-[0.96]"
+                        onClick={() => setSizeFilter(item.name)}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="truncate font-semibold text-slate-950">{item.name}</span>
+                          <span className="text-xs font-semibold text-slate-600 tabular-nums">{formatNumber(item.value)} WO</span>
+                        </div>
+                        <Progress value={(item.value / maxSize) * 100} className="h-1.5 bg-emerald-100 [&>div]:bg-emerald-500" />
+                        <span className="text-xs text-slate-500">{formatNumber(item.percentage, 1)}% dari WO terfilter</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid items-stretch gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+            <Card className="flex h-full flex-col rounded-lg border-slate-200 bg-white py-0 shadow-sm">
+              <CardHeader className="px-5 py-4">
+                <CardTitle className="text-base text-slate-950">Brand Condition</CardTitle>
+                <CardDescription>Status repair per brand: progress, complete, reject, dan WO belum final.</CardDescription>
+              </CardHeader>
+              <CardContent className="min-h-0 flex-1 px-5 pb-5">
+                <div className="max-h-[360px] space-y-3 overflow-y-auto pr-1">
+                  {brandRepairRows.map((item) => {
+                    const unresolved = item.progress + item.waitingWo + item.emptyWo
+                    const unresolvedRate = item.workOrders > 0 ? (unresolved / item.workOrders) * 100 : 0
+
+                    return (
+                      <button
+                        key={item.name}
+                        type="button"
+                        className="grid w-full gap-2 rounded-md border border-slate-200 bg-white p-3 text-left transition-colors hover:border-blue-200 hover:bg-blue-50/40 active:scale-[0.96]"
+                        onClick={() => setBrandFilter(item.name)}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="truncate font-semibold text-slate-950">{item.name}</span>
+                          <span className="text-xs font-semibold text-slate-600 tabular-nums">{formatNumber(item.workOrders)} WO</span>
+                        </div>
+                        <Progress value={unresolvedRate} className="h-1.5 bg-emerald-100 [&>div]:bg-blue-500" />
+                        <div className="grid grid-cols-4 gap-2 text-xs text-slate-500">
+                          <span>Progress {formatNumber(item.progress)}</span>
+                          <span>Complete {formatNumber(item.complete)}</span>
+                          <span>Reject {formatNumber(item.reject)}</span>
+                          <span>Pending {formatNumber(item.waitingWo + item.emptyWo)}</span>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="overflow-hidden rounded-lg border-slate-200 bg-white py-0 shadow-sm">
+              <CardHeader className="border-b border-slate-100 px-5 py-4">
+                <CardTitle className="text-base text-slate-950">Brand & Tyre Size Detail</CardTitle>
+                <CardDescription>Kombinasi brand-size untuk melihat size mana yang dominan per brand.</CardDescription>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="max-h-[430px] overflow-auto">
+                  <table className="w-full min-w-[920px] text-sm">
+                    <thead className="sticky top-0 z-10 bg-slate-50 text-left text-xs uppercase text-slate-500">
+                      <tr>
+                        <th className="px-4 py-3">Brand</th>
+                        <th className="px-4 py-3">Tyre Size</th>
+                        <th className="px-4 py-3 text-right">WO</th>
+                        <th className="px-4 py-3 text-right">Progress</th>
+                        <th className="px-4 py-3 text-right">Complete</th>
+                        <th className="px-4 py-3 text-right">Reject</th>
+                        <th className="px-4 py-3 text-right">Waiting/Kosong</th>
+                        <th className="px-4 py-3">Top Injury</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {brandSizeRows.length > 0 ? (
+                        brandSizeRows.map((item) => (
+                          <tr key={item.key} className="border-t border-slate-100">
+                            <td className="px-4 py-3 font-semibold text-slate-950">{item.brand}</td>
+                            <td className="px-4 py-3">{item.size}</td>
+                            <td className="px-4 py-3 text-right font-semibold tabular-nums">{formatNumber(item.workOrders)}</td>
+                            <td className="px-4 py-3 text-right tabular-nums">{formatNumber(item.progress)}</td>
+                            <td className="px-4 py-3 text-right tabular-nums">{formatNumber(item.complete)}</td>
+                            <td className="px-4 py-3 text-right tabular-nums">{formatNumber(item.reject)}</td>
+                            <td className="px-4 py-3 text-right tabular-nums">{formatNumber(item.waitingWo + item.emptyWo)}</td>
+                            <td className="px-4 py-3">{item.topInjury}</td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={8} className="px-4 py-10 text-center text-slate-500">
+                            Data brand dan tyre size tidak ditemukan untuk filter saat ini.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card className="overflow-hidden rounded-lg border-slate-200 bg-white py-0 shadow-sm">
+            <CardHeader className="border-b border-slate-100 px-5 py-4">
+              <CardTitle className="text-base text-slate-950">Brand Repair Summary</CardTitle>
+              <CardDescription>Ringkasan brand dengan top size, top injury, customer dominan, material, dan total waktu.</CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="max-h-[360px] overflow-auto">
+                <table className="w-full min-w-[980px] text-sm">
+                  <thead className="sticky top-0 z-10 bg-slate-50 text-left text-xs uppercase text-slate-500">
+                    <tr>
+                      <th className="px-4 py-3">Brand</th>
+                      <th className="px-4 py-3 text-right">WO</th>
+                      <th className="px-4 py-3">Top Size</th>
+                      <th className="px-4 py-3">Top Injury</th>
+                      <th className="px-4 py-3">Top Customer</th>
+                      <th className="px-4 py-3 text-right">Material</th>
+                      <th className="px-4 py-3 text-right">Waiting/Kosong</th>
+                      <th className="px-4 py-3 text-right">Total Waktu</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {brandRepairRows.length > 0 ? (
+                      brandRepairRows.map((item) => (
+                        <tr key={item.name} className="border-t border-slate-100">
+                          <td className="px-4 py-3 font-semibold text-slate-950">{item.name}</td>
+                          <td className="px-4 py-3 text-right font-semibold tabular-nums">{formatNumber(item.workOrders)}</td>
+                          <td className="px-4 py-3">{item.topSize}</td>
+                          <td className="px-4 py-3">{item.topInjury}</td>
+                          <td className="px-4 py-3">{item.topCustomer}</td>
+                          <td className="px-4 py-3 text-right tabular-nums">{formatNumber(item.materialRows)}</td>
+                          <td className="px-4 py-3 text-right tabular-nums">{formatNumber(item.waitingWo + item.emptyWo)}</td>
+                          <td className="px-4 py-3 text-right font-semibold tabular-nums">{formatMinutes(item.totalMinutes)}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={8} className="px-4 py-10 text-center text-slate-500">
+                          Data brand repair tidak ditemukan untuk filter saat ini.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="productivity" className="space-y-4">
@@ -1719,37 +2090,37 @@ export function WipRepairDashboardClient({
         </TabsContent>
 
         <TabsContent value="store-loc" className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-3">
-            <Card className="rounded-lg border-emerald-200 bg-emerald-50/70 py-0 shadow-sm">
-              <CardContent className="p-4">
-                <p className="text-xs font-semibold text-emerald-700">Sudah Ada WO</p>
-                <p className="mt-2 text-2xl font-bold text-emerald-950 tabular-nums">{formatNumber(storeLocStatusTotals.withWo)}</p>
-                <p className="mt-1 text-xs text-emerald-700">WO aktual per store loc pada filter aktif.</p>
-              </CardContent>
-            </Card>
-            <Card className="rounded-lg border-amber-200 bg-amber-50/70 py-0 shadow-sm">
-              <CardContent className="p-4">
-                <p className="text-xs font-semibold text-amber-700">Waiting WO</p>
-                <p className="mt-2 text-2xl font-bold text-amber-950 tabular-nums">{formatNumber(storeLocStatusTotals.waitingWo)}</p>
-                <p className="mt-1 text-xs text-amber-700">Data sudah masuk repair, nomor WO belum final.</p>
-              </CardContent>
-            </Card>
-            <Card className="rounded-lg border-slate-200 bg-white py-0 shadow-sm">
-              <CardContent className="p-4">
-                <p className="text-xs font-semibold text-slate-600">WO Kosong</p>
-                <p className="mt-2 text-2xl font-bold text-slate-950 tabular-nums">{formatNumber(storeLocStatusTotals.emptyWo)}</p>
-                <p className="mt-1 text-xs text-slate-500">WO blank/unknown dan perlu dicek kelengkapannya.</p>
-              </CardContent>
-            </Card>
+          <div className="grid auto-rows-fr gap-4 md:grid-cols-3">
+            <WorkshopStatCard
+              title="Sudah Ada WO"
+              value={formatNumber(storeLocStatusTotals.withWo)}
+              detail="WO aktual per store loc pada filter aktif."
+              icon={BadgeCheck}
+              tone="green"
+            />
+            <WorkshopStatCard
+              title="Waiting WO"
+              value={formatNumber(storeLocStatusTotals.waitingWo)}
+              detail="Data sudah masuk repair, nomor WO belum final."
+              icon={TimerReset}
+              tone="orange"
+            />
+            <WorkshopStatCard
+              title="WO Kosong"
+              value={formatNumber(storeLocStatusTotals.emptyWo)}
+              detail="WO blank/unknown dan perlu dicek kelengkapannya."
+              icon={PackageSearch}
+              tone="slate"
+            />
           </div>
 
-          <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
-            <Card className="rounded-lg border-slate-200 bg-white py-0 shadow-sm">
+          <div className="grid items-stretch gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+            <Card className="flex h-full flex-col rounded-lg border-slate-200 bg-white py-0 shadow-sm">
               <CardHeader className="px-5 py-4">
                 <CardTitle className="text-base text-slate-950">Status WO Per Store Loc</CardTitle>
                 <CardDescription>Perbandingan WO aktual, Waiting WO, dan WO kosong pada setiap store loc.</CardDescription>
               </CardHeader>
-              <CardContent className="px-5 pb-5">
+              <CardContent className="flex-1 px-5 pb-5">
                 <ChartContainer config={chartConfig} className="h-[360px] w-full">
                   <BarChart data={storeLocRows.slice(0, 10)} layout="vertical" margin={{ left: 26, right: 24, top: 8, bottom: 8 }}>
                     <CartesianGrid horizontal={false} strokeDasharray="3 3" />
@@ -1769,37 +2140,48 @@ export function WipRepairDashboardClient({
               </CardContent>
             </Card>
 
-            <Card className="rounded-lg border-slate-200 bg-white py-0 shadow-sm">
+            <Card className="flex h-full flex-col rounded-lg border-slate-200 bg-white py-0 shadow-sm">
               <CardHeader className="px-5 py-4">
                 <CardTitle className="text-base text-slate-950">Store Loc Summary</CardTitle>
                 <CardDescription>Ringkasan lokasi dari semua data WIP Repair yang lolos filter.</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-3 px-5 pb-5">
-                {storeLocRows.slice(0, 6).map((item) => {
-                  const pendingValue = item.workOrders > 0 ? ((item.waitingWo + item.emptyWo) / item.workOrders) * 100 : 0
+              <CardContent className="min-h-0 flex-1 px-5 pb-5">
+                <div className="max-h-[426px] space-y-3 overflow-y-auto pr-1">
+                  {storeLocRows.slice(0, 8).map((item) => {
+                    const pendingValue = item.workOrders > 0 ? ((item.waitingWo + item.emptyWo) / item.workOrders) * 100 : 0
 
-                  return (
-                    <button
-                      key={item.name}
-                      type="button"
-                      className="grid w-full gap-2 rounded-md border border-slate-200 bg-white p-3 text-left transition-colors hover:border-blue-200 hover:bg-blue-50/40 active:scale-[0.96]"
-                      onClick={() => {
-                        setQuery(item.name)
-                      }}
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="truncate font-semibold text-slate-950">{item.name}</span>
-                        <span className="text-sm font-semibold text-slate-950 tabular-nums">{formatNumber(item.workOrders)} WO</span>
-                      </div>
-                      <Progress value={pendingValue} className="h-1.5 bg-emerald-100 [&>div]:bg-amber-500" />
-                      <div className="grid grid-cols-3 gap-2 text-xs text-slate-500">
-                        <span>Ada WO {formatNumber(item.withWo)}</span>
-                        <span>Waiting {formatNumber(item.waitingWo)}</span>
-                        <span>Kosong {formatNumber(item.emptyWo)}</span>
-                      </div>
-                    </button>
-                  )
-                })}
+                    return (
+                      <button
+                        key={item.name}
+                        type="button"
+                        className="grid w-full gap-2 rounded-md border border-slate-200 bg-white p-3 text-left transition-colors hover:border-blue-200 hover:bg-blue-50/40 active:scale-[0.96]"
+                        onClick={() => {
+                          setQuery(item.name)
+                        }}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="truncate font-semibold text-slate-950">{item.name}</span>
+                          <span className="shrink-0 text-sm font-semibold text-slate-950 tabular-nums">{formatNumber(item.workOrders)} WO</span>
+                        </div>
+                        <Progress value={pendingValue} className="h-1.5 bg-emerald-100 [&>div]:bg-amber-500" />
+                        <div className="grid grid-cols-3 gap-2 text-xs text-slate-500">
+                          <span className="grid gap-0.5">
+                            <span>Ada WO</span>
+                            <span className="font-semibold text-slate-700 tabular-nums">{formatNumber(item.withWo)}</span>
+                          </span>
+                          <span className="grid gap-0.5">
+                            <span>Waiting</span>
+                            <span className="font-semibold text-slate-700 tabular-nums">{formatNumber(item.waitingWo)}</span>
+                          </span>
+                          <span className="grid gap-0.5 text-right">
+                            <span>Kosong</span>
+                            <span className="font-semibold text-slate-700 tabular-nums">{formatNumber(item.emptyWo)}</span>
+                          </span>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
               </CardContent>
             </Card>
           </div>
