@@ -192,6 +192,8 @@ const details: WipRepairWorkOrderDetailRecord[] = [
     smu: "PC",
     qty: "2",
     time: "60",
+    date: "2026-04-03",
+    person: "Irdan",
   },
   {
     id_job: "job-2",

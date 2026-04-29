@@ -44,6 +44,8 @@ export type WipRepairWorkOrderDetailRecord = {
   smu: string | null
   qty: string | null
   time: string | null
+  date?: string | null
+  person?: string | null
 }
 
 export type WipRepairWorkOrderDetailApiResponse = {

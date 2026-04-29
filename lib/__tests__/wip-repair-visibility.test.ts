@@ -43,6 +43,8 @@ const baseDetail: WipRepairWorkOrderDetailRecord = {
   smu: "PC",
   qty: "1",
   time: "30",
+  date: "2026-04-03",
+  person: "Irdan",
 }
 
 describe("WIP Repair visibility filters", () => {

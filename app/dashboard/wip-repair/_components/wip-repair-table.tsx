@@ -459,6 +459,8 @@ export function WipRepairTable({ data, workOrderDetails }: WipRepairTableProps) 
               detail.smu,
               detail.qty,
               detail.time,
+              detail.date,
+              detail.person,
             ]
               .map((value) => getNormalizedText(value))
               .some((value) => value.includes(normalizedQuery))
@@ -663,6 +665,8 @@ export function WipRepairTable({ data, workOrderDetails }: WipRepairTableProps) 
                             detail.smu,
                             detail.qty,
                             detail.time,
+                            detail.date,
+                            detail.person,
                           ]
                             .map((value) => getNormalizedText(value))
                             .some((value) => value.includes(normalizedQuery))
@@ -756,6 +760,8 @@ export function WipRepairTable({ data, workOrderDetails }: WipRepairTableProps) 
                                       <TableHead className="px-3 py-2">Kategori</TableHead>
                                       <TableHead className="px-3 py-2">Qty</TableHead>
                                       <TableHead className="px-3 py-2">Waktu</TableHead>
+                                      <TableHead className="px-3 py-2">Tanggal</TableHead>
+                                      <TableHead className="px-3 py-2">Dikerjakan Oleh</TableHead>
                                     </TableRow>
                                   </TableHeader>
                                   <TableBody>
@@ -778,6 +784,12 @@ export function WipRepairTable({ data, workOrderDetails }: WipRepairTableProps) 
                                         </TableCell>
                                         <TableCell className="px-3 py-2 tabular-nums text-muted-foreground">
                                           <HighlightText value={formatMinutes(detail.time)} query={query} />
+                                        </TableCell>
+                                        <TableCell className="px-3 py-2 text-muted-foreground">
+                                          <HighlightText value={formatDate(detail.date ?? null)} query={query} />
+                                        </TableCell>
+                                        <TableCell className="px-3 py-2 text-muted-foreground">
+                                          <HighlightText value={detail.person ?? null} query={query} />
                                         </TableCell>
                                       </TableRow>
                                     ))}

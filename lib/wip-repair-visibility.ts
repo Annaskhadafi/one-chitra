@@ -45,5 +45,7 @@ export function isVisibleWipRepairWorkOrderDetail(detail: WipRepairWorkOrderDeta
     detail.material_name,
     detail.category,
     detail.smu,
+    detail.date,
+    detail.person,
   ].some(containsExcludedTerm)
 }

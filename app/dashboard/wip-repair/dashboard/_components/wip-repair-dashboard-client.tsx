@@ -78,7 +78,33 @@ const chartConfig = {
   quantity: { label: "Qty", color: "#f97316" },
   rows: { label: "Pemakaian", color: "#16a34a" },
   minutes: { label: "Menit", color: "#7c3aed" },
+  hours: { label: "Jam", color: "#7c3aed" },
+  jobs: { label: "Pekerjaan", color: "#2563eb" },
 } satisfies ChartConfig
+
+type ProductivityDetailRow = {
+  key: string
+  date: string
+  person: string
+  wo: string
+  tireSn: string
+  customer: string
+  site: string
+  job: string
+  material: string
+  quantity: number
+  minutes: number
+}
+
+type ProductivityPersonItem = {
+  name: string
+  jobs: number
+  hours: number
+  minutes: number
+  workOrders: number
+  activeDays: number
+  topJob: string
+}
 
 function normalizeValue(value: string | null | undefined) {
   return value?.trim() || "-"
@@ -95,10 +121,163 @@ function isWaitingWorkOrder(value: string | null | undefined) {
 function getHeaderDetailLookupKey(item: WipRepairRecord) {
   if (isWaitingWorkOrder(item.wo)) {
     const tireSn = normalizeTireSn(item.tire_sn)
-    return tireSn === "-" ? `${normalizeValue(item.wo)}:${normalizeValue(item.id_wo)}` : `WAITING_SN:${tireSn}`
+    return tireSn === "-" ? `WAITING_ID:${normalizeValue(item.id_wo)}` : `WAITING_SN:${tireSn}`
   }
 
   return normalizeValue(item.wo)
+}
+
+function isWaitingDetailWorkOrder(value: string | null | undefined) {
+  const normalized = normalizeValue(value).toLowerCase()
+
+  return normalized === "waiting wo" || normalized === "waiting"
+}
+
+function getDetailLookupKeys(detail: WipRepairWorkOrderDetailRecord) {
+  if (!isWaitingDetailWorkOrder(detail.wo)) {
+    return [normalizeValue(detail.wo)]
+  }
+
+  const keys = new Set<string>()
+  const tireSn = normalizeTireSn(detail.tire_sn)
+  const idWo = normalizeValue(detail.id_wo)
+
+  if (tireSn !== "-") {
+    keys.add(`WAITING_SN:${tireSn}`)
+  }
+
+  if (idWo !== "-") {
+    keys.add(`WAITING_ID:${idWo}`)
+  }
+
+  return Array.from(keys)
+}
+
+function parseNumber(value: string | null | undefined) {
+  const normalized = normalizeValue(value)
+
+  if (normalized === "-") {
+    return 0
+  }
+
+  const parsed = Number(normalized.replace(",", "."))
+
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function normalizePersonName(value: string | null | undefined) {
+  return normalizeValue(value)
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toUpperCase()
+}
+
+function splitPersonNames(value: string | null | undefined) {
+  const normalized = normalizeValue(value)
+
+  if (normalized === "-") {
+    return []
+  }
+
+  return normalized
+    .replace(/\b(dan|and)\b/gi, ",")
+    .split(/[,;/|&+]+/)
+    .map(normalizePersonName)
+    .filter((name) => name !== "-")
+}
+
+function getEditDistance(left: string, right: string) {
+  if (left === right) {
+    return 0
+  }
+
+  if (left.length === 0) {
+    return right.length
+  }
+
+  if (right.length === 0) {
+    return left.length
+  }
+
+  const previous = Array.from({ length: right.length + 1 }, (_, index) => index)
+  const current = Array.from({ length: right.length + 1 }, () => 0)
+
+  for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
+    current[0] = leftIndex
+
+    for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
+      const cost = left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1
+      current[rightIndex] = Math.min(
+        current[rightIndex - 1] + 1,
+        previous[rightIndex] + 1,
+        previous[rightIndex - 1] + cost
+      )
+    }
+
+    previous.splice(0, previous.length, ...current)
+  }
+
+  return previous[right.length]
+}
+
+function isSimilarPersonName(left: string, right: string) {
+  if (left === right) {
+    return true
+  }
+
+  const shorterLength = Math.min(left.length, right.length)
+
+  if (shorterLength <= 4 || left[0] !== right[0]) {
+    return false
+  }
+
+  if (left.slice(0, 2) !== right.slice(0, 2)) {
+    return false
+  }
+
+  const distance = getEditDistance(left, right)
+
+  return shorterLength <= 6 ? distance <= 1 : distance <= 2
+}
+
+function buildPersonAliasMap(values: Array<string | null | undefined>) {
+  const counts = values
+    .flatMap(splitPersonNames)
+    .reduce<Record<string, number>>((accumulator, name) => {
+      accumulator[name] = (accumulator[name] ?? 0) + 1
+      return accumulator
+    }, {})
+  const canonicalNames = Object.keys(counts).sort(
+    (left, right) => right.length - left.length || counts[right] - counts[left] || left.localeCompare(right)
+  )
+  const aliases: Record<string, string> = {}
+
+  for (const name of canonicalNames) {
+    const canonical = Object.values(aliases).find((candidate) => isSimilarPersonName(candidate, name))
+    aliases[name] = canonical ?? name
+  }
+
+  return aliases
+}
+
+function getDetailMonth(detail: WipRepairWorkOrderDetailRecord) {
+  return detail.date && /^\d{4}-\d{2}/.test(detail.date) ? detail.date.slice(0, 7) : "-"
+}
+
+function formatMonthInput(value: Date) {
+  return value.toISOString().slice(0, 7)
+}
+
+function getDefaultProductivityMonth(details: WipRepairWorkOrderDetailRecord[]) {
+  const currentMonth = formatMonthInput(new Date())
+  const availableMonths = Array.from(
+    new Set(details.map(getDetailMonth).filter((month) => month !== "-"))
+  ).sort((left, right) => right.localeCompare(left))
+
+  return availableMonths.includes(currentMonth) ? currentMonth : availableMonths[0] ?? currentMonth
 }
 
 function formatNumber(value: number, maximumFractionDigits = 0) {
@@ -414,10 +593,14 @@ export function WipRepairDashboardClient({
   const [sizeFilters, setSizeFilters] = useState<string[]>([])
   const [brandFilters, setBrandFilters] = useState<string[]>([])
   const [materialFilters, setMaterialFilters] = useState<string[]>([])
+  const [personFilters, setPersonFilters] = useState<string[]>([])
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
+  const [productivityMonth, setProductivityMonth] = useState(() => getDefaultProductivityMonth(workOrderDetails))
   const [processMetric, setProcessMetric] = useState<"total" | "average">("total")
   const [query, setQuery] = useState("")
+
+  const personAliasMap = useMemo(() => buildPersonAliasMap(workOrderDetails.map((item) => item.person)), [workOrderDetails])
 
   const filterOptions = useMemo(
     () => ({
@@ -428,20 +611,28 @@ export function WipRepairDashboardClient({
       sizes: buildOptions(data.map((item) => item.size)),
       brands: buildOptions(data.map((item) => normalizeWipRepairBrand(item.brand))),
       materials: buildOptions(workOrderDetails.map((item) => item.material_name)),
+      people: Array.from(
+        new Set(
+          workOrderDetails
+            .flatMap((item) => splitPersonNames(item.person))
+            .map((name) => personAliasMap[name] ?? name)
+            .filter((name) => name !== "-")
+        )
+      ).sort((left, right) => left.localeCompare(right)),
     }),
-    [data, workOrderDetails]
+    [data, personAliasMap, workOrderDetails]
   )
 
   const detailsByWorkOrder = useMemo(() => {
     return workOrderDetails.reduce<Record<string, WipRepairWorkOrderDetailRecord[]>>((accumulator, detail) => {
-      const wo = normalizeValue(detail.wo)
+      for (const key of getDetailLookupKeys(detail)) {
+        if (key === "-") {
+          continue
+        }
 
-      if (wo === "-") {
-        return accumulator
+        accumulator[key] ??= []
+        accumulator[key].push(detail)
       }
-
-      accumulator[wo] ??= []
-      accumulator[wo].push(detail)
 
       return accumulator
     }, {})
@@ -458,6 +649,13 @@ export function WipRepairDashboardClient({
       const materialMatch =
         materialFilters.length === 0 ||
         details.some((detail) => materialFilters.includes(normalizeValue(detail.material_name)))
+      const personMatch =
+        personFilters.length === 0 ||
+        details.some((detail) =>
+          splitPersonNames(detail.person)
+            .map((name) => personAliasMap[name] ?? name)
+            .some((name) => personFilters.includes(name))
+        )
       const startMatch = !parsedStartDate || !itemDate || itemDate >= parsedStartDate
       const endMatch = !parsedEndDate || !itemDate || itemDate <= parsedEndDate
       const queryMatch =
@@ -476,7 +674,14 @@ export function WipRepairDashboardClient({
           .map((value) => normalizeValue(value).toLowerCase())
           .some((value) => value.includes(normalizedQuery)) ||
         details.some((detail) =>
-          [detail.job, detail.material_name, detail.category]
+          [
+            detail.job,
+            detail.material_name,
+            detail.category,
+            detail.person,
+            ...splitPersonNames(detail.person).map((name) => personAliasMap[name] ?? name),
+            detail.date,
+          ]
             .map((value) => normalizeValue(value).toLowerCase())
             .some((value) => value.includes(normalizedQuery))
         )
@@ -491,20 +696,26 @@ export function WipRepairDashboardClient({
         startMatch &&
         endMatch &&
         materialMatch &&
+        personMatch &&
         queryMatch
       )
     })
-  }, [brandFilters, customerFilters, data, detailsByWorkOrder, endDate, injuryFilters, materialFilters, query, siteFilters, sizeFilters, startDate, statusFilters])
+  }, [brandFilters, customerFilters, data, detailsByWorkOrder, endDate, injuryFilters, materialFilters, personAliasMap, personFilters, query, siteFilters, sizeFilters, startDate, statusFilters])
 
   const filteredDetails = useMemo(() => {
-    const selectedWorkOrders = new Set(
-      filteredWorkOrders
-        .filter((item) => !isWaitingWorkOrder(item.wo))
-        .map((item) => normalizeValue(item.wo))
-    )
+    const selectedWorkOrders = new Set(filteredWorkOrders.map(getHeaderDetailLookupKey))
 
-    return workOrderDetails.filter((detail) => selectedWorkOrders.has(normalizeValue(detail.wo)))
-  }, [filteredWorkOrders, workOrderDetails])
+    return workOrderDetails.filter((detail) => {
+      const detailMatch = getDetailLookupKeys(detail).some((key) => selectedWorkOrders.has(key))
+      const personMatch =
+        personFilters.length === 0 ||
+        splitPersonNames(detail.person)
+          .map((name) => personAliasMap[name] ?? name)
+          .some((name) => personFilters.includes(name))
+
+      return detailMatch && personMatch
+    })
+  }, [filteredWorkOrders, personAliasMap, personFilters, workOrderDetails])
 
   const dashboard = useMemo(() => {
     if (
@@ -515,6 +726,7 @@ export function WipRepairDashboardClient({
       sizeFilters.length === 0 &&
       brandFilters.length === 0 &&
       materialFilters.length === 0 &&
+      personFilters.length === 0 &&
       !startDate &&
       !endDate &&
       query.trim().length === 0
@@ -523,7 +735,7 @@ export function WipRepairDashboardClient({
     }
 
     return buildWipRepairDashboardData(filteredWorkOrders, filteredDetails)
-  }, [brandFilters, customerFilters, endDate, filteredDetails, filteredWorkOrders, initialDashboardData, injuryFilters, materialFilters, query, siteFilters, sizeFilters, startDate, statusFilters])
+  }, [brandFilters, customerFilters, endDate, filteredDetails, filteredWorkOrders, initialDashboardData, injuryFilters, materialFilters, personFilters, query, siteFilters, sizeFilters, startDate, statusFilters])
 
   const activeFilters = [
     ...statusFilters.map((value) => ({ label: "Status", value, clear: () => setStatusFilters(statusFilters.filter((item) => item !== value)) })),
@@ -533,6 +745,7 @@ export function WipRepairDashboardClient({
     ...sizeFilters.map((value) => ({ label: "Size", value, clear: () => setSizeFilters(sizeFilters.filter((item) => item !== value)) })),
     ...brandFilters.map((value) => ({ label: "Brand", value, clear: () => setBrandFilters(brandFilters.filter((item) => item !== value)) })),
     ...materialFilters.map((value) => ({ label: "Material", value, clear: () => setMaterialFilters(materialFilters.filter((item) => item !== value)) })),
+    ...personFilters.map((value) => ({ label: "Nama", value, clear: () => setPersonFilters(personFilters.filter((item) => item !== value)) })),
     ...(startDate ? [{ label: "Dari", value: startDate, clear: () => setStartDate("") }] : []),
     ...(endDate ? [{ label: "Sampai", value: endDate, clear: () => setEndDate("") }] : []),
   ]
@@ -545,6 +758,7 @@ export function WipRepairDashboardClient({
     setSizeFilters([])
     setBrandFilters([])
     setMaterialFilters([])
+    setPersonFilters([])
     setStartDate("")
     setEndDate("")
     setQuery("")
@@ -569,6 +783,125 @@ export function WipRepairDashboardClient({
       })),
     [dashboard.jobTimeBreakdown, processMetric]
   )
+  const workOrderByDetailKey = useMemo(() => {
+    return filteredWorkOrders.reduce<Record<string, WipRepairRecord>>((accumulator, item) => {
+      accumulator[getHeaderDetailLookupKey(item)] = item
+      return accumulator
+    }, {})
+  }, [filteredWorkOrders])
+  const productivityDetails = useMemo<ProductivityDetailRow[]>(() => {
+    return filteredDetails
+      .filter((detail) => {
+        const people = splitPersonNames(detail.person)
+        return people.length > 0 && (productivityMonth === "" || getDetailMonth(detail) === productivityMonth)
+      })
+      .flatMap((detail, index) => {
+        const matchingKey = getDetailLookupKeys(detail).find((key) => workOrderByDetailKey[key])
+        const workOrder = matchingKey ? workOrderByDetailKey[matchingKey] : undefined
+
+        return Array.from(new Set(splitPersonNames(detail.person).map((name) => personAliasMap[name] ?? name))).map((person) => ({
+          key: `${matchingKey ?? normalizeValue(detail.wo)}-${index}-${person}-${normalizeValue(detail.job)}`,
+          date: normalizeValue(detail.date),
+          person,
+          wo: normalizeValue(workOrder?.wo ?? detail.wo),
+          tireSn: normalizeValue(workOrder?.tire_sn ?? detail.tire_sn),
+          customer: normalizeValue(workOrder?.customer),
+          site: normalizeValue(workOrder?.site),
+          job: normalizeValue(detail.job),
+          material: normalizeValue(detail.material_name),
+          quantity: parseNumber(detail.qty),
+          minutes: parseNumber(detail.time),
+        }))
+      })
+      .sort((left, right) => right.date.localeCompare(left.date) || left.person.localeCompare(right.person) || left.wo.localeCompare(right.wo))
+  }, [filteredDetails, personAliasMap, productivityMonth, workOrderByDetailKey])
+  const productivityPeople = useMemo<ProductivityPersonItem[]>(() => {
+    const people = productivityDetails.reduce<
+      Record<string, { jobs: number; minutes: number; workOrders: Set<string>; dates: Set<string>; jobsByName: Record<string, number> }>
+    >((accumulator, detail) => {
+      accumulator[detail.person] ??= {
+        jobs: 0,
+        minutes: 0,
+        workOrders: new Set<string>(),
+        dates: new Set<string>(),
+        jobsByName: {},
+      }
+
+      const item = accumulator[detail.person]
+      item.jobs += 1
+      item.minutes += detail.minutes
+      item.workOrders.add(`${detail.wo}:${detail.tireSn}`)
+      if (detail.date !== "-") {
+        item.dates.add(detail.date)
+      }
+      item.jobsByName[detail.job] = (item.jobsByName[detail.job] ?? 0) + 1
+
+      return accumulator
+    }, {})
+
+    return Object.entries(people)
+      .map(([name, item]) => ({
+        name,
+        jobs: item.jobs,
+        hours: Number((item.minutes / 60).toFixed(1)),
+        minutes: item.minutes,
+        workOrders: item.workOrders.size,
+        activeDays: item.dates.size,
+        topJob:
+          Object.entries(item.jobsByName).sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))[0]?.[0] ??
+          "-",
+      }))
+      .sort((left, right) => right.minutes - left.minutes || right.jobs - left.jobs || left.name.localeCompare(right.name))
+  }, [productivityDetails])
+  const productivityJobRanking = useMemo<WipRepairRankingItem[]>(() => {
+    const total = productivityDetails.length
+    const counts = productivityDetails.reduce<Record<string, number>>((accumulator, detail) => {
+      accumulator[detail.job] = (accumulator[detail.job] ?? 0) + 1
+      return accumulator
+    }, {})
+
+    return Object.entries(counts)
+      .map(([name, value]) => ({
+        name,
+        value,
+        percentage: total > 0 ? Number(((value / total) * 100).toFixed(1)) : 0,
+      }))
+      .sort((left, right) => right.value - left.value || left.name.localeCompare(right.name))
+  }, [productivityDetails])
+  const productivityDailyData = useMemo(() => {
+    const daily = productivityDetails.reduce<Record<string, { name: string; jobs: number; hours: number; minutes: number }>>(
+      (accumulator, detail) => {
+        if (detail.date === "-") {
+          return accumulator
+        }
+
+        accumulator[detail.date] ??= { name: detail.date.slice(5), jobs: 0, hours: 0, minutes: 0 }
+        accumulator[detail.date].jobs += 1
+        accumulator[detail.date].minutes += detail.minutes
+        accumulator[detail.date].hours = Number((accumulator[detail.date].minutes / 60).toFixed(1))
+
+        return accumulator
+      },
+      {}
+    )
+
+    return Object.entries(daily)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([, value]) => value)
+  }, [productivityDetails])
+  const productivitySummary = useMemo(() => {
+    const totalMinutes = productivityDetails.reduce((total, detail) => total + detail.minutes, 0)
+    const activeDays = new Set(productivityDetails.map((detail) => detail.date).filter((date) => date !== "-")).size
+    const totalJobs = productivityDetails.length
+
+    return {
+      people: productivityPeople.length,
+      totalJobs,
+      totalMinutes,
+      activeDays,
+      averageJobsPerPerson: productivityPeople.length > 0 ? totalJobs / productivityPeople.length : 0,
+    }
+  }, [productivityDetails, productivityPeople.length])
 
   return (
     <div className="flex flex-col gap-5">
@@ -589,7 +922,7 @@ export function WipRepairDashboardClient({
                 <Input
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="WO, tire SN, customer, injury, job, material"
+                  placeholder="WO, tire SN, customer, injury, job, material, nama pekerja"
                   className="h-10 rounded-md pl-9"
                 />
               </div>
@@ -621,7 +954,7 @@ export function WipRepairDashboardClient({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
             <label className="grid gap-1.5">
               <span className="text-xs font-medium text-muted-foreground">Customer</span>
               <MultiSelectFilter label="Semua customer" value={customerFilters} options={filterOptions.customers} onChange={setCustomerFilters} />
@@ -641,6 +974,10 @@ export function WipRepairDashboardClient({
             <label className="grid gap-1.5">
               <span className="text-xs font-medium text-muted-foreground">Material</span>
               <MultiSelectFilter label="Semua material" value={materialFilters} options={filterOptions.materials} onChange={setMaterialFilters} />
+            </label>
+            <label className="grid gap-1.5">
+              <span className="text-xs font-medium text-muted-foreground">Nama Pekerja</span>
+              <MultiSelectFilter label="Semua nama" value={personFilters} options={filterOptions.people} onChange={setPersonFilters} />
             </label>
           </div>
 
@@ -725,13 +1062,198 @@ export function WipRepairDashboardClient({
         />
       </div>
 
-      <Tabs defaultValue="material" className="space-y-4">
-        <TabsList className="grid h-auto w-full grid-cols-2 rounded-lg bg-muted p-1 md:w-fit md:grid-cols-4">
+      <Tabs defaultValue="productivity" className="space-y-4">
+        <TabsList className="grid h-auto w-full grid-cols-2 rounded-lg bg-muted p-1 md:w-fit md:grid-cols-5">
+          <TabsTrigger value="productivity" className="rounded-md">Produktivitas</TabsTrigger>
           <TabsTrigger value="material" className="rounded-md">Material</TabsTrigger>
           <TabsTrigger value="customer" className="rounded-md">Customer</TabsTrigger>
           <TabsTrigger value="process" className="rounded-md">Process Time</TabsTrigger>
           <TabsTrigger value="tire" className="rounded-md">Tire Profile</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="productivity" className="space-y-4">
+          <Card className="rounded-lg border-border/70 py-0 shadow-sm">
+            <CardHeader className="border-b bg-muted/20 px-7 py-6">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Users className="h-4 w-4 text-blue-500" />
+                    Produktivitas Pengerjaan
+                  </CardTitle>
+                  <CardDescription className="pt-1">
+                    Perbandingan antar orang dan detail apa saja yang dikerjakan berdasarkan tanggal detail WO.
+                  </CardDescription>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-[170px_minmax(230px,280px)]">
+                  <label className="grid gap-1.5">
+                    <span className="text-xs font-medium text-muted-foreground">Bulan Pengerjaan</span>
+                    <Input
+                      type="month"
+                      value={productivityMonth}
+                      onChange={(event) => setProductivityMonth(event.target.value)}
+                      className="h-10 rounded-md"
+                    />
+                  </label>
+                  <label className="grid gap-1.5">
+                    <span className="text-xs font-medium text-muted-foreground">Nama Pekerja</span>
+                    <MultiSelectFilter label="Semua nama" value={personFilters} options={filterOptions.people} onChange={setPersonFilters} />
+                  </label>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-5 px-7 py-6">
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <StatCard title="Orang Aktif" value={formatNumber(productivitySummary.people)} description="Nama pekerja unik pada bulan dan filter aktif." icon={Users} tone="blue" />
+                <StatCard title="Pekerjaan" value={formatNumber(productivitySummary.totalJobs)} description={`Rata-rata ${formatNumber(productivitySummary.averageJobsPerPerson, 1)} pekerjaan per orang.`} icon={Wrench} tone="green" />
+                <StatCard title="Total Jam" value={formatMinutes(productivitySummary.totalMinutes)} description="Akumulasi time dari detail pekerjaan." icon={Clock3} tone="violet" />
+                <StatCard title="Hari Aktif" value={formatNumber(productivitySummary.activeDays)} description="Jumlah tanggal pengerjaan yang memiliki aktivitas." icon={CalendarDays} tone="orange" />
+              </div>
+
+              <div className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
+                <Card className="rounded-lg border-border/70 py-0 shadow-sm">
+                  <CardHeader className="px-6 py-5">
+                    <CardTitle className="text-base">Grafik Antar Orang</CardTitle>
+                    <CardDescription className="pt-1">Ranking jam kerja dari detail pekerjaan bulan terpilih.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="px-6 pb-6">
+                    <ChartContainer config={chartConfig} className="h-[340px] w-full">
+                      <BarChart data={productivityPeople.slice(0, 10)} layout="vertical" margin={{ left: 22, right: 26 }}>
+                        <CartesianGrid horizontal={false} strokeDasharray="3 3" />
+                        <XAxis type="number" tickLine={false} axisLine={false} fontSize={11} />
+                        <YAxis dataKey="name" type="category" tickLine={false} axisLine={false} width={120} fontSize={11} />
+                        <ChartTooltip content={<ChartTooltipContent />} />
+                        <Bar dataKey="hours" radius={[0, 8, 8, 0]} fill="#7c3aed" />
+                      </BarChart>
+                    </ChartContainer>
+                  </CardContent>
+                </Card>
+
+                <HorizontalRanking
+                  title="Jenis Pekerjaan"
+                  description="Pekerjaan yang paling sering dilakukan pada filter aktif."
+                  data={productivityJobRanking}
+                  color="bg-blue-500"
+                />
+              </div>
+
+              <div className="grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
+                <Card className="rounded-lg border-border/70 py-0 shadow-sm">
+                  <CardHeader className="px-6 py-5">
+                    <CardTitle className="text-base">Trend Harian</CardTitle>
+                    <CardDescription className="pt-1">Jumlah pekerjaan per tanggal pengerjaan.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="px-6 pb-6">
+                    <ChartContainer config={chartConfig} className="h-[280px] w-full">
+                      <AreaChart data={productivityDailyData} margin={{ left: -18, right: 16, top: 10, bottom: 20 }}>
+                        <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                        <XAxis dataKey="name" tickLine={false} axisLine={false} fontSize={11} />
+                        <YAxis tickLine={false} axisLine={false} fontSize={11} />
+                        <ChartTooltip content={<ChartTooltipContent />} />
+                        <Area type="monotone" dataKey="jobs" stroke="#2563eb" fill="#2563eb" fillOpacity={0.2} strokeWidth={3} />
+                      </AreaChart>
+                    </ChartContainer>
+                  </CardContent>
+                </Card>
+
+                <Card className="overflow-hidden rounded-lg border-border/70 py-0 shadow-sm">
+                  <CardHeader className="border-b bg-muted/30 px-6 py-5">
+                    <CardTitle className="text-base">Ranking Pekerja</CardTitle>
+                    <CardDescription className="pt-1">Klik nama di filter untuk melihat pekerjaan orang tertentu.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[760px] text-sm">
+                        <thead className="bg-muted/40 text-left text-xs uppercase text-muted-foreground">
+                          <tr>
+                            <th className="px-4 py-3">Nama</th>
+                            <th className="px-4 py-3 text-right">Job</th>
+                            <th className="px-4 py-3 text-right">WO/SN</th>
+                            <th className="px-4 py-3 text-right">Hari</th>
+                            <th className="px-4 py-3">Top Job</th>
+                            <th className="px-4 py-3 text-right">Waktu</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {productivityPeople.length > 0 ? (
+                            productivityPeople.slice(0, 10).map((item) => (
+                              <tr key={item.name} className="border-t">
+                                <td className="px-4 py-3 font-semibold">{item.name}</td>
+                                <td className="px-4 py-3 text-right tabular-nums">{formatNumber(item.jobs)}</td>
+                                <td className="px-4 py-3 text-right tabular-nums">{formatNumber(item.workOrders)}</td>
+                                <td className="px-4 py-3 text-right tabular-nums">{formatNumber(item.activeDays)}</td>
+                                <td className="px-4 py-3">{item.topJob}</td>
+                                <td className="px-4 py-3 text-right font-semibold tabular-nums">{formatMinutes(item.minutes)}</td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
+                                Belum ada detail pekerjaan untuk bulan dan filter ini.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <Card className="overflow-hidden rounded-lg border-border/70 py-0 shadow-sm">
+                <CardHeader className="border-b bg-muted/30 px-6 py-5">
+                  <CardTitle className="text-base">Detail Pekerjaan Per Nama</CardTitle>
+                  <CardDescription className="pt-1">Daftar pekerjaan aktual dari API detail WO untuk filter aktif.</CardDescription>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[1040px] text-sm">
+                      <thead className="bg-muted/40 text-left text-xs uppercase text-muted-foreground">
+                        <tr>
+                          <th className="px-4 py-3">Tanggal</th>
+                          <th className="px-4 py-3">Nama</th>
+                          <th className="px-4 py-3">WO / SN</th>
+                          <th className="px-4 py-3">Customer / Site</th>
+                          <th className="px-4 py-3">Pekerjaan</th>
+                          <th className="px-4 py-3">Material</th>
+                          <th className="px-4 py-3 text-right">Qty</th>
+                          <th className="px-4 py-3 text-right">Waktu</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {productivityDetails.length > 0 ? (
+                          productivityDetails.slice(0, 80).map((detail) => (
+                            <tr key={detail.key} className="border-t">
+                              <td className="px-4 py-3 font-mono text-xs">{detail.date}</td>
+                              <td className="px-4 py-3 font-semibold">{detail.person}</td>
+                              <td className="px-4 py-3">
+                                <div className="font-mono text-xs font-semibold">{detail.wo}</div>
+                                <div className="text-xs text-muted-foreground">{detail.tireSn}</div>
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="font-medium">{detail.customer}</div>
+                                <div className="text-xs text-muted-foreground">{detail.site}</div>
+                              </td>
+                              <td className="px-4 py-3">{detail.job}</td>
+                              <td className="px-4 py-3">{detail.material}</td>
+                              <td className="px-4 py-3 text-right tabular-nums">{formatNumber(detail.quantity, 2)}</td>
+                              <td className="px-4 py-3 text-right font-semibold tabular-nums">{formatMinutes(detail.minutes)}</td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={8} className="px-4 py-10 text-center text-muted-foreground">
+                              Tidak ada pekerjaan yang cocok dengan filter produktivitas.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         <TabsContent value="material" className="grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
           <MaterialList data={dashboard.materialUsage} onSelect={(value) => addFilter(setMaterialFilters, value)} />
