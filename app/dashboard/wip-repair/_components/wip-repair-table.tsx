@@ -443,6 +443,8 @@ export function WipRepairTable({ data, workOrderDetails }: WipRepairTableProps) 
             item.pattern,
             item.injury,
             item.receiver,
+            item.inspector,
+            item.createby,
             item.store_loc,
           ]
             .map((value) => getNormalizedText(value))
@@ -620,7 +622,9 @@ export function WipRepairTable({ data, workOrderDetails }: WipRepairTableProps) 
                 <TableHead className="px-4 py-3">Size</TableHead>
                 <TableHead className="px-4 py-3">Injury</TableHead>
                 <TableHead className="px-4 py-3">Total Waktu</TableHead>
-                <TableHead className="px-4 py-3">Received</TableHead>
+                <TableHead className="px-4 py-3">Inspect</TableHead>
+                <TableHead className="px-4 py-3">Created By</TableHead>
+                <TableHead className="px-4 py-3">Received / Receiver</TableHead>
                 <TableHead className="px-4 py-3">WO Date</TableHead>
               </TableRow>
             </TableHeader>
@@ -642,6 +646,8 @@ export function WipRepairTable({ data, workOrderDetails }: WipRepairTableProps) 
                     item.pattern,
                     item.injury,
                     item.receiver,
+                    item.inspector,
+                    item.createby,
                     item.store_loc,
                   ].map((value) => getNormalizedText(value)).some((value) => value.includes(normalizedQuery))
                   const matchingDetailIds = new Set(
@@ -709,12 +715,24 @@ export function WipRepairTable({ data, workOrderDetails }: WipRepairTableProps) 
                         <TableCell className="px-4 py-3 font-medium tabular-nums">
                           {details.length > 0 ? formatDurationFromMinutes(totalMinutes) : "-"}
                         </TableCell>
-                        <TableCell className="px-4 py-3 text-muted-foreground">{formatDate(item.received_date)}</TableCell>
+                        <TableCell className="px-4 py-3">
+                          <div className="flex flex-col">
+                            <span className="text-muted-foreground">{formatDate(item.inspect_date)}</span>
+                            <span className="text-xs text-muted-foreground">{normalizeValue(item.inspector)}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="px-4 py-3 text-muted-foreground">{normalizeValue(item.createby)}</TableCell>
+                        <TableCell className="px-4 py-3">
+                          <div className="flex flex-col">
+                            <span className="text-muted-foreground">{formatDate(item.received_date)}</span>
+                            <span className="text-xs text-muted-foreground">{normalizeValue(item.receiver)}</span>
+                          </div>
+                        </TableCell>
                         <TableCell className="px-4 py-3 text-muted-foreground">{formatDate(item.wo_date)}</TableCell>
                       </TableRow>
                       {isExpanded ? (
                         <TableRow className="bg-muted/20 hover:bg-muted/20">
-                          <TableCell colSpan={12} className="px-4 py-4">
+                          <TableCell colSpan={14} className="px-4 py-4">
                             <div className="rounded-xl border bg-background p-4">
                               <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                                 <div>
@@ -775,7 +793,7 @@ export function WipRepairTable({ data, workOrderDetails }: WipRepairTableProps) 
                 })
               ) : (
                 <TableRow>
-                  <TableCell colSpan={12} className="h-40 px-4 py-3 text-center">
+                  <TableCell colSpan={14} className="h-40 px-4 py-3 text-center">
                     <div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
                       <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
                         <Wrench className="h-5 w-5" />
