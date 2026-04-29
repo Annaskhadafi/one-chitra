@@ -451,6 +451,7 @@ export async function updateStockTransferStatus(id: number, data: {
     } finally {
         try {
             revalidatePath("/dashboard/stock-transfers")
+            revalidatePath("/dashboard/stocks")
             revalidatePath("/dashboard/inventory")
         } catch (_e) { }
     }

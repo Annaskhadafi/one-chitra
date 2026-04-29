@@ -61,6 +61,7 @@ function normalizeDeliveryOutput<T>(value: T): T {
 }
 
 type StockQueryable = Pick<typeof db, "query" | "select">
+type StockWriteExecutor = StockQueryable & Pick<typeof db, "execute">
 
 type DeliveryItemLike = {
     id?: number
@@ -184,6 +185,44 @@ async function getOriginWarehouseStock(queryable: StockQueryable, warehouseId: n
         ))
 
     return Number(result[0]?.totalStock) || 0
+}
+
+async function adjustOriginWarehouseStock(
+    executor: StockWriteExecutor,
+    {
+        warehouseId,
+        productId,
+        totalDelta,
+        bookedDelta = 0,
+    }: {
+        warehouseId: number
+        productId: number
+        totalDelta: number
+        bookedDelta?: number
+    },
+) {
+    const result = await executor.execute(sql`
+        UPDATE stock_levels
+        SET
+            total_stock = total_stock + ${totalDelta},
+            booked_stock = booked_stock + ${bookedDelta},
+            updated_at = NOW()
+        WHERE id = (
+            SELECT sl.id
+            FROM stock_levels sl
+            INNER JOIN warehouses w ON w.id = sl.warehouse_id
+            INNER JOIN products p ON p.id = sl.product_id
+            WHERE
+                w.sloc = (SELECT sloc FROM warehouses WHERE id = ${warehouseId})
+                AND p.material_number = (SELECT material_number FROM products WHERE id = ${productId} LIMIT 1)
+            ORDER BY sl.id
+            LIMIT 1
+        )
+    `)
+
+    if ((result.rowCount ?? 0) === 0) {
+        throw new Error(`Stock level not found for product ID ${productId} in origin warehouse`)
+    }
 }
 
 function getProductStockLabel(
@@ -790,16 +829,12 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
 
                     for (const item of mergedItems) {
                         // Deduct total stock AND booked stock
-                        await tx.update(stockLevels)
-                            .set({
-                                totalStock: sql`${stockLevels.totalStock} - ${item.deliveredQuantity}`,
-                                bookedStock: sql`${stockLevels.bookedStock} - ${item.deliveredQuantity}`,
-                                updatedAt: new Date(),
-                            })
-                            .where(and(
-                                eq(stockLevels.warehouseId, data.warehouseId),
-                                eq(stockLevels.productId, item.productId)
-                            ))
+                        await adjustOriginWarehouseStock(tx, {
+                            warehouseId: data.warehouseId,
+                            productId: item.productId,
+                            totalDelta: -item.deliveredQuantity,
+                            bookedDelta: -item.deliveredQuantity,
+                        })
 
                         // Record Movement with customer and warehouse info
                         await recordStockMovement(tx, {
@@ -925,16 +960,12 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
                 await restoreStockBookingsForDelivery(tx, id)
                 const originalMovementType = originalWasVHS ? "TRANSFER_OUT" : "DELIVERY"
                 for (const item of originalDelivery.items) {
-                    await tx.update(stockLevels)
-                        .set({
-                            totalStock: sql`${stockLevels.totalStock} + ${item.deliveredQuantity}`,
-                            bookedStock: sql`${stockLevels.bookedStock} + ${item.deliveredQuantity}`,
-                            updatedAt: new Date(),
-                        })
-                        .where(and(
-                            eq(stockLevels.warehouseId, originalDelivery.warehouseId),
-                            eq(stockLevels.productId, item.productId)
-                        ))
+                    await adjustOriginWarehouseStock(tx, {
+                        warehouseId: originalDelivery.warehouseId,
+                        productId: item.productId,
+                        totalDelta: item.deliveredQuantity,
+                        bookedDelta: item.deliveredQuantity,
+                    })
 
                     // Record Revert Movement
                     await recordStockMovement(tx, {
@@ -1085,16 +1116,12 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
                 if (shouldReconcileStock && newIsCommitted) {
                     const movementType = isVHSConsignment ? "TRANSFER_OUT" : "DELIVERY"
                     for (const item of mergedNewItems) {
-                        await tx.update(stockLevels)
-                            .set({
-                                totalStock: sql`${stockLevels.totalStock} - ${item.deliveredQuantity}`,
-                                bookedStock: sql`${stockLevels.bookedStock} - ${item.deliveredQuantity}`,
-                                updatedAt: new Date(),
-                            })
-                            .where(and(
-                                eq(stockLevels.warehouseId, data.warehouseId),
-                                eq(stockLevels.productId, item.productId)
-                            ))
+                        await adjustOriginWarehouseStock(tx, {
+                            warehouseId: data.warehouseId,
+                            productId: item.productId,
+                            totalDelta: -item.deliveredQuantity,
+                            bookedDelta: -item.deliveredQuantity,
+                        })
 
                         // Record New Movement
                         await recordStockMovement(tx, {
@@ -1190,16 +1217,12 @@ export async function deleteDelivery(id: number) {
                 await restoreStockBookingsForDelivery(tx, id)
                 const movementType = wasVHS ? "TRANSFER_OUT" : "DELIVERY"
                 for (const item of delivery.items) {
-                    await tx.update(stockLevels)
-                        .set({
-                            totalStock: sql`${stockLevels.totalStock} + ${item.deliveredQuantity}`,
-                            bookedStock: sql`${stockLevels.bookedStock} + ${item.deliveredQuantity}`, // Also restore booked stock
-                            updatedAt: new Date(),
-                        })
-                        .where(and(
-                            eq(stockLevels.warehouseId, delivery.warehouseId),
-                            eq(stockLevels.productId, item.productId)
-                        ))
+                    await adjustOriginWarehouseStock(tx, {
+                        warehouseId: delivery.warehouseId,
+                        productId: item.productId,
+                        totalDelta: item.deliveredQuantity,
+                        bookedDelta: item.deliveredQuantity,
+                    })
 
                     // Record Revert Movement (from delete)
                     await recordStockMovement(tx, {
@@ -1229,6 +1252,7 @@ export async function deleteDelivery(id: number) {
 
             try {
                 revalidatePath("/dashboard/deliveries")
+                revalidatePath("/dashboard/stocks")
                 revalidatePath("/dashboard/inventory")
             } catch (_e) { }
             return { success: true }
@@ -1280,16 +1304,12 @@ export async function bulkDeleteDeliveries(ids: number[]) {
                     await restoreStockBookingsForDelivery(tx, id)
                     const movementType = wasVHS ? "TRANSFER_OUT" : "DELIVERY"
                     for (const item of delivery.items) {
-                        await tx.update(stockLevels)
-                            .set({
-                                totalStock: sql`${stockLevels.totalStock} + ${item.deliveredQuantity}`,
-                                bookedStock: sql`${stockLevels.bookedStock} + ${item.deliveredQuantity}`,
-                                updatedAt: new Date(),
-                            })
-                            .where(and(
-                                eq(stockLevels.warehouseId, delivery.warehouseId),
-                                eq(stockLevels.productId, item.productId)
-                            ))
+                        await adjustOriginWarehouseStock(tx, {
+                            warehouseId: delivery.warehouseId,
+                            productId: item.productId,
+                            totalDelta: item.deliveredQuantity,
+                            bookedDelta: item.deliveredQuantity,
+                        })
 
                         await recordStockMovement(tx, {
                             productId: item.productId,
@@ -1317,6 +1337,7 @@ export async function bulkDeleteDeliveries(ids: number[]) {
 
             try {
                 revalidatePath("/dashboard/deliveries")
+                revalidatePath("/dashboard/stocks")
                 revalidatePath("/dashboard/inventory")
             } catch (_e) { }
             return { success: true }
@@ -1370,16 +1391,12 @@ export async function bulkUpdateDeliveryStatus(ids: number[], status: string) {
                         await restoreStockBookingsForDelivery(tx, id)
                         const movementType = isVHS ? "TRANSFER_OUT" : "DELIVERY"
                         for (const item of delivery.items) {
-                            await tx.update(stockLevels)
-                                .set({
-                                    totalStock: sql`${stockLevels.totalStock} + ${item.deliveredQuantity}`,
-                                    bookedStock: sql`${stockLevels.bookedStock} + ${item.deliveredQuantity}`,
-                                    updatedAt: new Date(),
-                                })
-                                .where(and(
-                                    eq(stockLevels.warehouseId, delivery.warehouseId),
-                                    eq(stockLevels.productId, item.productId)
-                                ))
+                            await adjustOriginWarehouseStock(tx, {
+                                warehouseId: delivery.warehouseId,
+                                productId: item.productId,
+                                totalDelta: item.deliveredQuantity,
+                                bookedDelta: item.deliveredQuantity,
+                            })
 
                             await recordStockMovement(tx, {
                                 productId: item.productId,
@@ -1407,16 +1424,12 @@ export async function bulkUpdateDeliveryStatus(ids: number[], status: string) {
 
                         const movementType = isVHS ? "TRANSFER_OUT" : "DELIVERY"
                         for (const item of delivery.items) {
-                            await tx.update(stockLevels)
-                                .set({
-                                    totalStock: sql`${stockLevels.totalStock} - ${item.deliveredQuantity}`,
-                                    bookedStock: sql`${stockLevels.bookedStock} - ${item.deliveredQuantity}`,
-                                    updatedAt: new Date(),
-                                })
-                                .where(and(
-                                    eq(stockLevels.warehouseId, delivery.warehouseId),
-                                    eq(stockLevels.productId, item.productId)
-                                ))
+                            await adjustOriginWarehouseStock(tx, {
+                                warehouseId: delivery.warehouseId,
+                                productId: item.productId,
+                                totalDelta: -item.deliveredQuantity,
+                                bookedDelta: -item.deliveredQuantity,
+                            })
 
                             await recordStockMovement(tx, {
                                 productId: item.productId,
@@ -1478,6 +1491,7 @@ export async function bulkUpdateDeliveryStatus(ids: number[], status: string) {
 
             try {
                 revalidatePath("/dashboard/deliveries")
+                revalidatePath("/dashboard/stocks")
                 revalidatePath("/dashboard/inventory")
             } catch (_e) { }
             return { success: true as const, deliveredNotificationIds }
