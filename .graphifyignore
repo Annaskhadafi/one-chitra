@@ -1,0 +1,21 @@
+# Generated and dependency folders
+.next/
+node_modules/
+graphify-out/
+dist/
+build/
+coverage/
+
+# Local scratch/debug output
+tmp/
+scratch/
+debug_uat/
+debug2_uat/
+codex_uat_*/
+.codex-skill-tmp-*/
+
+# Large generated archives or exports
+*.zip
+*.tar
+*.tgz
+*.7z

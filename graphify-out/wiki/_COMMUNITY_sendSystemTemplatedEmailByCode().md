@@ -1,0 +1,229 @@
+---
+type: community
+cohesion: 0.02
+members: 191
+---
+
+# sendSystemTemplatedEmailByCode()
+
+**Cohesion:** 0.02 - loosely connected
+**Members:** 191 nodes
+
+## Members
+- [[DELETE()]] - code - app\api\notifications\subscriptions\route.ts
+- [[DashboardPage()]] - code - app\dashboard\page.tsx
+- [[EmailSettingsPage()]] - code - app\dashboard\settings\email\page.tsx
+- [[GET()_5]] - code - app\api\cron\revenue-report\route.ts
+- [[GET()_7]] - code - app\api\email\smtp\route.ts
+- [[GET()_12]] - code - app\api\notifications\subscriptions\route.ts
+- [[GET()_8]] - code - app\api\email\templates\route.ts
+- [[POST()_4]] - code - app\api\email\smtp\route.ts
+- [[POST()_9]] - code - app\api\notifications\subscriptions\route.ts
+- [[POST()_5]] - code - app\api\email\templates\route.ts
+- [[POST()_6]] - code - app\api\email\test\route.ts
+- [[ReportsHubPage()]] - code - app\dashboard\reports\page.tsx
+- [[RevenueForecastPage()]] - code - app\dashboard\revenue-forecast\page.tsx
+- [[RevenueSnapshotPage()]] - code - app\report\revenue-snapshot\page.tsx
+- [[SalesReportClient()]] - code - app\dashboard\reports\sales\sales-report-client.tsx
+- [[addCandidates()]] - code - app\dashboard\settings\email\_components\notification-rules.tsx
+- [[addCcEmail()]] - code - app\dashboard\settings\email\_components\template-editor.tsx
+- [[addCondition()]] - code - app\dashboard\settings\email\_components\notification-rules.tsx
+- [[addRecipientsWithValidation()]] - code - lib\email-notification-rule-form-utils.ts
+- [[addVariable()]] - code - app\dashboard\settings\email\_components\template-editor.tsx
+- [[applyPreset()]] - code - app\dashboard\settings\email\_components\smtp-settings-form.tsx
+- [[applyStarterTemplate()]] - code - app\dashboard\settings\email\_components\template-editor.tsx
+- [[clamp()_1]] - code - app\dashboard\reports\page.tsx
+- [[clearEmailLogs()]] - code - app\actions\email.ts
+- [[cn()_28]] - code - lib\utils.ts
+- [[commitQuery()]] - code - app\dashboard\settings\email\_components\notification-rules.tsx
+- [[configureWebPush()]] - code - lib\push-notifications.ts
+- [[createActionButton()]] - code - lib\email-template-registry.ts
+- [[createEmailNotificationRule()]] - code - app\actions\email.ts
+- [[createEmailShell()]] - code - lib\email-template-registry.ts
+- [[createEmailTemplate()]] - code - app\actions\email.ts
+- [[createStructuredTemplate()]] - code - lib\email-template-registry.ts
+- [[createSummaryTable()]] - code - lib\email-template-registry.ts
+- [[createTextBlock()]] - code - lib\email-template-registry.ts
+- [[createTransporter()]] - code - lib\email.ts
+- [[dashboard-overview.ts]] - code - lib\server\dashboard-overview.ts
+- [[dashboard-revenue-logic.ts]] - code - app\actions\dashboard-revenue-logic.ts
+- [[dashboard-revenue.ts]] - code - app\actions\dashboard-revenue.ts
+- [[dashboard-revenue.ts_1]] - code - lib\server\dashboard-revenue.ts
+- [[deleteEmailNotificationRule()]] - code - app\actions\email.ts
+- [[deleteEmailTemplate()]] - code - app\actions\email.ts
+- [[dispatchTemplateMessage()]] - code - lib\email.ts
+- [[email-logs.tsx]] - code - app\dashboard\settings\email\_components\email-logs.tsx
+- [[email-notification-rule-form-utils.ts]] - code - lib\email-notification-rule-form-utils.ts
+- [[email-schema.ts]] - code - lib\email-schema.ts
+- [[email-template-registry.ts]] - code - lib\email-template-registry.ts
+- [[email.ts]] - code - app\actions\email.ts
+- [[email.ts_2]] - code - lib\email.ts
+- [[ensureEmailManagementSchema()]] - code - lib\email-schema.ts
+- [[ensureSystemEmailTemplates()]] - code - lib\email-template-registry.ts
+- [[extractActionUrlFromContent()]] - code - lib\push-notifications.ts
+- [[extractPushBody()]] - code - lib\push-notifications.ts
+- [[fetchAllSalesRevenueData()]] - code - app\actions\dashboard-revenue-logic.ts
+- [[fetchDashboardInventory()]] - code - app\actions\dashboard-revenue-logic.ts
+- [[fetchDashboardRevenueForecast()]] - code - app\actions\dashboard-revenue-logic.ts
+- [[fetchRevenueReportConfig()]] - code - app\actions\dashboard-revenue-logic.ts
+- [[findRecipientUserIdsByEmails()]] - code - lib\push-notifications.ts
+- [[formatCurrency()]] - code - app\actions\inventory-procurement.ts
+- [[formatCurrency()_38]] - code - lib\utils.ts
+- [[formatDateTime()_6]] - code - app\dashboard\settings\email\_components\email-logs.tsx
+- [[formatDaysToStockout()]] - code - app\actions\inventory-procurement.ts
+- [[generateRevenueReportPdf()]] - code - lib\revenue-report-pdf.ts
+- [[getActiveSmtpConfig()]] - code - lib\email.ts
+- [[getAllSalesRevenueData()]] - code - app\actions\dashboard-revenue.ts
+- [[getAllSalesRevenueDataForPage()]] - code - lib\server\dashboard-revenue.ts
+- [[getDashboardInventory()]] - code - app\actions\dashboard-revenue.ts
+- [[getDashboardInventoryData()]] - code - lib\server\dashboard-revenue.ts
+- [[getDashboardRevenueForecast()]] - code - app\actions\dashboard-revenue.ts
+- [[getDashboardRevenueForecastData()]] - code - lib\server\dashboard-revenue.ts
+- [[getDashboardStats()_1]] - code - lib\server\dashboard-overview.ts
+- [[getDefaultDeliveryChannelsForTemplate()]] - code - lib\email-template-registry.ts
+- [[getEmailLogs()]] - code - app\actions\email.ts
+- [[getEmailNotificationRuleLogs()]] - code - app\actions\email.ts
+- [[getEmailNotificationRules()]] - code - app\actions\email.ts
+- [[getEmailTemplate()]] - code - app\actions\email.ts
+- [[getEmailTemplate()_1]] - code - lib\email.ts
+- [[getEmailTemplateByCode()]] - code - lib\email.ts
+- [[getEmailTemplates()]] - code - app\actions\email.ts
+- [[getEmailTemplates()_1]] - code - app\actions\marketing-campaigns.ts
+- [[getPct()]] - code - app\actions\dashboard-revenue.ts
+- [[getPeriodBounds()]] - code - app\actions\dashboard-revenue-logic.ts
+- [[getPushPublicKey()]] - code - lib\push-notifications.ts
+- [[getRangeBounds()_2]] - code - lib\server\dashboard-overview.ts
+- [[getRevenueReportConfig()]] - code - app\actions\dashboard-revenue.ts
+- [[getSmtpSettings()]] - code - app\actions\email.ts
+- [[getSystemEmailTemplateDefinition()]] - code - lib\email-template-registry.ts
+- [[getVapidConfig()]] - code - lib\push-notifications.ts
+- [[handleClearLogs()]] - code - app\dashboard\settings\email\_components\email-logs.tsx
+- [[handleDelete()_20]] - code - app\dashboard\settings\email\_components\notification-rules.tsx
+- [[handleDelete()_21]] - code - app\dashboard\settings\email\_components\template-list.tsx
+- [[handleDuplicate()_2]] - code - app\dashboard\settings\email\_components\template-list.tsx
+- [[handleOpenLogs()]] - code - app\dashboard\settings\email\_components\notification-rules.tsx
+- [[handleSave()_8]] - code - app\dashboard\settings\email\_components\revenue-report-settings.tsx
+- [[handleSave()_9]] - code - app\dashboard\settings\email\_components\template-list.tsx
+- [[handleTest()_1]] - code - app\dashboard\settings\email\_components\revenue-report-settings.tsx
+- [[handleTest()_2]] - code - app\dashboard\settings\email\_components\smtp-settings-form.tsx
+- [[handleToggle()_1]] - code - app\dashboard\settings\email\_components\notification-rules.tsx
+- [[handleToggle()_2]] - code - app\dashboard\settings\email\_components\template-list.tsx
+- [[inventory-procurement.ts]] - code - app\actions\inventory-procurement.ts
+- [[isPushConfigured()]] - code - lib\push-notifications.ts
+- [[isRevenueReportTemplateManagedByAutomation()]] - code - lib\revenue-report-config.ts
+- [[isValidEmailFormat()]] - code - lib\email-notification-rule-form-utils.ts
+- [[load()_3]] - code - app\dashboard\settings\email\_components\revenue-report-settings.tsx
+- [[mergeRevenueTypeTotals()]] - code - lib\revenue-type.ts
+- [[navbar-theme-form.tsx]] - code - app\dashboard\settings\navbar\_components\navbar-theme-form.tsx
+- [[normalizeDeliveryChannels()]] - code - lib\email.ts
+- [[normalizeEmailList()_1]] - code - lib\email.ts
+- [[normalizeRecipientList()]] - code - lib\email-notification-rule-form-utils.ts
+- [[normalizeRecipientRoleName()]] - code - lib\revenue-report-config.ts
+- [[normalizeRecipientRoleNames()]] - code - lib\revenue-report-config.ts
+- [[normalizeRevenueReportConfig()]] - code - lib\revenue-report-config.ts
+- [[normalizeRevenueType()]] - code - lib\revenue-type.ts
+- [[normalizeScheduleTime()]] - code - lib\revenue-report-config.ts
+- [[normalizeScheduleType()]] - code - lib\revenue-report-config.ts
+- [[normalizeScheduleValue()]] - code - lib\revenue-report-config.ts
+- [[normalizeSystemTemplateData()]] - code - lib\email.ts
+- [[notification-rules.tsx]] - code - app\dashboard\settings\email\_components\notification-rules.tsx
+- [[onReset()_1]] - code - app\dashboard\settings\navbar\_components\navbar-theme-form.tsx
+- [[onSave()_1]] - code - app\dashboard\settings\navbar\_components\navbar-theme-form.tsx
+- [[onSaved()]] - code - app\dashboard\settings\email\_components\notification-rules.tsx
+- [[onSubmit()_21]] - code - app\dashboard\settings\email\_components\notification-rules.tsx
+- [[onSubmit()_22]] - code - app\dashboard\settings\email\_components\smtp-settings-form.tsx
+- [[onSubmit()_23]] - code - app\dashboard\settings\email\_components\template-editor.tsx
+- [[openCreate()]] - code - app\dashboard\settings\email\_components\template-list.tsx
+- [[openEdit()]] - code - app\dashboard\settings\email\_components\template-list.tsx
+- [[page.tsx_1]] - code - app\dashboard\page.tsx
+- [[page.tsx_73]] - code - app\dashboard\reports\page.tsx
+- [[page.tsx_85]] - code - app\dashboard\revenue-forecast\page.tsx
+- [[page.tsx_104]] - code - app\dashboard\settings\email\page.tsx
+- [[page.tsx_132]] - code - app\report\revenue-snapshot\page.tsx
+- [[push-notifications.ts]] - code - lib\push-notifications.ts
+- [[queueSystemTemplatedEmailLog()]] - code - lib\email.ts
+- [[randomId()]] - code - app\dashboard\settings\email\_components\notification-rules.tsx
+- [[removeCcEmail()]] - code - app\dashboard\settings\email\_components\template-editor.tsx
+- [[removeCondition()]] - code - app\dashboard\settings\email\_components\notification-rules.tsx
+- [[removeEmail()_1]] - code - app\dashboard\settings\email\_components\notification-rules.tsx
+- [[removePushSubscription()]] - code - lib\push-notifications.ts
+- [[removeVariable()]] - code - app\dashboard\settings\email\_components\template-editor.tsx
+- [[renderTable()]] - code - app\dashboard\settings\email\_components\email-logs.tsx
+- [[replaceTemplateVariables()]] - code - lib\email.ts
+- [[resolveActionUrlFromTemplateData()]] - code - lib\email.ts
+- [[resolveChromiumExecutablePath()]] - code - lib\revenue-report-pdf.ts
+- [[resolveUserEmailsFromRolesAndIds()]] - code - lib\email.ts
+- [[revenue-report-config.ts]] - code - lib\revenue-report-config.ts
+- [[revenue-report-pdf.ts]] - code - lib\revenue-report-pdf.ts
+- [[revenue-report-settings.tsx]] - code - app\dashboard\settings\email\_components\revenue-report-settings.tsx
+- [[revenue-type.ts]] - code - lib\revenue-type.ts
+- [[route.ts_8]] - code - app\api\cron\revenue-report\route.ts
+- [[route.ts_12]] - code - app\api\email\smtp\route.ts
+- [[route.ts_13]] - code - app\api\email\templates\route.ts
+- [[route.ts_14]] - code - app\api\email\test\route.ts
+- [[route.ts_19]] - code - app\api\notifications\subscriptions\route.ts
+- [[sales-report-client.tsx]] - code - app\dashboard\reports\sales\sales-report-client.tsx
+- [[sanitizeTemplateRecipientSettings()]] - code - app\actions\email.ts
+- [[saveRevenueReportConfig()]] - code - app\actions\dashboard-revenue.ts
+- [[saveSmtpSettings()]] - code - app\actions\email.ts
+- [[searchRecipientEmails()]] - code - app\actions\email.ts
+- [[sendEmail()]] - code - lib\email.ts
+- [[sendInventoryProcurementRequest()]] - code - app\actions\inventory-procurement.ts
+- [[sendLoggedNotificationMessage()]] - code - lib\email.ts
+- [[sendMagicLinkEmail()]] - code - lib\email.ts
+- [[sendManualRevenueReport()]] - code - app\actions\dashboard-revenue.ts
+- [[sendNotificationEmail()]] - code - lib\email.ts
+- [[sendPasswordResetEmail()]] - code - lib\email.ts
+- [[sendPushNotificationToUsers()]] - code - lib\push-notifications.ts
+- [[sendSystemTemplatedEmailByCode()]] - code - lib\email.ts
+- [[sendTemplatedEmail()]] - code - lib\email.ts
+- [[serializeEmailList()]] - code - lib\email.ts
+- [[smtp-settings-form.tsx]] - code - app\dashboard\settings\email\_components\smtp-settings-form.tsx
+- [[splitEmailCandidates()]] - code - lib\email-notification-rule-form-utils.ts
+- [[syncEmailManagementSchema()]] - code - lib\email-schema.ts
+- [[template-editor.tsx]] - code - app\dashboard\settings\email\_components\template-editor.tsx
+- [[template-list.tsx]] - code - app\dashboard\settings\email\_components\template-list.tsx
+- [[test()]] - code - test-manual-report.ts
+- [[test()_1]] - code - test-pdf.ts
+- [[test-manual-report.ts]] - code - test-manual-report.ts
+- [[test-pdf.ts]] - code - test-pdf.ts
+- [[testSmtpConnection()]] - code - app\actions\email.ts
+- [[toggleChannel()]] - code - app\dashboard\settings\email\_components\template-editor.tsx
+- [[toggleEmailNotificationRule()]] - code - app\actions\email.ts
+- [[toggleEmailTemplate()]] - code - app\actions\email.ts
+- [[toggleRecipientUser()]] - code - app\dashboard\settings\email\_components\template-editor.tsx
+- [[toggleRole()]] - code - app\dashboard\settings\email\_components\template-editor.tsx
+- [[updateEmailLog()]] - code - lib\email.ts
+- [[updateEmailNotificationRule()]] - code - app\actions\email.ts
+- [[updateEmailTemplate()]] - code - app\actions\email.ts
+- [[upsertPushSubscription()]] - code - lib\push-notifications.ts
+- [[utils.ts_1]] - code - lib\utils.ts
+- [[validateConditionDrafts()]] - code - lib\email-notification-rule-form-utils.ts
+- [[writeEmailLog()]] - code - lib\email.ts
+- [[writePushNotificationLog()]] - code - lib\email.ts
+
+## Live Query (requires Dataview plugin)
+
+```dataview
+TABLE source_file, type FROM #community/sendSystemTemplatedEmailByCode()
+SORT file.name ASC
+```
+
+## Connections to other communities
+- 26 edges to [[_COMMUNITY_getAuthenticatedSession()]]
+- 4 edges to [[_COMMUNITY_getCurrentUserId()]]
+- 3 edges to [[_COMMUNITY_createGoodReceiveManual()]]
+- 3 edges to [[_COMMUNITY_generateMarketingMagicAnalysis()]]
+- 3 edges to [[_COMMUNITY_createDelivery()]]
+- 2 edges to [[_COMMUNITY_GET()]]
+- 2 edges to [[_COMMUNITY_Boolean()]]
+- 1 edge to [[_COMMUNITY_createSalesOrder()]]
+- 1 edge to [[_COMMUNITY_getOpnameAuthSession()]]
+- 1 edge to [[_COMMUNITY_ensureCosmeticTiresTable()]]
+
+## Top bridge nodes
+- [[dispatchTemplateMessage()]] - degree 13, connects to 1 community
+- [[sendManualRevenueReport()]] - degree 12, connects to 1 community
+- [[GET()_5]] - degree 10, connects to 1 community
+- [[replaceTemplateVariables()]] - degree 6, connects to 1 community
+- [[getRevenueReportConfig()]] - degree 5, connects to 1 community

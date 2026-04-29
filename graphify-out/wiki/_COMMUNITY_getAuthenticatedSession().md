@@ -1,0 +1,340 @@
+---
+type: community
+cohesion: 0.01
+members: 262
+---
+
+# getAuthenticatedSession()
+
+**Cohesion:** 0.01 - loosely connected
+**Members:** 262 nodes
+
+## Members
+- [[AccountPage()]] - code - app\dashboard\account\page.tsx
+- [[ApprovalPage()]] - code - app\dashboard\approvals\page.tsx
+- [[ApprovalRequestPdfPage()]] - code - app\dashboard\approvals\[requestId]\pdf\page.tsx
+- [[ApprovalSettingsPage()]] - code - app\dashboard\settings\approvals\page.tsx
+- [[CanvasOverlay()]] - code - app\dashboard\settings\approvals\_components\approval-workflow-client.tsx
+- [[CostFuelPage()]] - code - app\dashboard\cost-fuel\page.tsx
+- [[FormControl()]] - code - components\ui\form.tsx
+- [[FormDescription()]] - code - components\ui\form.tsx
+- [[FormMessage()]] - code - components\ui\form.tsx
+- [[InboxTab()]] - code - app\dashboard\approvals\_components\inbox-tab.tsx
+- [[OperationalActivityLogPage()]] - code - app\dashboard\admin\operational-activity-log\page.tsx
+- [[POST()_3]] - code - app\api\draft-so\route.ts
+- [[POST()]] - code - app\api\approvals\events\route.ts
+- [[PUT()]] - code - app\api\draft-so\route.ts
+- [[QuotationAnalysisPage()]] - code - app\dashboard\quotation-analysis\page.tsx
+- [[R49DashboardClient()]] - code - app\dashboard\r49-dashboard\_components\r49-dashboard-client.tsx
+- [[SessionsPage()]] - code - app\dashboard\security\sessions\page.tsx
+- [[String()]] - code - app\dashboard\deliveries\_components\delivery-table.tsx
+- [[WorkflowCanvasPage()]] - code - app\dashboard\settings\approvals\[id]\canvas\page.tsx
+- [[accuracy-trend-chart.tsx]] - code - app\dashboard\inventory-ml\_components\accuracy-trend-chart.tsx
+- [[actionColor()_1]] - code - app\dashboard\security\audit-logs\_components\audit-log-table.tsx
+- [[actionColor()]] - code - app\dashboard\admin\operational-activity-log\_components\operational-activity-log-table.tsx
+- [[add-user-dialog.tsx]] - code - app\dashboard\admin\users\_components\add-user-dialog.tsx
+- [[addWorkflowStep()]] - code - app\actions\approval.ts
+- [[adminResetPassword()]] - code - app\actions\users.ts
+- [[applyFilters()_1]] - code - app\dashboard\security\audit-logs\_components\audit-log-table.tsx
+- [[applyFilters()]] - code - app\dashboard\admin\operational-activity-log\_components\operational-activity-log-table.tsx
+- [[approval-workflow-client.tsx]] - code - app\dashboard\settings\approvals\_components\approval-workflow-client.tsx
+- [[approval.ts]] - code - app\actions\approval.ts
+- [[audit-log-table.tsx]] - code - app\dashboard\security\audit-logs\_components\audit-log-table.tsx
+- [[banSecurityUser()]] - code - app\actions\security.ts
+- [[buildFormOptionFromRoute()]] - code - app\actions\approval.ts
+- [[bulkCreateSecurityUsers()]] - code - app\actions\security.ts
+- [[bulkDeleteUsers()]] - code - app\actions\users.ts
+- [[bulkUpdateUserRole()]] - code - app\actions\users.ts
+- [[changePassword()]] - code - app\actions\users.ts
+- [[clearFilters()_1]] - code - app\dashboard\security\audit-logs\_components\audit-log-table.tsx
+- [[clearFilters()]] - code - app\dashboard\admin\operational-activity-log\_components\operational-activity-log-table.tsx
+- [[cn()_18]] - code - components\ui\form.tsx
+- [[collectDashboardRoutes()]] - code - app\actions\approval.ts
+- [[collectModuleFiles()]] - code - app\actions\approval.ts
+- [[compareByOperator()]] - code - app\actions\approval.ts
+- [[compareStrings()]] - code - lib\email-notification-rules.ts
+- [[cost-fuel.ts]] - code - app\actions\cost-fuel.ts
+- [[createApprovalDefinition()]] - code - app\actions\approval.ts
+- [[createApprovalDefinitionVoid()]] - code - app\dashboard\settings\approvals\page.tsx
+- [[createApprovalOrgNode()]] - code - app\actions\approval.ts
+- [[createApprovalOrgStructure()]] - code - app\actions\approval.ts
+- [[createApprovalRequest()]] - code - app\actions\approval.ts
+- [[createApprovalRequestCore()]] - code - app\actions\approval.ts
+- [[createApprovalRequestForEntity()]] - code - app\actions\approval.ts
+- [[createApprovalStep()]] - code - app\actions\approval.ts
+- [[createAssignmentsForStep()]] - code - app\actions\approval.ts
+- [[createEmailContact()]] - code - app\actions\email-contacts.ts
+- [[createEmailGroup()]] - code - app\actions\email-contacts.ts
+- [[createSecurityRole()]] - code - app\actions\security.ts
+- [[createSecurityUser()]] - code - app\actions\security.ts
+- [[createTestQuotation()]] - code - scripts\test-approval-e2e.ts
+- [[createTestQuotation()_1]] - code - scripts\test-approval-reject-email.ts
+- [[createUser()]] - code - app\actions\users.ts
+- [[createWorkflowDefinition()]] - code - scripts\test-approval-e2e.ts
+- [[createWorkflowDefinition()_1]] - code - scripts\test-approval-reject-email.ts
+- [[customer-selector.tsx]] - code - app\dashboard\customer-360\_components\customer-selector.tsx
+- [[deleteApprovalDefinition()]] - code - app\actions\approval.ts
+- [[deleteApprovalOrgNode()]] - code - app\actions\approval.ts
+- [[deleteApprovalOrgStructure()]] - code - app\actions\approval.ts
+- [[deleteEmailContact()]] - code - app\actions\email-contacts.ts
+- [[deleteEmailGroup()]] - code - app\actions\email-contacts.ts
+- [[deletePriceList()]] - code - app\actions\price-management.ts
+- [[deletePriceListItem()]] - code - app\actions\price-management.ts
+- [[deleteSecurityRole()]] - code - app\actions\security.ts
+- [[deleteSecurityUser()]] - code - app\actions\security.ts
+- [[deleteUser()]] - code - app\actions\users.ts
+- [[email-contacts.ts]] - code - app\actions\email-contacts.ts
+- [[email-notification-rules.ts]] - code - lib\email-notification-rules.ts
+- [[ensureFormRegistry()]] - code - scripts\test-approval-e2e.ts
+- [[ensureFormRegistry()_2]] - code - scripts\test-approval-reject-email.ts
+- [[ensureNotificationTemplate()]] - code - scripts\test-approval-reject-email.ts
+- [[ensureScriptUser()]] - code - scripts\test-approval-e2e.ts
+- [[ensureScriptUser()_1]] - code - scripts\test-approval-reject-email.ts
+- [[ensureSecurityPermissions()]] - code - app\actions\security.ts
+- [[evaluateCondition()]] - code - lib\email-notification-rules.ts
+- [[evaluateConditionForStep()]] - code - app\actions\approval.ts
+- [[evaluateRuleSnapshot()]] - code - lib\email-notification-rules.ts
+- [[fmt()_2]] - code - app\dashboard\revenue-forecast\_components\sales-revenue-table.tsx
+- [[form.tsx]] - code - components\ui\form.tsx
+- [[formatCompactCurrency()]] - code - app\dashboard\procurement-next\_components\procurement-next-client.tsx
+- [[formatCurrency()_24]] - code - app\dashboard\sales-orders\_components\proforma-invoice-preview.tsx
+- [[formatDate()_19]] - code - app\dashboard\sales-orders\_components\proforma-invoice-preview.tsx
+- [[formatDateCell()]] - code - app\dashboard\revenue-forecast\_components\sales-revenue-table.tsx
+- [[formatDaysCover()]] - code - app\dashboard\procurement-next\_components\procurement-next-client.tsx
+- [[formatMonth()]] - code - app\dashboard\inventory-ml\_components\accuracy-trend-chart.tsx
+- [[formatNumber()_4]] - code - app\dashboard\procurement-next\_components\procurement-next-client.tsx
+- [[generate()]] - code - app\dashboard\sales-orders\_components\sales-order-pdf-preview.tsx
+- [[getAccuracyTrend()]] - code - app\actions\inventory-ml.ts
+- [[getActiveSessions()]] - code - app\actions\security.ts
+- [[getAllSecurityPermissions()]] - code - app\actions\security.ts
+- [[getApprovalDefinitions()]] - code - app\actions\approval.ts
+- [[getApprovalFormFieldOptions()]] - code - app\actions\approval.ts
+- [[getApprovalFormRegistry()]] - code - app\actions\approval.ts
+- [[getApprovalInbox()]] - code - app\actions\approval.ts
+- [[getApprovalMatrixImports()]] - code - app\actions\approval.ts
+- [[getApprovalOrgStructures()]] - code - app\actions\approval.ts
+- [[getApprovalOrgUsers()]] - code - app\actions\approval.ts
+- [[getApprovalReports()]] - code - app\actions\approval.ts
+- [[getApprovalRequestDetail()]] - code - app\actions\approval.ts
+- [[getApprovalRequestsByDefinition()]] - code - app\actions\approval.ts
+- [[getApprovalStatusList()]] - code - app\actions\approval.ts
+- [[getApprovalTestUtils()]] - code - app\actions\approval.ts
+- [[getApprovalUsersForSelect()]] - code - app\actions\approval.ts
+- [[getAuditLogs()_1]] - code - app\actions\security.ts
+- [[getAuthenticatedSession()]] - code - lib\rbac.ts
+- [[getCostFuelMasterData()]] - code - app\actions\cost-fuel.ts
+- [[getDefaultR49Filters()]] - code - app\dashboard\r49-dashboard\_components\r49-dashboard-client.tsx
+- [[getEffectivePrice()]] - code - app\actions\price-management.ts
+- [[getEmailContacts()]] - code - app\actions\email-contacts.ts
+- [[getEmailGroups()]] - code - app\actions\email-contacts.ts
+- [[getMarginAlerts()]] - code - app\actions\price-management.ts
+- [[getNodeKind()]] - code - app\actions\approval.ts
+- [[getOperationalActivityLogs()]] - code - app\actions\security.ts
+- [[getOptionalTextField()]] - code - app\dashboard\sales-orders\_components\proforma-invoice-preview.tsx
+- [[getPlatformCustomers()]] - code - app\actions\email-contacts.ts
+- [[getPlatformUsers()]] - code - app\actions\email-contacts.ts
+- [[getPriceList()]] - code - app\actions\price-management.ts
+- [[getPriceLists()]] - code - app\actions\price-management.ts
+- [[getProductsForPricing()]] - code - app\actions\price-management.ts
+- [[getQuotationAnalysis()]] - code - app\actions\quotation-analysis.ts
+- [[getSecurityRoles()]] - code - app\actions\security.ts
+- [[getSecurityStats()]] - code - app\actions\security.ts
+- [[getSecurityUsers()]] - code - app\actions\security.ts
+- [[getStepDueAt()]] - code - app\actions\approval.ts
+- [[getSubWorkflowOptions()]] - code - app\actions\approval.ts
+- [[getTransitions()]] - code - app\actions\approval.ts
+- [[getValueByPath()]] - code - app\actions\approval.ts
+- [[getWebsiteFormFieldOptions()]] - code - app\actions\approval.ts
+- [[getWebsiteFormOptions()]] - code - app\actions\approval.ts
+- [[goToPage()_1]] - code - app\dashboard\security\audit-logs\_components\audit-log-table.tsx
+- [[goToPage()]] - code - app\dashboard\admin\operational-activity-log\_components\operational-activity-log-table.tsx
+- [[handleDelete()_19]] - code - app\dashboard\settings\approvals\_components\approval-workflow-client.tsx
+- [[handleExportExcel()_2]] - code - app\dashboard\revenue-forecast\_components\sales-revenue-table.tsx
+- [[handleFileChange()]] - code - app\dashboard\account\_components\profile-form.tsx
+- [[handleReset()_1]] - code - app\dashboard\inventory-ml\settings\_components\ml-settings-client.tsx
+- [[handleRevoke()]] - code - app\dashboard\security\sessions\_components\sessions-table.tsx
+- [[handleRevokeAll()]] - code - app\dashboard\security\sessions\_components\sessions-table.tsx
+- [[handleSave()_6]] - code - app\dashboard\inventory-ml\settings\_components\ml-settings-client.tsx
+- [[handleSelect()_2]] - code - app\dashboard\customer-360\_components\customer-selector.tsx
+- [[handleStatusChange()_2]] - code - app\dashboard\settings\approvals\_components\approval-workflow-client.tsx
+- [[handleSubmit()]] - code - app\dashboard\admin\users\_components\add-user-dialog.tsx
+- [[handleSubmit()_1]] - code - app\dashboard\admin\users\_components\import-users-dialog.tsx
+- [[handleTest()]] - code - app\dashboard\inventory-ml\settings\_components\ml-settings-client.tsx
+- [[import-users-dialog.tsx]] - code - app\dashboard\admin\users\_components\import-users-dialog.tsx
+- [[importApprovalMatrix()]] - code - app\actions\approval.ts
+- [[importEmailContacts()]] - code - app\actions\email-contacts.ts
+- [[importUsers()]] - code - app\actions\users.ts
+- [[inbox-tab.tsx]] - code - app\dashboard\approvals\_components\inbox-tab.tsx
+- [[inferDataType()]] - code - app\actions\approval.ts
+- [[isEmptyValue()]] - code - app\actions\approval.ts
+- [[isEmptyValue()_1]] - code - lib\email-notification-rules.ts
+- [[load()_1]] - code - app\dashboard\marketing\campaigns\_components\recipient-select.tsx
+- [[loadTrendData()]] - code - app\dashboard\inventory-ml\_components\accuracy-trend-chart.tsx
+- [[main()_110]] - code - scripts\seed-approval-org-sample.ts
+- [[main()_116]] - code - scripts\test-admin-reset.ts
+- [[main()_117]] - code - scripts\test-approval-e2e.ts
+- [[main()_119]] - code - scripts\test-approval-reject-email.ts
+- [[ml-settings-client.tsx]] - code - app\dashboard\inventory-ml\settings\_components\ml-settings-client.tsx
+- [[nodeKindToStepType()]] - code - app\actions\approval.ts
+- [[normalizeComparisonOperator()]] - code - app\actions\approval.ts
+- [[normalizeContactCategory()]] - code - app\actions\email-contacts.ts
+- [[normalizeDataType()]] - code - lib\email-notification-rules.ts
+- [[normalizeEmailList()]] - code - lib\email-notification-rules.ts
+- [[normalizeMatrixRow()]] - code - app\actions\approval.ts
+- [[normalizeModuleRoute()]] - code - app\actions\approval.ts
+- [[normalizeSloc()_1]] - code - app\dashboard\inventory\_components\stock-comparison.tsx
+- [[onSubmit()]] - code - app\dashboard\account\_components\profile-form.tsx
+- [[operational-activity-log-table.tsx]] - code - app\dashboard\admin\operational-activity-log\_components\operational-activity-log-table.tsx
+- [[page.tsx_3]] - code - app\dashboard\account\page.tsx
+- [[page.tsx_4]] - code - app\dashboard\admin\operational-activity-log\page.tsx
+- [[page.tsx_7]] - code - app\dashboard\approvals\page.tsx
+- [[page.tsx_10]] - code - app\dashboard\approvals\[requestId]\pdf\page.tsx
+- [[page.tsx_19]] - code - app\dashboard\cost-fuel\page.tsx
+- [[page.tsx_67]] - code - app\dashboard\quotation-analysis\page.tsx
+- [[page.tsx_99]] - code - app\dashboard\security\sessions\page.tsx
+- [[page.tsx_103]] - code - app\dashboard\settings\approvals\[id]\canvas\page.tsx
+- [[page.tsx_102]] - code - app\dashboard\settings\approvals\page.tsx
+- [[parseBoolean()]] - code - lib\email-notification-rules.ts
+- [[parseDate()_1]] - code - lib\email-notification-rules.ts
+- [[parseDevice()]] - code - app\dashboard\security\sessions\_components\sessions-table.tsx
+- [[parseMatrixFile()]] - code - app\actions\approval.ts
+- [[parseNumber()_3]] - code - lib\email-notification-rules.ts
+- [[parseRequiredKeys()]] - code - app\actions\approval.ts
+- [[pickFieldMetaFromSource()]] - code - app\actions\approval.ts
+- [[pickSnapshotValue()]] - code - lib\email-notification-rules.ts
+- [[price-management.ts]] - code - app\actions\price-management.ts
+- [[processEmailNotificationRulesForSnapshot()]] - code - lib\email-notification-rules.ts
+- [[procurement-next-client.tsx]] - code - app\dashboard\procurement-next\_components\procurement-next-client.tsx
+- [[profile-form.tsx]] - code - app\dashboard\account\_components\profile-form.tsx
+- [[proforma-invoice-preview.tsx]] - code - app\dashboard\sales-orders\_components\proforma-invoice-preview.tsx
+- [[quotation-analysis.ts]] - code - app\actions\quotation-analysis.ts
+- [[r49-dashboard-client.tsx]] - code - app\dashboard\r49-dashboard\_components\r49-dashboard-client.tsx
+- [[refresh()]] - code - app\dashboard\security\sessions\_components\sessions-table.tsx
+- [[registerApprovalForm()]] - code - app\actions\approval.ts
+- [[registerApprovalFormVoid()]] - code - app\dashboard\settings\approvals\page.tsx
+- [[reorderWorkflowSteps()]] - code - app\actions\approval.ts
+- [[resetForm()]] - code - app\dashboard\admin\users\_components\add-user-dialog.tsx
+- [[resetMLSettings()]] - code - app\actions\inventory-ml.ts
+- [[resolveAssigneeIds()]] - code - app\actions\approval.ts
+- [[resolveFirstActionableStep()]] - code - app\actions\approval.ts
+- [[resolveNextStepOrderFromGraph()]] - code - app\actions\approval.ts
+- [[resolveSafeDashboardModuleDir()]] - code - app\actions\approval.ts
+- [[revertApprovalRequest()]] - code - app\actions\approval.ts
+- [[revokeAllOtherSessions()]] - code - app\actions\security.ts
+- [[revokeSession()]] - code - app\actions\security.ts
+- [[route.ts]] - code - app\api\approvals\events\route.ts
+- [[route.ts_11]] - code - app\api\draft-so\route.ts
+- [[runApprovalSlaEscalationJob()]] - code - app\actions\approval.ts
+- [[safeRevalidatePath()]] - code - app\actions\approval.ts
+- [[sales-order-pdf-preview.tsx]] - code - app\dashboard\sales-orders\_components\sales-order-pdf-preview.tsx
+- [[sales-revenue-table.tsx]] - code - app\dashboard\revenue-forecast\_components\sales-revenue-table.tsx
+- [[saveApprovalMatrixBuilder()]] - code - app\actions\approval.ts
+- [[saveWorkflowSteps()]] - code - app\actions\approval.ts
+- [[scanFormFieldOptionsByModulePath()]] - code - app\actions\approval.ts
+- [[security.ts]] - code - app\actions\security.ts
+- [[seed-approval-org-sample.ts]] - code - scripts\seed-approval-org-sample.ts
+- [[seedApprovalOrgSampleData()]] - code - app\actions\approval.ts
+- [[sessions-table.tsx]] - code - app\dashboard\security\sessions\_components\sessions-table.tsx
+- [[setUserRole()]] - code - app\actions\users.ts
+- [[stepTypeToNodeKind()]] - code - app\actions\approval.ts
+- [[stock-comparison.tsx]] - code - app\dashboard\inventory\_components\stock-comparison.tsx
+- [[submitApprovalDecision()]] - code - app\actions\approval.ts
+- [[submitSettlement()]] - code - app\actions\cost-settlement.ts
+- [[tableLabel()]] - code - app\dashboard\admin\operational-activity-log\_components\operational-activity-log-table.tsx
+- [[test-admin-reset.ts]] - code - scripts\test-admin-reset.ts
+- [[test-approval-e2e.ts]] - code - scripts\test-approval-e2e.ts
+- [[test-approval-reject-email.ts]] - code - scripts\test-approval-reject-email.ts
+- [[test-better-auth-login.ts]] - code - scripts\test-better-auth-login.ts
+- [[testBetterAuthLogin()]] - code - scripts\test-better-auth-login.ts
+- [[testMLSettings()]] - code - app\actions\inventory-ml.ts
+- [[toTitleCase()]] - code - app\actions\approval.ts
+- [[toggleCustomerName()]] - code - app\dashboard\revenue-forecast\_components\sales-revenue-table.tsx
+- [[toggleSalesman()]] - code - app\dashboard\revenue-forecast\_components\sales-revenue-table.tsx
+- [[triggerApprovalRequestEvent()]] - code - app\actions\approval.ts
+- [[unbanSecurityUser()]] - code - app\actions\security.ts
+- [[updateApprovalDefinitionStatus()]] - code - app\actions\approval.ts
+- [[updateApprovalOrgNode()]] - code - app\actions\approval.ts
+- [[updateApprovalOrgStructure()]] - code - app\actions\approval.ts
+- [[updateEmailContact()]] - code - app\actions\email-contacts.ts
+- [[updateEmailGroup()]] - code - app\actions\email-contacts.ts
+- [[updateMLSettings()]] - code - app\actions\inventory-ml.ts
+- [[updateProfile()]] - code - app\actions\users.ts
+- [[updateSecurityRole()]] - code - app\actions\security.ts
+- [[updateSecurityUserAccessSettings()]] - code - app\actions\security.ts
+- [[updateSecurityUserProfile()]] - code - app\actions\security.ts
+- [[updateSecurityUserRole()]] - code - app\actions\security.ts
+- [[updateUserAccessSettings()]] - code - app\actions\users.ts
+- [[updateWorkflowStep()]] - code - app\actions\approval.ts
+- [[upsertFieldType()]] - code - app\actions\approval.ts
+- [[upsertPriceList()]] - code - app\actions\price-management.ts
+- [[upsertPriceListItem()]] - code - app\actions\price-management.ts
+- [[users.ts]] - code - app\actions\users.ts
+- [[validateOrgStructureNodes()]] - code - app\actions\approval.ts
+- [[validateStepConfig()]] - code - app\actions\approval.ts
+- [[writeAuditLog()]] - code - app\actions\security.ts
+
+## Live Query (requires Dataview plugin)
+
+```dataview
+TABLE source_file, type FROM #community/getAuthenticatedSession()
+SORT file.name ASC
+```
+
+## Connections to other communities
+- 38 edges to [[_COMMUNITY_getWarehouses()]]
+- 33 edges to [[_COMMUNITY_getSafetyStockAnalytics()]]
+- 26 edges to [[_COMMUNITY_sendSystemTemplatedEmailByCode()]]
+- 16 edges to [[_COMMUNITY_generateMarketingMagicAnalysis()]]
+- 14 edges to [[_COMMUNITY_checkPermission()]]
+- 10 edges to [[_COMMUNITY_getA2RCompetitionData()]]
+- 9 edges to [[_COMMUNITY_createDelivery()]]
+- 8 edges to [[_COMMUNITY_renderPdfToImages()]]
+- 7 edges to [[_COMMUNITY_createSalesOrder()]]
+- 7 edges to [[_COMMUNITY_createStockTransfer()]]
+- 6 edges to [[_COMMUNITY_Boolean()]]
+- 6 edges to [[_COMMUNITY_normalizeCodeValue()]]
+- 6 edges to [[_COMMUNITY_ensureCosmeticTiresTable()]]
+- 6 edges to [[_COMMUNITY_getMaterialVendorReference()]]
+- 5 edges to [[_COMMUNITY_readManagedUpload()]]
+- 5 edges to [[_COMMUNITY_ensureSlowMovingProductsTable()]]
+- 4 edges to [[_COMMUNITY_getSettlementSession()]]
+- 4 edges to [[_COMMUNITY_createGoodReceiveManual()]]
+- 4 edges to [[_COMMUNITY_getLogisticsMasterPrices()]]
+- 4 edges to [[_COMMUNITY_uploadFile()]]
+- 4 edges to [[_COMMUNITY_isStockBookingSchemaAvailable()]]
+- 4 edges to [[_COMMUNITY_extractStructuredFromDocument()]]
+- 3 edges to [[_COMMUNITY_GET()]]
+- 3 edges to [[_COMMUNITY_DeliveryCostRequestPage()]]
+- 3 edges to [[_COMMUNITY_buildForecastValues()]]
+- 3 edges to [[_COMMUNITY_buildRevenueMLForecast()]]
+- 3 edges to [[_COMMUNITY_getStockCardCatalogAction()]]
+- 2 edges to [[_COMMUNITY_validateComment()]]
+- 2 edges to [[_COMMUNITY_getCurrentUserId()]]
+- 2 edges to [[_COMMUNITY_getOpnameAuthSession()]]
+- 2 edges to [[_COMMUNITY_getPendingQuotationAttachments()]]
+- 2 edges to [[_COMMUNITY_buildSlides()]]
+- 2 edges to [[_COMMUNITY_runConditionBranchingTest()]]
+- 1 edge to [[_COMMUNITY_calculateBundlingOptimization()]]
+- 1 edge to [[_COMMUNITY_CoverLetterPage()]]
+- 1 edge to [[_COMMUNITY_fetchGoodReceiveFromSAP()]]
+- 1 edge to [[_COMMUNITY_getSalesHistory()]]
+- 1 edge to [[_COMMUNITY_getPriceHistory()]]
+- 1 edge to [[_COMMUNITY_getMonthlyScmReport()]]
+- 1 edge to [[_COMMUNITY_EprIntegrasiPage()]]
+- 1 edge to [[_COMMUNITY_tryAiMapping()]]
+- 1 edge to [[_COMMUNITY_escapeCsvValue()]]
+- 1 edge to [[_COMMUNITY_handleImport()]]
+- 1 edge to [[_COMMUNITY_buildVoucherHtml()]]
+- 1 edge to [[_COMMUNITY_buildPayload()]]
+- 1 edge to [[_COMMUNITY_addManual()]]
+- 1 edge to [[_COMMUNITY_isMissingServerActionError()]]
+- 1 edge to [[_COMMUNITY_onSuccess()]]
+- 1 edge to [[_COMMUNITY_normalizeValue()]]
+- 1 edge to [[_COMMUNITY_getGeneratedAvatarDataUri()]]
+
+## Top bridge nodes
+- [[submitSettlement()]] - degree 5, connects to 2 communities
+- [[load()_1]] - degree 5, connects to 2 communities
+- [[getAuthenticatedSession()]] - degree 226, connects to 1 community
+- [[users.ts]] - degree 11, connects to 1 community
+- [[price-management.ts]] - degree 10, connects to 1 community

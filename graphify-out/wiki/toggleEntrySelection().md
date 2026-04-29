@@ -1,0 +1,17 @@
+---
+source_file: "app\dashboard\epr-integrasi\epr-integrasi-client.tsx"
+type: "code"
+community: "getPendingQuotationAttachments()"
+location: "L270"
+tags:
+  - graphify/code
+  - graphify/EXTRACTED
+  - community/getPendingQuotationAttachments()
+---
+
+# toggleEntrySelection()
+
+## Connections
+- [[getPendingQuotationAttachments()]] - `calls` [EXTRACTED]
+
+#graphify/code #graphify/EXTRACTED #community/getPendingQuotationAttachments()

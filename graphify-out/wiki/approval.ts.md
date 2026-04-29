@@ -1,0 +1,87 @@
+---
+source_file: "app\actions\approval.ts"
+type: "code"
+community: "getAuthenticatedSession()"
+location: "L1"
+tags:
+  - graphify/code
+  - graphify/EXTRACTED
+  - community/getAuthenticatedSession()
+---
+
+# approval.ts
+
+## Connections
+- [[addWorkflowStep()]] - `contains` [EXTRACTED]
+- [[buildFormOptionFromRoute()]] - `contains` [EXTRACTED]
+- [[collectDashboardRoutes()]] - `contains` [EXTRACTED]
+- [[collectModuleFiles()]] - `contains` [EXTRACTED]
+- [[compareByOperator()]] - `contains` [EXTRACTED]
+- [[createApprovalDefinition()]] - `contains` [EXTRACTED]
+- [[createApprovalOrgNode()]] - `contains` [EXTRACTED]
+- [[createApprovalOrgStructure()]] - `contains` [EXTRACTED]
+- [[createApprovalRequest()]] - `contains` [EXTRACTED]
+- [[createApprovalRequestCore()]] - `contains` [EXTRACTED]
+- [[createApprovalRequestForEntity()]] - `contains` [EXTRACTED]
+- [[createApprovalStep()]] - `contains` [EXTRACTED]
+- [[createAssignmentsForStep()]] - `contains` [EXTRACTED]
+- [[deleteApprovalDefinition()]] - `contains` [EXTRACTED]
+- [[deleteApprovalOrgNode()]] - `contains` [EXTRACTED]
+- [[deleteApprovalOrgStructure()]] - `contains` [EXTRACTED]
+- [[evaluateConditionForStep()]] - `contains` [EXTRACTED]
+- [[getApprovalDefinitions()]] - `contains` [EXTRACTED]
+- [[getApprovalFormFieldOptions()]] - `contains` [EXTRACTED]
+- [[getApprovalFormRegistry()]] - `contains` [EXTRACTED]
+- [[getApprovalInbox()]] - `contains` [EXTRACTED]
+- [[getApprovalMatrixImports()]] - `contains` [EXTRACTED]
+- [[getApprovalOrgStructures()]] - `contains` [EXTRACTED]
+- [[getApprovalOrgUsers()]] - `contains` [EXTRACTED]
+- [[getApprovalReports()]] - `contains` [EXTRACTED]
+- [[getApprovalRequestDetail()]] - `contains` [EXTRACTED]
+- [[getApprovalRequestsByDefinition()]] - `contains` [EXTRACTED]
+- [[getApprovalStatusList()]] - `contains` [EXTRACTED]
+- [[getApprovalTestUtils()]] - `contains` [EXTRACTED]
+- [[getApprovalUsersForSelect()]] - `contains` [EXTRACTED]
+- [[getNodeKind()]] - `contains` [EXTRACTED]
+- [[getStepDueAt()]] - `contains` [EXTRACTED]
+- [[getSubWorkflowOptions()]] - `contains` [EXTRACTED]
+- [[getTransitions()]] - `contains` [EXTRACTED]
+- [[getValueByPath()]] - `contains` [EXTRACTED]
+- [[getWebsiteFormFieldOptions()]] - `contains` [EXTRACTED]
+- [[getWebsiteFormOptions()]] - `contains` [EXTRACTED]
+- [[importApprovalMatrix()]] - `contains` [EXTRACTED]
+- [[inferDataType()]] - `contains` [EXTRACTED]
+- [[isEmptyValue()]] - `contains` [EXTRACTED]
+- [[nodeKindToStepType()]] - `contains` [EXTRACTED]
+- [[normalizeComparisonOperator()]] - `contains` [EXTRACTED]
+- [[normalizeMatrixRow()]] - `contains` [EXTRACTED]
+- [[normalizeModuleRoute()]] - `contains` [EXTRACTED]
+- [[parseMatrixFile()]] - `contains` [EXTRACTED]
+- [[parseRequiredKeys()]] - `contains` [EXTRACTED]
+- [[pickFieldMetaFromSource()]] - `contains` [EXTRACTED]
+- [[registerApprovalForm()]] - `contains` [EXTRACTED]
+- [[reorderWorkflowSteps()]] - `contains` [EXTRACTED]
+- [[resolveAssigneeIds()]] - `contains` [EXTRACTED]
+- [[resolveFirstActionableStep()]] - `contains` [EXTRACTED]
+- [[resolveNextStepOrderFromGraph()]] - `contains` [EXTRACTED]
+- [[resolveSafeDashboardModuleDir()]] - `contains` [EXTRACTED]
+- [[revertApprovalRequest()]] - `contains` [EXTRACTED]
+- [[runApprovalSlaEscalationJob()]] - `contains` [EXTRACTED]
+- [[safeRevalidatePath()]] - `contains` [EXTRACTED]
+- [[saveApprovalMatrixBuilder()]] - `contains` [EXTRACTED]
+- [[saveWorkflowSteps()]] - `contains` [EXTRACTED]
+- [[scanFormFieldOptionsByModulePath()]] - `contains` [EXTRACTED]
+- [[seedApprovalOrgSampleData()]] - `contains` [EXTRACTED]
+- [[stepTypeToNodeKind()]] - `contains` [EXTRACTED]
+- [[submitApprovalDecision()]] - `contains` [EXTRACTED]
+- [[toTitleCase()]] - `contains` [EXTRACTED]
+- [[triggerApprovalRequestEvent()]] - `contains` [EXTRACTED]
+- [[updateApprovalDefinitionStatus()]] - `contains` [EXTRACTED]
+- [[updateApprovalOrgNode()]] - `contains` [EXTRACTED]
+- [[updateApprovalOrgStructure()]] - `contains` [EXTRACTED]
+- [[updateWorkflowStep()]] - `contains` [EXTRACTED]
+- [[upsertFieldType()]] - `contains` [EXTRACTED]
+- [[validateOrgStructureNodes()]] - `contains` [EXTRACTED]
+- [[validateStepConfig()]] - `contains` [EXTRACTED]
+
+#graphify/code #graphify/EXTRACTED #community/getAuthenticatedSession()

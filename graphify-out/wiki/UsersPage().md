@@ -1,0 +1,19 @@
+---
+source_file: "app\dashboard\admin\users\page.tsx"
+type: "code"
+community: "getWarehouses()"
+location: "L7"
+tags:
+  - graphify/code
+  - graphify/INFERRED
+  - community/getWarehouses()
+---
+
+# UsersPage()
+
+## Connections
+- [[getRoles()]] - `calls` [INFERRED]
+- [[getUsers()]] - `calls` [INFERRED]
+- [[getWarehouses()]] - `calls` [INFERRED]
+
+#graphify/code #graphify/INFERRED #community/getWarehouses()

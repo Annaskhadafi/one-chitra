@@ -62,3 +62,15 @@ task-manager cancel-task <task_id> "Reason for cancellation"
 ✅ **ALWAYS complete one task fully before starting the next**
 ✅ **ALWAYS provide completion details in the complete command**
 ✅ **ALWAYS follow the exact 3-step sequence: list → start → complete (or cancel if not required)**
+
+## graphify
+
+This project has a local graphify knowledge graph in `graphify-out/`.
+
+Token-saving rules:
+- For architecture, dependency, ownership, cross-module, or "where is this logic?" questions, check `graphify-out/GRAPH_REPORT.md` before broad file reads.
+- If `graphify-out/wiki/index.md` exists, use the wiki/community notes first and open raw source files only for the exact nodes or files needed.
+- Prefer `graphify query "<question>"`, `graphify path "<A>" "<B>"`, or `graphify explain "<concept>"` before broad grep/search. These commands traverse `graphify-out/graph.json` and usually cost fewer tokens than reading many files.
+- The current graph was built AST-only to avoid semantic extraction token cost. Treat it as strong for code structure, imports, calls, classes, and functions; verify behavior-sensitive details in source before editing.
+- After modifying code files, run `graphify update .` so `graphify-out/graph.json`, `GRAPH_REPORT.md`, and the wiki stay current.
+- Do not run full semantic/deep graph extraction unless the user explicitly accepts the higher token cost.

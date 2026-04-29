@@ -1,0 +1,18 @@
+---
+source_file: "app\actions\slow-moving-products.ts"
+type: "code"
+community: "ensureSlowMovingProductsTable()"
+location: "L90"
+tags:
+  - graphify/code
+  - graphify/EXTRACTED
+  - community/ensureSlowMovingProductsTable()
+---
+
+# deleteSlowMovingProduct()
+
+## Connections
+- [[ensureSlowMovingProductsTable()]] - `calls` [EXTRACTED]
+- [[getAuthenticatedSession()]] - `calls` [INFERRED]
+
+#graphify/code #graphify/EXTRACTED #community/ensureSlowMovingProductsTable()

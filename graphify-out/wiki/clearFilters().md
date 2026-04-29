@@ -1,0 +1,14 @@
+---
+source_file: "app\dashboard\admin\operational-activity-log\_components\operational-activity-log-table.tsx"
+type: "code"
+community: "getAuthenticatedSession()"
+location: "L78"
+tags:
+  - graphify/code
+  - graphify/EXTRACTED
+  - community/getAuthenticatedSession()
+---
+
+# clearFilters()
+
+#graphify/code #graphify/EXTRACTED #community/getAuthenticatedSession()

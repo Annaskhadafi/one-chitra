@@ -1,0 +1,271 @@
+---
+type: community
+cohesion: 0.01
+members: 220
+---
+
+# getWarehouses()
+
+**Cohesion:** 0.01 - loosely connected
+**Members:** 220 nodes
+
+## Members
+- [[BundlingCalculatorPage()]] - code - app\dashboard\calculator\page.tsx
+- [[CreateQuotationPage()]] - code - app\dashboard\quotations\create\page.tsx
+- [[CreateStockTransferPage()]] - code - app\dashboard\stock-transfers\create\page.tsx
+- [[CustomersPage()]] - code - app\dashboard\customers\page.tsx
+- [[EditQuotationPage()]] - code - app\dashboard\quotations\[id]\edit\page.tsx
+- [[EditSalesOrderPage()]] - code - app\dashboard\sales-orders\[id]\edit\page.tsx
+- [[EvhsMasterPriceModalPage()]] - code - app\evhs-master-price-modal\page.tsx
+- [[EvhsPage()]] - code - app\dashboard\evhs\page.tsx
+- [[GET()_10]] - code - app\api\inventory-comparison\route.ts
+- [[GET()_14]] - code - app\api\stocks-sap-new\route.ts
+- [[GoodReceivePage()]] - code - app\dashboard\good-receive\page.tsx
+- [[InventoryPage()]] - code - app\dashboard\inventory\page.tsx
+- [[OcrValidatePage()]] - code - app\dashboard\sales-orders\ocr-validate\page.tsx
+- [[ProductsPage()]] - code - app\dashboard\products\page.tsx
+- [[RolesPage()]] - code - app\dashboard\admin\roles\page.tsx
+- [[SecurityUsersPage()]] - code - app\dashboard\security\users\page.tsx
+- [[SlowMovingPage()]] - code - app\dashboard\marketing\slow-moving\page.tsx
+- [[StockMovementsPage()]] - code - app\dashboard\stock-movements\page.tsx
+- [[StocksPage()]] - code - app\dashboard\stocks\page.tsx
+- [[StocksSAPNewPage()]] - code - app\dashboard\stocks-sap-new\page.tsx
+- [[UsersPage()]] - code - app\dashboard\admin\users\page.tsx
+- [[VendorQuotationsModalPage()]] - code - app\vendor-quotations-modal\page.tsx
+- [[VendorQuotationsPage()]] - code - app\dashboard\vendor-quotations\page.tsx
+- [[WarehousePage()]] - code - app\dashboard\warehouse\page.tsx
+- [[addItem()_2]] - code - app\dashboard\evhs\_components\evhs-add-manual-voucher-dialog.tsx
+- [[assertCurrentUserHasWarehouseAccess()]] - code - lib\warehouse-access.ts
+- [[assertCurrentUserHasWarehouseAccessForAll()]] - code - lib\warehouse-access.ts
+- [[bulkDeleteProducts()]] - code - app\actions\product.ts
+- [[bulkUpdateProductCategory()]] - code - app\actions\product.ts
+- [[clearStockMovements()]] - code - app\actions\stock-movement.ts
+- [[completeEvhsDraftVoucher()]] - code - app\actions\evhs.ts
+- [[confirmEvhsReceipt()]] - code - app\actions\evhs.ts
+- [[createEvhsDraftVoucher()]] - code - app\actions\evhs.ts
+- [[createEvhsVoucher()]] - code - app\actions\evhs.ts
+- [[createGiRecord()]] - code - app\actions\evhs.ts
+- [[createProduct()]] - code - app\actions\product.ts
+- [[dedupeProductsForDisplay()]] - code - app\actions\product.ts
+- [[deleteEvhsVoucher()]] - code - app\actions\evhs.ts
+- [[deleteProduct()]] - code - app\actions\product.ts
+- [[downloadTemplate()_4]] - code - app\dashboard\products\_components\product-table-csv.tsx
+- [[ensureStockMovementSourceColumn()]] - code - app\actions\stock-movement.ts
+- [[ensureUserWarehouseAccessTable()]] - code - lib\warehouse-access.ts
+- [[evhs-add-manual-voucher-dialog.tsx]] - code - app\dashboard\evhs\_components\evhs-add-manual-voucher-dialog.tsx
+- [[evhs-edit-usage-dialog.tsx]] - code - app\dashboard\evhs\_components\evhs-edit-usage-dialog.tsx
+- [[evhs-edit-voucher-dialog.tsx]] - code - app\dashboard\evhs\_components\evhs-edit-voucher-dialog.tsx
+- [[evhs-fill-draft-dialog.tsx]] - code - app\dashboard\evhs\_components\evhs-fill-draft-dialog.tsx
+- [[evhs-multiple-usage-dialog.tsx]] - code - app\dashboard\evhs\_components\evhs-multiple-usage-dialog.tsx
+- [[evhs-receipt-confirm-dialog.tsx]] - code - app\dashboard\evhs\_components\evhs-receipt-confirm-dialog.tsx
+- [[evhs-stock-usage-dialog.tsx]] - code - app\dashboard\evhs\_components\evhs-stock-usage-dialog.tsx
+- [[evhs.ts]] - code - app\actions\evhs.ts
+- [[expandSlocLookupKeys()]] - code - lib\sloc.ts
+- [[fetchDialogOptions()]] - code - app\dashboard\products\_components\product-dialog.tsx
+- [[fetchRate()]] - code - app\dashboard\quotations\_components\quotation-form.tsx
+- [[fetchRates()]] - code - app\dashboard\products\_components\product-table.tsx
+- [[filterEvhsReceiptRowsByWarehouse()]] - code - app\actions\evhs.ts
+- [[formatCost()]] - code - app\actions\product.ts
+- [[formatEvhsWarehouseLabel()]] - code - app\actions\evhs.ts
+- [[formatWarehouseLabel()_2]] - code - lib\sloc.ts
+- [[getAccessibleWarehousesForCurrentUser()]] - code - lib\warehouse-access.ts
+- [[getAgingBucket()]] - code - app\actions\evhs.ts
+- [[getAllowedWarehouseIdsForCurrentUser()]] - code - lib\warehouse-access.ts
+- [[getBundlingFormDependencies()]] - code - app\actions\bundling-ml.ts
+- [[getCellValue()]] - code - app\dashboard\inventory\_components\inventory-import-dialog.tsx
+- [[getCurrentUserWarehouseAccessContext()]] - code - lib\warehouse-access.ts
+- [[getCustomers()]] - code - app\actions\customer.ts
+- [[getDaysSince()]] - code - app\actions\evhs.ts
+- [[getDerivedWarehouseType()]] - code - app\dashboard\stocks-sap-new\_components\stock-sap-new-table.tsx
+- [[getEvhsAllVhsStockData()]] - code - app\actions\evhs.ts
+- [[getEvhsControlTowerData()]] - code - app\actions\evhs.ts
+- [[getEvhsDraftVoucherSerialCatalog()]] - code - app\actions\evhs.ts
+- [[getEvhsMasterPrices()]] - code - app\actions\evhs-master.ts
+- [[getEvhsMatchedGiRecord()]] - code - app\actions\evhs.ts
+- [[getEvhsMrkoData()]] - code - app\actions\evhs.ts
+- [[getEvhsReceipts()]] - code - app\actions\evhs.ts
+- [[getEvhsTrackingData()]] - code - app\actions\evhs.ts
+- [[getEvhsVoucherItemUnitPrice()]] - code - app\actions\evhs.ts
+- [[getEvhsVouchers()]] - code - app\actions\evhs.ts
+- [[getGiRecords()]] - code - app\actions\evhs.ts
+- [[getPendingEvhsTransfers()]] - code - app\actions\evhs.ts
+- [[getProductByMaterialNumber()]] - code - app\actions\product.ts
+- [[getProductCategories()]] - code - app\actions\product.ts
+- [[getProductStats()]] - code - app\actions\product.ts
+- [[getProducts()]] - code - app\actions\product.ts
+- [[getRealtimeExchangeRate()]] - code - app\actions\settings.ts
+- [[getReorderPredictionStocks()]] - code - app\actions\stock-alerts.ts
+- [[getRoles()]] - code - app\actions\roles.ts
+- [[getSalesOrderPicUsers()]] - code - app\actions\sales-order.ts
+- [[getSetting()]] - code - app\actions\settings.ts
+- [[getStockMovements()]] - code - app\actions\stock-movement.ts
+- [[getStocks()]] - code - app\actions\stock.ts
+- [[getUserWarehouseAssignments()]] - code - lib\warehouse-access.ts
+- [[getUsers()]] - code - app\actions\users.ts
+- [[getVendorQuotations()]] - code - app\actions\vendor-quotation.ts
+- [[getWarehouseAccessContextForUserId()]] - code - lib\warehouse-access.ts
+- [[getWarehouseIdsForStockIds()]] - code - lib\warehouse-access.ts
+- [[getWarehouses()]] - code - app\actions\warehouse.ts
+- [[handleClearLogs()_1]] - code - app\dashboard\stock-movements\_components\movement-table.tsx
+- [[handleComplete()]] - code - app\dashboard\evhs\_components\evhs-fill-draft-dialog.tsx
+- [[handleDelete()_7]] - code - app\dashboard\evhs\_components\evhs-voucher-table.tsx
+- [[handleExportExcel()_3]] - code - app\dashboard\stocks-sap\_components\stock-sap-table.tsx
+- [[handleFileChange()_5]] - code - app\dashboard\inventory\_components\inventory-import-dialog.tsx
+- [[handleFileChange()_8]] - code - app\dashboard\products\_components\product-table-csv.tsx
+- [[handleFileChange()_9]] - code - app\dashboard\stocks\_components\stock-csv-upload.tsx
+- [[handleImport()_2]] - code - app\dashboard\inventory\_components\inventory-import-dialog.tsx
+- [[handleReset()]] - code - app\dashboard\evhs\_components\evhs-add-manual-voucher-dialog.tsx
+- [[handleSaveDraft()]] - code - app\dashboard\evhs\_components\evhs-fill-draft-dialog.tsx
+- [[handleSubmit()_6]] - code - app\dashboard\evhs\_components\evhs-add-manual-voucher-dialog.tsx
+- [[handleSubmit()_14]] - code - app\dashboard\products\_components\product-dialog.tsx
+- [[handleSync()_1]] - code - app\dashboard\stocks-sap\_components\stock-sap-table.tsx
+- [[handleUpload()_2]] - code - app\dashboard\products\_components\product-table-csv.tsx
+- [[handleUpload()_3]] - code - app\dashboard\stocks\_components\stock-csv-upload.tsx
+- [[hasEvhsWarehouseAccess()]] - code - app\actions\evhs.ts
+- [[hasGlobalWarehouseAccess()]] - code - lib\warehouse-access.ts
+- [[hydrateDraftItems()]] - code - app\dashboard\evhs\_components\evhs-fill-draft-dialog.tsx
+- [[if()_4]] - code - app\dashboard\stock-movements\_components\movement-table.tsx
+- [[if()_6]] - code - app\dashboard\stocks-sap-new\_components\stock-sap-new-table.tsx
+- [[importEvhsGiRecords()]] - code - app\actions\evhs.ts
+- [[importProducts()]] - code - app\actions\product.ts
+- [[importStocks()]] - code - app\actions\stock.ts
+- [[inferMovementSource()]] - code - app\actions\stock-movement.ts
+- [[insertStockMovement()]] - code - app\actions\stock-movement.ts
+- [[inventory-import-dialog.tsx]] - code - app\dashboard\inventory\_components\inventory-import-dialog.tsx
+- [[isCentralWarehouseSloc()]] - code - app\dashboard\stocks-sap-new\_components\stock-sap-new-table.tsx
+- [[isCkVhsWarehouse()]] - code - app\actions\evhs.ts
+- [[isEvhsDestinationWarehouse()]] - code - app\actions\evhs.ts
+- [[isMissingSourceColumnError()]] - code - app\actions\stock-movement.ts
+- [[isMissingUserWarehouseAccessTableError()]] - code - lib\warehouse-access.ts
+- [[isPlainObject()_1]] - code - lib\sloc.ts
+- [[isTyreCategory()_1]] - code - app\dashboard\evhs\_components\evhs-receipt-confirm-dialog.tsx
+- [[main()_6]] - code - test-create-voucher.ts
+- [[main()_9]] - code - test-tracking.ts
+- [[main()_10]] - code - test-update-voucher.ts
+- [[movement-table.tsx]] - code - app\dashboard\stock-movements\_components\movement-table.tsx
+- [[normalizeEvhsMaterialKey()]] - code - app\actions\evhs.ts
+- [[normalizeEvhsPrice()]] - code - app\actions\evhs.ts
+- [[normalizeEvhsSapSlocKey()]] - code - app\actions\evhs.ts
+- [[normalizeEvhsSlocKey()]] - code - app\actions\evhs.ts
+- [[normalizeEvhsWarehouseDescriptionKey()]] - code - app\actions\evhs.ts
+- [[normalizeHeader()_1]] - code - app\dashboard\inventory\_components\inventory-import-dialog.tsx
+- [[normalizeMaterial()]] - code - app\actions\product.ts
+- [[normalizeMaterial()_1]] - code - app\dashboard\inventory\_components\inventory-import-dialog.tsx
+- [[normalizeRole()]] - code - lib\warehouse-access.ts
+- [[normalizeSerialNumber()]] - code - app\actions\evhs.ts
+- [[normalizeSerialNumber()_1]] - code - app\dashboard\evhs\_components\evhs-fill-draft-dialog.tsx
+- [[normalizeSloc()]] - code - app\dashboard\inventory\_components\inventory-import-dialog.tsx
+- [[normalizeSloc()_2]] - code - lib\sloc.ts
+- [[normalizeSlocFields()]] - code - lib\sloc.ts
+- [[normalizeSlocForSearch()]] - code - lib\sloc.ts
+- [[normalizeWarehouseAccessInput()]] - code - lib\warehouse-access.ts
+- [[normalizedSlocSql()]] - code - lib\sloc.ts
+- [[onSubmit()_8]] - code - app\dashboard\evhs\_components\evhs-edit-usage-dialog.tsx
+- [[onSubmit()_9]] - code - app\dashboard\evhs\_components\evhs-edit-voucher-dialog.tsx
+- [[onSubmit()_10]] - code - app\dashboard\evhs\_components\evhs-multiple-usage-dialog.tsx
+- [[onSubmit()_11]] - code - app\dashboard\evhs\_components\evhs-receipt-confirm-dialog.tsx
+- [[onSubmit()_12]] - code - app\dashboard\evhs\_components\evhs-stock-usage-dialog.tsx
+- [[page.tsx_5]] - code - app\dashboard\admin\roles\page.tsx
+- [[page.tsx_6]] - code - app\dashboard\admin\users\page.tsx
+- [[page.tsx_14]] - code - app\dashboard\calculator\page.tsx
+- [[page.tsx_27]] - code - app\dashboard\customers\page.tsx
+- [[page.tsx_37]] - code - app\dashboard\evhs\page.tsx
+- [[page.tsx_44]] - code - app\dashboard\good-receive\page.tsx
+- [[page.tsx_51]] - code - app\dashboard\inventory\page.tsx
+- [[page.tsx_62]] - code - app\dashboard\marketing\slow-moving\page.tsx
+- [[page.tsx_66]] - code - app\dashboard\products\page.tsx
+- [[page.tsx_69]] - code - app\dashboard\quotations\create\page.tsx
+- [[page.tsx_71]] - code - app\dashboard\quotations\[id]\edit\page.tsx
+- [[page.tsx_94]] - code - app\dashboard\sales-orders\[id]\edit\page.tsx
+- [[page.tsx_93]] - code - app\dashboard\sales-orders\ocr-validate\page.tsx
+- [[page.tsx_100]] - code - app\dashboard\security\users\page.tsx
+- [[page.tsx_108]] - code - app\dashboard\stock-movements\page.tsx
+- [[page.tsx_118]] - code - app\dashboard\stock-transfers\create\page.tsx
+- [[page.tsx_119]] - code - app\dashboard\stocks\page.tsx
+- [[page.tsx_121]] - code - app\dashboard\stocks-sap-new\page.tsx
+- [[page.tsx_124]] - code - app\dashboard\vendor-quotations\page.tsx
+- [[page.tsx_125]] - code - app\dashboard\warehouse\page.tsx
+- [[page.tsx_128]] - code - app\evhs-master-price-modal\page.tsx
+- [[page.tsx_137]] - code - app\vendor-quotations-modal\page.tsx
+- [[parseFile()_1]] - code - app\dashboard\inventory\_components\inventory-import-dialog.tsx
+- [[parseFile()_4]] - code - app\dashboard\stocks\_components\stock-csv-upload.tsx
+- [[parseFullFile()_1]] - code - app\dashboard\products\_components\product-table-csv.tsx
+- [[parseHeaders()_1]] - code - app\dashboard\products\_components\product-table-csv.tsx
+- [[parseSerialNumbers()]] - code - app\actions\evhs.ts
+- [[product-dialog.tsx]] - code - app\dashboard\products\_components\product-dialog.tsx
+- [[product-table-csv.tsx]] - code - app\dashboard\products\_components\product-table-csv.tsx
+- [[product-table.tsx]] - code - app\dashboard\products\_components\product-table.tsx
+- [[product.ts]] - code - app\actions\product.ts
+- [[recordStockMovement()]] - code - app\actions\stock-movement.ts
+- [[removeItem()_2]] - code - app\dashboard\evhs\_components\evhs-add-manual-voucher-dialog.tsx
+- [[replaceUserWarehouseAccess()]] - code - lib\warehouse-access.ts
+- [[reset()_4]] - code - app\dashboard\products\_components\product-table-csv.tsx
+- [[resetState()_1]] - code - app\dashboard\inventory\_components\inventory-import-dialog.tsx
+- [[route.ts_16]] - code - app\api\inventory-comparison\route.ts
+- [[route.ts_28]] - code - app\api\stocks-sap-new\route.ts
+- [[safeNumber()_1]] - code - app\dashboard\stocks-sap-new\_components\stock-sap-new-table.tsx
+- [[settings.ts]] - code - app\actions\settings.ts
+- [[shouldRequireSerialNumber()]] - code - app\dashboard\evhs\_components\evhs-receipt-confirm-dialog.tsx
+- [[sloc.ts]] - code - lib\sloc.ts
+- [[stock-csv-upload.tsx]] - code - app\dashboard\stocks\_components\stock-csv-upload.tsx
+- [[stock-movement.ts]] - code - app\actions\stock-movement.ts
+- [[stock-sap-new-table.tsx]] - code - app\dashboard\stocks-sap-new\_components\stock-sap-new-table.tsx
+- [[stock-sap-table.tsx]] - code - app\dashboard\stocks-sap\_components\stock-sap-table.tsx
+- [[stock-sap.ts]] - code - app\actions\stock-sap.ts
+- [[syncIndividualStock()]] - code - app\actions\stock-sap.ts
+- [[syncProductCostSapFromStockSapNew()]] - code - app\actions\product.ts
+- [[test-create-voucher.ts]] - code - test-create-voucher.ts
+- [[test-tracking.ts]] - code - test-tracking.ts
+- [[test-update-voucher.ts]] - code - test-update-voucher.ts
+- [[toPositiveQty()]] - code - app\dashboard\evhs\_components\evhs-fill-draft-dialog.tsx
+- [[updateEditItem()]] - code - app\dashboard\evhs\_components\evhs-fill-draft-dialog.tsx
+- [[updateEvhsDraftVoucherItems()]] - code - app\actions\evhs.ts
+- [[updateEvhsUsage()]] - code - app\actions\evhs.ts
+- [[updateEvhsVoucher()]] - code - app\actions\evhs.ts
+- [[updateItemProduct()]] - code - app\dashboard\evhs\_components\evhs-add-manual-voucher-dialog.tsx
+- [[updateItemQty()]] - code - app\dashboard\evhs\_components\evhs-add-manual-voucher-dialog.tsx
+- [[updateMrko()]] - code - app\actions\evhs.ts
+- [[updateProduct()]] - code - app\actions\product.ts
+- [[updateProductField()]] - code - app\actions\product.ts
+- [[updateSetting()]] - code - app\actions\settings.ts
+- [[upsertProduct()]] - code - app\actions\product.ts
+- [[warehouse-access.ts]] - code - lib\warehouse-access.ts
+
+## Live Query (requires Dataview plugin)
+
+```dataview
+TABLE source_file, type FROM #community/getWarehouses()
+SORT file.name ASC
+```
+
+## Connections to other communities
+- 38 edges to [[_COMMUNITY_getAuthenticatedSession()]]
+- 10 edges to [[_COMMUNITY_onSuccess()]]
+- 5 edges to [[_COMMUNITY_createDelivery()]]
+- 5 edges to [[_COMMUNITY_createSalesOrder()]]
+- 4 edges to [[_COMMUNITY_getOpnameAuthSession()]]
+- 3 edges to [[_COMMUNITY_checkPermission()]]
+- 3 edges to [[_COMMUNITY_isStockBookingSchemaAvailable()]]
+- 2 edges to [[_COMMUNITY_Boolean()]]
+- 2 edges to [[_COMMUNITY_readManagedUpload()]]
+- 2 edges to [[_COMMUNITY_getStockCardCatalogAction()]]
+- 2 edges to [[_COMMUNITY_createStockTransfer()]]
+- 2 edges to [[_COMMUNITY_createGoodReceiveManual()]]
+- 1 edge to [[_COMMUNITY_calculateBundlingOptimization()]]
+- 1 edge to [[_COMMUNITY_getErrorMessage()]]
+- 1 edge to [[_COMMUNITY_findCkMasterPriceSuggestion()]]
+- 1 edge to [[_COMMUNITY_getProductHistoryForQuotation()]]
+- 1 edge to [[_COMMUNITY_generateMarketingMagicAnalysis()]]
+- 1 edge to [[_COMMUNITY_getSafetyStockAnalytics()]]
+- 1 edge to [[_COMMUNITY_EprIntegrasiPage()]]
+- 1 edge to [[_COMMUNITY_buildVoucherHtml()]]
+- 1 edge to [[_COMMUNITY_ensureSlowMovingProductsTable()]]
+- 1 edge to [[_COMMUNITY_ensureCosmeticTiresTable()]]
+- 1 edge to [[_COMMUNITY_uploadFile()]]
+
+## Top bridge nodes
+- [[getEvhsDraftVoucherSerialCatalog()]] - degree 7, connects to 2 communities
+- [[getEvhsVouchers()]] - degree 7, connects to 2 communities
+- [[SlowMovingPage()]] - degree 6, connects to 2 communities
+- [[product.ts]] - degree 17, connects to 1 community
+- [[getEvhsAllVhsStockData()]] - degree 11, connects to 1 community

@@ -1,0 +1,17 @@
+---
+source_file: "lib\email.ts"
+type: "code"
+community: "sendSystemTemplatedEmailByCode()"
+location: "L775"
+tags:
+  - graphify/code
+  - graphify/EXTRACTED
+  - community/sendSystemTemplatedEmailByCode()
+---
+
+# sendPasswordResetEmail()
+
+## Connections
+- [[sendSystemTemplatedEmailByCode()]] - `calls` [EXTRACTED]
+
+#graphify/code #graphify/EXTRACTED #community/sendSystemTemplatedEmailByCode()
