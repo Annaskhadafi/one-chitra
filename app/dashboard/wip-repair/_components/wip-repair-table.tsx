@@ -55,6 +55,29 @@ function normalizeTireSn(value: string | null | undefined) {
   return normalizeValue(value).toUpperCase()
 }
 
+function isWaitingWorkOrder(value: string | null | undefined) {
+  return normalizeValue(value).toLowerCase() === "waiting wo"
+}
+
+function getWorkOrderDetailKey(item: WipRepairRecord) {
+  if (!isWaitingWorkOrder(item.wo)) {
+    return normalizeValue(item.wo)
+  }
+
+  const tireSn = normalizeTireSn(item.tire_sn)
+  const idWo = normalizeValue(item.id_wo)
+
+  return `${normalizeValue(item.wo)}:${tireSn}:${idWo}`
+}
+
+function getDetailLookupKeys(item: WipRepairRecord) {
+  if (isWaitingWorkOrder(item.wo)) {
+    return [normalizeValue(item.wo), "waiting"]
+  }
+
+  return [normalizeValue(item.wo)]
+}
+
 function getNormalizedText(value: string | null | undefined) {
   return normalizeValue(value).toLowerCase()
 }
@@ -293,6 +316,12 @@ function getSortTimestamp(item: WipRepairRecord) {
   return 0
 }
 
+function getDetailSortValue(detail: WipRepairWorkOrderDetailRecord) {
+  const parsed = Number(detail.id_job)
+
+  return Number.isFinite(parsed) ? parsed : Number.MAX_SAFE_INTEGER
+}
+
 export function WipRepairTable({ data, workOrderDetails }: WipRepairTableProps) {
   const [query, setQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState(ALL_FILTER)
@@ -305,7 +334,7 @@ export function WipRepairTable({ data, workOrderDetails }: WipRepairTableProps) 
   const [expandedWorkOrders, setExpandedWorkOrders] = useState<Set<string>>(() => new Set())
 
   const detailsByWorkOrder = useMemo(() => {
-    return workOrderDetails.reduce<Record<string, WipRepairWorkOrderDetailRecord[]>>((accumulator, detail) => {
+    const grouped = workOrderDetails.reduce<Record<string, WipRepairWorkOrderDetailRecord[]>>((accumulator, detail) => {
       const wo = normalizeValue(detail.wo)
 
       if (wo === "-") {
@@ -317,6 +346,20 @@ export function WipRepairTable({ data, workOrderDetails }: WipRepairTableProps) 
 
       return accumulator
     }, {})
+
+    for (const details of Object.values(grouped)) {
+      details.sort((left, right) => {
+        const sortDiff = getDetailSortValue(left) - getDetailSortValue(right)
+
+        if (sortDiff !== 0) {
+          return sortDiff
+        }
+
+        return normalizeValue(left.id_job).localeCompare(normalizeValue(right.id_job))
+      })
+    }
+
+    return grouped
   }, [workOrderDetails])
 
   const statusOptions = useMemo(
@@ -353,8 +396,7 @@ export function WipRepairTable({ data, workOrderDetails }: WipRepairTableProps) 
 
     return data
       .filter((item) => {
-        const workOrder = normalizeValue(item.wo)
-        const details = detailsByWorkOrder[workOrder] ?? []
+        const details = getDetailLookupKeys(item).flatMap((key) => detailsByWorkOrder[key] ?? [])
         const matchesQuery =
           normalizedQuery.length === 0 ||
           [
@@ -552,7 +594,8 @@ export function WipRepairTable({ data, workOrderDetails }: WipRepairTableProps) 
               {filteredData.length > 0 ? (
                 filteredData.map((item) => {
                   const workOrder = normalizeValue(item.wo)
-                  const details = detailsByWorkOrder[workOrder] ?? []
+                  const detailKey = getWorkOrderDetailKey(item)
+                  const details = getDetailLookupKeys(item).flatMap((key) => detailsByWorkOrder[key] ?? [])
                   const normalizedQuery = query.trim().toLowerCase()
                   const hasSearch = normalizedQuery.length > 0
                   const isSearchMatched = hasSearch && [
@@ -587,7 +630,7 @@ export function WipRepairTable({ data, workOrderDetails }: WipRepairTableProps) 
                         .map((detail) => detail.id_job)
                       : []
                   )
-                  const isExpanded = expandedWorkOrders.has(workOrder) || (hasSearch && details.length > 0 && (isSearchMatched || matchingDetailIds.size > 0))
+                  const isExpanded = expandedWorkOrders.has(detailKey) || (hasSearch && details.length > 0 && (isSearchMatched || matchingDetailIds.size > 0))
                   const totalMinutes = details.reduce((sum, detail) => sum + (parseMinutes(detail.time) ?? 0), 0)
 
                   return (
@@ -601,8 +644,8 @@ export function WipRepairTable({ data, workOrderDetails }: WipRepairTableProps) 
                             className="h-8 w-8 rounded-full"
                             disabled={details.length === 0}
                             aria-expanded={isExpanded}
-                            aria-label={`Detail pekerjaan WO ${workOrder}`}
-                            onClick={() => toggleWorkOrder(workOrder)}
+                            aria-label={`Detail pekerjaan WO ${workOrder} ${normalizeTireSn(item.tire_sn)}`}
+                            onClick={() => toggleWorkOrder(detailKey)}
                           >
                             <ChevronDown className={cn("h-4 w-4 transition-transform", isExpanded && "rotate-180")} />
                           </Button>
@@ -642,6 +685,9 @@ export function WipRepairTable({ data, workOrderDetails }: WipRepairTableProps) 
                               <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                                 <div>
                                   <p className="font-medium">Detail pekerjaan WO {workOrder}</p>
+                                  {isWaitingWorkOrder(item.wo) ? (
+                                    <p className="text-sm text-muted-foreground">Tire SN {normalizeTireSn(item.tire_sn)}</p>
+                                  ) : null}
                                   <p className="text-sm text-muted-foreground">
                                     {details.length.toLocaleString("id-ID")} aktivitas pekerjaan dan material dari API detail.
                                   </p>
