@@ -249,13 +249,18 @@ describe("buildWipRepairDashboardData", () => {
         "bridgsetone",
         "BERIDGESTONE",
         "BRIGESTONE",
+        "BRIGDSTONE",
+        "BRIDGESTON",
         "BS",
       ].map(normalizeWipRepairBrand)
-    ).toEqual(Array(7).fill("BRIDGESTONE"))
-    expect(["GOOD YEAR", "GOOD YEAR ", "Goodyear"].map(normalizeWipRepairBrand)).toEqual(Array(3).fill("GOODYEAR"))
+    ).toEqual(Array(9).fill("BRIDGESTONE"))
+    expect(["GOOD YEAR", "GOOD YEAR ", "Goodyear", "GOD YEAR", "GPDYEAR", "GPPDYEAR"].map(normalizeWipRepairBrand)).toEqual(Array(6).fill("GOODYEAR"))
     expect(["Michelin", "mechelin", "michellin"].map(normalizeWipRepairBrand)).toEqual(Array(3).fill("MICHELIN"))
-    expect(["AELUS", "Aeolus"].map(normalizeWipRepairBrand)).toEqual(Array(2).fill("AEOLUS"))
+    expect(["AELUS", "AELOUS", "Aeolus", "AEULUS"].map(normalizeWipRepairBrand)).toEqual(Array(4).fill("AEOLUS"))
     expect(["MAXXAM", "maxam"].map(normalizeWipRepairBrand)).toEqual(Array(2).fill("MAXAM"))
+    expect(["ADVANCR", "Advance"].map(normalizeWipRepairBrand)).toEqual(Array(2).fill("ADVANCE"))
+    expect(["EDIT REPAIR", ""].map(normalizeWipRepairBrand)).toEqual(Array(2).fill("-"))
+    expect(["Customer Brand Baru", "RANDOM"].map(normalizeWipRepairBrand)).toEqual(["CUSTOMER BRAND BARU", "RANDOM"])
   })
 
   it("summarizes WO, status, injury, customer, material, and time metrics", () => {
@@ -321,5 +326,31 @@ describe("buildWipRepairDashboardData", () => {
       ["WAIT-SN-1", 0],
       ["WAIT-SN-2", 0],
     ])
+  })
+
+  it("ignores detail rows whose WO is not present in the visible WIP Repair data", () => {
+    const dashboard = buildWipRepairDashboardData(
+      workOrders.slice(0, 1),
+      [
+        ...details,
+        {
+          id_job: "job-orphan",
+          wo: "TRIAL-WO",
+          job: "Trial Repair",
+          material_id: "TRIAL-MAT",
+          material_name: "TRIAL MATERIAL",
+          category: "TRIAL",
+          smu: "PC",
+          qty: "99",
+          time: "999",
+        },
+      ],
+      new Date("2026-04-28T00:00:00Z")
+    )
+
+    expect(dashboard.summary.totalWorkOrders).toBe(1)
+    expect(dashboard.summary.totalDetailRows).toBe(2)
+    expect(dashboard.summary.totalMinutes).toBe(180)
+    expect(dashboard.materialUsage.map((item) => item.name)).not.toContain("TRIAL MATERIAL")
   })
 })

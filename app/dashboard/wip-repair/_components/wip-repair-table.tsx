@@ -296,6 +296,7 @@ function getSortTimestamp(item: WipRepairRecord) {
 export function WipRepairTable({ data, workOrderDetails }: WipRepairTableProps) {
   const [query, setQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState(ALL_FILTER)
+  const [storeLocFilter, setStoreLocFilter] = useState(ALL_FILTER)
   const [siteFilter, setSiteFilter] = useState(ALL_FILTER)
   const [brandFilter, setBrandFilter] = useState(ALL_FILTER)
   const [customerFilters, setCustomerFilters] = useState<string[]>([])
@@ -320,6 +321,10 @@ export function WipRepairTable({ data, workOrderDetails }: WipRepairTableProps) 
 
   const statusOptions = useMemo(
     () => Array.from(new Set(data.map((item) => normalizeValue(item.status)).filter((item) => item !== "-"))).sort(),
+    [data]
+  )
+  const storeLocOptions = useMemo(
+    () => Array.from(new Set(data.map((item) => normalizeValue(item.store_loc)).filter((item) => item !== "-"))).sort(),
     [data]
   )
   const siteOptions = useMemo(
@@ -382,16 +387,17 @@ export function WipRepairTable({ data, workOrderDetails }: WipRepairTableProps) 
           )
 
         const matchesStatus = statusFilter === ALL_FILTER || normalizeValue(item.status) === statusFilter
+        const matchesStoreLoc = storeLocFilter === ALL_FILTER || normalizeValue(item.store_loc) === storeLocFilter
         const matchesSite = siteFilter === ALL_FILTER || normalizeValue(item.site) === siteFilter
         const matchesBrand = brandFilter === ALL_FILTER || normalizeWipRepairBrand(item.brand) === brandFilter
         const matchesCustomer = customerFilters.length === 0 || customerFilters.includes(normalizeValue(item.customer))
         const matchesSize = sizeFilters.length === 0 || sizeFilters.includes(normalizeValue(item.size))
         const matchesInjury = injuryFilters.length === 0 || injuryFilters.includes(normalizeValue(item.injury))
 
-        return matchesQuery && matchesStatus && matchesSite && matchesBrand && matchesCustomer && matchesSize && matchesInjury
+        return matchesQuery && matchesStatus && matchesStoreLoc && matchesSite && matchesBrand && matchesCustomer && matchesSize && matchesInjury
       })
       .sort((left, right) => getSortTimestamp(right) - getSortTimestamp(left))
-  }, [brandFilter, customerFilters, data, detailsByWorkOrder, injuryFilters, query, siteFilter, sizeFilters, statusFilter])
+  }, [brandFilter, customerFilters, data, detailsByWorkOrder, injuryFilters, query, siteFilter, sizeFilters, statusFilter, storeLocFilter])
 
   function toggleWorkOrder(wo: string) {
     setExpandedWorkOrders((current) => {
@@ -417,12 +423,12 @@ export function WipRepairTable({ data, workOrderDetails }: WipRepairTableProps) 
               <Input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Cari WO, tire SN, customer, site, atau brand"
+                placeholder="Cari WO, store loc, tire SN, customer, site, atau brand"
                 className="h-10 rounded-xl pl-9"
               />
             </div>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-6">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-7">
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger className="h-10 w-full rounded-xl sm:min-w-40">
                   <SelectValue placeholder="Semua status" />
@@ -430,6 +436,20 @@ export function WipRepairTable({ data, workOrderDetails }: WipRepairTableProps) 
                 <SelectContent>
                   <SelectItem value={ALL_FILTER}>Semua status</SelectItem>
                   {statusOptions.map((option) => (
+                    <SelectItem key={option} value={option}>
+                      {option}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={storeLocFilter} onValueChange={setStoreLocFilter}>
+                <SelectTrigger className="h-10 w-full rounded-xl sm:min-w-40">
+                  <SelectValue placeholder="Semua store loc" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL_FILTER}>Semua store loc</SelectItem>
+                  {storeLocOptions.map((option) => (
                     <SelectItem key={option} value={option}>
                       {option}
                     </SelectItem>
@@ -490,9 +510,11 @@ export function WipRepairTable({ data, workOrderDetails }: WipRepairTableProps) 
               />
             </div>
           </div>
-          {customerFilters.length > 0 || sizeFilters.length > 0 || injuryFilters.length > 0 ? (
+          {storeLocFilter !== ALL_FILTER || customerFilters.length > 0 || sizeFilters.length > 0 || injuryFilters.length > 0 ? (
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              {[...customerFilters.map((value) => ({ type: "Customer", value, onClear: () => setCustomerFilters(customerFilters.filter((item) => item !== value)) })),
+              {[
+                ...(storeLocFilter !== ALL_FILTER ? [{ type: "Store Loc", value: storeLocFilter, onClear: () => setStoreLocFilter(ALL_FILTER) }] : []),
+                ...customerFilters.map((value) => ({ type: "Customer", value, onClear: () => setCustomerFilters(customerFilters.filter((item) => item !== value)) })),
                 ...sizeFilters.map((value) => ({ type: "Size", value, onClear: () => setSizeFilters(sizeFilters.filter((item) => item !== value)) })),
                 ...injuryFilters.map((value) => ({ type: "Injury", value, onClear: () => setInjuryFilters(injuryFilters.filter((item) => item !== value)) }))].map((filter) => (
                 <Badge key={`${filter.type}-${filter.value}`} variant="secondary" className="gap-1 rounded-full px-2.5 py-1">
@@ -513,6 +535,7 @@ export function WipRepairTable({ data, workOrderDetails }: WipRepairTableProps) 
             <TableHeader className="bg-muted/40">
               <TableRow>
                 <TableHead className="w-12 px-4 py-3" aria-label="Detail pekerjaan" />
+                <TableHead className="px-4 py-3">Store Loc</TableHead>
                 <TableHead className="px-4 py-3">WO</TableHead>
                 <TableHead className="px-4 py-3">Status</TableHead>
                 <TableHead className="px-4 py-3">Customer / Site</TableHead>
@@ -584,6 +607,7 @@ export function WipRepairTable({ data, workOrderDetails }: WipRepairTableProps) 
                             <ChevronDown className={cn("h-4 w-4 transition-transform", isExpanded && "rotate-180")} />
                           </Button>
                         </TableCell>
+                        <TableCell className="px-4 py-3 font-medium">{normalizeValue(item.store_loc)}</TableCell>
                         <TableCell className="px-4 py-3 font-medium tabular-nums">{workOrder}</TableCell>
                         <TableCell className="px-4 py-3">
                           <Badge variant="outline" className={cn("rounded-full px-2.5 py-1 text-xs font-medium", getStatusClasses(item.status))}>
@@ -613,7 +637,7 @@ export function WipRepairTable({ data, workOrderDetails }: WipRepairTableProps) 
                       </TableRow>
                       {isExpanded ? (
                         <TableRow className="bg-muted/20 hover:bg-muted/20">
-                          <TableCell colSpan={11} className="px-4 py-4">
+                          <TableCell colSpan={12} className="px-4 py-4">
                             <div className="rounded-xl border bg-background p-4">
                               <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                                 <div>
@@ -671,7 +695,7 @@ export function WipRepairTable({ data, workOrderDetails }: WipRepairTableProps) 
                 })
               ) : (
                 <TableRow>
-                  <TableCell colSpan={11} className="h-40 px-4 py-3 text-center">
+                  <TableCell colSpan={12} className="h-40 px-4 py-3 text-center">
                     <div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
                       <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
                         <Wrench className="h-5 w-5" />

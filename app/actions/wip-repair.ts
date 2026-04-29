@@ -6,6 +6,7 @@ import type {
   WipRepairWorkOrderDetailApiResponse,
   WipRepairWorkOrderDetailRecord,
 } from "@/lib/types/wip-repair"
+import { isVisibleWipRepairRecord, isVisibleWipRepairWorkOrderDetail } from "@/lib/wip-repair-visibility"
 
 const WIP_REPAIR_API_URL =
   process.env.WIP_REPAIR_API_URL ??
@@ -31,7 +32,7 @@ export async function getWipRepairData(): Promise<WipRepairRecord[]> {
       return []
     }
 
-    return payload.data
+    return payload.data.filter(isVisibleWipRepairRecord)
   } catch (error) {
     console.error("Failed to load WIP Repair data", error)
     return []
@@ -54,7 +55,7 @@ export async function getWipRepairWorkOrderDetails(): Promise<WipRepairWorkOrder
       return []
     }
 
-    return payload.data
+    return payload.data.filter(isVisibleWipRepairWorkOrderDetail)
   } catch (error) {
     console.error("Failed to load WIP Repair WO detail data", error)
     return []

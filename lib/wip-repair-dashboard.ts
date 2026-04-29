@@ -195,7 +195,12 @@ export function buildWipRepairDashboardData(
   workOrderDetails: WipRepairWorkOrderDetailRecord[],
   now = new Date()
 ): WipRepairDashboardData {
-  const detailsByWorkOrder = workOrderDetails.reduce<Record<string, WipRepairWorkOrderDetailRecord[]>>((accumulator, detail) => {
+  const visibleWorkOrderKeys = new Set(
+    data.flatMap((item) => [normalizeValue(item.wo), getHeaderDetailLookupKey(item)]).filter((value) => value !== UNKNOWN_VALUE)
+  )
+  const visibleWorkOrderDetails = workOrderDetails.filter((detail) => visibleWorkOrderKeys.has(normalizeValue(detail.wo)))
+
+  const detailsByWorkOrder = visibleWorkOrderDetails.reduce<Record<string, WipRepairWorkOrderDetailRecord[]>>((accumulator, detail) => {
     const wo = normalizeValue(detail.wo)
 
     if (wo === UNKNOWN_VALUE) {
@@ -241,7 +246,7 @@ export function buildWipRepairDashboardData(
     .sort((left, right) => right.totalMinutes - left.totalMinutes || (right.agingDays ?? 0) - (left.agingDays ?? 0))
 
   const totalMinutes = workOrderInsights.reduce((sum, item) => sum + item.totalMinutes, 0)
-  const materialRows = workOrderDetails.filter((detail) => normalizeValue(detail.material_name) !== UNKNOWN_VALUE)
+  const materialRows = visibleWorkOrderDetails.filter((detail) => normalizeValue(detail.material_name) !== UNKNOWN_VALUE)
   const materialUsage = Object.values(
     materialRows.reduce<Record<string, WipRepairMaterialUsageItem>>((accumulator, detail) => {
       const name = normalizeValue(detail.material_name)
@@ -278,7 +283,7 @@ export function buildWipRepairDashboardData(
     .slice(0, 12)
 
   const jobTimeBreakdown = Object.values(
-    workOrderDetails.reduce<Record<string, WipRepairJobTimeItem>>((accumulator, detail) => {
+    visibleWorkOrderDetails.reduce<Record<string, WipRepairJobTimeItem>>((accumulator, detail) => {
       const name = normalizeValue(detail.job)
 
       accumulator[name] ??= {
@@ -318,7 +323,7 @@ export function buildWipRepairDashboardData(
       progressWorkOrders: statusCounts.progress,
       completeWorkOrders: statusCounts.complete,
       rejectWorkOrders: statusCounts.reject,
-      totalDetailRows: workOrderDetails.length,
+      totalDetailRows: visibleWorkOrderDetails.length,
       totalMaterialRows: materialRows.length,
       totalMinutes: round(totalMinutes),
       averageMinutesPerWorkOrder: data.length > 0 ? round(totalMinutes / data.length) : 0,
@@ -333,7 +338,7 @@ export function buildWipRepairDashboardData(
     topBrands: getTopCountItems(data.map((item) => normalizeWipRepairBrand(item.brand)), data.length, 8),
     materialUsage: preparedMaterialUsage,
     materialCategories: getTopCountItems(materialRows.map((item) => item.category ?? ""), materialRows.length, 8),
-    jobFrequency: getTopCountItems(workOrderDetails.map((item) => item.job ?? ""), workOrderDetails.length, 10),
+    jobFrequency: getTopCountItems(visibleWorkOrderDetails.map((item) => item.job ?? ""), visibleWorkOrderDetails.length, 10),
     jobTimeBreakdown,
     agingBuckets: agingBucketOrder.map((name) => {
       const value = agingCounts[name] ?? 0
