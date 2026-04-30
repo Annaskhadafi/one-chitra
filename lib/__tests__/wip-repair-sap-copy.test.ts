@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { buildWipRepairSapCopyText, countWipRepairSapCopyRows } from "@/lib/wip-repair-sap-copy"
+import { buildWipRepairSapCopyText, countWipRepairSapCopyRows, resolveWipRepairSiteCode } from "@/lib/wip-repair-sap-copy"
 import type { WipRepairRecord, WipRepairWorkOrderDetailRecord } from "@/lib/types/wip-repair"
 
 const workOrder: WipRepairRecord = {
@@ -86,8 +86,8 @@ describe("buildWipRepairSapCopyText", () => {
       workOrder,
       details,
       repairMasterItems: [
-        { materialCode: "761E290002", materialName: "BLACK CEMENT 946 ML" },
-        { materialCode: "799E260001", materialName: "CRP-46 440 X 170MM" },
+        { materialCode: "761E290002", materialName: "BLACK CEMENT 946 ML", uom: "CAN" },
+        { materialCode: "799E260001", materialName: "CRP-46 440 X 170MM", uom: "PC" },
       ],
       repairMasterSites: [
         { siteCode: "RS01", siteName: "BPN" },
@@ -95,7 +95,7 @@ describe("buildWipRepairSapCopyText", () => {
     })
 
     expect(text.split("\n")).toEqual([
-      "761E290002\t500\tML\tRS01\t\t80000039916\t\t\t\t\t\t\t2002\t\tBLACK CEMENT 946 ML",
+      "761E290002\t500\tCAN\tRS01\t\t80000039916\t\t\t\t\t\t\t2002\t\tBLACK CEMENT 946 ML",
       "799E260001\t1\tPC\tRS01\t\t80000039916\t\t\t\t\t\t\t2002\t\tCRP-46 440 X 170MM",
       "\t2\tPC\tRS01\t\t80000039916\t\t\t\t\t\t\t2002\t\tUNMATCHED MATERIAL",
     ])
@@ -103,5 +103,14 @@ describe("buildWipRepairSapCopyText", () => {
 
   it("counts every detail row that has material text", () => {
     expect(countWipRepairSapCopyRows(details, [])).toBe(3)
+  })
+
+  it("resolves WIP store loc labels to repair master site code", () => {
+    expect(
+      resolveWipRepairSiteCode(
+        { store_loc: "CK-BMB", site: "BMB" },
+        [{ siteCode: "RS03", siteName: "CP BMB" }],
+      ),
+    ).toBe("RS03")
   })
 })

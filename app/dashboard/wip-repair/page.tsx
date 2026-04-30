@@ -61,6 +61,7 @@ async function WipRepairContent() {
         repairMasterItems={repairMasterData.items.map((item) => ({
           materialCode: item.materialCode,
           materialName: item.materialName,
+          uom: item.uom,
         }))}
         repairMasterSites={repairMasterData.sites.map((site) => ({
           siteCode: site.siteCode,

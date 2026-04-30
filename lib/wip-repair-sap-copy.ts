@@ -3,6 +3,7 @@ import type { WipRepairRecord, WipRepairWorkOrderDetailRecord } from "@/lib/type
 type RepairMasterItemForSapCopy = {
   materialCode: string | null
   materialName: string | null
+  uom?: string | null
 }
 
 type RepairMasterSiteForSapCopy = {
@@ -25,6 +26,17 @@ function cleanText(value: string | null | undefined) {
 
 function normalizeLookup(value: string | null | undefined) {
   return cleanText(value).replace(/\s+/g, " ").toUpperCase()
+}
+
+function normalizeLookupKey(value: string | null | undefined) {
+  return normalizeLookup(value).replace(/[^A-Z0-9]/g, "")
+}
+
+function getLookupTokens(value: string | null | undefined) {
+  return normalizeLookup(value)
+    .split(/[^A-Z0-9]+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 2)
 }
 
 function normalizeUom(value: string | null | undefined) {
@@ -52,27 +64,40 @@ function splitQuantityAndUom(qty: string | null | undefined, smu: string | null 
 }
 
 function makeMasterMaterialLookup(items: RepairMasterItemForSapCopy[]) {
-  const lookup = new Map<string, RepairMasterItemForSapCopy>()
+  const byName = new Map<string, RepairMasterItemForSapCopy>()
+  const byCode = new Map<string, RepairMasterItemForSapCopy>()
 
   for (const item of items) {
-    const key = normalizeLookup(item.materialName)
+    const nameKey = normalizeLookup(item.materialName)
+    const codeKey = normalizeLookupKey(item.materialCode)
 
-    if (key) {
-      lookup.set(key, item)
+    if (nameKey) {
+      byName.set(nameKey, item)
+    }
+
+    if (codeKey) {
+      byCode.set(codeKey, item)
     }
   }
 
-  return lookup
+  return { byName, byCode }
 }
 
-function resolveStoreLoc(workOrder: WipRepairRecord, sites: RepairMasterSiteForSapCopy[]) {
-  const candidates = [workOrder.store_loc, workOrder.site].map(normalizeLookup).filter(Boolean)
+export function resolveWipRepairSiteCode(workOrder: Pick<WipRepairRecord, "store_loc" | "site">, sites: RepairMasterSiteForSapCopy[]) {
+  const candidateValues = [workOrder.store_loc, workOrder.site].filter((value) => cleanText(value))
+  const candidateKeys = candidateValues.map(normalizeLookupKey).filter(Boolean)
+  const candidateTokens = new Set(candidateValues.flatMap(getLookupTokens))
 
   for (const site of sites) {
-    const siteCode = normalizeLookup(site.siteCode)
-    const siteName = normalizeLookup(site.siteName)
+    const siteCode = normalizeLookupKey(site.siteCode)
+    const siteName = normalizeLookupKey(site.siteName)
+    const siteTokens = getLookupTokens(site.siteName)
 
-    if (candidates.includes(siteCode) || candidates.includes(siteName)) {
+    if (
+      candidateKeys.includes(siteCode) ||
+      candidateKeys.includes(siteName) ||
+      siteTokens.some((token) => candidateTokens.has(token))
+    ) {
       return cleanText(site.siteCode)
     }
   }
@@ -114,7 +139,7 @@ export function buildWipRepairSapCopyText({
   repairMasterSites,
 }: BuildWipRepairSapCopyTextInput) {
   const materialLookup = makeMasterMaterialLookup(repairMasterItems)
-  const storeLoc = resolveStoreLoc(workOrder, repairMasterSites)
+  const storeLoc = resolveWipRepairSiteCode(workOrder, repairMasterSites)
   const workOrderNumber = cleanText(workOrder.wo)
 
   const rows = details
@@ -125,14 +150,16 @@ export function buildWipRepairSapCopyText({
         return null
       }
 
-      const masterMaterial = materialLookup.get(normalizeLookup(materialName))
-      const materialNumber = cleanText(masterMaterial?.materialCode) || cleanText(detail.material_id)
+      const masterMaterialByName = materialLookup.byName.get(normalizeLookup(materialName))
+      const materialNumber = cleanText(masterMaterialByName?.materialCode) || cleanText(detail.material_id)
+      const masterMaterialByCode = materialLookup.byCode.get(normalizeLookupKey(materialNumber))
+      const masterUom = normalizeUom(masterMaterialByCode?.uom ?? masterMaterialByName?.uom)
       const quantity = splitQuantityAndUom(detail.qty, detail.smu)
 
       return makeSapCopyRow({
         materialNumber,
         qty: quantity.qty,
-        uom: quantity.uom,
+        uom: masterUom || quantity.uom,
         storeLoc,
         workOrderNumber,
         materialName,

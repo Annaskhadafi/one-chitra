@@ -34,7 +34,7 @@ import {
 } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
 import { normalizeWipRepairBrand } from "@/lib/wip-repair-brand"
-import { buildWipRepairSapCopyText, countWipRepairSapCopyRows } from "@/lib/wip-repair-sap-copy"
+import { buildWipRepairSapCopyText, countWipRepairSapCopyRows, resolveWipRepairSiteCode } from "@/lib/wip-repair-sap-copy"
 import type { WipRepairRecord, WipRepairWorkOrderDetailRecord } from "@/lib/types/wip-repair"
 
 type WipRepairTableProps = {
@@ -47,6 +47,7 @@ type WipRepairTableProps = {
 type RepairMasterLookupItem = {
   materialCode: string | null
   materialName: string | null
+  uom?: string | null
 }
 
 type RepairMasterLookupSite = {
@@ -406,6 +407,7 @@ export function WipRepairTable({ data, workOrderDetails, repairMasterItems, repa
   const [sizeFilters, setSizeFilters] = useState<string[]>([])
   const [injuryFilters, setInjuryFilters] = useState<string[]>([])
   const [expandedWorkOrders, setExpandedWorkOrders] = useState<Set<string>>(() => new Set())
+  const [copiedSapKey, setCopiedSapKey] = useState<string | null>(null)
 
   const detailsByWorkOrder = useMemo(() => {
     const grouped = workOrderDetails.reduce<Record<string, WipRepairWorkOrderDetailRecord[]>>((accumulator, detail) => {
@@ -443,8 +445,8 @@ export function WipRepairTable({ data, workOrderDetails, repairMasterItems, repa
     [data]
   )
   const storeLocOptions = useMemo(
-    () => Array.from(new Set(data.map((item) => normalizeValue(item.store_loc)).filter((item) => item !== "-"))).sort(),
-    [data]
+    () => Array.from(new Set(data.map((item) => normalizeValue(resolveWipRepairSiteCode(item, repairMasterSites))).filter((item) => item !== "-"))).sort(),
+    [data, repairMasterSites]
   )
   const siteOptions = useMemo(
     () => Array.from(new Set(data.map((item) => normalizeValue(item.site)).filter((item) => item !== "-"))).sort(),
@@ -488,6 +490,7 @@ export function WipRepairTable({ data, workOrderDetails, repairMasterItems, repa
             item.inspector,
             item.createby,
             item.store_loc,
+            resolveWipRepairSiteCode(item, repairMasterSites),
           ]
             .map((value) => getNormalizedText(value))
             .some((value) => value.includes(normalizedQuery)) ||
@@ -509,7 +512,7 @@ export function WipRepairTable({ data, workOrderDetails, repairMasterItems, repa
           )
 
         const matchesStatus = statusFilter === ALL_FILTER || normalizeValue(item.status) === statusFilter
-        const matchesStoreLoc = storeLocFilter === ALL_FILTER || normalizeValue(item.store_loc) === storeLocFilter
+        const matchesStoreLoc = storeLocFilter === ALL_FILTER || normalizeValue(resolveWipRepairSiteCode(item, repairMasterSites)) === storeLocFilter
         const matchesSite = siteFilter === ALL_FILTER || normalizeValue(item.site) === siteFilter
         const matchesBrand = brandFilter === ALL_FILTER || normalizeWipRepairBrand(item.brand) === brandFilter
         const matchesCustomer = customerFilters.length === 0 || customerFilters.includes(normalizeValue(item.customer))
@@ -519,7 +522,7 @@ export function WipRepairTable({ data, workOrderDetails, repairMasterItems, repa
         return matchesQuery && matchesStatus && matchesStoreLoc && matchesSite && matchesBrand && matchesCustomer && matchesSize && matchesInjury
       })
       .sort((left, right) => getSortTimestamp(right) - getSortTimestamp(left))
-  }, [brandFilter, customerFilters, data, detailsByWorkOrder, injuryFilters, query, siteFilter, sizeFilters, statusFilter, storeLocFilter])
+  }, [brandFilter, customerFilters, data, detailsByWorkOrder, injuryFilters, query, repairMasterSites, siteFilter, sizeFilters, statusFilter, storeLocFilter])
 
   function toggleWorkOrder(wo: string) {
     setExpandedWorkOrders((current) => {
@@ -535,7 +538,7 @@ export function WipRepairTable({ data, workOrderDetails, repairMasterItems, repa
     })
   }
 
-  async function copySapFormat(item: WipRepairRecord, details: WipRepairWorkOrderDetailRecord[]) {
+  async function copySapFormat(item: WipRepairRecord, details: WipRepairWorkOrderDetailRecord[], detailKey: string) {
     const text = buildWipRepairSapCopyText({
       workOrder: item,
       details,
@@ -551,6 +554,10 @@ export function WipRepairTable({ data, workOrderDetails, repairMasterItems, repa
 
     try {
       await copyTextToClipboard(text)
+      setCopiedSapKey(detailKey)
+      window.setTimeout(() => {
+        setCopiedSapKey((current) => (current === detailKey ? null : current))
+      }, 2500)
       toast.success(`${rowCount.toLocaleString("id-ID")} baris material SAP disalin`)
     } catch (error) {
       console.error("Copy SAP format failed:", error)
@@ -568,7 +575,7 @@ export function WipRepairTable({ data, workOrderDetails, repairMasterItems, repa
               <Input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Cari WO, store loc, tire SN, customer, site, atau brand"
+                placeholder="Cari WO, site code, tire SN, customer, site, atau brand"
                 className="h-10 rounded-xl pl-9"
               />
             </div>
@@ -590,10 +597,10 @@ export function WipRepairTable({ data, workOrderDetails, repairMasterItems, repa
 
               <Select value={storeLocFilter} onValueChange={setStoreLocFilter}>
                 <SelectTrigger className="h-10 w-full rounded-xl sm:min-w-40">
-                  <SelectValue placeholder="Semua store loc" />
+                  <SelectValue placeholder="Semua site code" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={ALL_FILTER}>Semua store loc</SelectItem>
+                  <SelectItem value={ALL_FILTER}>Semua site code</SelectItem>
                   {storeLocOptions.map((option) => (
                     <SelectItem key={option} value={option}>
                       {option}
@@ -658,7 +665,7 @@ export function WipRepairTable({ data, workOrderDetails, repairMasterItems, repa
           {storeLocFilter !== ALL_FILTER || customerFilters.length > 0 || sizeFilters.length > 0 || injuryFilters.length > 0 ? (
             <div className="mt-3 flex flex-wrap items-center gap-2">
               {[
-                ...(storeLocFilter !== ALL_FILTER ? [{ type: "Store Loc", value: storeLocFilter, onClear: () => setStoreLocFilter(ALL_FILTER) }] : []),
+                ...(storeLocFilter !== ALL_FILTER ? [{ type: "Site Code", value: storeLocFilter, onClear: () => setStoreLocFilter(ALL_FILTER) }] : []),
                 ...customerFilters.map((value) => ({ type: "Customer", value, onClear: () => setCustomerFilters(customerFilters.filter((item) => item !== value)) })),
                 ...sizeFilters.map((value) => ({ type: "Size", value, onClear: () => setSizeFilters(sizeFilters.filter((item) => item !== value)) })),
                 ...injuryFilters.map((value) => ({ type: "Injury", value, onClear: () => setInjuryFilters(injuryFilters.filter((item) => item !== value)) }))].map((filter) => (
@@ -680,7 +687,7 @@ export function WipRepairTable({ data, workOrderDetails, repairMasterItems, repa
             <TableHeader className="bg-muted/40">
               <TableRow>
                 <TableHead className="w-12 px-4 py-3" aria-label="Detail pekerjaan" />
-                <TableHead className="px-4 py-3">Store Loc</TableHead>
+                <TableHead className="px-4 py-3">Site Code</TableHead>
                 <TableHead className="px-4 py-3">WO</TableHead>
                 <TableHead className="px-4 py-3">Status</TableHead>
                 <TableHead className="px-4 py-3">Customer / Site</TableHead>
@@ -742,6 +749,7 @@ export function WipRepairTable({ data, workOrderDetails, repairMasterItems, repa
                   const isExpanded = expandedWorkOrders.has(detailKey) || (hasSearch && details.length > 0 && (isSearchMatched || matchingDetailIds.size > 0))
                   const totalMinutes = details.reduce((sum, detail) => sum + (parseMinutes(detail.time) ?? 0), 0)
                   const sapCopyRowCount = countWipRepairSapCopyRows(details, repairMasterItems)
+                  const isSapCopied = copiedSapKey === detailKey
 
                   return (
                     <Fragment key={item.id_wo}>
@@ -760,7 +768,7 @@ export function WipRepairTable({ data, workOrderDetails, repairMasterItems, repa
                             <ChevronDown className={cn("h-4 w-4 transition-transform", isExpanded && "rotate-180")} />
                           </Button>
                         </TableCell>
-                        <TableCell className="px-4 py-3 font-medium">{normalizeValue(item.store_loc)}</TableCell>
+                        <TableCell className="px-4 py-3 font-medium">{normalizeValue(resolveWipRepairSiteCode(item, repairMasterSites))}</TableCell>
                         <TableCell className="px-4 py-3 font-medium tabular-nums">{workOrder}</TableCell>
                         <TableCell className="px-4 py-3">
                           <Badge variant="outline" className={cn("rounded-full px-2.5 py-1 text-xs font-medium", getStatusClasses(item.status))}>
@@ -804,7 +812,18 @@ export function WipRepairTable({ data, workOrderDetails, repairMasterItems, repa
                         <TableRow className="bg-muted/20 hover:bg-muted/20">
                           <TableCell colSpan={14} className="px-4 py-4">
                             <div className="rounded-xl border bg-background p-4">
-                              <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                              <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start">
+                                <Button
+                                  type="button"
+                                  variant={isSapCopied ? "default" : "outline"}
+                                  size="sm"
+                                  className="w-fit gap-2 rounded-lg"
+                                  disabled={sapCopyRowCount === 0}
+                                  onClick={() => copySapFormat(item, details, detailKey)}
+                                >
+                                  {isSapCopied ? <Check className="h-4 w-4" /> : <ClipboardCopy className="h-4 w-4" />}
+                                  {isSapCopied ? "Berhasil dicopy" : "Copy SAP"}
+                                </Button>
                                 <div>
                                   <p className="font-medium">Detail pekerjaan WO {workOrder}</p>
                                   {isWaitingWorkOrder(item.wo) ? (
@@ -814,17 +833,6 @@ export function WipRepairTable({ data, workOrderDetails, repairMasterItems, repa
                                     {details.length.toLocaleString("id-ID")} aktivitas pekerjaan dan material dari API detail.
                                   </p>
                                 </div>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  className="w-fit gap-2 rounded-lg"
-                                  disabled={sapCopyRowCount === 0}
-                                  onClick={() => copySapFormat(item, details)}
-                                >
-                                  <ClipboardCopy className="h-4 w-4" />
-                                  Copy SAP
-                                </Button>
                               </div>
 
                               <div className="overflow-x-auto rounded-lg border">
