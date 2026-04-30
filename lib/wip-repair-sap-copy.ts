@@ -39,6 +39,10 @@ function getLookupTokens(value: string | null | undefined) {
     .filter((token) => token.length >= 2)
 }
 
+function getMaterialNameTokens(value: string | null | undefined) {
+  return getLookupTokens(value).filter((token) => /^[A-Z]+$/.test(token) && token.length >= 2)
+}
+
 function normalizeUom(value: string | null | undefined) {
   return cleanText(value).toUpperCase()
 }
@@ -103,6 +107,34 @@ function makeMasterMaterialLookup(items: RepairMasterItemForSapCopy[]) {
   }
 
   return { byName, byCode }
+}
+
+function isValidMaterialNumber(value: string | null | undefined) {
+  return normalizeLookupKey(value).length >= 8
+}
+
+function resolveMasterMaterialByName(materialName: string, materialLookup: ReturnType<typeof makeMasterMaterialLookup>) {
+  const exactMatch = materialLookup.byName.get(normalizeLookup(materialName))
+
+  if (exactMatch) {
+    return exactMatch
+  }
+
+  const detailTokens = getMaterialNameTokens(materialName)
+
+  if (detailTokens.length < 2) {
+    return null
+  }
+
+  for (const masterMaterial of materialLookup.byName.values()) {
+    const masterTokens = new Set(getMaterialNameTokens(masterMaterial.materialName))
+
+    if (detailTokens.every((token) => masterTokens.has(token))) {
+      return masterMaterial
+    }
+  }
+
+  return null
 }
 
 export function resolveWipRepairSite(workOrder: Pick<WipRepairRecord, "store_loc" | "site">, sites: RepairMasterSiteForSapCopy[]) {
@@ -182,8 +214,9 @@ export function buildWipRepairSapCopyText({
         return null
       }
 
-      const masterMaterialByName = materialLookup.byName.get(normalizeLookup(materialName))
-      const materialNumber = cleanText(masterMaterialByName?.materialCode) || cleanText(detail.material_id)
+      const masterMaterialByName = resolveMasterMaterialByName(materialName, materialLookup)
+      const detailMaterialId = cleanText(detail.material_id)
+      const materialNumber = cleanText(masterMaterialByName?.materialCode) || (isValidMaterialNumber(detailMaterialId) ? detailMaterialId : "")
       const masterMaterialByCode = materialLookup.byCode.get(normalizeLookupKey(materialNumber))
       const masterUom = normalizeUom(masterMaterialByCode?.uom ?? masterMaterialByName?.uom)
       const quantity = splitQuantityAndUom(detail.qty, detail.smu)

@@ -68,6 +68,17 @@ const details: WipRepairWorkOrderDetailRecord[] = [
     time: "15",
   },
   {
+    id_job: "4528",
+    wo: "80000039916",
+    job: "Cementing",
+    material_id: "7",
+    material_name: "MTR SOLUTION 700 G",
+    category: "CEMENT",
+    smu: "mL",
+    qty: "100",
+    time: "15",
+  },
+  {
     id_job: "4526",
     wo: "80000039916",
     job: "No material",
@@ -83,26 +94,28 @@ const details: WipRepairWorkOrderDetailRecord[] = [
 describe("buildWipRepairSapCopyText", () => {
   it("builds SAP paste TSV data rows without header", () => {
     const text = buildWipRepairSapCopyText({
-      workOrder,
+      workOrder: { ...workOrder, store_loc: "CK-BMB", site: "BMB" },
       details,
       repairMasterItems: [
         { materialCode: "761E290002", materialName: "BLACK CEMENT 946 ML", uom: "CAN" },
         { materialCode: "799E260001", materialName: "CRP-46 440 X 170MM", uom: "PC" },
+        { materialCode: "761E290001", materialName: "MTR-2 SOLUTION 600 G", uom: "CAN" },
       ],
       repairMasterSites: [
-        { siteCode: "RS01", siteName: "BPN" },
+        { siteCode: "RS03", siteName: "CP BMB" },
       ],
     })
 
     expect(text.split("\n")).toEqual([
-      "761E290002\t0.5\tCAN\tRS01\t\t80000039916\t\t\t\t\t\t\t2002\t\tBLACK CEMENT 946 ML",
-      "799E260001\t1\tPC\tRS01\t\t80000039916\t\t\t\t\t\t\t2002\t\tCRP-46 440 X 170MM",
-      "\t2\tPC\tRS01\t\t80000039916\t\t\t\t\t\t\t2002\t\tUNMATCHED MATERIAL",
+      "761E290002\t0.5\tCAN\tRS03\t\t80000039916\t\t\t\t\t\t\t2002\t\tBLACK CEMENT 946 ML",
+      "799E260001\t1\tPC\tRS03\t\t80000039916\t\t\t\t\t\t\t2002\t\tCRP-46 440 X 170MM",
+      "\t2\tPC\tRS03\t\t80000039916\t\t\t\t\t\t\t2002\t\tUNMATCHED MATERIAL",
+      "761E290001\t0.1\tCAN\tRS03\t\t80000039916\t\t\t\t\t\t\t2002\t\tMTR SOLUTION 700 G",
     ])
   })
 
   it("counts every detail row that has material text", () => {
-    expect(countWipRepairSapCopyRows(details, [])).toBe(3)
+    expect(countWipRepairSapCopyRows(details, [])).toBe(4)
   })
 
   it("resolves WIP store loc labels to repair master site code", () => {
