@@ -31,10 +31,24 @@ import {
 import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
 import { upsertStock } from "@/app/actions/stock"
-import { Plus, Trash2 } from "lucide-react"
+import { Check, ChevronsUpDown, Plus, Trash2 } from "lucide-react"
 import { z } from "zod"
 
 import { stockSchema } from "@/lib/schemas"
+import { cn } from "@/lib/utils"
+import {
+    Command,
+    CommandEmpty,
+    CommandGroup,
+    CommandInput,
+    CommandItem,
+    CommandList,
+} from "@/components/ui/command"
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from "@/components/ui/popover"
 
 type StockFormValues = z.infer<typeof stockSchema>
 
@@ -79,6 +93,7 @@ interface StockDialogProps {
 export function StockDialog({ stock, products, customers, warehouses, trigger, onSuccess }: StockDialogProps) {
     const [isOpen, setIsOpen] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
+    const [isProductSearchOpen, setIsProductSearchOpen] = useState(false)
     const isEdit = !!stock
 
     const form = useForm<StockFormValues>({
@@ -101,6 +116,7 @@ export function StockDialog({ stock, products, customers, warehouses, trigger, o
         control: form.control,
         name: "stockBookings",
     })
+    const selectedProduct = products.find((product) => product.id === form.watch("productId"))
 
     const handleSubmit = async (data: StockFormValues) => {
         setIsLoading(true)
@@ -148,24 +164,71 @@ export function StockDialog({ stock, products, customers, warehouses, trigger, o
                             render={({ field }) => (
                                 <FormItem>
                                     <FormLabel>Product</FormLabel>
-                                    <Select
-                                        onValueChange={(v) => field.onChange(Number(v))}
-                                        defaultValue={field.value !== 0 ? field.value.toString() : undefined}
-                                        disabled={isEdit || isLoading}
-                                    >
-                                        <FormControl>
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="Select Product" />
-                                            </SelectTrigger>
-                                        </FormControl>
-                                        <SelectContent>
-                                            {products.map(p => (
-                                                <SelectItem key={p.id} value={p.id.toString()}>
-                                                    {p.materialNumber} - {p.materialDescription}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
+                                    <Popover open={isProductSearchOpen} onOpenChange={setIsProductSearchOpen}>
+                                        <PopoverTrigger asChild>
+                                            <FormControl>
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    role="combobox"
+                                                    disabled={isEdit || isLoading}
+                                                    className={cn(
+                                                        "h-auto min-h-10 w-full justify-between whitespace-normal text-left font-normal",
+                                                        !selectedProduct && "text-muted-foreground"
+                                                    )}
+                                                >
+                                                    <span className="min-w-0 flex-1 truncate">
+                                                        {selectedProduct
+                                                            ? `${selectedProduct.materialNumber} - ${selectedProduct.materialDescription || "-"}`
+                                                            : "Select Product"}
+                                                    </span>
+                                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                                </Button>
+                                            </FormControl>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                                            <Command>
+                                                <CommandInput placeholder="Search material number or product..." />
+                                                <CommandList>
+                                                    <CommandEmpty>No product found.</CommandEmpty>
+                                                    <CommandGroup>
+                                                        {products.map((product) => (
+                                                            <CommandItem
+                                                                key={product.id}
+                                                                value={[
+                                                                    product.id,
+                                                                    product.materialNumber,
+                                                                    product.materialDescription,
+                                                                    product.oldMaterialNo,
+                                                                    product.category,
+                                                                    product.plant,
+                                                                ].filter(Boolean).join(" ")}
+                                                                onSelect={() => {
+                                                                    field.onChange(product.id)
+                                                                    setIsProductSearchOpen(false)
+                                                                }}
+                                                            >
+                                                                <Check
+                                                                    className={cn(
+                                                                        "mr-2 h-4 w-4",
+                                                                        product.id === field.value ? "opacity-100" : "opacity-0"
+                                                                    )}
+                                                                />
+                                                                <div className="min-w-0">
+                                                                    <div className="truncate font-medium">
+                                                                        {product.materialNumber} - {product.materialDescription || "-"}
+                                                                    </div>
+                                                                    <div className="truncate text-xs text-muted-foreground">
+                                                                        {product.plant || "-"} | {product.category || "-"} | Old: {product.oldMaterialNo || "-"}
+                                                                    </div>
+                                                                </div>
+                                                            </CommandItem>
+                                                        ))}
+                                                    </CommandGroup>
+                                                </CommandList>
+                                            </Command>
+                                        </PopoverContent>
+                                    </Popover>
                                     <FormMessage />
                                 </FormItem>
                             )}

@@ -138,10 +138,13 @@ function formatCurrency(value: number) {
 
 function calculateGrandTotal(order: SalesOrderListItem) {
     const subtotal = order.items.reduce((sum, item) => {
-        const lineTotal = item.quantity * Number(item.unitPrice) - Number(item.discount) + Number(item.tax)
-        return sum + lineTotal
+        return sum + calculateLineTotal(item)
     }, 0)
     return subtotal - Number(order.discount) + Number(order.shipping)
+}
+
+function calculateLineTotal(item: { quantity: number; unitPrice: string; discount: string; tax: string }) {
+    return item.quantity * Number(item.unitPrice) - Number(item.discount) + Number(item.tax)
 }
 
 function formatRemarkDetailForExport(order: SalesOrderListItem) {
@@ -166,6 +169,80 @@ function formatRemarkDetailForExport(order: SalesOrderListItem) {
 
 function formatNumber(value: number) {
     return value.toLocaleString("id-ID")
+}
+
+function normalizeSearch(value: unknown) {
+    return String(value ?? "").toLowerCase()
+}
+
+function orderItemMatchesSearch(item: { product?: { materialNumber?: string | null; materialDescription?: string | null } | null; description?: string | null }, term: string) {
+    if (!term) return false
+
+    return [
+        item.product?.materialNumber,
+        item.product?.materialDescription,
+        item.description,
+    ].some((value) => normalizeSearch(value).includes(term))
+}
+
+function orderMatchesSearch(order: {
+    invoiceNumber?: string | null
+    customerPo?: string | null
+    customer?: { name?: string | null } | null
+    salesPerson?: { name?: string | null } | null
+    createdByUser?: { name?: string | null } | null
+    status?: string | null
+    items?: { product?: { materialNumber?: string | null; materialDescription?: string | null } | null; description?: string | null }[]
+}, term: string) {
+    if (!term) return true
+
+    const orderFields = [
+        order.invoiceNumber,
+        order.customerPo,
+        order.customer?.name,
+        order.salesPerson?.name,
+        order.createdByUser?.name,
+        order.status,
+    ]
+
+    return orderFields.some((value) => normalizeSearch(value).includes(term)) ||
+        order.items?.some((item) => orderItemMatchesSearch(item, term))
+}
+
+function orderHasProductSearchMatch(order: { items?: { product?: { materialNumber?: string | null; materialDescription?: string | null } | null; description?: string | null }[] }, term: string) {
+    return Boolean(term) && Boolean(order.items?.some((item) => orderItemMatchesSearch(item, term)))
+}
+
+function highlightSearchText(value: string | null | undefined, term: string) {
+    const text = value || "-"
+    if (!term) return text
+
+    const lowerText = text.toLowerCase()
+    const lowerTerm = term.toLowerCase()
+    const parts: React.ReactNode[] = []
+    let cursor = 0
+    let matchIndex = lowerText.indexOf(lowerTerm)
+
+    while (matchIndex !== -1) {
+        if (matchIndex > cursor) {
+            parts.push(text.slice(cursor, matchIndex))
+        }
+
+        const end = matchIndex + lowerTerm.length
+        parts.push(
+            <mark key={`${matchIndex}-${end}`} className="rounded bg-yellow-200 px-0.5 text-yellow-950">
+                {text.slice(matchIndex, end)}
+            </mark>
+        )
+        cursor = end
+        matchIndex = lowerText.indexOf(lowerTerm, cursor)
+    }
+
+    if (cursor < text.length) {
+        parts.push(text.slice(cursor))
+    }
+
+    return parts
 }
 
 function getDeliveryStatusLabel(item: SalesOrderListItem["remarks"]["items"][number]) {
@@ -501,7 +578,7 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
             header: () => null,
             cell: ({ row }) => {
                 const order = row.original
-                const canExpand = order.status !== "completed"
+                const canExpand = order.items.length > 0
                 const isExpanded = expandedRows[row.id] === true
 
                 if (!canExpand) {
@@ -883,7 +960,15 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
                     {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
                 </Button>
             ),
-            cell: ({ row }) => <Badge variant="outline">{row.original.items.length} items</Badge>,
+            cell: ({ row }) => {
+                const term = globalFilter.trim().toLowerCase()
+                const matchedItems = term
+                    ? row.original.items.filter((item) => orderItemMatchesSearch(item, term))
+                    : []
+                const count = matchedItems.length > 0 ? matchedItems.length : row.original.items.length
+
+                return <Badge variant="outline">{count} items</Badge>
+            },
         },
         {
             id: "grandTotal",
@@ -993,7 +1078,7 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
                 </div>
             ),
         },
-    ], [expandedRows, mounted, canEdit, canView, canDelete, handleDelete, handleUpdateStatus])
+    ], [expandedRows, mounted, canEdit, canView, canDelete, handleDelete, handleUpdateStatus, globalFilter])
 
     const filteredData = useMemo(() => {
         const term = globalFilter.trim().toLowerCase()
@@ -1003,14 +1088,7 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
             const orderYear = new Date(order.salesDate).getFullYear().toString()
             const orderMonth = monthLabels[new Date(order.salesDate).getMonth()]
 
-            const matchesSearch = term.length === 0 || (
-                order.invoiceNumber?.toLowerCase().includes(term) ||
-                order.customerPo?.toLowerCase().includes(term) ||
-                order.customer?.name.toLowerCase().includes(term) ||
-                order.salesPerson?.name?.toLowerCase().includes(term) ||
-                order.createdByUser?.name?.toLowerCase().includes(term) ||
-                order.status.toLowerCase().includes(term)
-            )
+            const matchesSearch = orderMatchesSearch(order, term)
 
             const matchesStatus = statusFilter.length === 0 || statusFilter.includes(order.status)
             const matchesCustomer = customerFilter.length === 0 || customerFilter.includes(order.customer?.name || "")
@@ -1024,6 +1102,52 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
             return matchesSearch && matchesStatus && matchesCustomer && matchesTripDestination && matchesCategory && matchesRemark && matchesYear && matchesMonth && matchesCreatedBy
         })
     }, [data, globalFilter, statusFilter, customerFilter, tripDestinationFilter, categoryFilter, remarkFilter, yearFilter, monthFilter, createdByFilter])
+
+    const filteredTotals = useMemo(() => {
+        const term = globalFilter.trim().toLowerCase()
+        const hasItemSearch = filteredData.some((order) => orderHasProductSearchMatch(order, term))
+
+        return filteredData.reduce(
+            (totals, order) => {
+                if (hasItemSearch) {
+                    const matchedItems = order.items.filter((item) => orderItemMatchesSearch(item, term))
+                    totals.qty += matchedItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0)
+                    totals.value += matchedItems.reduce((sum, item) => sum + calculateLineTotal(item), 0)
+                    return totals
+                }
+
+                totals.qty += order.items.reduce((sum, item) => sum + Number(item.quantity || 0), 0)
+                totals.value += calculateGrandTotal(order)
+                return totals
+            },
+            { qty: 0, value: 0 }
+        )
+    }, [filteredData, globalFilter])
+
+    useEffect(() => {
+        const term = globalFilter.trim().toLowerCase()
+        if (!term) return
+
+        const productMatchIds = filteredData
+            .filter((order) => orderHasProductSearchMatch(order, term))
+            .map((order) => String(order.id))
+
+        if (productMatchIds.length === 0) return
+
+        setExpandedRows((current) => {
+            let changed = false
+            const next = { ...current }
+
+            for (const rowId of productMatchIds) {
+                if (next[rowId] !== true) {
+                    next[rowId] = true
+                    changed = true
+                }
+            }
+
+            return changed ? next : current
+        })
+    }, [filteredData, globalFilter])
 
     const table = useReactTable({
         data: filteredData,
@@ -1051,9 +1175,26 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
     const tableRowElements = rows.flatMap((row) => {
         const order = row.original
         const isExpanded = expandedRows[row.id] === true
+        const searchTerm = globalFilter.trim().toLowerCase()
+        const hasProductSearchMatch = orderHasProductSearchMatch(order, searchTerm)
+        const visibleItems = hasProductSearchMatch
+            ? order.items.filter((item) => orderItemMatchesSearch(item, searchTerm))
+            : order.items
+        const visibleOutstandingQty = visibleItems.reduce((sum, item) => {
+            const { remainingQuantity } = getOrderItemDeliverySummary(order, item)
+            return sum + remainingQuantity
+        }, 0)
+        const visibleOutstandingItems = visibleItems.filter((item) => {
+            const { remainingQuantity } = getOrderItemDeliverySummary(order, item)
+            return remainingQuantity > 0
+        }).length
 
         const mainRow = (
-            <TableRow key={row.id} data-state={row.getIsSelected() && "selected"}>
+            <TableRow
+                key={row.id}
+                data-state={row.getIsSelected() && "selected"}
+                className={cn(hasProductSearchMatch && "bg-yellow-50 hover:bg-yellow-100/70")}
+            >
                 {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -1068,7 +1209,7 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
 
         return [
             mainRow,
-            <TableRow key={`detail-${row.id}`} className="bg-slate-50">
+            <TableRow key={`detail-${row.id}`} className={cn("bg-slate-50", hasProductSearchMatch && "bg-yellow-50/70")}>
                 <TableCell colSpan={visibleColumnCount} className="p-0">
                     <div className="rounded-b-xl border border-t-0 border-slate-200 bg-white p-4">
                         <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -1078,11 +1219,11 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
                             </div>
                             <div className="rounded-xl border bg-slate-50 p-3">
                                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Outstanding Qty</p>
-                                <p className="mt-2 text-sm font-medium">{order.remarks?.outstandingQty.toLocaleString() ?? 0}</p>
+                                <p className="mt-2 text-sm font-medium">{visibleOutstandingQty.toLocaleString()}</p>
                             </div>
                             <div className="rounded-xl border bg-slate-50 p-3">
                                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Outstanding Items</p>
-                                <p className="mt-2 text-sm font-medium">{order.remarks?.outstandingItemsCount ?? 0}</p>
+                                <p className="mt-2 text-sm font-medium">{visibleOutstandingItems}</p>
                             </div>
                         </div>
 
@@ -1099,7 +1240,7 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y">
-                                    {order.items.map((item) => {
+                                    {visibleItems.map((item) => {
                                         const {
                                             remainingQuantity,
                                             deliveredQuantity,
@@ -1107,15 +1248,22 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
                                             stockStatus,
                                             deliveryStatus,
                                         } = getOrderItemDeliverySummary(order, item)
+                                        const itemMatchesSearch = orderItemMatchesSearch(item, searchTerm)
 
                                         return (
-                                            <tr key={item.id} className="border-b last:border-b-0">
+                                            <tr
+                                                key={item.id}
+                                                className={cn(
+                                                    "border-b last:border-b-0",
+                                                    itemMatchesSearch && "bg-yellow-100/70"
+                                                )}
+                                            >
                                                 <td className="px-3 py-2 align-top">
                                                     <div className="font-medium">
-                                                        {item.product?.materialDescription || item.description || item.product?.materialNumber || "Unknown product"}
+                                                        {highlightSearchText(item.product?.materialDescription || item.description || item.product?.materialNumber || "Unknown product", searchTerm)}
                                                     </div>
                                                     <div className="text-xs text-muted-foreground">
-                                                        {item.product?.materialNumber || "-"}
+                                                        {highlightSearchText(item.product?.materialNumber || "-", searchTerm)}
                                                     </div>
                                                 </td>
                                                 <td className="px-3 py-2 align-top">{item.quantity.toLocaleString()}</td>
@@ -1237,7 +1385,7 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
     }, [])
     useEffect(() => {
         setPagination((prev) => ({ ...prev, pageIndex: 0 }))
-    }, [globalFilter, statusFilter, customerFilter, categoryFilter, yearFilter, monthFilter, createdByFilter])
+    }, [globalFilter, statusFilter, customerFilter, tripDestinationFilter, categoryFilter, remarkFilter, yearFilter, monthFilter, createdByFilter])
 
     return (
         <div className="space-y-6">
@@ -1476,7 +1624,7 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
                         <div className="relative flex-1">
                             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                             <Input
-                                placeholder="Search invoice, customer, PO, user..."
+                                placeholder="Search invoice, customer, PO, material, product..."
                                 className="pl-8"
                                 value={globalFilter ?? ""}
                                 onChange={(e) => setGlobalFilter(e.target.value)}
@@ -1602,7 +1750,7 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
                     <div className="relative w-full sm:w-72 shrink-0">
                         <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                         <Input
-                            placeholder="Search invoice, customer, PO, user..."
+                            placeholder="Search invoice, customer, PO, material, product..."
                             className="pl-8"
                             value={globalFilter ?? ""}
                             onChange={(e) => setGlobalFilter(e.target.value)}
@@ -1719,6 +1867,21 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
                                     })}
                             </DropdownMenuContent>
                         </DropdownMenu>
+                    </div>
+                </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-lg border bg-card px-4 py-3">
+                    <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Total Qty</div>
+                    <div className="mt-1 font-mono text-2xl font-bold">
+                        {formatNumber(filteredTotals.qty)}
+                    </div>
+                </div>
+                <div className="rounded-lg border bg-card px-4 py-3">
+                    <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Total Nilai</div>
+                    <div className="mt-1 font-mono text-2xl font-bold">
+                        {formatCurrency(filteredTotals.value)}
                     </div>
                 </div>
             </div>
