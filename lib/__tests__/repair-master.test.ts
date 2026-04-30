@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest"
 
-import { DEFAULT_REPAIR_SITES, normalizeRepairMasterCode } from "@/lib/repair-master"
+import {
+  DEFAULT_REPAIR_SITES,
+  mergeRepairMasterItemsWithStockSap,
+  normalizeRepairMasterCode,
+} from "@/lib/repair-master"
 
 describe("repair master helpers", () => {
   it("keeps the site list from the Repair master screenshot", () => {
@@ -25,5 +29,49 @@ describe("repair master helpers", () => {
   it("normalizes master codes for duplicate checks", () => {
     expect(normalizeRepairMasterCode(" rs01 ")).toBe("RS01")
     expect(normalizeRepairMasterCode("0201")).toBe("0201")
+  })
+
+  it("matches repair master stock values from Stock SAP by material number", () => {
+    const [matched, unmatched] = mergeRepairMasterItemsWithStockSap(
+      [
+        {
+          materialCode: " 461B000005 ",
+          valuationStockValue: "manual qty",
+          valuatedStock: "manual value",
+          currency: "USD",
+          uom: "KG",
+        },
+        {
+          materialCode: "499A002403",
+          valuationStockValue: "7",
+          valuatedStock: "900",
+          currency: "USD",
+          uom: "KG",
+        },
+      ],
+      [
+        {
+          materialNo: "461B000005",
+          totalStock: "10.000",
+          valueStock: "1500.500",
+          currency: "IDR",
+          baseUnitOfMeasure: "KG",
+        },
+        {
+          materialNo: "461B000005",
+          totalStock: 2,
+          valueStock: 500,
+          currency: "IDR",
+          baseUnitOfMeasure: "KG",
+        },
+      ],
+    )
+
+    expect(matched.valuationStockValue).toBe("12")
+    expect(matched.valuatedStock).toBe("2000.5")
+    expect(matched.currency).toBe("IDR")
+    expect(matched.uom).toBe("KG")
+    expect(unmatched.valuationStockValue).toBe("7")
+    expect(unmatched.valuatedStock).toBe("900")
   })
 })

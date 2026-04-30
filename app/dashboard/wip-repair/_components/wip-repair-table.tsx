@@ -1,7 +1,8 @@
 "use client"
 
 import { Fragment, useMemo, useState } from "react"
-import { Check, ChevronDown, Search, Wrench, X } from "lucide-react"
+import { Check, ChevronDown, ClipboardCopy, Search, Wrench, X } from "lucide-react"
+import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -33,11 +34,24 @@ import {
 } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
 import { normalizeWipRepairBrand } from "@/lib/wip-repair-brand"
+import { buildWipRepairSapCopyText, countWipRepairSapCopyRows } from "@/lib/wip-repair-sap-copy"
 import type { WipRepairRecord, WipRepairWorkOrderDetailRecord } from "@/lib/types/wip-repair"
 
 type WipRepairTableProps = {
   data: WipRepairRecord[]
   workOrderDetails: WipRepairWorkOrderDetailRecord[]
+  repairMasterItems: RepairMasterLookupItem[]
+  repairMasterSites: RepairMasterLookupSite[]
+}
+
+type RepairMasterLookupItem = {
+  materialCode: string | null
+  materialName: string | null
+}
+
+type RepairMasterLookupSite = {
+  siteCode: string | null
+  siteName: string | null
 }
 
 const ALL_FILTER = "__all__"
@@ -354,7 +368,35 @@ function getDetailSortValue(detail: WipRepairWorkOrderDetailRecord) {
   return Number.isFinite(parsed) ? parsed : Number.MAX_SAFE_INTEGER
 }
 
-export function WipRepairTable({ data, workOrderDetails }: WipRepairTableProps) {
+async function copyTextToClipboard(text: string) {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text)
+      return
+    }
+  } catch {
+    // Some embedded browsers reject the Clipboard API; fall back below.
+  }
+
+  const textArea = document.createElement("textarea")
+  textArea.value = text
+  textArea.setAttribute("readonly", "true")
+  textArea.style.position = "fixed"
+  textArea.style.top = "-9999px"
+  textArea.style.left = "-9999px"
+  document.body.appendChild(textArea)
+  textArea.focus()
+  textArea.select()
+
+  const copied = document.execCommand("copy")
+  document.body.removeChild(textArea)
+
+  if (!copied) {
+    throw new Error("Clipboard copy command failed")
+  }
+}
+
+export function WipRepairTable({ data, workOrderDetails, repairMasterItems, repairMasterSites }: WipRepairTableProps) {
   const [query, setQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState(ALL_FILTER)
   const [storeLocFilter, setStoreLocFilter] = useState(ALL_FILTER)
@@ -491,6 +533,29 @@ export function WipRepairTable({ data, workOrderDetails }: WipRepairTableProps) 
 
       return next
     })
+  }
+
+  async function copySapFormat(item: WipRepairRecord, details: WipRepairWorkOrderDetailRecord[]) {
+    const text = buildWipRepairSapCopyText({
+      workOrder: item,
+      details,
+      repairMasterItems,
+      repairMasterSites,
+    })
+    const rowCount = countWipRepairSapCopyRows(details, repairMasterItems)
+
+    if (rowCount === 0) {
+      toast.error("Tidak ada material yang cocok untuk format SAP")
+      return
+    }
+
+    try {
+      await copyTextToClipboard(text)
+      toast.success(`${rowCount.toLocaleString("id-ID")} baris material SAP disalin`)
+    } catch (error) {
+      console.error("Copy SAP format failed:", error)
+      toast.error("Gagal menyalin format SAP")
+    }
   }
 
   return (
@@ -676,6 +741,7 @@ export function WipRepairTable({ data, workOrderDetails }: WipRepairTableProps) 
                   )
                   const isExpanded = expandedWorkOrders.has(detailKey) || (hasSearch && details.length > 0 && (isSearchMatched || matchingDetailIds.size > 0))
                   const totalMinutes = details.reduce((sum, detail) => sum + (parseMinutes(detail.time) ?? 0), 0)
+                  const sapCopyRowCount = countWipRepairSapCopyRows(details, repairMasterItems)
 
                   return (
                     <Fragment key={item.id_wo}>
@@ -748,6 +814,17 @@ export function WipRepairTable({ data, workOrderDetails }: WipRepairTableProps) 
                                     {details.length.toLocaleString("id-ID")} aktivitas pekerjaan dan material dari API detail.
                                   </p>
                                 </div>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="w-fit gap-2 rounded-lg"
+                                  disabled={sapCopyRowCount === 0}
+                                  onClick={() => copySapFormat(item, details)}
+                                >
+                                  <ClipboardCopy className="h-4 w-4" />
+                                  Copy SAP
+                                </Button>
                               </div>
 
                               <div className="overflow-x-auto rounded-lg border">

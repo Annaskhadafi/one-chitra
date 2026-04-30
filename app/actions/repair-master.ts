@@ -6,7 +6,11 @@ import { z } from "zod"
 
 import { db } from "@/db"
 import { repairMasterItems, repairMasterSites } from "@/db/schema"
-import { DEFAULT_REPAIR_SITES, normalizeRepairMasterCode } from "@/lib/repair-master"
+import {
+  DEFAULT_REPAIR_SITES,
+  mergeRepairMasterItemsWithStockSap,
+  normalizeRepairMasterCode,
+} from "@/lib/repair-master"
 import { repairMasterItemSchema, repairMasterSiteSchema } from "@/lib/schemas"
 
 const REPAIR_MASTER_PATH = "/dashboard/master-barang-repair"
@@ -81,7 +85,44 @@ export async function getRepairMasterData() {
     db.select().from(repairMasterSites).orderBy(asc(repairMasterSites.sortOrder), asc(repairMasterSites.siteCode)),
   ])
 
-  return { items, sites }
+  if (items.length === 0) {
+    return { items, sites }
+  }
+
+  const materialCodes = Array.from(
+    new Set(items.map((item) => normalizeRepairMasterCode(item.materialCode)).filter(Boolean)),
+  )
+  if (materialCodes.length === 0) {
+    return { items, sites }
+  }
+
+  const materialCodesSql = sql.join(materialCodes.map((materialCode) => sql`${materialCode}`), sql`, `)
+  const stockSapResult = await db.execute(sql`
+    SELECT
+      UPPER(TRIM(material_no)) AS "materialNo",
+      SUM(COALESCE(total_stock, 0))::double precision AS "totalStock",
+      SUM(COALESCE(value_stock, 0))::double precision AS "valueStock",
+      MAX(NULLIF(TRIM(currency), '')) AS currency,
+      MAX(NULLIF(TRIM(base_unit_of_measure), '')) AS "baseUnitOfMeasure"
+    FROM public.zmc9_stock_sap
+    WHERE material_no IS NOT NULL
+      AND UPPER(TRIM(material_no)) IN (${materialCodesSql})
+    GROUP BY UPPER(TRIM(material_no))
+  `)
+
+  return {
+    items: mergeRepairMasterItemsWithStockSap(
+      items,
+      stockSapResult.rows as Array<{
+        materialNo: string | null
+        totalStock: string | number | null
+        valueStock: string | number | null
+        currency: string | null
+        baseUnitOfMeasure: string | null
+      }>,
+    ),
+    sites,
+  }
 }
 
 export async function upsertRepairMasterItem(data: z.infer<typeof repairMasterItemSchema>, id?: number) {

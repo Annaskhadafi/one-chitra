@@ -1,6 +1,7 @@
 import { Suspense } from "react"
 import { ClipboardList, Loader2, Wrench } from "lucide-react"
 
+import { getRepairMasterData } from "@/app/actions/repair-master"
 import { getWipRepairData, getWipRepairWorkOrderDetails } from "@/app/actions/wip-repair"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { WipRepairTable } from "./_components/wip-repair-table"
@@ -10,9 +11,10 @@ function normalizeValue(value: string | null | undefined) {
 }
 
 async function WipRepairContent() {
-  const [data, workOrderDetails] = await Promise.all([
+  const [data, workOrderDetails, repairMasterData] = await Promise.all([
     getWipRepairData(),
     getWipRepairWorkOrderDetails(),
+    getRepairMasterData(),
   ])
 
   const progressCount = data.filter((item) => item.status.toLowerCase().includes("progress")).length
@@ -53,7 +55,18 @@ async function WipRepairContent() {
         </Card>
       </div>
 
-      <WipRepairTable data={data} workOrderDetails={workOrderDetails} />
+      <WipRepairTable
+        data={data}
+        workOrderDetails={workOrderDetails}
+        repairMasterItems={repairMasterData.items.map((item) => ({
+          materialCode: item.materialCode,
+          materialName: item.materialName,
+        }))}
+        repairMasterSites={repairMasterData.sites.map((site) => ({
+          siteCode: site.siteCode,
+          siteName: site.siteName,
+        }))}
+      />
     </div>
   )
 }

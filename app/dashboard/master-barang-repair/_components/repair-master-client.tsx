@@ -173,20 +173,20 @@ function ItemDialog({
             <Input value={form.materialName} onChange={(event) => updateForm("materialName", event.target.value)} disabled={isPending} />
           </div>
           <div className="space-y-2">
-            <Label>ValStockValue</Label>
+            <Label>Stock Qty</Label>
             <Input value={form.valuationStockValue} onChange={(event) => updateForm("valuationStockValue", event.target.value)} disabled={isPending} />
+          </div>
+          <div className="space-y-2">
+            <Label>UOM</Label>
+            <Input value={form.uom} onChange={(event) => updateForm("uom", event.target.value)} disabled={isPending} />
           </div>
           <div className="space-y-2">
             <Label>Curr</Label>
             <Input value={form.currency} onChange={(event) => updateForm("currency", event.target.value)} disabled={isPending} />
           </div>
           <div className="space-y-2">
-            <Label>Valuated Stock</Label>
+            <Label>Valuation Stock</Label>
             <Input value={form.valuatedStock} onChange={(event) => updateForm("valuatedStock", event.target.value)} disabled={isPending} />
-          </div>
-          <div className="space-y-2">
-            <Label>UOM</Label>
-            <Input value={form.uom} onChange={(event) => updateForm("uom", event.target.value)} disabled={isPending} />
           </div>
           <div className="space-y-2">
             <Label>SMU</Label>
@@ -423,14 +423,14 @@ export function RepairMasterClient({ initialItems, initialSites }: RepairMasterC
               onClick={() =>
                 downloadCsv(
                   `repair_master_items_${new Date().toISOString().slice(0, 10)}.csv`,
-                  ["Material Code", "Material Name", "ValStockValue", "Curr", "Valuated Stock", "UOM", "Category", "SMU", "Default Qty", "Standard Time", "Status", "Notes"],
+                  ["Material Code", "Material Name", "Stock Qty", "UOM", "Curr", "Valuation Stock", "Category", "SMU", "Default Qty", "Standard Time", "Status", "Notes"],
                   filteredItems.map((item) => [
                     item.materialCode,
                     item.materialName,
                     item.valuationStockValue ?? "",
+                    item.uom ?? "",
                     item.currency ?? "",
                     item.valuatedStock ?? "",
-                    item.uom ?? "",
                     item.category ?? "",
                     item.smu ?? "",
                     item.defaultQty ?? "",
@@ -462,10 +462,10 @@ export function RepairMasterClient({ initialItems, initialSites }: RepairMasterC
                   </TableHead>
                   <TableHead>Material Code</TableHead>
                   <TableHead>Material Name</TableHead>
-                  <TableHead>ValStockValue</TableHead>
-                  <TableHead>Curr</TableHead>
-                  <TableHead>Valuated Stock</TableHead>
+                  <TableHead>Stock Qty</TableHead>
                   <TableHead>UOM</TableHead>
+                  <TableHead>Curr</TableHead>
+                  <TableHead>Valuation Stock</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Action</TableHead>
                 </TableRow>
@@ -487,9 +487,9 @@ export function RepairMasterClient({ initialItems, initialSites }: RepairMasterC
                       <TableCell className="font-medium">{item.materialCode}</TableCell>
                       <TableCell className="min-w-72">{item.materialName}</TableCell>
                       <TableCell>{item.valuationStockValue || "-"}</TableCell>
+                      <TableCell>{item.uom || "-"}</TableCell>
                       <TableCell>{item.currency || "-"}</TableCell>
                       <TableCell>{item.valuatedStock || "-"}</TableCell>
-                      <TableCell>{item.uom || "-"}</TableCell>
                       <TableCell>
                         <Badge variant={item.isActive ? "default" : "secondary"}>{item.isActive ? "Active" : "Inactive"}</Badge>
                       </TableCell>

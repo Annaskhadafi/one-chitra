@@ -69,11 +69,6 @@ export const navigationConfig: NavSection[] = [
                         resource: "bundling",
                     },
                     {
-                        title: "Master Barang Repair",
-                        url: "/dashboard/master-barang-repair",
-                        resource: "products",
-                    },
-                    {
                         title: "Warehouse",
                         url: "/dashboard/warehouse",
                         resource: "warehouses",
@@ -416,6 +411,11 @@ export const navigationConfig: NavSection[] = [
                         title: "WIP Repair Table",
                         url: "/dashboard/wip-repair",
                         resource: "wip-repair",
+                    },
+                    {
+                        title: "Master Barang Repair",
+                        url: "/dashboard/master-barang-repair",
+                        resource: "products",
                     },
                 ],
             },
