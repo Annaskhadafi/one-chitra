@@ -135,4 +135,13 @@ describe("buildWipRepairSapCopyText", () => {
       ),
     ).toEqual({ siteCode: "RS03", siteName: "CP BMB" })
   })
+
+  it("maps BSF store loc to repair master RS01", () => {
+    expect(
+      resolveWipRepairSite(
+        { store_loc: "BSF", site: null },
+        [{ siteCode: "RS01", siteName: "BPN" }],
+      ),
+    ).toEqual({ siteCode: "RS01", siteName: "BPN" })
+  })
 })

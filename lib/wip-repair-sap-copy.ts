@@ -19,6 +19,9 @@ type BuildWipRepairSapCopyTextInput = {
 }
 
 const SAP_MOVEMENT_TYPE = "2002"
+const STORE_LOC_SITE_CODE_ALIASES: Record<string, string> = {
+  BSF: "RS01",
+}
 
 function cleanText(value: string | null | undefined) {
   return value?.trim() ?? ""
@@ -141,6 +144,23 @@ export function resolveWipRepairSite(workOrder: Pick<WipRepairRecord, "store_loc
   const candidateValues = [workOrder.store_loc, workOrder.site].filter((value) => cleanText(value))
   const candidateKeys = candidateValues.map(normalizeLookupKey).filter(Boolean)
   const candidateTokens = new Set(candidateValues.flatMap(getLookupTokens))
+
+  for (const candidateKey of candidateKeys) {
+    const aliasSiteCode = STORE_LOC_SITE_CODE_ALIASES[candidateKey]
+
+    if (!aliasSiteCode) {
+      continue
+    }
+
+    const aliasSite = sites.find((site) => normalizeLookupKey(site.siteCode) === aliasSiteCode)
+
+    if (aliasSite) {
+      return {
+        siteCode: cleanText(aliasSite.siteCode),
+        siteName: cleanText(aliasSite.siteName),
+      }
+    }
+  }
 
   for (const site of sites) {
     const siteCode = normalizeLookupKey(site.siteCode)
