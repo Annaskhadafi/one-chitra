@@ -144,4 +144,19 @@ describe("buildWipRepairSapCopyText", () => {
       ),
     ).toEqual({ siteCode: "RS01", siteName: "BPN" })
   })
+
+  it("maps MTR Solution 700 G to the explicit material number", () => {
+    const text = buildWipRepairSapCopyText({
+      workOrder,
+      details: [details[3]],
+      repairMasterItems: [
+        { materialCode: "761E290001", materialName: "Master alias row", uom: "CAN" },
+      ],
+      repairMasterSites: [
+        { siteCode: "RS01", siteName: "BPN" },
+      ],
+    })
+
+    expect(text).toBe("761E290001\t0.1\tCAN\tRS01\t\t80000039916\t\t\t\t\t\t\t2002\t\tMTR SOLUTION 700 G")
+  })
 })

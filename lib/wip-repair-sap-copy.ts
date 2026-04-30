@@ -22,6 +22,9 @@ const SAP_MOVEMENT_TYPE = "2002"
 const STORE_LOC_SITE_CODE_ALIASES: Record<string, string> = {
   BSF: "RS01",
 }
+const MATERIAL_NAME_CODE_ALIASES: Record<string, string> = {
+  MTRSOLUTION700G: "761E290001",
+}
 
 function cleanText(value: string | null | undefined) {
   return value?.trim() ?? ""
@@ -234,9 +237,11 @@ export function buildWipRepairSapCopyText({
         return null
       }
 
-      const masterMaterialByName = resolveMasterMaterialByName(materialName, materialLookup)
+      const aliasMaterialCode = MATERIAL_NAME_CODE_ALIASES[normalizeLookupKey(materialName)]
+      const masterMaterialByName = aliasMaterialCode ? null : resolveMasterMaterialByName(materialName, materialLookup)
       const detailMaterialId = cleanText(detail.material_id)
-      const materialNumber = cleanText(masterMaterialByName?.materialCode) || (isValidMaterialNumber(detailMaterialId) ? detailMaterialId : "")
+      const materialNumber =
+        aliasMaterialCode || cleanText(masterMaterialByName?.materialCode) || (isValidMaterialNumber(detailMaterialId) ? detailMaterialId : "")
       const masterMaterialByCode = materialLookup.byCode.get(normalizeLookupKey(materialNumber))
       const masterUom = normalizeUom(masterMaterialByCode?.uom ?? masterMaterialByName?.uom)
       const quantity = splitQuantityAndUom(detail.qty, detail.smu)
