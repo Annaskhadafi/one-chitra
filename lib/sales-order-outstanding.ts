@@ -38,8 +38,8 @@ export type OutstandingTotals = {
 export type OutstandingMaterialExportRow = {
     "Material Number": string
     "Material Description": string
-    Customer: string
-    "No PO Customer": string
+    "Nama Customer": string
+    "PO Customer": string
     "Total Outstanding Qty": number
     "Total Outstanding Value": number
     "Total Sales Order": number
@@ -103,6 +103,21 @@ function appendUnique(values: string[], value?: string | null) {
     values.push(normalized)
 }
 
+function normalizeMaterialNumber(value?: string | null) {
+    const normalized = value?.trim()
+    return normalized || "-"
+}
+
+function normalizeMaterialDescription(item: SalesOrderItemLike, materialNumber: string) {
+    return item.product?.materialDescription?.trim() || item.description?.trim() || materialNumber
+}
+
+function getMaterialGroupKey(materialNumber: string, materialDescription: string) {
+    return materialNumber !== "-"
+        ? materialNumber.toUpperCase()
+        : materialDescription.trim().toUpperCase()
+}
+
 export function buildOutstandingMaterialExportRows(orders: SalesOrderLike[]): OutstandingMaterialExportRow[] {
     const materialMap = new Map<string, {
         materialNumber: string
@@ -112,7 +127,13 @@ export function buildOutstandingMaterialExportRows(orders: SalesOrderLike[]): Ou
         salesOrderIds: Set<number | string>
         totalOutstandingQty: number
         totalOutstandingValue: number
-        details: string[]
+        details: Map<string, {
+            customerName: string
+            customerPo: string
+            salesOrderNumber: string
+            remainingQuantity: number
+            outstandingValue: number
+        }>
     }>()
 
     for (const order of orders) {
@@ -130,9 +151,9 @@ export function buildOutstandingMaterialExportRows(orders: SalesOrderLike[]): Ou
                 continue
             }
 
-            const materialNumber = item.product?.materialNumber || "-"
-            const materialDescription = item.product?.materialDescription || item.description || materialNumber
-            const key = materialNumber !== "-" ? materialNumber : materialDescription
+            const materialNumber = normalizeMaterialNumber(item.product?.materialNumber)
+            const materialDescription = normalizeMaterialDescription(item, materialNumber)
+            const key = getMaterialGroupKey(materialNumber, materialDescription)
             const outstandingValue = calculateOutstandingLineValue(item, remainingQuantity)
             const current = materialMap.get(key) ?? {
                 materialNumber,
@@ -142,7 +163,7 @@ export function buildOutstandingMaterialExportRows(orders: SalesOrderLike[]): Ou
                 salesOrderIds: new Set<number | string>(),
                 totalOutstandingQty: 0,
                 totalOutstandingValue: 0,
-                details: [],
+                details: new Map(),
             }
 
             appendUnique(current.customers, order.customer?.name)
@@ -150,9 +171,20 @@ export function buildOutstandingMaterialExportRows(orders: SalesOrderLike[]): Ou
             current.salesOrderIds.add(order.id ?? order.invoiceNumber ?? `${customerPo}-${item.id}`)
             current.totalOutstandingQty += remainingQuantity
             current.totalOutstandingValue += outstandingValue
-            current.details.push(
-                `${order.customer?.name || "-"} | ${customerPo} | ${order.invoiceNumber || `SO-${order.id ?? "-"}`} | Qty ${remainingQuantity.toLocaleString("id-ID")} | Value ${Math.round(outstandingValue).toLocaleString("id-ID")}`
-            )
+
+            const customerName = order.customer?.name?.trim() || "-"
+            const salesOrderNumber = order.invoiceNumber || `SO-${order.id ?? "-"}`
+            const detailKey = `${customerName}|${customerPo}|${salesOrderNumber}`
+            const detail = current.details.get(detailKey) ?? {
+                customerName,
+                customerPo,
+                salesOrderNumber,
+                remainingQuantity: 0,
+                outstandingValue: 0,
+            }
+            detail.remainingQuantity += remainingQuantity
+            detail.outstandingValue += outstandingValue
+            current.details.set(detailKey, detail)
 
             materialMap.set(key, current)
         }
@@ -163,11 +195,15 @@ export function buildOutstandingMaterialExportRows(orders: SalesOrderLike[]): Ou
         .map((row) => ({
             "Material Number": row.materialNumber,
             "Material Description": row.materialDescription,
-            Customer: row.customers.join("; "),
-            "No PO Customer": row.customerPos.join("; "),
+            "Nama Customer": row.customers.join("; "),
+            "PO Customer": row.customerPos.join("; "),
             "Total Outstanding Qty": row.totalOutstandingQty,
             "Total Outstanding Value": Math.round(row.totalOutstandingValue),
             "Total Sales Order": row.salesOrderIds.size,
-            "Detail Outstanding": row.details.join("\n"),
+            "Detail Outstanding": Array.from(row.details.values())
+                .map((detail) =>
+                    `${detail.customerName} | ${detail.customerPo} | ${detail.salesOrderNumber} | Qty ${detail.remainingQuantity.toLocaleString("id-ID")} | Value ${Math.round(detail.outstandingValue).toLocaleString("id-ID")}`
+                )
+                .join("\n"),
         }))
 }

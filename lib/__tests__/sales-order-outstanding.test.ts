@@ -122,10 +122,62 @@ describe("sales order outstanding helpers", () => {
             "Total Outstanding Qty": 6,
             "Total Outstanding Value": 600600,
             "Total Sales Order": 2,
-            Customer: "PT Alpha; PT Beta",
-            "No PO Customer": "PO-CUST-001; PO-CUST-002",
+            "Nama Customer": "PT Alpha; PT Beta",
+            "PO Customer": "PO-CUST-001; PO-CUST-002",
         })
         expect(rows[0]["Detail Outstanding"]).toContain("PT Alpha | PO-CUST-001 | SO-001 | Qty 4")
         expect(rows[0]["Detail Outstanding"]).not.toContain("PT Gamma")
+    })
+
+    it("normalizes material number and groups customer, PO, and detail into one material row", () => {
+        const rows = buildOutstandingMaterialExportRows([
+            {
+                id: 20,
+                invoiceNumber: "SO-020",
+                customerPo: "PO-CUST-020",
+                customer: { name: "PT Alpha" },
+                items: [
+                    {
+                        ...baseItem,
+                        id: 20,
+                        product: {
+                            materialNumber: " mat-001 ",
+                            materialDescription: "Bearing Set",
+                        },
+                    },
+                    {
+                        ...baseItem,
+                        id: 21,
+                        quantity: 5,
+                        product: {
+                            materialNumber: "MAT-001",
+                            materialDescription: "Bearing Set",
+                        },
+                    },
+                ],
+                remarks: {
+                    items: [
+                        {
+                            itemId: 20,
+                            remainingQuantity: 2,
+                        },
+                        {
+                            itemId: 21,
+                            remainingQuantity: 3,
+                        },
+                    ],
+                },
+            },
+        ])
+
+        expect(rows).toHaveLength(1)
+        expect(rows[0]).toMatchObject({
+            "Material Number": "mat-001",
+            "Nama Customer": "PT Alpha",
+            "PO Customer": "PO-CUST-020",
+            "Total Outstanding Qty": 5,
+            "Total Sales Order": 1,
+        })
+        expect(rows[0]["Detail Outstanding"]).toContain("PT Alpha | PO-CUST-020 | SO-020 | Qty 5")
     })
 })
