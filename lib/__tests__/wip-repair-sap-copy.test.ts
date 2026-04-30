@@ -81,7 +81,7 @@ const details: WipRepairWorkOrderDetailRecord[] = [
 ]
 
 describe("buildWipRepairSapCopyText", () => {
-  it("builds SAP paste TSV with blank spacer columns and matched master data", () => {
+  it("builds SAP paste TSV data rows without header", () => {
     const text = buildWipRepairSapCopyText({
       workOrder,
       details,
@@ -95,7 +95,6 @@ describe("buildWipRepairSapCopyText", () => {
     })
 
     expect(text.split("\n")).toEqual([
-      "MATERIAL NUMBER\tQTY\tUOM\tSTORE LOG\t\tNOMOR WO\t\t\t\t\t\t\t2002\t\tMATERIAL",
       "761E290002\t500\tML\tRS01\t\t80000039916\t\t\t\t\t\t\t2002\t\tBLACK CEMENT 946 ML",
       "799E260001\t1\tPC\tRS01\t\t80000039916\t\t\t\t\t\t\t2002\t\tCRP-46 440 X 170MM",
       "\t2\tPC\tRS01\t\t80000039916\t\t\t\t\t\t\t2002\t\tUNMATCHED MATERIAL",

@@ -1,11 +1,11 @@
 # Graph Report - one-chitra  (2026-04-30)
 
 ## Corpus Check
-- 1054 files · ~881,545 words
+- 1054 files · ~881,516 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 4071 nodes · 5588 edges · 104 communities detected
+- 4071 nodes · 5587 edges · 104 communities detected
 - Extraction: 77% EXTRACTED · 23% INFERRED · 0% AMBIGUOUS · INFERRED: 1288 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
@@ -70,7 +70,7 @@
 - [[_COMMUNITY_Community 57|Community 57]]
 - [[_COMMUNITY_Community 58|Community 58]]
 - [[_COMMUNITY_Community 59|Community 59]]
-- [[_COMMUNITY_Community 61|Community 61]]
+- [[_COMMUNITY_Community 60|Community 60]]
 - [[_COMMUNITY_Community 62|Community 62]]
 - [[_COMMUNITY_Community 63|Community 63]]
 - [[_COMMUNITY_Community 64|Community 64]]
@@ -82,7 +82,7 @@
 - [[_COMMUNITY_Community 70|Community 70]]
 - [[_COMMUNITY_Community 71|Community 71]]
 - [[_COMMUNITY_Community 72|Community 72]]
-- [[_COMMUNITY_Community 80|Community 80]]
+- [[_COMMUNITY_Community 73|Community 73]]
 - [[_COMMUNITY_Community 81|Community 81]]
 - [[_COMMUNITY_Community 84|Community 84]]
 - [[_COMMUNITY_Community 85|Community 85]]
@@ -147,35 +147,35 @@ Nodes (184): AccountPage(), addWorkflowStep(), buildFormOptionFromRoute(), colle
 
 ### Community 1 - "Community 1"
 Cohesion: 0.02
-Nodes (141): getBundlingFormDependencies(), getCustomers(), completeEvhsDraftVoucher(), confirmEvhsReceipt(), createEvhsDraftVoucher(), createEvhsVoucher(), createGiRecord(), deleteEvhsVoucher() (+133 more)
+Nodes (141): getAllSalesRevenueData(), getDashboardInventory(), getDashboardRevenueForecast(), getPct(), getRevenueReportConfig(), fetchAllSalesRevenueData(), fetchDashboardInventory(), fetchDashboardRevenueForecast() (+133 more)
 
 ### Community 2 - "Community 2"
 Cohesion: 0.02
-Nodes (141): getAllSalesRevenueData(), getDashboardInventory(), getDashboardRevenueForecast(), getPct(), getRevenueReportConfig(), fetchAllSalesRevenueData(), fetchDashboardInventory(), fetchDashboardRevenueForecast() (+133 more)
+Nodes (129): getBundlingFormDependencies(), completeEvhsDraftVoucher(), confirmEvhsReceipt(), createEvhsDraftVoucher(), createEvhsVoucher(), createGiRecord(), deleteEvhsVoucher(), filterEvhsReceiptRowsByWarehouse() (+121 more)
 
 ### Community 3 - "Community 3"
 Cohesion: 0.02
-Nodes (75): bulkDeleteDeliveries(), deleteDelivery(), attachSalesDocumentsToQuotation(), buildComparableQuotationItems(), buildCustomerPoAttachmentTitle(), buildExtractedDataFromOcr(), buildMappedDataFromOcr(), buildOcrFailureSummary() (+67 more)
+Nodes (92): batchSyncInvoiceFromBilling(), deleteBillingRecord(), getBillingRecordByPo(), getBillingRecords(), getFirstExecuteRow(), getInvoiceInfoByDoSap(), getInvoiceInfoByPoNo(), importBillingRecords() (+84 more)
 
 ### Community 4 - "Community 4"
+Cohesion: 0.02
+Nodes (80): bulkDeleteDeliveries(), deleteDelivery(), attachSalesDocumentsToQuotation(), buildComparableQuotationItems(), buildCustomerPoAttachmentTitle(), buildExtractedDataFromOcr(), buildMappedDataFromOcr(), buildOcrFailureSummary() (+72 more)
+
+### Community 5 - "Community 5"
 Cohesion: 0.03
 Nodes (75): getFleetList(), acknowledgeNotification(), addDaysToDate(), addMonthsToDate(), average(), buildConfidenceNote(), buildMonthlySeries(), calculateLinearTrendSlope() (+67 more)
 
-### Community 5 - "Community 5"
-Cohesion: 0.02
-Nodes (61): createCompetitorActivity(), createCompetitorPrice(), createLostSale(), getCompetitorActivities(), getCompetitorPrices(), getLostSales(), syncCompetitorPricesFromApi(), createCustomer() (+53 more)
-
 ### Community 6 - "Community 6"
-Cohesion: 0.03
-Nodes (69): assertOriginWarehouseStock(), buildDeliveryItemQuantityMap(), buildDeliveryStockCheckResult(), bulkAttachDoScansByInternalNo(), bulkUpdateDeliveryStatus(), checkStockAvailability(), clearLogisticsCosts(), createDelivery() (+61 more)
+Cohesion: 0.02
+Nodes (62): createCompetitorActivity(), createCompetitorPrice(), createLostSale(), getCompetitorActivities(), getCompetitorPrices(), getLostSales(), syncCompetitorPricesFromApi(), createCustomer() (+54 more)
 
 ### Community 7 - "Community 7"
 Cohesion: 0.03
-Nodes (57): createFleetTrip(), deleteFleetTrip(), generateTripNumber(), updateFleetTrip(), updateFleetTripStatus(), createSurveyForm(), createSurveyFormFromTemplate(), deleteSurveyForm() (+49 more)
+Nodes (65): getCustomers(), bulkDeleteMasterPrices(), createOrUpdateMasterPrice(), deleteMasterPrice(), getErrorMessage(), getEvhsMasterPrices(), importMasterPrices(), buildSalesOrderColumns() (+57 more)
 
 ### Community 8 - "Community 8"
-Cohesion: 0.04
-Nodes (53): buildSalesOrderColumns(), createSalesOrder(), deleteSalesOrder(), duplicateCustomerPoResult(), findExistingSalesOrderByCustomerPo(), generateInvoiceNumber(), getSalesOrder(), getSalesOrders() (+45 more)
+Cohesion: 0.03
+Nodes (57): createFleetTrip(), deleteFleetTrip(), generateTripNumber(), updateFleetTrip(), updateFleetTripStatus(), createSurveyForm(), createSurveyFormFromTemplate(), deleteSurveyForm() (+49 more)
 
 ### Community 9 - "Community 9"
 Cohesion: 0.04
@@ -198,84 +198,84 @@ Cohesion: 0.06
 Nodes (39): buildStockOpnameActualEmailContent(), bulkDeleteStockOpnameSessions(), bulkUpdateOpnameCounts(), cancelStockOpnameSession(), closeStockOpnameSession(), createStockOpnameActualSession(), createStockOpnameSession(), deleteStockOpnameSession() (+31 more)
 
 ### Community 14 - "Community 14"
-Cohesion: 0.05
-Nodes (28): batchSyncInvoiceFromBilling(), deleteBillingRecord(), getBillingRecordByPo(), getBillingRecords(), getFirstExecuteRow(), getInvoiceInfoByDoSap(), getInvoiceInfoByPoNo(), importBillingRecords() (+20 more)
-
-### Community 15 - "Community 15"
 Cohesion: 0.06
 Nodes (31): bulkDeleteRepairMasterItems(), cleanText(), deleteRepairMasterItem(), deleteRepairMasterSite(), ensureDefaultRepairSites(), ensureRepairMasterTables(), getRepairMasterData(), upsertRepairMasterItem() (+23 more)
 
-### Community 16 - "Community 16"
+### Community 15 - "Community 15"
 Cohesion: 0.07
 Nodes (33): buildGoodReceiveManualNotificationContent(), buildLatestPoItemMap(), buildVendorFallbackMap(), createGoodReceiveManual(), escapeHtml(), findEprRecipientByPoNumber(), getFirstStringValue(), getGoodReceiveManualById() (+25 more)
 
-### Community 17 - "Community 17"
+### Community 16 - "Community 16"
 Cohesion: 0.11
 Nodes (38): assertMembership(), createGroupRoom(), deleteChatRoom(), deleteMessage(), deleteUserSticker(), editMessage(), enrichMessages(), generateHelpDeskReplyForRoom() (+30 more)
 
-### Community 18 - "Community 18"
+### Community 17 - "Community 17"
 Cohesion: 0.09
 Nodes (37): extractInternalNo(), forceDeliveryYear2026(), normalizeInternalNo(), POST(), sanitizeText(), selectDisplayText(), extractJsonFromText(), sanitizeOcrText() (+29 more)
 
-### Community 19 - "Community 19"
+### Community 18 - "Community 18"
 Cohesion: 0.1
 Nodes (32): getMLFilters(), getRevenueMLForecast(), fetchForecast(), handleRefresh(), addMonths(), average(), buildAnomalies(), buildConfidence() (+24 more)
 
-### Community 20 - "Community 20"
-Cohesion: 0.07
-Nodes (26): createCosmeticTire(), deleteCosmeticTire(), ensureCosmeticTiresTable(), getCosmeticTires(), importCosmeticTires(), normalizeInput(), updateCosmeticTire(), deleteSlowMovingProduct() (+18 more)
-
-### Community 21 - "Community 21"
+### Community 19 - "Community 19"
 Cohesion: 0.06
 Nodes (17): buildContextQuickActions(), buildFollowupQuickActions(), getAttachmentUrl(), getChatAvatarSrc(), getHelpDeskPageContext(), isGifAttachment(), isVisualAttachment(), AutoCloseSidebar() (+9 more)
 
-### Community 22 - "Community 22"
+### Community 20 - "Community 20"
 Cohesion: 0.08
 Nodes (28): consolidateDuplicateStocks(), deleteStock(), exportInventoryComparisonToExcel(), getStockByMaterialNumber(), getStockByProductReference(), importStocks(), mergeStockBookingsForDuplicateGroup(), normalizeStockBookingEntries() (+20 more)
 
-### Community 23 - "Community 23"
+### Community 21 - "Community 21"
 Cohesion: 0.08
 Nodes (20): createCalendarEvent(), getCalendarEvents(), getCustomerListForBirthday(), getCustomersWithTomorrowBirthday(), getPendingEmailReminders(), importCustomerBirthdays(), markReminderSent(), updateCalendarEvent() (+12 more)
 
-### Community 24 - "Community 24"
+### Community 22 - "Community 22"
 Cohesion: 0.14
 Nodes (29): askHelpDeskOllama(), buildKnowledgeDraftFromDocument(), deleteHelpDeskKnowledgeSource(), ensureBotUser(), ensureHelpDeskKnowledgeSeed(), ensureHelpDeskRoom(), extractHelpDeskKnowledgeFromDocument(), generateHelpDeskReply() (+21 more)
 
-### Community 25 - "Community 25"
+### Community 23 - "Community 23"
 Cohesion: 0.09
 Nodes (22): getStockCardCatalogAction(), getStockCardDetailAction(), getStockCardLabelsByIdsAction(), getCanonicalAppUrl(), stripTrailingSlash(), toCanonicalAppUrl(), normalizeUrl(), resolveBaseURL() (+14 more)
 
-### Community 26 - "Community 26"
+### Community 24 - "Community 24"
 Cohesion: 0.09
 Nodes (10): handleDownloadPdf(), buildQuotationPdfPayload(), downloadBlob(), formatCurrency(), formatDate(), generateQuotationPdf(), getLetterheadDataUrl(), inferMimeType() (+2 more)
 
-### Community 27 - "Community 27"
+### Community 25 - "Community 25"
 Cohesion: 0.09
 Nodes (17): getDeliveryCostRequestStats(), getFleetData(), getSavedDeliveryCostRequests(), getUnsettledDeliveryCosts(), saveDeliveryCostRequest(), updateDeliveryCostRequest(), fetchUnsettled(), DeliveryCostRequestPage() (+9 more)
 
-### Community 28 - "Community 28"
+### Community 26 - "Community 26"
 Cohesion: 0.11
 Nodes (20): buildStandardPrintHtml(), buildVoucherHtml(), chunkVouchers(), compareVoucherByPos(), escapeHtml(), EvhsVoucherPreview(), formatVoucherDate(), getPosSortMeta() (+12 more)
 
-### Community 29 - "Community 29"
+### Community 27 - "Community 27"
 Cohesion: 0.11
 Nodes (21): createSettlement(), deleteSettlement(), generateSettlementNumber(), getLatestSettlementByDeliveryIds(), getLatestSettlementByFleetTripIds(), getSettlementById(), getSettlements(), getSettlementSession() (+13 more)
 
-### Community 30 - "Community 30"
+### Community 28 - "Community 28"
 Cohesion: 0.16
 Nodes (25): A2RCompetitionPage(), getDefaultYear(), buildMonthlyScore(), buildSelectedMonths(), ensureA2RSalesTargetsTable(), getA2RCompetitionData(), getA2RCompetitionFilterOptions(), getA2RCompetitionTargetSetup() (+17 more)
 
-### Community 31 - "Community 31"
+### Community 29 - "Community 29"
 Cohesion: 0.13
 Nodes (18): deleteInventoryVendorProfile(), ensureInventoryVendorTables(), getDateDifferenceInDays(), getInventoryVendorProfiles(), getMaterialVendorReference(), normalizeMaterialNo(), normalizeVendorName(), parseDateValue() (+10 more)
 
-### Community 32 - "Community 32"
+### Community 30 - "Community 30"
 Cohesion: 0.17
 Nodes (22): addMonths(), addPeriods(), average(), buildAutoArimaForecastValues(), buildForecastValues(), formatPeriodLabel(), getFuturePeriods(), getProcurementNextAnalytics() (+14 more)
 
-### Community 33 - "Community 33"
+### Community 31 - "Community 31"
 Cohesion: 0.17
 Nodes (21): buildDataUri(), extractJsonFromText(), extractRawTextFromDocument(), extractStructuredFromDocument(), getBboxAnnotationInput(), getDocumentAnnotationInput(), getRawText(), normalizeDocumentForOcr() (+13 more)
+
+### Community 32 - "Community 32"
+Cohesion: 0.15
+Nodes (13): createCosmeticTire(), deleteCosmeticTire(), ensureCosmeticTiresTable(), getCosmeticTires(), importCosmeticTires(), normalizeInput(), updateCosmeticTire(), handleDelete() (+5 more)
+
+### Community 33 - "Community 33"
+Cohesion: 0.15
+Nodes (13): deleteSlowMovingProduct(), deleteSlowMovingProducts(), ensureSlowMovingProductsTable(), getSlowMovingProducts(), importSlowMovingProducts(), buildProductOptions(), buildSlowMovingRow(), getMaterialKey() (+5 more)
 
 ### Community 34 - "Community 34"
 Cohesion: 0.11
@@ -330,12 +330,12 @@ Cohesion: 0.27
 Nodes (12): buildContent(), buildSlug(), buildSummary(), buildTags(), buildTitle(), describeRouteType(), getActorUserId(), main() (+4 more)
 
 ### Community 47 - "Community 47"
-Cohesion: 0.15
-Nodes (6): fetchGoodReceiveFromSAP(), processGoodReceive(), handleProcess(), main(), main(), main()
-
-### Community 48 - "Community 48"
 Cohesion: 0.24
 Nodes (10): buildPayload(), deleteLogisticsMasterPrice(), getLogisticsMasterPrices(), importLogisticsMasterPrices(), isMissingTableError(), normalizeNullableNumber(), normalizeNullableString(), upsertLogisticsMasterPrice() (+2 more)
+
+### Community 48 - "Community 48"
+Cohesion: 0.19
+Nodes (6): calculateSellingPrice(), ceilToThousand(), createBundleGroupId(), createQuotationItemClientId(), if(), setBlockedDialog()
 
 ### Community 49 - "Community 49"
 Cohesion: 0.18
@@ -346,8 +346,8 @@ Cohesion: 0.23
 Nodes (9): handleSelect(), applySelectedFiles(), createProgressTicker(), delay(), easeProgress(), hasMeaningfulBasicResult(), onDrop(), onSelect() (+1 more)
 
 ### Community 51 - "Community 51"
-Cohesion: 0.23
-Nodes (7): bulkDeleteMasterPrices(), createOrUpdateMasterPrice(), deleteMasterPrice(), getErrorMessage(), importMasterPrices(), getErrorMessage(), startImport()
+Cohesion: 0.15
+Nodes (6): fetchGoodReceiveFromSAP(), processGoodReceive(), handleProcess(), main(), main(), main()
 
 ### Community 52 - "Community 52"
 Cohesion: 0.2
@@ -378,64 +378,64 @@ Cohesion: 0.29
 Nodes (6): buildPrintHtml(), createInitialFormState(), escapeHtml(), formatDate(), handlePrint(), todayValue()
 
 ### Community 59 - "Community 59"
-Cohesion: 0.44
-Nodes (8): buildWipRepairSapCopyText(), cleanText(), makeMasterMaterialLookup(), makeSapCopyRow(), normalizeLookup(), normalizeUom(), resolveStoreLoc(), splitQuantityAndUom()
+Cohesion: 0.2
+Nodes (1): escapeCsvValue()
 
-### Community 61 - "Community 61"
-Cohesion: 0.39
-Nodes (7): buildCustomerCandidates(), callMistralChatCompletion(), getMessageContent(), parseJsonContent(), POST(), sanitizeText(), tryAiMapping()
+### Community 60 - "Community 60"
+Cohesion: 0.42
+Nodes (7): buildWipRepairSapCopyText(), cleanText(), makeMasterMaterialLookup(), normalizeLookup(), normalizeUom(), resolveStoreLoc(), splitQuantityAndUom()
 
 ### Community 62 - "Community 62"
 Cohesion: 0.39
-Nodes (7): compareNumber(), compareText(), EvhsAllVhsStockTable(), getCategoryPriority(), getStatusLabel(), getWarehouseLabel(), sortRows()
+Nodes (7): buildCustomerCandidates(), callMistralChatCompletion(), getMessageContent(), parseJsonContent(), POST(), sanitizeText(), tryAiMapping()
 
 ### Community 63 - "Community 63"
+Cohesion: 0.39
+Nodes (7): compareNumber(), compareText(), EvhsAllVhsStockTable(), getCategoryPriority(), getStatusLabel(), getWarehouseLabel(), sortRows()
+
+### Community 64 - "Community 64"
 Cohesion: 0.25
 Nodes (4): handleFileSelect(), downloadCSVTemplate(), generateCSVTemplate(), parseAndValidateCSV()
 
-### Community 64 - "Community 64"
+### Community 65 - "Community 65"
 Cohesion: 0.53
 Nodes (7): fetchPlatformData(), handleDelete(), handleImport(), handleSubmit(), isMissingServerActionError(), loadData(), runServerAction()
 
-### Community 65 - "Community 65"
+### Community 66 - "Community 66"
 Cohesion: 0.31
 Nodes (4): buildItemMap(), formatCurrency(), getChanges(), getItemTotal()
 
-### Community 66 - "Community 66"
+### Community 67 - "Community 67"
 Cohesion: 0.56
 Nodes (7): getDetailGroupingKeys(), getDetailLookupKeys(), getNormalizedText(), getWorkOrderDetailKey(), isWaitingWorkOrder(), normalizeTireSn(), normalizeValue()
 
-### Community 67 - "Community 67"
+### Community 68 - "Community 68"
 Cohesion: 0.31
 Nodes (6): escapeHtml(), insertLink(), normalizeHtmlForEditor(), runCommand(), syncParallelApproverNames(), update()
 
-### Community 68 - "Community 68"
+### Community 69 - "Community 69"
 Cohesion: 0.31
 Nodes (5): buildInitialGraph(), buildMachineConfig(), getSortedApprovalNodes(), makeEdge(), WorkflowCanvas()
 
-### Community 69 - "Community 69"
+### Community 70 - "Community 70"
 Cohesion: 0.33
 Nodes (6): mapOcrItemsToProductIds(), callMistralChatCompletion(), getMessageContent(), mapCustomerNameToId(), parseJsonContent(), POST()
 
-### Community 70 - "Community 70"
+### Community 71 - "Community 71"
 Cohesion: 0.44
 Nodes (8): ensureApprovalSection(), getApprovalResourceByUrl(), main(), makeApprovalGroupItem(), makeItemId(), makeSectionId(), makeSubItem(), removeFromAdmin()
 
-### Community 71 - "Community 71"
+### Community 72 - "Community 72"
 Cohesion: 0.32
 Nodes (3): buildConfig(), handleSubmit(), validate()
 
-### Community 72 - "Community 72"
+### Community 73 - "Community 73"
 Cohesion: 0.33
 Nodes (2): handleSave(), validateDraft()
 
-### Community 80 - "Community 80"
+### Community 81 - "Community 81"
 Cohesion: 0.62
 Nodes (6): createDefinition(), ensureFormRegistry(), ensureUser(), main(), runConditionBranchingTest(), runParallelExplicitAssigneeTest()
-
-### Community 81 - "Community 81"
-Cohesion: 0.33
-Nodes (1): goToPage()
 
 ### Community 84 - "Community 84"
 Cohesion: 0.4
@@ -558,9 +558,9 @@ Cohesion: 1.0
 Nodes (2): loadRepairCandidates(), main()
 
 ## Knowledge Gaps
-- **Thin community `Community 72`** (7 nodes): `matrix-builder.tsx`, `addDraftNode()`, `handleSave()`, `makeTempId()`, `removeDraftNode()`, `updateDraftNode()`, `validateDraft()`
+- **Thin community `Community 59`** (10 nodes): `do-monitoring-table.tsx`, `calculateGrandTotal()`, `escapeCsvValue()`, `formatCurrency()`, `formatQuantity()`, `getDateRangePreset()`, `getDeliveryItemValue()`, `getMatchedDeliveryItems()`, `getWarehouseLabel()`, `if()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 81`** (6 nodes): `operational-activity-log-table.tsx`, `actionColor()`, `applyFilters()`, `clearFilters()`, `goToPage()`, `tableLabel()`
+- **Thin community `Community 73`** (7 nodes): `matrix-builder.tsx`, `addDraftNode()`, `handleSave()`, `makeTempId()`, `removeDraftNode()`, `updateDraftNode()`, `validateDraft()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 84`** (6 nodes): `filter-context.tsx`, `FilterProvider()`, `getDefaultFilters()`, `loadFiltersFromStorage()`, `saveFiltersToStorage()`, `useFilters()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -604,11 +604,11 @@ Nodes (2): loadRepairCandidates(), main()
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `getAuthenticatedSession()` connect `Community 0` to `Community 1`, `Community 2`, `Community 3`, `Community 4`, `Community 6`, `Community 7`, `Community 8`, `Community 9`, `Community 10`, `Community 11`, `Community 12`, `Community 13`, `Community 14`, `Community 16`, `Community 19`, `Community 20`, `Community 22`, `Community 25`, `Community 29`, `Community 30`, `Community 31`, `Community 39`, `Community 47`, `Community 48`, `Community 57`?**
+- **Why does `getAuthenticatedSession()` connect `Community 0` to `Community 1`, `Community 2`, `Community 3`, `Community 4`, `Community 5`, `Community 7`, `Community 8`, `Community 9`, `Community 10`, `Community 11`, `Community 12`, `Community 13`, `Community 15`, `Community 18`, `Community 20`, `Community 23`, `Community 27`, `Community 28`, `Community 29`, `Community 32`, `Community 33`, `Community 39`, `Community 47`, `Community 51`, `Community 57`?**
   _High betweenness centrality (0.236) - this node is a cross-community bridge._
-- **Why does `String()` connect `Community 0` to `Community 1`, `Community 2`, `Community 3`, `Community 4`, `Community 6`, `Community 7`, `Community 8`, `Community 9`, `Community 10`, `Community 12`, `Community 14`, `Community 17`, `Community 18`, `Community 19`, `Community 20`, `Community 21`, `Community 22`, `Community 23`, `Community 24`, `Community 27`, `Community 28`, `Community 29`, `Community 30`, `Community 31`, `Community 32`, `Community 33`, `Community 34`, `Community 35`, `Community 36`, `Community 40`, `Community 41`, `Community 43`, `Community 49`, `Community 54`, `Community 61`, `Community 64`, `Community 81`, `Community 87`?**
+- **Why does `String()` connect `Community 0` to `Community 1`, `Community 2`, `Community 3`, `Community 4`, `Community 5`, `Community 7`, `Community 8`, `Community 9`, `Community 10`, `Community 12`, `Community 16`, `Community 17`, `Community 18`, `Community 19`, `Community 20`, `Community 21`, `Community 22`, `Community 25`, `Community 26`, `Community 27`, `Community 28`, `Community 29`, `Community 30`, `Community 31`, `Community 32`, `Community 33`, `Community 34`, `Community 35`, `Community 36`, `Community 40`, `Community 41`, `Community 43`, `Community 49`, `Community 54`, `Community 59`, `Community 62`, `Community 65`, `Community 87`?**
   _High betweenness centrality (0.215) - this node is a cross-community bridge._
-- **Why does `checkPermission()` connect `Community 7` to `Community 0`, `Community 3`, `Community 6`, `Community 8`, `Community 12`, `Community 14`, `Community 29`?**
+- **Why does `checkPermission()` connect `Community 8` to `Community 0`, `Community 3`, `Community 4`, `Community 7`, `Community 12`, `Community 27`?**
   _High betweenness centrality (0.032) - this node is a cross-community bridge._
 - **Are the 223 inferred relationships involving `getAuthenticatedSession()` (e.g. with `getA2RCompetitionFilterOptions()` and `getA2RCompetitionTargetSetup()`) actually correct?**
   _`getAuthenticatedSession()` has 223 INFERRED edges - model-reasoned connections that need verification._

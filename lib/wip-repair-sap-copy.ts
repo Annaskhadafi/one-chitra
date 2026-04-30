@@ -116,14 +116,6 @@ export function buildWipRepairSapCopyText({
   const materialLookup = makeMasterMaterialLookup(repairMasterItems)
   const storeLoc = resolveStoreLoc(workOrder, repairMasterSites)
   const workOrderNumber = cleanText(workOrder.wo)
-  const header = makeSapCopyRow({
-    materialNumber: "MATERIAL NUMBER",
-    qty: "QTY",
-    uom: "UOM",
-    storeLoc: "STORE LOG",
-    workOrderNumber: "NOMOR WO",
-    materialName: "MATERIAL",
-  })
 
   const rows = details
     .map((detail) => {
@@ -148,7 +140,7 @@ export function buildWipRepairSapCopyText({
     })
     .filter((row): row is string => Boolean(row))
 
-  return [header, ...rows].join("\n")
+  return rows.join("\n")
 }
 
 export function countWipRepairSapCopyRows(details: WipRepairWorkOrderDetailRecord[], repairMasterItems: RepairMasterItemForSapCopy[]) {
