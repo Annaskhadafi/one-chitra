@@ -65,6 +65,11 @@ import { ProcessKanbanBoard } from "@/components/kanban/process-kanban-board"
 import { ActionBlockedDialog, type ActionBlockedDetails } from "@/components/action-blocked-dialog"
 import { buildActionErrorDetails, buildPermissionBlockedDetails } from "@/lib/action-blocked"
 import { Providers } from "@/components/providers"
+import {
+    buildOutstandingMaterialExportRows,
+    calculateOrderTotal,
+    calculateOutstandingTotals,
+} from "@/lib/sales-order-outstanding"
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query"
 import {
     useReactTable,
@@ -137,14 +142,7 @@ function formatCurrency(value: number) {
 }
 
 function calculateGrandTotal(order: SalesOrderListItem) {
-    const subtotal = order.items.reduce((sum, item) => {
-        return sum + calculateLineTotal(item)
-    }, 0)
-    return subtotal - Number(order.discount) + Number(order.shipping)
-}
-
-function calculateLineTotal(item: { quantity: number; unitPrice: string; discount: string; tax: string }) {
-    return item.quantity * Number(item.unitPrice) - Number(item.discount) + Number(item.tax)
+    return calculateOrderTotal(order)
 }
 
 function formatRemarkDetailForExport(order: SalesOrderListItem) {
@@ -243,18 +241,6 @@ function highlightSearchText(value: string | null | undefined, term: string) {
     }
 
     return parts
-}
-
-function getDeliveryStatusLabel(item: SalesOrderListItem["remarks"]["items"][number]) {
-    if (item.remainingQuantity <= 0) return "Complete"
-    if (item.deliveredQuantity > 0) return "Parsial"
-    return "Belum Terkirim"
-}
-
-function getDeliveryStatusVariant(item: SalesOrderListItem["remarks"]["items"][number]): "secondary" | "warning" | "success" {
-    if (item.remainingQuantity <= 0) return "success"
-    if (item.deliveredQuantity > 0) return "warning"
-    return "secondary"
 }
 
 function getOrderItemDeliverySummary(order: SalesOrderListItem, item: SalesOrderListItem["items"][number]) {
@@ -1103,24 +1089,13 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
         })
     }, [data, globalFilter, statusFilter, customerFilter, tripDestinationFilter, categoryFilter, remarkFilter, yearFilter, monthFilter, createdByFilter])
 
-    const filteredTotals = useMemo(() => {
+    const filteredOutstandingTotals = useMemo(() => {
         const term = globalFilter.trim().toLowerCase()
         const hasItemSearch = filteredData.some((order) => orderHasProductSearchMatch(order, term))
 
-        return filteredData.reduce(
-            (totals, order) => {
-                if (hasItemSearch) {
-                    const matchedItems = order.items.filter((item) => orderItemMatchesSearch(item, term))
-                    totals.qty += matchedItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0)
-                    totals.value += matchedItems.reduce((sum, item) => sum + calculateLineTotal(item), 0)
-                    return totals
-                }
-
-                totals.qty += order.items.reduce((sum, item) => sum + Number(item.quantity || 0), 0)
-                totals.value += calculateGrandTotal(order)
-                return totals
-            },
-            { qty: 0, value: 0 }
+        return calculateOutstandingTotals(
+            filteredData,
+            hasItemSearch ? (item) => orderItemMatchesSearch(item, term) : undefined
         )
     }, [filteredData, globalFilter])
 
@@ -1363,6 +1338,31 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
         const workbook = XLSX.utils.book_new()
         XLSX.utils.book_append_sheet(workbook, worksheet, "Sales Orders")
         XLSX.writeFile(workbook, `sales-orders-${new Date().toISOString().slice(0, 10)}.xlsx`)
+    }
+
+    const handleOutstandingExport = () => {
+        const exportRows = buildOutstandingMaterialExportRows(data)
+
+        if (exportRows.length === 0) {
+            toast.info("Tidak ada barang outstanding dari Sales Order yang sudah memiliki PO Customer.")
+            return
+        }
+
+        const worksheet = XLSX.utils.json_to_sheet(exportRows)
+        worksheet["!cols"] = [
+            { wch: 18 },
+            { wch: 34 },
+            { wch: 34 },
+            { wch: 36 },
+            { wch: 22 },
+            { wch: 24 },
+            { wch: 18 },
+            { wch: 90 },
+        ]
+
+        const workbook = XLSX.utils.book_new()
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Outstanding by Material")
+        XLSX.writeFile(workbook, `sales-order-outstanding-material-${new Date().toISOString().slice(0, 10)}.xlsx`)
     }
 
     const handleKanbanStatusChange = useCallback(async (id: number, status: string) => {
@@ -1636,6 +1636,15 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
                         <Button variant="outline" onClick={handleExport} size="icon">
                             <Download className="h-4 w-4" />
                         </Button>
+                        <Button
+                            variant="outline"
+                            onClick={handleOutstandingExport}
+                            size="icon"
+                            title="Export outstanding by material"
+                            aria-label="Export outstanding by material"
+                        >
+                            <Truck className="h-4 w-4" />
+                        </Button>
                     </div>
 
                     <div className="flex items-center gap-2 overflow-x-auto pb-1">
@@ -1826,6 +1835,10 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
                             <Download className="mr-2 h-4 w-4" />
                             Export CSV
                         </Button>
+                        <Button variant="outline" onClick={handleOutstandingExport}>
+                            <Truck className="mr-2 h-4 w-4" />
+                            Export Outstanding
+                        </Button>
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <Button variant="outline">
@@ -1873,15 +1886,15 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
 
             <div className="grid gap-3 sm:grid-cols-2">
                 <div className="rounded-lg border bg-card px-4 py-3">
-                    <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Total Qty</div>
+                    <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Qty Outstanding</div>
                     <div className="mt-1 font-mono text-2xl font-bold">
-                        {formatNumber(filteredTotals.qty)}
+                        {formatNumber(filteredOutstandingTotals.qty)}
                     </div>
                 </div>
                 <div className="rounded-lg border bg-card px-4 py-3">
-                    <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Total Nilai</div>
+                    <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Nilai Outstanding</div>
                     <div className="mt-1 font-mono text-2xl font-bold">
-                        {formatCurrency(filteredTotals.value)}
+                        {formatCurrency(filteredOutstandingTotals.value)}
                     </div>
                 </div>
             </div>
