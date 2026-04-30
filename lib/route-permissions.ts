@@ -49,6 +49,7 @@ export const dashboardRoutePermissionRules: DashboardRoutePermissionRule[] = [
     { prefix: "/dashboard/marketing/campaigns", resource: "marketing" },
     { prefix: "/dashboard/marketing/email-lists", resource: "marketing" },
     { prefix: "/dashboard/marketing/slow-moving", resource: "marketing" },
+    { prefix: "/dashboard/master-barang-repair", resource: "products" },
     { prefix: "/dashboard/portal", resource: "portal-items" },
     { prefix: "/dashboard/price-management", resource: "price-management" },
     { prefix: "/dashboard/products", resource: "products" },

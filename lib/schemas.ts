@@ -32,6 +32,27 @@ export const warehouseSchema = z.object({
     type: z.string().optional(),
 })
 
+export const repairMasterItemSchema = z.object({
+    materialCode: z.string().min(1, "Material Code is required"),
+    materialName: z.string().min(1, "Material Name is required"),
+    valuationStockValue: z.string().optional(),
+    currency: z.string().optional(),
+    valuatedStock: z.string().optional(),
+    uom: z.string().optional(),
+    category: z.string().optional(),
+    smu: z.string().optional(),
+    defaultQty: z.string().optional(),
+    standardTime: z.string().optional(),
+    notes: z.string().optional(),
+    isActive: z.boolean().default(true),
+})
+
+export const repairMasterSiteSchema = z.object({
+    siteCode: z.string().min(1, "Site Code is required"),
+    siteName: z.string().min(1, "Site Name is required"),
+    isActive: z.boolean().default(true),
+})
+
 export const stockSchema = z.object({
     productId: z.number().min(1, "Product is required"),
     warehouseId: z.number().min(1, "Warehouse is required"),

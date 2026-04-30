@@ -14,6 +14,9 @@ const POINT_INVENTORY = 10
 const POINT_SLOW_MOVING = 20
 const R49_HIGH_THRESHOLD = 215_000_000
 const R49_MID_THRESHOLD = 190_000_000
+const A2R_SALESMAN_ALIASES = new Map<string, string>([
+    ["TOMMY INDRA ALDINY RAMBE", "OCKY HEGAR PRATAMA"],
+])
 
 const a2rCompetitionFiltersSchema = z.object({
     year: z.coerce.number().int().min(2020).max(2100),
@@ -38,6 +41,15 @@ function monthLabel(period: string) {
 
 function normalizeText(value: string | null | undefined) {
     return String(value ?? "").trim().toUpperCase()
+}
+
+function normalizeA2RSalesman(value: string | null | undefined) {
+    const trimmed = String(value ?? "").trim()
+    if (!trimmed) {
+        return ""
+    }
+
+    return A2R_SALESMAN_ALIASES.get(normalizeText(trimmed)) || trimmed
 }
 
 function normalizeCustomerKey(value: string | null | undefined) {
@@ -391,20 +403,25 @@ export async function getA2RCompetitionTargetSetup(period: string) {
         WHERE period = ${period}
     `)
 
-    const activeSalesmen = (activeSalesmenResult.rows as Array<{ salesman: string | null }>)
-        .map((row) => row.salesman?.trim())
+    const activeSalesmen = Array.from(new Set((activeSalesmenResult.rows as Array<{ salesman: string | null }>)
+        .map((row) => normalizeA2RSalesman(row.salesman))
         .filter((value): value is string => Boolean(value))
+    ))
 
-    const fallbackSalesmen = (fallbackSalesmenResult.rows as Array<{ salesman: string | null }>)
-        .map((row) => row.salesman?.trim())
+    const fallbackSalesmen = Array.from(new Set((fallbackSalesmenResult.rows as Array<{ salesman: string | null }>)
+        .map((row) => normalizeA2RSalesman(row.salesman))
         .filter((value): value is string => Boolean(value))
+    ))
 
-    const targetMap = new Map<string, number>(
-        (targetResult.rows as Array<{ salesman: string; targetRevenue: number | string | null }>).map((row) => [
-            row.salesman.trim(),
-            Number(row.targetRevenue || 0),
-        ])
-    )
+    const targetMap = new Map<string, number>()
+    for (const row of targetResult.rows as Array<{ salesman: string; targetRevenue: number | string | null }>) {
+        const salesman = normalizeA2RSalesman(row.salesman)
+        if (!salesman) {
+            continue
+        }
+
+        targetMap.set(salesman, (targetMap.get(salesman) || 0) + Number(row.targetRevenue || 0))
+    }
 
     const salesmen = Array.from(new Set([
         ...activeSalesmen,
@@ -431,17 +448,26 @@ export async function saveA2RCompetitionTargets(period: string, items: z.infer<t
     await ensureA2RSalesTargetsTable()
 
     const parsedItems = z.array(a2rSalesTargetItemSchema).parse(items)
-    const dedupedItems = Array.from(
-        new Map(
-            parsedItems.map((item) => [
-                item.salesman.trim(),
-                {
-                    salesman: item.salesman.trim(),
-                    targetRevenue: Number(item.targetRevenue || 0),
-                },
-            ])
-        ).values()
-    )
+    const dedupedItemMap = new Map<string, { salesman: string; targetRevenue: number }>()
+    for (const item of parsedItems) {
+        const salesman = normalizeA2RSalesman(item.salesman)
+        if (!salesman) {
+            continue
+        }
+
+        const existing = dedupedItemMap.get(salesman)
+        if (existing) {
+            existing.targetRevenue += Number(item.targetRevenue || 0)
+            continue
+        }
+
+        dedupedItemMap.set(salesman, {
+            salesman,
+            targetRevenue: Number(item.targetRevenue || 0),
+        })
+    }
+
+    const dedupedItems = Array.from(dedupedItemMap.values())
 
     await db.transaction(async (tx) => {
         await tx.execute(sql`
@@ -570,7 +596,13 @@ export async function getA2RCompetitionData(rawFilters: z.input<typeof a2rCompet
 
     const targetMap = new Map<string, number>()
     for (const row of targetResult.rows as TargetRow[]) {
-        targetMap.set(`${row.period}|${row.salesman.trim()}`, Number(row.targetRevenue || 0))
+        const salesman = normalizeA2RSalesman(row.salesman)
+        if (!salesman) {
+            continue
+        }
+
+        const key = `${row.period}|${salesman}`
+        targetMap.set(key, (targetMap.get(key) || 0) + Number(row.targetRevenue || 0))
     }
 
     const monthlyMap = new Map<string, MonthlySalesmanAccumulator>()
@@ -600,7 +632,8 @@ export async function getA2RCompetitionData(rawFilters: z.input<typeof a2rCompet
     for (const period of selectedPeriods) {
         const targetSalesmen = (targetResult.rows as TargetRow[])
             .filter((row) => row.period === period)
-            .map((row) => row.salesman.trim())
+            .map((row) => normalizeA2RSalesman(row.salesman))
+            .filter(Boolean)
 
         for (const salesman of targetSalesmen) {
             ensureMonthlyAccumulator(period, salesman)
@@ -608,7 +641,7 @@ export async function getA2RCompetitionData(rawFilters: z.input<typeof a2rCompet
     }
 
     for (const row of salesRows) {
-        const salesman = row.salesman.trim()
+        const salesman = normalizeA2RSalesman(row.salesman)
         if (!salesman || !selectedPeriods.includes(row.period)) {
             continue
         }
@@ -803,7 +836,7 @@ export async function getA2RCompetitionData(rawFilters: z.input<typeof a2rCompet
     }
 
     for (const row of salesRows) {
-        const salesman = row.salesman.trim()
+        const salesman = normalizeA2RSalesman(row.salesman)
         const materialKey = normalizeMaterialKey(row.materialNo)
         const materialNo = row.materialNo?.trim() || "-"
         const materialDescription = row.materialDescription?.trim() || "Tanpa deskripsi"
