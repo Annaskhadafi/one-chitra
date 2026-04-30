@@ -63,6 +63,28 @@ function splitQuantityAndUom(qty: string | null | undefined, smu: string | null 
   }
 }
 
+function formatSapQuantity(value: number) {
+  return Number(value.toFixed(3)).toString()
+}
+
+function convertQuantityToMasterUom(quantity: { qty: string; uom: string }, masterUom: string) {
+  if (!masterUom) {
+    return quantity
+  }
+
+  const parsedQty = Number(quantity.qty.replace(",", "."))
+
+  if (!Number.isFinite(parsedQty)) {
+    return { qty: quantity.qty, uom: masterUom }
+  }
+
+  if (quantity.uom === "ML" && masterUom === "CAN") {
+    return { qty: formatSapQuantity(parsedQty / 1000), uom: masterUom }
+  }
+
+  return { qty: quantity.qty, uom: masterUom }
+}
+
 function makeMasterMaterialLookup(items: RepairMasterItemForSapCopy[]) {
   const byName = new Map<string, RepairMasterItemForSapCopy>()
   const byCode = new Map<string, RepairMasterItemForSapCopy>()
@@ -83,7 +105,7 @@ function makeMasterMaterialLookup(items: RepairMasterItemForSapCopy[]) {
   return { byName, byCode }
 }
 
-export function resolveWipRepairSiteCode(workOrder: Pick<WipRepairRecord, "store_loc" | "site">, sites: RepairMasterSiteForSapCopy[]) {
+export function resolveWipRepairSite(workOrder: Pick<WipRepairRecord, "store_loc" | "site">, sites: RepairMasterSiteForSapCopy[]) {
   const candidateValues = [workOrder.store_loc, workOrder.site].filter((value) => cleanText(value))
   const candidateKeys = candidateValues.map(normalizeLookupKey).filter(Boolean)
   const candidateTokens = new Set(candidateValues.flatMap(getLookupTokens))
@@ -98,11 +120,21 @@ export function resolveWipRepairSiteCode(workOrder: Pick<WipRepairRecord, "store
       candidateKeys.includes(siteName) ||
       siteTokens.some((token) => candidateTokens.has(token))
     ) {
-      return cleanText(site.siteCode)
+      return {
+        siteCode: cleanText(site.siteCode),
+        siteName: cleanText(site.siteName),
+      }
     }
   }
 
-  return cleanText(workOrder.store_loc)
+  return {
+    siteCode: cleanText(workOrder.store_loc),
+    siteName: cleanText(workOrder.site),
+  }
+}
+
+export function resolveWipRepairSiteCode(workOrder: Pick<WipRepairRecord, "store_loc" | "site">, sites: RepairMasterSiteForSapCopy[]) {
+  return resolveWipRepairSite(workOrder, sites).siteCode
 }
 
 function makeSapCopyRow(values: {
@@ -155,11 +187,12 @@ export function buildWipRepairSapCopyText({
       const masterMaterialByCode = materialLookup.byCode.get(normalizeLookupKey(materialNumber))
       const masterUom = normalizeUom(masterMaterialByCode?.uom ?? masterMaterialByName?.uom)
       const quantity = splitQuantityAndUom(detail.qty, detail.smu)
+      const convertedQuantity = convertQuantityToMasterUom(quantity, masterUom)
 
       return makeSapCopyRow({
         materialNumber,
-        qty: quantity.qty,
-        uom: masterUom || quantity.uom,
+        qty: convertedQuantity.qty,
+        uom: convertedQuantity.uom,
         storeLoc,
         workOrderNumber,
         materialName,

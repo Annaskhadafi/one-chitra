@@ -34,7 +34,7 @@ import {
 } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
 import { normalizeWipRepairBrand } from "@/lib/wip-repair-brand"
-import { buildWipRepairSapCopyText, countWipRepairSapCopyRows, resolveWipRepairSiteCode } from "@/lib/wip-repair-sap-copy"
+import { buildWipRepairSapCopyText, countWipRepairSapCopyRows, resolveWipRepairSite, resolveWipRepairSiteCode } from "@/lib/wip-repair-sap-copy"
 import type { WipRepairRecord, WipRepairWorkOrderDetailRecord } from "@/lib/types/wip-repair"
 
 type WipRepairTableProps = {
@@ -750,6 +750,7 @@ export function WipRepairTable({ data, workOrderDetails, repairMasterItems, repa
                   const totalMinutes = details.reduce((sum, detail) => sum + (parseMinutes(detail.time) ?? 0), 0)
                   const sapCopyRowCount = countWipRepairSapCopyRows(details, repairMasterItems)
                   const isSapCopied = copiedSapKey === detailKey
+                  const siteInfo = resolveWipRepairSite(item, repairMasterSites)
 
                   return (
                     <Fragment key={item.id_wo}>
@@ -768,7 +769,12 @@ export function WipRepairTable({ data, workOrderDetails, repairMasterItems, repa
                             <ChevronDown className={cn("h-4 w-4 transition-transform", isExpanded && "rotate-180")} />
                           </Button>
                         </TableCell>
-                        <TableCell className="px-4 py-3 font-medium">{normalizeValue(resolveWipRepairSiteCode(item, repairMasterSites))}</TableCell>
+                        <TableCell className="px-4 py-3">
+                          <div className="flex flex-col">
+                            <span className="font-medium">{normalizeValue(siteInfo.siteCode)}</span>
+                            <span className="text-xs text-muted-foreground">{normalizeValue(siteInfo.siteName)}</span>
+                          </div>
+                        </TableCell>
                         <TableCell className="px-4 py-3 font-medium tabular-nums">{workOrder}</TableCell>
                         <TableCell className="px-4 py-3">
                           <Badge variant="outline" className={cn("rounded-full px-2.5 py-1 text-xs font-medium", getStatusClasses(item.status))}>

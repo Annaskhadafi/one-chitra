@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { buildWipRepairSapCopyText, countWipRepairSapCopyRows, resolveWipRepairSiteCode } from "@/lib/wip-repair-sap-copy"
+import { buildWipRepairSapCopyText, countWipRepairSapCopyRows, resolveWipRepairSite, resolveWipRepairSiteCode } from "@/lib/wip-repair-sap-copy"
 import type { WipRepairRecord, WipRepairWorkOrderDetailRecord } from "@/lib/types/wip-repair"
 
 const workOrder: WipRepairRecord = {
@@ -95,7 +95,7 @@ describe("buildWipRepairSapCopyText", () => {
     })
 
     expect(text.split("\n")).toEqual([
-      "761E290002\t500\tCAN\tRS01\t\t80000039916\t\t\t\t\t\t\t2002\t\tBLACK CEMENT 946 ML",
+      "761E290002\t0.5\tCAN\tRS01\t\t80000039916\t\t\t\t\t\t\t2002\t\tBLACK CEMENT 946 ML",
       "799E260001\t1\tPC\tRS01\t\t80000039916\t\t\t\t\t\t\t2002\t\tCRP-46 440 X 170MM",
       "\t2\tPC\tRS01\t\t80000039916\t\t\t\t\t\t\t2002\t\tUNMATCHED MATERIAL",
     ])
@@ -112,5 +112,14 @@ describe("buildWipRepairSapCopyText", () => {
         [{ siteCode: "RS03", siteName: "CP BMB" }],
       ),
     ).toBe("RS03")
+  })
+
+  it("resolves WIP site display code and name", () => {
+    expect(
+      resolveWipRepairSite(
+        { store_loc: "CK-BMB", site: "BMB" },
+        [{ siteCode: "RS03", siteName: "CP BMB" }],
+      ),
+    ).toEqual({ siteCode: "RS03", siteName: "CP BMB" })
   })
 })
