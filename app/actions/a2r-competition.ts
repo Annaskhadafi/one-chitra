@@ -506,7 +506,7 @@ export async function getA2RCompetitionData(rawFilters: z.input<typeof a2rCompet
     const { startDate, endDateExclusive } = getRangeBounds(filters.year, selectedMonths)
     const selectedPeriodsSql = sql.join(selectedPeriods.map((period) => sql`${period}`), sql`, `)
 
-    const [salesResult, slowMovingResult, cosmeticMatchResult, targetResult, materialCategoryResult] = await Promise.all([
+    const [salesResult, slowMovingResult, cosmeticMatchResult, consignmentMatchResult, targetResult, materialCategoryResult] = await Promise.all([
         db.execute(sql`
             SELECT
                 TO_CHAR(billing_date, 'MM.YYYY') AS period,
@@ -540,17 +540,33 @@ export async function getA2RCompetitionData(rawFilters: z.input<typeof a2rCompet
             WHERE material_number IS NOT NULL
               AND TRIM(material_number) <> ''
         `),
-        // Fuzzy match cosmetic tires by material number AND serial number
-        // Serial numbers are normalized by removing all whitespace (spaces, tabs, etc.) to handle:
-        // - SN with spaces: "ABC 123" -> "ABC123"
-        // - SN without spaces: "ABC123" -> "ABC123"
-        // - SN with multiple spaces: "ABC  123" -> "ABC123"
+        // Fuzzy match cosmetic tires by material number AND serial number (via delivery)
+        // This handles regular deliveries where DO SAP matches sales_revenue_sap.delivery_no
         db.execute(sql`
             SELECT DISTINCT
                 COALESCE(d.do_sap, '') AS "doSap",
                 COALESCE(d.delivery_number, '') AS "deliveryNumber",
                 COALESCE(products.material_number, '') AS "materialNumber"
             FROM deliveries d
+            JOIN delivery_items di ON di.delivery_id = d.id
+            JOIN products ON products.id = di.product_id
+            JOIN cosmetic_tires ct
+              ON UPPER(TRIM(COALESCE(ct.material_number, ''))) = UPPER(TRIM(COALESCE(products.material_number, '')))
+             AND EXISTS (
+                SELECT 1
+                FROM UNNEST(COALESCE(di.serial_numbers, ARRAY[]::text[])) AS sn
+                WHERE REGEXP_REPLACE(UPPER(TRIM(sn)), '\\s+', '', 'g') = REGEXP_REPLACE(UPPER(TRIM(COALESCE(ct.serial_number, ''))), '\\s+', '', 'g')
+             )
+        `),
+        // Consignment matching: Get customer-material pairs for consignment deliveries with cosmetic tires
+        // This handles cases where DO SAP doesn't match (consignment) but customer+material+SN match
+        db.execute(sql`
+            SELECT DISTINCT
+                c.name AS "customerName",
+                COALESCE(products.material_number, '') AS "materialNumber"
+            FROM deliveries d
+            JOIN sales_orders so ON so.id = d.sales_order_id
+            JOIN customers c ON c.id = so.customer_id
             JOIN delivery_items di ON di.delivery_id = d.id
             JOIN products ON products.id = di.product_id
             JOIN cosmetic_tires ct
@@ -591,6 +607,8 @@ export async function getA2RCompetitionData(rawFilters: z.input<typeof a2rCompet
             .filter(([materialNumber]) => Boolean(materialNumber))
     )
     const cosmeticMatchSet = new Set<string>()
+    // Consignment match: customerName + materialNumber (for consignment without matching DO)
+    const consignmentMatchSet = new Set<string>()
 
     for (const row of cosmeticMatchResult.rows as Array<{ doSap: string; deliveryNumber: string; materialNumber: string }>) {
         const materialKey = normalizeMaterialKey(row.materialNumber)
@@ -602,6 +620,15 @@ export async function getA2RCompetitionData(rawFilters: z.input<typeof a2rCompet
         }
         if (deliveryNumberKey && materialKey) {
             cosmeticMatchSet.add(`${deliveryNumberKey}|${materialKey}`)
+        }
+    }
+
+    // Build consignment match set (customer + material pairs that have cosmetic tires)
+    for (const row of consignmentMatchResult.rows as Array<{ customerName: string; materialNumber: string }>) {
+        const customerKey = normalizeCustomerKey(row.customerName)
+        const materialKey = normalizeMaterialKey(row.materialNumber)
+        if (customerKey && materialKey) {
+            consignmentMatchSet.add(`${customerKey}|${materialKey}`)
         }
     }
 
@@ -706,7 +733,11 @@ export async function getA2RCompetitionData(rawFilters: z.input<typeof a2rCompet
             accumulator.r49CustomerBuckets.set(customerKey, customerBucket)
 
             const deliveryKey = normalizeDeliveryKey(row.deliveryNo)
-            if (deliveryKey && materialKey && cosmeticMatchSet.has(`${deliveryKey}|${materialKey}`)) {
+            // Check cosmetic match by delivery_no (regular) OR by customer+material (consignment)
+            const isCosmeticMatch = deliveryKey && materialKey && cosmeticMatchSet.has(`${deliveryKey}|${materialKey}`)
+            const isConsignmentMatch = materialKey && consignmentMatchSet.has(`${customerKey}|${materialKey}`)
+
+            if (isCosmeticMatch || isConsignmentMatch) {
                 const cosmeticBucket = accumulator.cosmeticCustomerBuckets.get(customerKey) || {
                     customerName: row.customerName?.trim() || "Unknown Customer",
                     materials: new Map(),
