@@ -73,6 +73,12 @@ function normalizeDeliveryKey(value: string | null | undefined) {
     return trimmed.replace(/\.0$/, "")
 }
 
+/**
+ * Normalizes a serial number for fuzzy matching.
+ * Removes all whitespace characters and converts to uppercase.
+ * This allows matching between SN with spaces (e.g., "ABC 123") and without spaces (e.g., "ABC123").
+ * Example: " ABC  123 " -> "ABC123"
+ */
 function normalizeSerialKey(value: string | null | undefined) {
     return normalizeText(value).replace(/\s+/g, "")
 }
@@ -534,6 +540,11 @@ export async function getA2RCompetitionData(rawFilters: z.input<typeof a2rCompet
             WHERE material_number IS NOT NULL
               AND TRIM(material_number) <> ''
         `),
+        // Fuzzy match cosmetic tires by material number AND serial number
+        // Serial numbers are normalized by removing all whitespace (spaces, tabs, etc.) to handle:
+        // - SN with spaces: "ABC 123" -> "ABC123"
+        // - SN without spaces: "ABC123" -> "ABC123"
+        // - SN with multiple spaces: "ABC  123" -> "ABC123"
         db.execute(sql`
             SELECT DISTINCT
                 COALESCE(d.do_sap, '') AS "doSap",
