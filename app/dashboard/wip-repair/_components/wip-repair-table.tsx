@@ -40,6 +40,7 @@ import type { WipRepairRecord, WipRepairWorkOrderDetailRecord } from "@/lib/type
 type WipRepairTableProps = {
   data: WipRepairRecord[]
   workOrderDetails: WipRepairWorkOrderDetailRecord[]
+  invoiceMappings: Record<string, { noInv: string | null; tanggalInvoice: string | null }>
   repairMasterItems: RepairMasterLookupItem[]
   repairMasterSites: RepairMasterLookupSite[]
 }
@@ -397,7 +398,7 @@ async function copyTextToClipboard(text: string) {
   }
 }
 
-export function WipRepairTable({ data, workOrderDetails, repairMasterItems, repairMasterSites }: WipRepairTableProps) {
+export function WipRepairTable({ data, workOrderDetails, invoiceMappings, repairMasterItems, repairMasterSites }: WipRepairTableProps) {
   const [query, setQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState(ALL_FILTER)
   const [storeLocFilter, setStoreLocFilter] = useState(ALL_FILTER)
@@ -696,6 +697,8 @@ export function WipRepairTable({ data, workOrderDetails, repairMasterItems, repa
                 <TableHead className="px-4 py-3">Size</TableHead>
                 <TableHead className="px-4 py-3">Injury</TableHead>
                 <TableHead className="px-4 py-3">Total Waktu</TableHead>
+                <TableHead className="px-4 py-3">No Inv</TableHead>
+                <TableHead className="px-4 py-3">Tanggal Invoice</TableHead>
                 <TableHead className="px-4 py-3">Inspect</TableHead>
                 <TableHead className="px-4 py-3">Created By</TableHead>
                 <TableHead className="px-4 py-3">Received / Receiver</TableHead>
@@ -799,9 +802,11 @@ export function WipRepairTable({ data, workOrderDetails, repairMasterItems, repa
                         <TableCell className="px-4 py-3 font-medium tabular-nums">
                           {details.length > 0 ? formatDurationFromMinutes(totalMinutes) : "-"}
                         </TableCell>
+                        <TableCell className="px-4 py-3">{normalizeValue(invoiceMappings[workOrder]?.noInv)}</TableCell>
+                        <TableCell className="px-4 py-3">{formatDate(invoiceMappings[workOrder]?.tanggalInvoice || null)}</TableCell>
                         <TableCell className="px-4 py-3">
                           <div className="flex flex-col">
-                            <span className="text-muted-foreground">{formatDate(item.inspect_date)}</span>
+                            <span className="font-medium">{formatDate(item.inspect_date)}</span>
                             <span className="text-xs text-muted-foreground">{normalizeValue(item.inspector)}</span>
                           </div>
                         </TableCell>
