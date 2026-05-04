@@ -407,6 +407,7 @@ export function WipRepairTable({ data, workOrderDetails, invoiceMappings, repair
   const [customerFilters, setCustomerFilters] = useState<string[]>([])
   const [sizeFilters, setSizeFilters] = useState<string[]>([])
   const [injuryFilters, setInjuryFilters] = useState<string[]>([])
+  const [invoiceFilter, setInvoiceFilter] = useState(ALL_FILTER)
   const [expandedWorkOrders, setExpandedWorkOrders] = useState<Set<string>>(() => new Set())
   const [copiedSapKey, setCopiedSapKey] = useState<string | null>(null)
 
@@ -519,11 +520,14 @@ export function WipRepairTable({ data, workOrderDetails, invoiceMappings, repair
         const matchesCustomer = customerFilters.length === 0 || customerFilters.includes(normalizeValue(item.customer))
         const matchesSize = sizeFilters.length === 0 || sizeFilters.includes(normalizeValue(item.size))
         const matchesInjury = injuryFilters.length === 0 || injuryFilters.includes(normalizeValue(item.injury))
+        
+        const workOrder = normalizeValue(item.wo)
+        const isInvoiceMatched = invoiceFilter === ALL_FILTER || (invoiceFilter === "INVOICED" ? !!invoiceMappings[workOrder]?.noInv : !invoiceMappings[workOrder]?.noInv)
 
-        return matchesQuery && matchesStatus && matchesStoreLoc && matchesSite && matchesBrand && matchesCustomer && matchesSize && matchesInjury
+        return matchesQuery && matchesStatus && matchesStoreLoc && matchesSite && matchesBrand && matchesCustomer && matchesSize && matchesInjury && isInvoiceMatched
       })
       .sort((left, right) => getSortTimestamp(right) - getSortTimestamp(left))
-  }, [brandFilter, customerFilters, data, detailsByWorkOrder, injuryFilters, query, repairMasterSites, siteFilter, sizeFilters, statusFilter, storeLocFilter])
+  }, [brandFilter, customerFilters, data, detailsByWorkOrder, injuryFilters, invoiceFilter, invoiceMappings, query, repairMasterSites, siteFilter, sizeFilters, statusFilter, storeLocFilter])
 
   function toggleWorkOrder(wo: string) {
     setExpandedWorkOrders((current) => {
@@ -581,7 +585,7 @@ export function WipRepairTable({ data, workOrderDetails, invoiceMappings, repair
               />
             </div>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-7">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-8">
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger className="h-10 w-full rounded-xl sm:min-w-40">
                   <SelectValue placeholder="Semua status" />
@@ -593,6 +597,17 @@ export function WipRepairTable({ data, workOrderDetails, invoiceMappings, repair
                       {option}
                     </SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={invoiceFilter} onValueChange={setInvoiceFilter}>
+                <SelectTrigger className="h-10 w-full rounded-xl sm:min-w-40">
+                  <SelectValue placeholder="Semua Invoice" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL_FILTER}>Semua Invoice</SelectItem>
+                  <SelectItem value="INVOICED">Sudah Invoice</SelectItem>
+                  <SelectItem value="NOT_INVOICED">Belum Invoice</SelectItem>
                 </SelectContent>
               </Select>
 
@@ -663,10 +678,11 @@ export function WipRepairTable({ data, workOrderDetails, invoiceMappings, repair
               />
             </div>
           </div>
-          {storeLocFilter !== ALL_FILTER || customerFilters.length > 0 || sizeFilters.length > 0 || injuryFilters.length > 0 ? (
+          {storeLocFilter !== ALL_FILTER || invoiceFilter !== ALL_FILTER || customerFilters.length > 0 || sizeFilters.length > 0 || injuryFilters.length > 0 ? (
             <div className="mt-3 flex flex-wrap items-center gap-2">
               {[
                 ...(storeLocFilter !== ALL_FILTER ? [{ type: "Site Code", value: storeLocFilter, onClear: () => setStoreLocFilter(ALL_FILTER) }] : []),
+                ...(invoiceFilter !== ALL_FILTER ? [{ type: "Invoice", value: invoiceFilter === "INVOICED" ? "Sudah Invoice" : "Belum Invoice", onClear: () => setInvoiceFilter(ALL_FILTER) }] : []),
                 ...customerFilters.map((value) => ({ type: "Customer", value, onClear: () => setCustomerFilters(customerFilters.filter((item) => item !== value)) })),
                 ...sizeFilters.map((value) => ({ type: "Size", value, onClear: () => setSizeFilters(sizeFilters.filter((item) => item !== value)) })),
                 ...injuryFilters.map((value) => ({ type: "Injury", value, onClear: () => setInjuryFilters(injuryFilters.filter((item) => item !== value)) }))].map((filter) => (
