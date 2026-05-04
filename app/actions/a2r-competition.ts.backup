@@ -252,7 +252,6 @@ type SalesProductDetail = {
     periods: string[]
     r49Points: number
     cosmeticPoints: number
-    cosmeticSerialNumbers: string[]
     inventoryPoints: number
     slowMovingPoints: number
     totalPoints: number
@@ -547,8 +546,7 @@ export async function getA2RCompetitionData(rawFilters: z.input<typeof a2rCompet
             SELECT DISTINCT
                 COALESCE(d.do_sap, '') AS "doSap",
                 COALESCE(d.delivery_number, '') AS "deliveryNumber",
-                COALESCE(products.material_number, '') AS "materialNumber",
-                COALESCE(ct.serial_number, '') AS "serialNumber"
+                COALESCE(products.material_number, '') AS "materialNumber"
             FROM deliveries d
             JOIN delivery_items di ON di.delivery_id = d.id
             JOIN products ON products.id = di.product_id
@@ -565,8 +563,7 @@ export async function getA2RCompetitionData(rawFilters: z.input<typeof a2rCompet
         db.execute(sql`
             SELECT DISTINCT
                 c.name AS "customerName",
-                COALESCE(products.material_number, '') AS "materialNumber",
-                COALESCE(ct.serial_number, '') AS "serialNumber"
+                COALESCE(products.material_number, '') AS "materialNumber"
             FROM deliveries d
             JOIN sales_orders so ON so.id = d.sales_order_id
             JOIN customers c ON c.id = so.customer_id
@@ -612,10 +609,8 @@ export async function getA2RCompetitionData(rawFilters: z.input<typeof a2rCompet
     const cosmeticMatchSet = new Set<string>()
     // Consignment match: customerName + materialNumber (for consignment without matching DO)
     const consignmentMatchSet = new Set<string>()
-    // SN lookup: materialKey -> set of serial numbers matched from cosmetic_tires
-    const cosmeticSnByMaterial = new Map<string, Set<string>>()
 
-    for (const row of cosmeticMatchResult.rows as Array<{ doSap: string; deliveryNumber: string; materialNumber: string; serialNumber: string }>) {
+    for (const row of cosmeticMatchResult.rows as Array<{ doSap: string; deliveryNumber: string; materialNumber: string }>) {
         const materialKey = normalizeMaterialKey(row.materialNumber)
         const doSapKey = normalizeDeliveryKey(row.doSap)
         const deliveryNumberKey = normalizeDeliveryKey(row.deliveryNumber)
@@ -626,24 +621,14 @@ export async function getA2RCompetitionData(rawFilters: z.input<typeof a2rCompet
         if (deliveryNumberKey && materialKey) {
             cosmeticMatchSet.add(`${deliveryNumberKey}|${materialKey}`)
         }
-        if (materialKey && row.serialNumber) {
-            const snSet = cosmeticSnByMaterial.get(materialKey) || new Set<string>()
-            snSet.add(row.serialNumber)
-            cosmeticSnByMaterial.set(materialKey, snSet)
-        }
     }
 
     // Build consignment match set (customer + material pairs that have cosmetic tires)
-    for (const row of consignmentMatchResult.rows as Array<{ customerName: string; materialNumber: string; serialNumber: string }>) {
+    for (const row of consignmentMatchResult.rows as Array<{ customerName: string; materialNumber: string }>) {
         const customerKey = normalizeCustomerKey(row.customerName)
         const materialKey = normalizeMaterialKey(row.materialNumber)
         if (customerKey && materialKey) {
             consignmentMatchSet.add(`${customerKey}|${materialKey}`)
-        }
-        if (materialKey && row.serialNumber) {
-            const snSet = cosmeticSnByMaterial.get(materialKey) || new Set<string>()
-            snSet.add(row.serialNumber)
-            cosmeticSnByMaterial.set(materialKey, snSet)
         }
     }
 
@@ -884,7 +869,6 @@ export async function getA2RCompetitionData(rawFilters: z.input<typeof a2rCompet
             periods: new Set<string>(),
             r49Points: 0,
             cosmeticPoints: 0,
-            cosmeticSerialNumbers: new Set<string>(),
             inventoryPoints: 0,
             slowMovingPoints: 0,
         }
@@ -994,13 +978,6 @@ export async function getA2RCompetitionData(rawFilters: z.input<typeof a2rCompet
             if (product) {
                 product.category = "TYRE"
                 product.cosmeticPoints += POINT_COSMETIC
-                // Collect matching SNs from the lookup map (display only, no effect on points)
-                const snSet = cosmeticSnByMaterial.get(assignedMaterial.materialKey)
-                if (snSet) {
-                    for (const sn of snSet) {
-                        product.cosmeticSerialNumbers.add(sn)
-                    }
-                }
             }
         }
     }
@@ -1025,7 +1002,6 @@ export async function getA2RCompetitionData(rawFilters: z.input<typeof a2rCompet
                         .map((period) => monthLabel(period)),
                     r49Points: product.r49Points,
                     cosmeticPoints: product.cosmeticPoints,
-                    cosmeticSerialNumbers: Array.from(product.cosmeticSerialNumbers).sort((a, b) => a.localeCompare(b)),
                     inventoryPoints: product.inventoryPoints,
                     slowMovingPoints: product.slowMovingPoints,
                     totalPoints: product.r49Points + product.cosmeticPoints + product.inventoryPoints + product.slowMovingPoints,

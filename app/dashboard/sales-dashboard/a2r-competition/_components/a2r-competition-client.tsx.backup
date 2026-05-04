@@ -100,7 +100,6 @@ type CompetitionRow = {
         periods: string[]
         r49Points: number
         cosmeticPoints: number
-        cosmeticSerialNumbers: string[]
         inventoryPoints: number
         slowMovingPoints: number
         totalPoints: number
@@ -173,7 +172,6 @@ function normalizeCompetitionData(data: CompetitionData | null): CompetitionData
                         periods: Array.isArray(product.periods) ? product.periods : [],
                         r49Points: Number(product.r49Points || 0),
                         cosmeticPoints: Number(product.cosmeticPoints || 0),
-                        cosmeticSerialNumbers: Array.isArray(product.cosmeticSerialNumbers) ? product.cosmeticSerialNumbers : [],
                         inventoryPoints: Number(product.inventoryPoints || 0),
                         slowMovingPoints: Number(product.slowMovingPoints || 0),
                         totalPoints: Number(product.totalPoints || 0),
@@ -289,7 +287,7 @@ function ProductDetailSection({
                                     const isTyre = product.category === "TYRE" || Number(product.totalPoints || 0) > 0
                                     const pointDetails = [
                                         product.r49Points > 0 ? `27.00R49 ${formatNumber(product.r49Points)} pt` : null,
-                                        product.cosmeticPoints > 0 ? `Cosmetic ${formatNumber(product.cosmeticPoints)} pt${product.cosmeticSerialNumbers && product.cosmeticSerialNumbers.length > 0 ? ` (SN: ${product.cosmeticSerialNumbers.join(", ")})` : ""}` : null,
+                                        product.cosmeticPoints > 0 ? `Cosmetic ${formatNumber(product.cosmeticPoints)} pt` : null,
                                         product.inventoryPoints > 0 ? `Existing Inventory ${formatNumber(product.inventoryPoints)} pt` : null,
                                         product.slowMovingPoints > 0 ? `Slow Moving ${formatNumber(product.slowMovingPoints)} pt` : null,
                                     ].filter((value): value is string => Boolean(value))
@@ -358,7 +356,7 @@ function ProductDetailSection({
                         const isTyre = product.category === "TYRE" || Number(product.totalPoints || 0) > 0
                         const pointDetails = [
                             product.r49Points > 0 ? `27.00R49 ${formatNumber(product.r49Points)} pt` : null,
-                            product.cosmeticPoints > 0 ? `Cosmetic ${formatNumber(product.cosmeticPoints)} pt${product.cosmeticSerialNumbers && product.cosmeticSerialNumbers.length > 0 ? ` (SN: ${product.cosmeticSerialNumbers.join(", ")})` : ""}` : null,
+                            product.cosmeticPoints > 0 ? `Cosmetic ${formatNumber(product.cosmeticPoints)} pt` : null,
                             product.inventoryPoints > 0 ? `Existing Inventory ${formatNumber(product.inventoryPoints)} pt` : null,
                             product.slowMovingPoints > 0 ? `Slow Moving ${formatNumber(product.slowMovingPoints)} pt` : null,
                         ].filter((value): value is string => Boolean(value))
@@ -428,9 +426,6 @@ function MonthToggle({
     onClick: () => void
 }) {
     const labels: Record<string, string> = {
-        "01": "Jan",
-        "02": "Feb",
-        "03": "Mar",
         "04": "Apr",
         "05": "Mei",
         "06": "Jun",
@@ -549,7 +544,7 @@ function TargetSetupDialog({
                 <DialogHeader>
                     <DialogTitle>Target Revenue Per Salesman</DialogTitle>
                     <DialogDescription>
-                        Target ini dipakai untuk menghitung achievement dan poin revenue A2R per bulan.
+                        Target ini dipakai untuk menghitung achievement dan poin revenue A2R per bulan mulai April.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -640,13 +635,27 @@ export function A2RCompetitionClient({
 
     const availableMonths = useMemo(() => monthsByYear[selectedYear] || [], [monthsByYear, selectedYear])
     const periods = useMemo(
-        () => {
-            const monthNames = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"]
-            return availableMonths.map((month) => ({
+        () =>
+            availableMonths.map((month) => ({
                 period: `${month}.${selectedYear}`,
-                label: `${monthNames[Number(month) - 1] || month} ${selectedYear}`,
-            }))
-        },
+                label: month === "04"
+                    ? `Apr ${selectedYear}`
+                    : month === "05"
+                        ? `Mei ${selectedYear}`
+                        : month === "06"
+                            ? `Jun ${selectedYear}`
+                            : month === "07"
+                                ? `Jul ${selectedYear}`
+                                : month === "08"
+                                    ? `Agu ${selectedYear}`
+                                    : month === "09"
+                                        ? `Sep ${selectedYear}`
+                                        : month === "10"
+                                            ? `Okt ${selectedYear}`
+                                            : month === "11"
+                                                ? `Nov ${selectedYear}`
+                                                : `Des ${selectedYear}`,
+            })),
         [availableMonths, selectedYear]
     )
 
@@ -705,7 +714,7 @@ export function A2RCompetitionClient({
                                 A2R Competition
                             </Badge>
                             <Badge variant="outline" className="rounded-full">
-                                Apr - Des
+                                Mulai April
                             </Badge>
                         </div>
                         <div>
