@@ -1,8 +1,9 @@
 "use client"
 
 import { Fragment, useMemo, useState } from "react"
-import { Check, ChevronDown, ClipboardCopy, Search, Wrench, X } from "lucide-react"
+import { Check, ChevronDown, ClipboardCopy, Search, Wrench, X, Download, Filter } from "lucide-react"
 import { toast } from "sonner"
+import * as xlsx from "xlsx"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -15,7 +16,9 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import {
   Select,
@@ -264,6 +267,24 @@ function formatDate(value: string | null) {
   }).format(parsed)
 }
 
+function formatExportDate(value: string | null | undefined) {
+  if (!value || value === "-") {
+    return "-"
+  }
+
+  const parsed = new Date(value)
+
+  if (Number.isNaN(parsed.getTime())) {
+    return value
+  }
+
+  const dd = String(parsed.getDate()).padStart(2, "0")
+  const MM = String(parsed.getMonth() + 1).padStart(2, "0")
+  const yyyy = parsed.getFullYear()
+
+  return `${dd}.${MM}.${yyyy}`
+}
+
 function formatQty(value: string | null, smu: string | null) {
   const normalizedValue = normalizeValue(value)
   const normalizedSmu = normalizeValue(smu)
@@ -408,6 +429,9 @@ export function WipRepairTable({ data, workOrderDetails, invoiceMappings, repair
   const [sizeFilters, setSizeFilters] = useState<string[]>([])
   const [injuryFilters, setInjuryFilters] = useState<string[]>([])
   const [invoiceFilter, setInvoiceFilter] = useState(ALL_FILTER)
+  const [woFilters, setWoFilters] = useState<string[]>([])
+  const [woPasteOpen, setWoPasteOpen] = useState(false)
+  const [woPasteText, setWoPasteText] = useState("")
   const [expandedWorkOrders, setExpandedWorkOrders] = useState<Set<string>>(() => new Set())
   const [copiedSapKey, setCopiedSapKey] = useState<string | null>(null)
 
@@ -523,11 +547,12 @@ export function WipRepairTable({ data, workOrderDetails, invoiceMappings, repair
         
         const workOrder = normalizeValue(item.wo)
         const isInvoiceMatched = invoiceFilter === ALL_FILTER || (invoiceFilter === "INVOICED" ? !!invoiceMappings[workOrder]?.noInv : !invoiceMappings[workOrder]?.noInv)
+        const isWoMatched = woFilters.length === 0 || woFilters.includes(workOrder)
 
-        return matchesQuery && matchesStatus && matchesStoreLoc && matchesSite && matchesBrand && matchesCustomer && matchesSize && matchesInjury && isInvoiceMatched
+        return matchesQuery && matchesStatus && matchesStoreLoc && matchesSite && matchesBrand && matchesCustomer && matchesSize && matchesInjury && isInvoiceMatched && isWoMatched
       })
       .sort((left, right) => getSortTimestamp(right) - getSortTimestamp(left))
-  }, [brandFilter, customerFilters, data, detailsByWorkOrder, injuryFilters, invoiceFilter, invoiceMappings, query, repairMasterSites, siteFilter, sizeFilters, statusFilter, storeLocFilter])
+  }, [brandFilter, customerFilters, data, detailsByWorkOrder, injuryFilters, invoiceFilter, invoiceMappings, query, repairMasterSites, siteFilter, sizeFilters, statusFilter, storeLocFilter, woFilters])
 
   function toggleWorkOrder(wo: string) {
     setExpandedWorkOrders((current) => {
@@ -570,19 +595,104 @@ export function WipRepairTable({ data, workOrderDetails, invoiceMappings, repair
     }
   }
 
+  function handleApplyWoPaste() {
+    const rawWos = woPasteText.split(/\r?\n|,|\t/).map((w) => w.trim()).filter(Boolean)
+    const uniqueWos = Array.from(new Set(rawWos))
+    setWoFilters(uniqueWos)
+    setWoPasteOpen(false)
+    if (uniqueWos.length > 0) {
+      toast.success(`${uniqueWos.length} WO berhasil difilter`)
+    }
+  }
+
+  function handleExport() {
+    if (filteredData.length === 0) {
+      toast.error("Tidak ada data untuk diekspor")
+      return
+    }
+
+    const exportData = filteredData.map((item) => {
+      const workOrder = normalizeValue(item.wo)
+      const detailKey = getWorkOrderDetailKey(item)
+      const details = getDetailLookupKeys(item).flatMap((key) => detailsByWorkOrder[key] ?? [])
+
+      const inspectDate = formatExportDate(item.inspect_date)
+      
+      let finishDate = "-"
+      if (details.length > 0) {
+        // Since details are already sorted by id_job ascending, the last one is the latest job id
+        const latestDetail = details[details.length - 1]
+        finishDate = formatExportDate(latestDetail.date)
+      }
+
+      const invoiceDate = formatExportDate(invoiceMappings[workOrder]?.tanggalInvoice)
+
+      return {
+        "WO": workOrder,
+        "Start Date": inspectDate,
+        "Finish Date": finishDate,
+        "Invoice Date": invoiceDate,
+      }
+    })
+
+    const worksheet = xlsx.utils.json_to_sheet(exportData)
+    const workbook = xlsx.utils.book_new()
+    xlsx.utils.book_append_sheet(workbook, worksheet, "WIP Repair")
+
+    const timestamp = new Date().toISOString().split("T")[0]
+    xlsx.writeFile(workbook, `WIP_Repair_Export_${timestamp}.xlsx`)
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <Card className="rounded-2xl border-border/60 py-0 shadow-sm">
         <CardContent className="px-4 py-4 md:px-6">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-            <div className="relative flex-1">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Cari WO, site code, tire SN, customer, site, atau brand"
-                className="h-10 rounded-xl pl-9"
-              />
+            <div className="flex flex-1 items-center gap-2">
+              <div className="relative flex-1">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Cari WO, site code, tire SN, customer, site, atau brand"
+                  className="h-10 rounded-xl pl-9"
+                />
+              </div>
+              
+              <Dialog open={woPasteOpen} onOpenChange={(open) => {
+                setWoPasteOpen(open)
+                if (open) setWoPasteText(woFilters.join("\n"))
+              }}>
+                <DialogTrigger asChild>
+                  <Button type="button" variant="outline" className="h-10 rounded-xl shrink-0">
+                    <Filter className="mr-2 h-4 w-4" />
+                    Filter WO
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>Bulk Filter WO</DialogTitle>
+                  </DialogHeader>
+                  <div className="py-4">
+                    <p className="text-sm text-muted-foreground mb-3">Paste Nomor WO (bisa dipisahkan dengan enter, koma, atau tab).</p>
+                    <Textarea 
+                      value={woPasteText}
+                      onChange={(e) => setWoPasteText(e.target.value)}
+                      placeholder="WO/26/0001&#10;WO/26/0002"
+                      className="min-h-[150px] resize-y"
+                    />
+                  </div>
+                  <DialogFooter className="gap-2 sm:gap-0">
+                    <Button variant="outline" onClick={() => { setWoFilters([]); setWoPasteOpen(false); setWoPasteText(""); }}>Reset</Button>
+                    <Button onClick={handleApplyWoPaste}>Apply Filter</Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+
+              <Button type="button" variant="outline" className="h-10 rounded-xl shrink-0" onClick={handleExport}>
+                <Download className="mr-2 h-4 w-4" />
+                Export
+              </Button>
             </div>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-8">
@@ -678,11 +788,12 @@ export function WipRepairTable({ data, workOrderDetails, invoiceMappings, repair
               />
             </div>
           </div>
-          {storeLocFilter !== ALL_FILTER || invoiceFilter !== ALL_FILTER || customerFilters.length > 0 || sizeFilters.length > 0 || injuryFilters.length > 0 ? (
+          {storeLocFilter !== ALL_FILTER || invoiceFilter !== ALL_FILTER || customerFilters.length > 0 || sizeFilters.length > 0 || injuryFilters.length > 0 || woFilters.length > 0 ? (
             <div className="mt-3 flex flex-wrap items-center gap-2">
               {[
                 ...(storeLocFilter !== ALL_FILTER ? [{ type: "Site Code", value: storeLocFilter, onClear: () => setStoreLocFilter(ALL_FILTER) }] : []),
                 ...(invoiceFilter !== ALL_FILTER ? [{ type: "Invoice", value: invoiceFilter === "INVOICED" ? "Sudah Invoice" : "Belum Invoice", onClear: () => setInvoiceFilter(ALL_FILTER) }] : []),
+                ...(woFilters.length > 0 ? [{ type: "WO", value: `${woFilters.length} WO`, onClear: () => setWoFilters([]) }] : []),
                 ...customerFilters.map((value) => ({ type: "Customer", value, onClear: () => setCustomerFilters(customerFilters.filter((item) => item !== value)) })),
                 ...sizeFilters.map((value) => ({ type: "Size", value, onClear: () => setSizeFilters(sizeFilters.filter((item) => item !== value)) })),
                 ...injuryFilters.map((value) => ({ type: "Injury", value, onClear: () => setInjuryFilters(injuryFilters.filter((item) => item !== value)) }))].map((filter) => (
