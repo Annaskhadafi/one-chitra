@@ -18,6 +18,20 @@ const A2R_SALESMAN_ALIASES = new Map<string, string>([
     ["TOMMY INDRA ALDINY RAMBE", "OCKY HEGAR PRATAMA"],
 ])
 
+// Customers excluded from Cosmetic Tire points (e.g. goods were returned)
+const COSMETIC_EXCLUDED_CUSTOMERS = new Set<string>([
+    "PT. DARMA HENWA TBK",
+    "PT DARMA HENWA TBK",
+    "DARMA HENWA",
+])
+
+function isCosmeticExcludedCustomer(customerName: string | null | undefined) {
+    const normalized = normalizeText(customerName)
+    return Array.from(COSMETIC_EXCLUDED_CUSTOMERS).some((excluded) =>
+        normalized.includes(normalizeText(excluded))
+    )
+}
+
 const a2rCompetitionFiltersSchema = z.object({
     year: z.coerce.number().int().min(2020).max(2100),
     months: z.array(z.string().regex(/^(0[1-9]|1[0-2])$/)).optional().default([]),
@@ -752,7 +766,7 @@ export async function getA2RCompetitionData(rawFilters: z.input<typeof a2rCompet
             const isCosmeticMatch = deliveryKey && materialKey && cosmeticMatchSet.has(`${deliveryKey}|${materialKey}`)
             const isConsignmentMatch = materialKey && consignmentMatchSet.has(`${customerKey}|${materialKey}`)
 
-            if (isCosmeticMatch || isConsignmentMatch) {
+            if ((isCosmeticMatch || isConsignmentMatch) && !isCosmeticExcludedCustomer(row.customerName)) {
                 const cosmeticBucket = accumulator.cosmeticCustomerBuckets.get(customerKey) || {
                     customerName: row.customerName?.trim() || "Unknown Customer",
                     materials: new Map(),
