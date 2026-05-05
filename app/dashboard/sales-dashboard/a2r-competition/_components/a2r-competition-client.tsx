@@ -22,6 +22,13 @@ import {
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
+import {
     Table,
     TableBody,
     TableCell,
@@ -46,6 +53,8 @@ import {
     Trophy,
 } from "lucide-react"
 import { toast } from "sonner"
+
+type FilterMode = "current" | "ytd" | "custom"
 
 type PeriodLabel = {
     period: string
@@ -631,12 +640,76 @@ export function A2RCompetitionClient({
     monthsByYear: Record<number, string[]>
     initialData: CompetitionData | null
 }) {
+    const [filterMode, setFilterMode] = useState<FilterMode>("ytd")
     const [selectedYear, setSelectedYear] = useState(initialYear)
     const [selectedMonths, setSelectedMonths] = useState(initialMonths)
     const [data, setData] = useState<CompetitionData | null>(() => normalizeCompetitionData(initialData))
     const [isLoading, startTransition] = useTransition()
     const [targetDialogOpen, setTargetDialogOpen] = useState(false)
     const [expandedSalesmen, setExpandedSalesmen] = useState<string[]>([])
+
+    // Calculate current month and YTD months
+    const currentDate = new Date()
+    const currentYear = currentDate.getFullYear()
+    const currentMonth = currentDate.getMonth() + 1 // 1-12
+    const a2rStartMonth = 4 // April
+
+    // Get YTD months from April to current month
+    const getYTDMonths = (year: number) => {
+        const months: string[] = []
+        const availableForYear = monthsByYear[year] || []
+        
+        if (year === currentYear) {
+            // Current year: April to current month
+            for (let m = a2rStartMonth; m <= currentMonth; m++) {
+                const monthStr = String(m).padStart(2, "0")
+                if (availableForYear.includes(monthStr)) {
+                    months.push(monthStr)
+                }
+            }
+        } else if (year < currentYear) {
+            // Previous years: April to December
+            for (let m = a2rStartMonth; m <= 12; m++) {
+                const monthStr = String(m).padStart(2, "0")
+                if (availableForYear.includes(monthStr)) {
+                    months.push(monthStr)
+                }
+            }
+        } else {
+            // Future years: all available months from April onwards
+            months.push(...availableForYear.filter(m => Number(m) >= a2rStartMonth))
+        }
+        
+        return months.length > 0 ? months : availableForYear
+    }
+
+    // Update selected months when filter mode changes
+    useEffect(() => {
+        if (filterMode === "current") {
+            const availableForYear = monthsByYear[selectedYear] || []
+            let newMonths: string[]
+            
+            if (selectedYear === currentYear) {
+                const currentMonthStr = String(currentMonth).padStart(2, "0")
+                newMonths = availableForYear.includes(currentMonthStr) ? [currentMonthStr] : availableForYear.slice(0, 1)
+            } else {
+                // For other years, default to first available month (usually April)
+                newMonths = availableForYear.slice(0, 1)
+            }
+            
+            if (newMonths.length > 0) {
+                setSelectedMonths(newMonths)
+                refreshData(selectedYear, newMonths)
+            }
+        } else if (filterMode === "ytd") {
+            const newMonths = getYTDMonths(selectedYear)
+            if (newMonths.length > 0) {
+                setSelectedMonths(newMonths)
+                refreshData(selectedYear, newMonths)
+            }
+        }
+        // For custom mode, keep the manually selected months
+    }, [filterMode])
 
     const availableMonths = useMemo(() => monthsByYear[selectedYear] || [], [monthsByYear, selectedYear])
     const periods = useMemo(
@@ -649,6 +722,23 @@ export function A2RCompetitionClient({
         },
         [availableMonths, selectedYear]
     )
+
+    // All periods for target setup (April to December for selected year)
+    const allTargetPeriods = useMemo(() => {
+        const monthNames = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"]
+        const targetPeriods: { period: string; label: string }[] = []
+        
+        // Generate all months from April (04) to December (12) for the selected year
+        for (let month = 4; month <= 12; month++) {
+            const monthStr = String(month).padStart(2, "0")
+            targetPeriods.push({
+                period: `${monthStr}.${selectedYear}`,
+                label: `${monthNames[month - 1]} ${selectedYear}`,
+            })
+        }
+        
+        return targetPeriods
+    }, [selectedYear])
 
     const refreshData = (nextYear = selectedYear, nextMonths = selectedMonths) => {
         startTransition(async () => {
@@ -669,11 +759,32 @@ export function A2RCompetitionClient({
     const handleYearChange = (year: number) => {
         const months = monthsByYear[year] || []
         setSelectedYear(year)
-        setSelectedMonths(months)
-        refreshData(year, months)
+        
+        // Apply filter mode logic when year changes
+        let newMonths: string[]
+        
+        if (filterMode === "current") {
+            if (year === currentYear) {
+                const currentMonthStr = String(currentMonth).padStart(2, "0")
+                newMonths = months.includes(currentMonthStr) ? [currentMonthStr] : months.slice(0, 1)
+            } else {
+                newMonths = months.slice(0, 1)
+            }
+        } else if (filterMode === "ytd") {
+            newMonths = getYTDMonths(year)
+        } else {
+            // Custom mode: use all available months
+            newMonths = months
+        }
+        
+        setSelectedMonths(newMonths)
+        refreshData(year, newMonths)
     }
 
     const handleToggleMonth = (month: string) => {
+        // Switch to custom mode when manually toggling
+        setFilterMode("custom")
+        
         const nextMonths = selectedMonths.includes(month)
             ? selectedMonths.filter((item) => item !== month)
             : [...selectedMonths, month].sort((left, right) => Number(left) - Number(right))
@@ -748,6 +859,35 @@ export function A2RCompetitionClient({
 
                     <div className="w-full max-w-xl rounded-[24px] border bg-white/90 p-4 shadow-sm sm:p-5">
                         <div className="flex flex-col gap-4">
+                            <div className="flex flex-col gap-2">
+                                <label className="text-sm font-semibold text-slate-700">Mode Filter:</label>
+                                <Select value={filterMode} onValueChange={(value) => setFilterMode(value as FilterMode)}>
+                                    <SelectTrigger className="w-full">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="current">Bulan Berjalan</SelectItem>
+                                        <SelectItem value="ytd">YTD (Year to Date)</SelectItem>
+                                        <SelectItem value="custom">Custom</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                {filterMode === "current" && (
+                                    <p className="text-xs text-slate-600">
+                                        Menampilkan data bulan berjalan saja
+                                    </p>
+                                )}
+                                {filterMode === "ytd" && (
+                                    <p className="text-xs text-slate-600">
+                                        Menampilkan data dari April sampai bulan berjalan
+                                    </p>
+                                )}
+                                {filterMode === "custom" && (
+                                    <p className="text-xs text-slate-600">
+                                        Pilih bulan secara manual di bawah
+                                    </p>
+                                )}
+                            </div>
+
                             <div className="flex flex-wrap items-center gap-2">
                                 {initialYears.map((year) => (
                                     <Button
@@ -761,16 +901,28 @@ export function A2RCompetitionClient({
                                     </Button>
                                 ))}
                             </div>
-                            <div className="flex flex-wrap gap-2">
-                                {availableMonths.map((month) => (
-                                    <MonthToggle
-                                        key={month}
-                                        month={month}
-                                        selected={selectedMonths.includes(month)}
-                                        onClick={() => handleToggleMonth(month)}
-                                    />
-                                ))}
-                            </div>
+                            {filterMode === "custom" && (
+                                <div className="flex flex-wrap gap-2">
+                                    {availableMonths.map((month) => (
+                                        <MonthToggle
+                                            key={month}
+                                            month={month}
+                                            selected={selectedMonths.includes(month)}
+                                            onClick={() => handleToggleMonth(month)}
+                                        />
+                                    ))}
+                                </div>
+                            )}
+                            {filterMode !== "custom" && (
+                                <div className="rounded-lg bg-blue-50 p-3">
+                                    <p className="text-sm font-medium text-slate-700">
+                                        Bulan terpilih: {selectedMonths.map(m => {
+                                            const monthNames = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"]
+                                            return monthNames[Number(m) - 1] || m
+                                        }).join(", ")}
+                                    </p>
+                                </div>
+                            )}
                             <div className="flex flex-wrap gap-2">
                                 <Button onClick={() => setTargetDialogOpen(true)}>
                                     <Target className="mr-2 h-4 w-4" />
@@ -798,7 +950,7 @@ export function A2RCompetitionClient({
                 open={targetDialogOpen}
                 onOpenChange={setTargetDialogOpen}
                 selectedYear={selectedYear}
-                periods={periods}
+                periods={allTargetPeriods}
                 onSaved={() => refreshData()}
             />
 
