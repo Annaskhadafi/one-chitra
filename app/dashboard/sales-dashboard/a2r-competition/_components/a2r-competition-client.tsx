@@ -55,6 +55,7 @@ import {
 import { toast } from "sonner"
 
 type FilterMode = "current" | "ytd" | "custom"
+type FilterMode = "current" | "ytd" | "custom" | "april" | "mei" | "juni" | "juli" | "agustus" | "september" | "oktober" | "november" | "desember"
 
 type PeriodLabel = {
     period: string
@@ -685,7 +686,29 @@ export function A2RCompetitionClient({
 
     // Update selected months when filter mode changes
     useEffect(() => {
-        if (filterMode === "current") {
+        const monthFilterMap: Record<string, string> = {
+            april: "04",
+            mei: "05",
+            juni: "06",
+            juli: "07",
+            agustus: "08",
+            september: "09",
+            oktober: "10",
+            november: "11",
+            desember: "12",
+        }
+
+        if (filterMode in monthFilterMap) {
+            // Single month filter
+            const monthStr = monthFilterMap[filterMode]
+            const availableForYear = monthsByYear[selectedYear] || []
+            const newMonths = availableForYear.includes(monthStr) ? [monthStr] : availableForYear.slice(0, 1)
+            
+            if (newMonths.length > 0) {
+                setSelectedMonths(newMonths)
+                refreshData(selectedYear, newMonths)
+            }
+        } else if (filterMode === "current") {
             const availableForYear = monthsByYear[selectedYear] || []
             let newMonths: string[]
             
@@ -760,10 +783,26 @@ export function A2RCompetitionClient({
         const months = monthsByYear[year] || []
         setSelectedYear(year)
         
+        const monthFilterMap: Record<string, string> = {
+            april: "04",
+            mei: "05",
+            juni: "06",
+            juli: "07",
+            agustus: "08",
+            september: "09",
+            oktober: "10",
+            november: "11",
+            desember: "12",
+        }
+
         // Apply filter mode logic when year changes
         let newMonths: string[]
         
-        if (filterMode === "current") {
+        if (filterMode in monthFilterMap) {
+            // Single month filter
+            const monthStr = monthFilterMap[filterMode]
+            newMonths = months.includes(monthStr) ? [monthStr] : months.slice(0, 1)
+        } else if (filterMode === "current") {
             if (year === currentYear) {
                 const currentMonthStr = String(currentMonth).padStart(2, "0")
                 newMonths = months.includes(currentMonthStr) ? [currentMonthStr] : months.slice(0, 1)
@@ -868,12 +907,21 @@ export function A2RCompetitionClient({
                                     <SelectContent>
                                         <SelectItem value="current">Bulan Berjalan</SelectItem>
                                         <SelectItem value="ytd">YTD (Year to Date)</SelectItem>
+                                        <SelectItem value="april">April</SelectItem>
+                                        <SelectItem value="mei">Mei</SelectItem>
+                                        <SelectItem value="juni">Juni</SelectItem>
+                                        <SelectItem value="juli">Juli</SelectItem>
+                                        <SelectItem value="agustus">Agustus</SelectItem>
+                                        <SelectItem value="september">September</SelectItem>
+                                        <SelectItem value="oktober">Oktober</SelectItem>
+                                        <SelectItem value="november">November</SelectItem>
+                                        <SelectItem value="desember">Desember</SelectItem>
                                         <SelectItem value="custom">Custom</SelectItem>
                                     </SelectContent>
                                 </Select>
-                                {filterMode === "current" && (
+                                {(filterMode === "current" || filterMode === "april" || filterMode === "mei" || filterMode === "juni" || filterMode === "juli" || filterMode === "agustus" || filterMode === "september" || filterMode === "oktober" || filterMode === "november" || filterMode === "desember") && (
                                     <p className="text-xs text-slate-600">
-                                        Menampilkan data bulan berjalan saja
+                                        {filterMode === "current" ? "Menampilkan data bulan berjalan saja" : `Menampilkan data bulan ${filterMode.charAt(0).toUpperCase() + filterMode.slice(1)} saja`}
                                     </p>
                                 )}
                                 {filterMode === "ytd" && (
