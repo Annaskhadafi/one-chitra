@@ -538,11 +538,40 @@ export function StockTable({ data: initialData, customers, products, warehouses,
         }
     }
 
-    const handleExportExcel = () => {
+    const handleExportExcel = async () => {
+        const hasVhs = filteredRows.some(row => row.original.warehouse?.type === "Warehouse VHS")
+        
+        let vhsStockMap = new Map<string, number>()
+        if (hasVhs) {
+            toast.loading("Memproses data EVHS untuk Export...", { id: "export-vhs" })
+            try {
+                // Inline fetch or we can import getEvhsAllVhsStockData at top
+                const { getEvhsAllVhsStockData } = await import("@/app/actions/evhs")
+                const vhsData = await getEvhsAllVhsStockData()
+                vhsData.forEach(item => {
+                    vhsStockMap.set(`${item.warehouseId}-${item.productId}`, item.availableQty)
+                })
+                toast.dismiss("export-vhs")
+            } catch (err) {
+                toast.dismiss("export-vhs")
+                toast.error("Gagal mengambil data EVHS untuk Export")
+                return
+            }
+        }
+
         const exportRows = filteredRows.map((row) => {
             const item = row.original
-            const valuation = calculateValuation(item.totalStock, item.product?.costSap ?? null)
-            const price = calculatePrice(item.totalStock, item.product?.costSap ?? null)
+            
+            let actualStock = item.totalStock
+            if (item.warehouse?.type === "Warehouse VHS") {
+                const availableQty = vhsStockMap.get(`${item.warehouseId}-${item.productId}`)
+                if (availableQty !== undefined) {
+                    actualStock = availableQty
+                }
+            }
+
+            const valuation = calculateValuation(actualStock, item.product?.costSap ?? null)
+            const price = calculatePrice(actualStock, item.product?.costSap ?? null)
 
             return {
                 Plant: item.product?.plant ?? "",
@@ -553,7 +582,7 @@ export function StockTable({ data: initialData, customers, products, warehouses,
                 Description: item.product?.materialDescription ?? "",
                 SLoc: item.warehouse?.sloc ?? "",
                 "Sloc Desc": item.warehouse?.description ?? "",
-                "Actual Stock": item.totalStock,
+                "Actual Stock": actualStock,
                 "Qty Booking": getTotalBookingQty(item),
                 "Min Stock": item.minStock ?? 0,
                 "Type Warehouse": item.warehouse?.type ?? "",
