@@ -2,7 +2,7 @@ import { Suspense } from "react"
 import { ClipboardList, Loader2, Wrench } from "lucide-react"
 
 import { getRepairMasterData } from "@/app/actions/repair-master"
-import { getWipRepairData, getWipRepairWorkOrderDetails, getWipRepairInvoiceMappings } from "@/app/actions/wip-repair"
+import { getWipRepairData, getWipRepairWorkOrderDetails, getWipRepairInvoiceMappings, getWipRepairPmoMappings } from "@/app/actions/wip-repair"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { WipRepairTable } from "./_components/wip-repair-table"
 
@@ -21,7 +21,10 @@ async function WipRepairContent() {
   const woNumbers = Array.from(new Set(data.map(item => normalizeValue(item.wo)).filter(wo => wo !== "-")))
   
   // Fetch invoice mappings
-  const invoiceMappings = await getWipRepairInvoiceMappings(woNumbers)
+  const [invoiceMappings, pmoMappings] = await Promise.all([
+    getWipRepairInvoiceMappings(woNumbers),
+    getWipRepairPmoMappings(woNumbers),
+  ])
 
   const progressCount = data.filter((item) => item.status.toLowerCase().includes("progress")).length
   const siteCount = new Set(data.map((item) => normalizeValue(item.site)).filter((item) => item !== "-")).size
@@ -65,6 +68,7 @@ async function WipRepairContent() {
         data={data}
         workOrderDetails={workOrderDetails}
         invoiceMappings={invoiceMappings}
+        pmoMappings={pmoMappings}
         repairMasterItems={repairMasterData.items.map((item) => ({
           materialCode: item.materialCode,
           materialName: item.materialName,

@@ -142,6 +142,24 @@ export const salesRevenueSap = pgTable("sales_revenue_sap", {
     extractedAt: timestamp("extracted_at"),
 });
 
+export const iw39PmoReportSap = pgTable("iw39_pmo_report_sap", {
+    pmoReportId: integer("pmo_report_id").primaryKey(),
+    orderType: text("order_type"),
+    woNumberSap: text("wo_number_sap"),
+    woCreateOn: date("wo_create_on"),
+    customerId: text("customer_id"),
+    customerName: text("customer_name"),
+    basicStart: date("basic_start"),
+    basicFinish: date("basic_finish"),
+    poNumber: text("po_number"),
+    poDate: date("po_date"),
+    workDescription: text("work_description"),
+    systemStatus: text("system_status"),
+    actualTotalCost: decimal("actual_total_cost", { precision: 20, scale: 2 }),
+    actualTotalRevenue: decimal("actual_total_revenue", { precision: 20, scale: 2 }),
+    extractedAt: timestamp("extracted_at"),
+});
+
 // Support Table for Cover Letters
 export const coverLetterSigners = pgTable("cover_letter_signers", {
     id: serial("id").primaryKey(),

@@ -44,6 +44,7 @@ type WipRepairTableProps = {
   data: WipRepairRecord[]
   workOrderDetails: WipRepairWorkOrderDetailRecord[]
   invoiceMappings: Record<string, { noInv: string | null; tanggalInvoice: string | null }>
+  pmoMappings: Record<string, { actualTotalRevenue: number | null; actualTotalCost: number | null; systemStatus: string | null; poNumber: string | null; poDate: string | null; poCustomer: string | null }>
   repairMasterItems: RepairMasterLookupItem[]
   repairMasterSites: RepairMasterLookupSite[]
 }
@@ -60,6 +61,10 @@ type RepairMasterLookupSite = {
 }
 
 const ALL_FILTER = "__all__"
+const TECO_DONE = "TECO_DONE"
+const TECO_PENDING = "TECO_PENDING"
+const MIGO_DONE = "MIGO_DONE"
+const MIGO_PENDING = "MIGO_PENDING"
 
 type MultiSelectOption = {
   value: string
@@ -349,6 +354,34 @@ function formatMinutes(value: string | null) {
   return formatDurationFromMinutes(parsed)
 }
 
+function hasActualValue(value: number | null | undefined) {
+  return value !== null && value !== undefined && Number.isFinite(value) && value !== 0
+}
+
+function formatCurrency(value: number | null | undefined) {
+  if (!hasActualValue(value)) {
+    return "-"
+  }
+
+  return new Intl.NumberFormat("id-ID", { maximumFractionDigits: 2 }).format(value ?? 0)
+}
+
+function getTecoStatus(mapping: { actualTotalRevenue: number | null; actualTotalCost: number | null; systemStatus: string | null; poNumber: string | null; poDate: string | null; poCustomer: string | null } | undefined) {
+  if (!mapping) {
+    return null
+  }
+
+  return normalizeValue(mapping.systemStatus).toUpperCase().includes("REL") ? TECO_PENDING : TECO_DONE
+}
+
+function getMigoStatus(mapping: { actualTotalRevenue: number | null; actualTotalCost: number | null; systemStatus: string | null; poNumber: string | null; poDate: string | null; poCustomer: string | null } | undefined) {
+  if (!hasActualValue(mapping?.actualTotalRevenue)) {
+    return null
+  }
+
+  return hasActualValue(mapping?.actualTotalCost) ? MIGO_DONE : MIGO_PENDING
+}
+
 function getStatusClasses(status: string) {
   const normalized = status.toLowerCase()
 
@@ -419,7 +452,7 @@ async function copyTextToClipboard(text: string) {
   }
 }
 
-export function WipRepairTable({ data, workOrderDetails, invoiceMappings, repairMasterItems, repairMasterSites }: WipRepairTableProps) {
+export function WipRepairTable({ data, workOrderDetails, invoiceMappings, pmoMappings, repairMasterItems, repairMasterSites }: WipRepairTableProps) {
   const [query, setQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState(ALL_FILTER)
   const [storeLocFilter, setStoreLocFilter] = useState(ALL_FILTER)
@@ -429,6 +462,8 @@ export function WipRepairTable({ data, workOrderDetails, invoiceMappings, repair
   const [sizeFilters, setSizeFilters] = useState<string[]>([])
   const [injuryFilters, setInjuryFilters] = useState<string[]>([])
   const [invoiceFilter, setInvoiceFilter] = useState(ALL_FILTER)
+  const [tecoFilter, setTecoFilter] = useState(ALL_FILTER)
+  const [migoFilter, setMigoFilter] = useState(ALL_FILTER)
   const [woFilters, setWoFilters] = useState<string[]>([])
   const [woPasteOpen, setWoPasteOpen] = useState(false)
   const [woPasteText, setWoPasteText] = useState("")
@@ -546,13 +581,16 @@ export function WipRepairTable({ data, workOrderDetails, invoiceMappings, repair
         const matchesInjury = injuryFilters.length === 0 || injuryFilters.includes(normalizeValue(item.injury))
         
         const workOrder = normalizeValue(item.wo)
+        const pmoMapping = pmoMappings[workOrder]
+        const isTecoMatched = tecoFilter === ALL_FILTER || getTecoStatus(pmoMapping) === tecoFilter
+        const isMigoMatched = migoFilter === ALL_FILTER || getMigoStatus(pmoMapping) === migoFilter
         const isInvoiceMatched = invoiceFilter === ALL_FILTER || (invoiceFilter === "INVOICED" ? !!invoiceMappings[workOrder]?.noInv : !invoiceMappings[workOrder]?.noInv)
         const isWoMatched = woFilters.length === 0 || woFilters.includes(workOrder)
 
-        return matchesQuery && matchesStatus && matchesStoreLoc && matchesSite && matchesBrand && matchesCustomer && matchesSize && matchesInjury && isInvoiceMatched && isWoMatched
+        return matchesQuery && matchesStatus && matchesStoreLoc && matchesSite && matchesBrand && matchesCustomer && matchesSize && matchesInjury && isTecoMatched && isMigoMatched && isInvoiceMatched && isWoMatched
       })
       .sort((left, right) => getSortTimestamp(right) - getSortTimestamp(left))
-  }, [brandFilter, customerFilters, data, detailsByWorkOrder, injuryFilters, invoiceFilter, invoiceMappings, query, repairMasterSites, siteFilter, sizeFilters, statusFilter, storeLocFilter, woFilters])
+  }, [brandFilter, customerFilters, data, detailsByWorkOrder, injuryFilters, invoiceFilter, invoiceMappings, migoFilter, pmoMappings, query, repairMasterSites, siteFilter, sizeFilters, statusFilter, storeLocFilter, tecoFilter, woFilters])
 
   function toggleWorkOrder(wo: string) {
     setExpandedWorkOrders((current) => {
@@ -613,7 +651,6 @@ export function WipRepairTable({ data, workOrderDetails, invoiceMappings, repair
 
     const exportData = filteredData.map((item) => {
       const workOrder = normalizeValue(item.wo)
-      const detailKey = getWorkOrderDetailKey(item)
       const details = getDetailLookupKeys(item).flatMap((key) => detailsByWorkOrder[key] ?? [])
 
       const inspectDate = formatExportDate(item.inspect_date)
@@ -626,12 +663,18 @@ export function WipRepairTable({ data, workOrderDetails, invoiceMappings, repair
       }
 
       const invoiceDate = formatExportDate(invoiceMappings[workOrder]?.tanggalInvoice)
+      const pmoMapping = pmoMappings[workOrder]
 
       return {
         "WO": workOrder,
         "Start Date": inspectDate,
         "Finish Date": finishDate,
         "Invoice Date": invoiceDate,
+        "Actual Total Revenue": pmoMapping?.actualTotalRevenue ?? 0,
+        "Actual Total Cost": pmoMapping?.actualTotalCost ?? 0,
+        "System Status": normalizeValue(pmoMapping?.systemStatus),
+        "PO Number": normalizeValue(pmoMapping?.poNumber),
+        "PO Date": formatExportDate(pmoMapping?.poDate),
       }
     })
 
@@ -647,7 +690,7 @@ export function WipRepairTable({ data, workOrderDetails, invoiceMappings, repair
     <div className="flex flex-col gap-4">
       <Card className="rounded-2xl border-border/60 py-0 shadow-sm">
         <CardContent className="px-4 py-4 md:px-6">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+          <div className="flex flex-col gap-4">
             <div className="flex flex-1 items-center gap-2">
               <div className="relative flex-1">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -695,7 +738,7 @@ export function WipRepairTable({ data, workOrderDetails, invoiceMappings, repair
               </Button>
             </div>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-8">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger className="h-10 w-full rounded-xl sm:min-w-40">
                   <SelectValue placeholder="Semua status" />
@@ -718,6 +761,28 @@ export function WipRepairTable({ data, workOrderDetails, invoiceMappings, repair
                   <SelectItem value={ALL_FILTER}>Semua Invoice</SelectItem>
                   <SelectItem value="INVOICED">Sudah Invoice</SelectItem>
                   <SelectItem value="NOT_INVOICED">Belum Invoice</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select value={tecoFilter} onValueChange={setTecoFilter}>
+                <SelectTrigger className="h-10 w-full rounded-xl sm:min-w-40">
+                  <SelectValue placeholder="Semua TECO" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL_FILTER}>Semua TECO</SelectItem>
+                  <SelectItem value={TECO_DONE}>Sudah TECO</SelectItem>
+                  <SelectItem value={TECO_PENDING}>Belum TECO</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select value={migoFilter} onValueChange={setMigoFilter}>
+                <SelectTrigger className="h-10 w-full rounded-xl sm:min-w-40">
+                  <SelectValue placeholder="Semua MIGO" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL_FILTER}>Semua MIGO</SelectItem>
+                  <SelectItem value={MIGO_DONE}>Sudah MIGO</SelectItem>
+                  <SelectItem value={MIGO_PENDING}>Belum MIGO</SelectItem>
                 </SelectContent>
               </Select>
 
@@ -788,11 +853,13 @@ export function WipRepairTable({ data, workOrderDetails, invoiceMappings, repair
               />
             </div>
           </div>
-          {storeLocFilter !== ALL_FILTER || invoiceFilter !== ALL_FILTER || customerFilters.length > 0 || sizeFilters.length > 0 || injuryFilters.length > 0 || woFilters.length > 0 ? (
+          {storeLocFilter !== ALL_FILTER || invoiceFilter !== ALL_FILTER || tecoFilter !== ALL_FILTER || migoFilter !== ALL_FILTER || customerFilters.length > 0 || sizeFilters.length > 0 || injuryFilters.length > 0 || woFilters.length > 0 ? (
             <div className="mt-3 flex flex-wrap items-center gap-2">
               {[
                 ...(storeLocFilter !== ALL_FILTER ? [{ type: "Site Code", value: storeLocFilter, onClear: () => setStoreLocFilter(ALL_FILTER) }] : []),
                 ...(invoiceFilter !== ALL_FILTER ? [{ type: "Invoice", value: invoiceFilter === "INVOICED" ? "Sudah Invoice" : "Belum Invoice", onClear: () => setInvoiceFilter(ALL_FILTER) }] : []),
+                ...(tecoFilter !== ALL_FILTER ? [{ type: "TECO", value: tecoFilter === TECO_DONE ? "Sudah TECO" : "Belum TECO", onClear: () => setTecoFilter(ALL_FILTER) }] : []),
+                ...(migoFilter !== ALL_FILTER ? [{ type: "MIGO", value: migoFilter === MIGO_DONE ? "Sudah MIGO" : "Belum MIGO", onClear: () => setMigoFilter(ALL_FILTER) }] : []),
                 ...(woFilters.length > 0 ? [{ type: "WO", value: `${woFilters.length} WO`, onClear: () => setWoFilters([]) }] : []),
                 ...customerFilters.map((value) => ({ type: "Customer", value, onClear: () => setCustomerFilters(customerFilters.filter((item) => item !== value)) })),
                 ...sizeFilters.map((value) => ({ type: "Size", value, onClear: () => setSizeFilters(sizeFilters.filter((item) => item !== value)) })),
@@ -826,6 +893,10 @@ export function WipRepairTable({ data, workOrderDetails, invoiceMappings, repair
                 <TableHead className="px-4 py-3">Total Waktu</TableHead>
                 <TableHead className="px-4 py-3">No Inv</TableHead>
                 <TableHead className="px-4 py-3">Tanggal Invoice</TableHead>
+                <TableHead className="px-4 py-3">PO Number</TableHead>
+                <TableHead className="px-4 py-3">PO Date</TableHead>
+                <TableHead className="px-4 py-3">Actual Total Revenue</TableHead>
+                <TableHead className="px-4 py-3">Actual Total Cost</TableHead>
                 <TableHead className="px-4 py-3">Inspect</TableHead>
                 <TableHead className="px-4 py-3">Created By</TableHead>
                 <TableHead className="px-4 py-3">Received / Receiver</TableHead>
@@ -881,6 +952,7 @@ export function WipRepairTable({ data, workOrderDetails, invoiceMappings, repair
                   const sapCopyRowCount = countWipRepairSapCopyRows(details, repairMasterItems)
                   const isSapCopied = copiedSapKey === detailKey
                   const siteInfo = resolveWipRepairSite(item, repairMasterSites)
+                  const pmoMapping = pmoMappings[workOrder]
 
                   return (
                     <Fragment key={item.id_wo}>
@@ -931,6 +1003,10 @@ export function WipRepairTable({ data, workOrderDetails, invoiceMappings, repair
                         </TableCell>
                         <TableCell className="px-4 py-3">{normalizeValue(invoiceMappings[workOrder]?.noInv)}</TableCell>
                         <TableCell className="px-4 py-3">{formatDate(invoiceMappings[workOrder]?.tanggalInvoice || null)}</TableCell>
+                        <TableCell className="px-4 py-3 font-mono text-xs">{normalizeValue(pmoMapping?.poNumber)}</TableCell>
+                        <TableCell className="px-4 py-3">{formatDate(pmoMapping?.poDate || null)}</TableCell>
+                        <TableCell className="px-4 py-3 font-medium tabular-nums">{formatCurrency(pmoMapping?.actualTotalRevenue)}</TableCell>
+                        <TableCell className="px-4 py-3 font-medium tabular-nums">{formatCurrency(pmoMapping?.actualTotalCost)}</TableCell>
                         <TableCell className="px-4 py-3">
                           <div className="flex flex-col">
                             <span className="font-medium">{formatDate(item.inspect_date)}</span>
@@ -948,7 +1024,7 @@ export function WipRepairTable({ data, workOrderDetails, invoiceMappings, repair
                       </TableRow>
                       {isExpanded ? (
                         <TableRow className="bg-muted/20 hover:bg-muted/20">
-                          <TableCell colSpan={14} className="px-4 py-4">
+                          <TableCell colSpan={20} className="px-4 py-4">
                             <div className="rounded-xl border bg-background p-4">
                               <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start">
                                 <Button
@@ -1028,7 +1104,7 @@ export function WipRepairTable({ data, workOrderDetails, invoiceMappings, repair
                 })
               ) : (
                 <TableRow>
-                  <TableCell colSpan={14} className="h-40 px-4 py-3 text-center">
+                  <TableCell colSpan={20} className="h-40 px-4 py-3 text-center">
                     <div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
                       <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
                         <Wrench className="h-5 w-5" />
@@ -1052,3 +1128,9 @@ export function WipRepairTable({ data, workOrderDetails, invoiceMappings, repair
     </div>
   )
 }
+
+
+
+
+
+

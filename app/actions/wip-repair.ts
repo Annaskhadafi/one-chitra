@@ -8,7 +8,7 @@ import type {
 } from "@/lib/types/wip-repair"
 import { isVisibleWipRepairRecord, isVisibleWipRepairWorkOrderDetail } from "@/lib/wip-repair-visibility"
 import { db } from "@/db"
-import { salesRevenueSap } from "@/db/schema"
+import { iw39PmoReportSap, salesRevenueSap } from "@/db/schema"
 import { inArray, sql, or } from "drizzle-orm"
 const WIP_REPAIR_API_URL =
   process.env.WIP_REPAIR_API_URL ??
@@ -69,6 +69,15 @@ export type WipRepairInvoiceMapping = {
   tanggalInvoice: string | null
 }
 
+export type WipRepairPmoMapping = {
+  actualTotalRevenue: number | null
+  actualTotalCost: number | null
+  systemStatus: string | null
+  poNumber: string | null
+  poDate: string | null
+  poCustomer: string | null
+}
+
 export async function getWipRepairInvoiceMappings(woNumbers: string[]): Promise<Record<string, WipRepairInvoiceMapping>> {
   if (!woNumbers || woNumbers.length === 0) {
     return {}
@@ -124,3 +133,50 @@ export async function getWipRepairInvoiceMappings(woNumbers: string[]): Promise<
     return {}
   }
 }
+
+export async function getWipRepairPmoMappings(woNumbers: string[]): Promise<Record<string, WipRepairPmoMapping>> {
+  if (!woNumbers || woNumbers.length === 0) {
+    return {}
+  }
+
+  try {
+    const uniqueWos = Array.from(new Set(woNumbers)).filter(Boolean)
+    const records = await db
+      .select({
+        wo: iw39PmoReportSap.woNumberSap,
+        actualTotalRevenue: sql<string | null>`MAX(${iw39PmoReportSap.actualTotalRevenue})`,
+        actualTotalCost: sql<string | null>`MAX(${iw39PmoReportSap.actualTotalCost})`,
+        systemStatus: sql<string | null>`MAX(${iw39PmoReportSap.systemStatus})`,
+        poNumber: sql<string | null>`MAX(${iw39PmoReportSap.poNumber})`,
+        poDate: sql<Date | string | null>`MAX(${iw39PmoReportSap.poDate})`,
+        customerName: sql<string | null>`MAX(${iw39PmoReportSap.customerName})`,
+        customerId: sql<string | null>`MAX(${iw39PmoReportSap.customerId})`,
+      })
+      .from(iw39PmoReportSap)
+      .where(inArray(iw39PmoReportSap.woNumberSap, uniqueWos))
+      .groupBy(iw39PmoReportSap.woNumberSap)
+
+    return records.reduce<Record<string, WipRepairPmoMapping>>((accumulator, record) => {
+      if (!record.wo) {
+        return accumulator
+      }
+
+      accumulator[record.wo] = {
+        actualTotalRevenue: record.actualTotalRevenue === null ? null : Number(record.actualTotalRevenue),
+        actualTotalCost: record.actualTotalCost === null ? null : Number(record.actualTotalCost),
+        systemStatus: record.systemStatus,
+        poNumber: record.poNumber,
+        poDate: record.poDate ? new Date(record.poDate).toISOString() : null,
+        poCustomer: record.customerName ?? record.customerId,
+      }
+
+      return accumulator
+    }, {})
+  } catch (error) {
+    console.error("Failed to load WIP Repair PMO mappings", error)
+    return {}
+  }
+}
+
+
+
