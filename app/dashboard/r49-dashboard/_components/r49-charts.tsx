@@ -39,7 +39,7 @@ interface ComposedData {
 }
 
 interface R49ChartsProps {
-    data: {
+    charts: {
         topCustomers: SimpleChartData[];
         monthlyTrend: TrendChartData[];
         materialBreakdown: SimpleChartData[];
@@ -47,13 +47,13 @@ interface R49ChartsProps {
         revByOrg: SimpleChartData[];
         qtyVsRev: ComposedData[];
     };
-    years: string[];
+    isLoading: boolean;
 }
 
 const COLORS = ["#0052CC", "#3b82f6", "#172B4D", "#E21870", "#6B778C", "#F7A823"];
 
-export function R49Charts({ data, years }: R49ChartsProps) {
-    const sortedYears = useMemo(() => [...years].sort((a, b) => b.localeCompare(a)), [years]);
+export function R49Charts({ charts, isLoading }: R49ChartsProps) {
+    
 
     const formatCurrency = (val: number) => {
         if (val >= 1_000_000_000) return (val / 1_000_000_000).toFixed(1) + " M";
@@ -66,7 +66,7 @@ export function R49Charts({ data, years }: R49ChartsProps) {
             {/* 1. Top 5 Customers */}
             <ChartCard title="Top 5 Customers by Revenue">
                 <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={data.topCustomers} layout="vertical" margin={{ left: 40 }}>
+                    <BarChart data={charts.topCustomers} layout="vertical" margin={{ left: 40 }}>
                         <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E2E8F0" />
                         <XAxis type="number" hide />
                         <YAxis dataKey="label" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: '#172B4D' }} width={100} />
@@ -79,7 +79,7 @@ export function R49Charts({ data, years }: R49ChartsProps) {
             {/* 2. Monthly Revenue Trend */}
             <ChartCard title="Monthly Revenue Trend">
                 <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={data.monthlyTrend.sort((a, b) => parseInt(a.month || "0") - parseInt(b.month || "0"))}>
+                    <AreaChart data={charts.monthlyTrend.sort((a, b) => parseInt(a.month || "0") - parseInt(b.month || "0"))}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
                         <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 9 }} />
                         <YAxis tickFormatter={formatCurrency} axisLine={false} tickLine={false} tick={{ fontSize: 9 }} />
@@ -94,14 +94,14 @@ export function R49Charts({ data, years }: R49ChartsProps) {
                 <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                         <Pie
-                            data={data.materialBreakdown}
+                            data={charts.materialBreakdown}
                             innerRadius={40}
                             outerRadius={70}
                             paddingAngle={5}
                             dataKey="value"
                             nameKey="label"
                         >
-                            {data.materialBreakdown.map((_, index) => (
+                            {charts.materialBreakdown.map((_, index) => (
                                 <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                             ))}
                         </Pie>
@@ -114,7 +114,7 @@ export function R49Charts({ data, years }: R49ChartsProps) {
             {/* 4. Avg Price Trend */}
             <ChartCard title="Avg Price per Qty Trend">
                 <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={data.avgPriceTrend.sort((a, b) => a.year.localeCompare(b.year))}>
+                    <LineChart data={charts.avgPriceTrend.sort((a, b) => a.year.localeCompare(b.year))}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
                         <XAxis dataKey="year" axisLine={false} tickLine={false} tick={{ fontSize: 9 }} />
                         <YAxis tickFormatter={formatCurrency} axisLine={false} tickLine={false} tick={{ fontSize: 9 }} />
@@ -127,7 +127,7 @@ export function R49Charts({ data, years }: R49ChartsProps) {
             {/* 5. Revenue by Sales Org (Plant) */}
             <ChartCard title="Revenue by Sales Org (Plant)">
                 <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={data.revByOrg}>
+                    <BarChart data={charts.revByOrg}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
                         <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 9 }} />
                         <YAxis tickFormatter={formatCurrency} axisLine={false} tickLine={false} tick={{ fontSize: 9 }} />
@@ -140,7 +140,7 @@ export function R49Charts({ data, years }: R49ChartsProps) {
             {/* 6. Qty vs Revenue Analysis */}
             <ChartCard title="Qty vs Revenue (Yearly)">
                 <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart data={data.qtyVsRev.sort((a, b) => a.label.localeCompare(b.label))}>
+                    <ComposedChart data={charts.qtyVsRev.sort((a, b) => a.label.localeCompare(b.label))}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
                         <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 9 }} />
                         <YAxis yAxisId="left" tickFormatter={formatCurrency} axisLine={false} tickLine={false} tick={{ fontSize: 9 }} />

@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useEffect, useRef, useState } from "react"
 import {
@@ -123,13 +123,18 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
         return sum + (item.quantity * Number(item.unitPrice) - Number(item.discount || 0))
     }, 0)
 
+
     const discountAmount = quotation.discountType === "percent"
         ? (itemsSubtotal * Number(quotation.discount)) / 100
         : Number(quotation.discount)
 
+
+    const subtotalAfterDiscount = itemsSubtotal - discountAmount
     const itemTaxTotal = quotation.items.reduce((sum, item) => sum + Number(item.tax || 0), 0)
-    const taxAmount = Number(quotation.tax) > 0 ? Number(quotation.tax) : itemTaxTotal
-    const grandTotal = itemsSubtotal - discountAmount + taxAmount + Number(quotation.shipping)
+    const taxAmount = itemTaxTotal > 0
+        ? (itemTaxTotal / itemsSubtotal) * subtotalAfterDiscount
+        : (Number(quotation.tax) > 0 ? subtotalAfterDiscount * 0.11 : 0)
+    const grandTotal = subtotalAfterDiscount + taxAmount + Number(quotation.shipping)
     const recipientAddressLines = [
         quotation.customer.address1,
         quotation.customer.address2,

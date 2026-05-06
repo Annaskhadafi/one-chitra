@@ -8,11 +8,13 @@ export default async function R49DashboardPage() {
     const filterOptions = filtersResponse.success && filtersResponse.data ? {
         customers: filtersResponse.data.customers.filter((v): v is string => Boolean(v)),
         salesmen: filtersResponse.data.salesmen.filter((v): v is string => Boolean(v)),
+        matGrp2Desc: filtersResponse.data.matGrp2Desc.filter((v): v is string => Boolean(v)),
         years: filtersResponse.data.years,
         months: filtersResponse.data.months,
     } : {
         customers: [],
         salesmen: [],
+        matGrp2Desc: [],
         years: [],
         months: []
     };

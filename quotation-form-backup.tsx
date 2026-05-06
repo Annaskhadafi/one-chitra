@@ -1168,18 +1168,8 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
 
     const quotationTax = useMemo(() => {
         const itemTaxTotal = items.reduce((sum, item) => sum + item.tax, 0)
-        if (itemTaxTotal > 0) {
-            // If items have individual tax, calculate tax after discount
-            const discAmount = discountType === "percent" ? (subTotal * discount) / 100 : discount
-            const subtotalAfterDiscount = subTotal - discAmount
-            // Recalculate tax proportionally based on subtotal after discount
-            return (itemTaxTotal / subTotal) * subtotalAfterDiscount
-        }
-        // If using global tax, calculate from subtotal after discount
-        const discAmount = discountType === "percent" ? (subTotal * discount) / 100 : discount
-        const subtotalAfterDiscount = subTotal - discAmount
-        return tax > 0 ? (subtotalAfterDiscount * 0.11) : 0
-    }, [items, tax, subTotal, discount, discountType])
+        return itemTaxTotal > 0 ? itemTaxTotal : tax
+    }, [items, tax])
 
     const grandTotal = useMemo(() => {
         const discAmount = discountType === "percent" ? (subTotal * discount) / 100 : discount
@@ -2560,3 +2550,4 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
         </div>
     )
 }
+

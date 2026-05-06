@@ -1,10 +1,13 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { getR49DashboardData } from "@/app/actions/r49-dashboard"
+import { getR49DashboardData, exportR49DashboardToExcel } from "@/app/actions/r49-dashboard"
 import { R49PivotTable } from "./r49-pivot-table"
 import { R49Charts } from "./r49-charts"
 import { Button } from "@/components/ui/button"
+import { Switch } from "@/components/ui/switch"
+import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
 import {
     Popover,
     PopoverContent,
@@ -27,7 +30,10 @@ import {
     User,
     Building2,
     ChevronDown,
+    Download,
+    DollarSign,
 } from "lucide-react"
+import * as XLSX from "xlsx"
 
 interface R49DashboardClientProps {
     initialFilterOptions: {
@@ -35,6 +41,7 @@ interface R49DashboardClientProps {
         salesmen: string[];
         years: string[];
         months: string[];
+        matGrp2Desc: string[];
     }
 }
 
@@ -57,6 +64,7 @@ function getDefaultR49Filters(initialFilterOptions: R49DashboardClientProps["ini
         months: ytdMonths,
         salesman: [] as string[],
         customers: [] as string[],
+        matGrp2Desc: [] as string[],
         page: 1,
         pageSize: 15,
         sortByYear: preferredYear || initialFilterOptions.years[0] || "",
@@ -66,6 +74,8 @@ function getDefaultR49Filters(initialFilterOptions: R49DashboardClientProps["ini
 
 export function R49DashboardClient({ initialFilterOptions }: R49DashboardClientProps) {
     const [filters, setFilters] = useState(() => getDefaultR49Filters(initialFilterOptions));
+    const [useLocCurr, setUseLocCurr] = useState(false);
+    const [isExporting, setIsExporting] = useState(false);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const [data, setData] = useState<any>(null);
@@ -103,144 +113,209 @@ export function R49DashboardClient({ initialFilterOptions }: R49DashboardClientP
         });
     };
 
+    const handleExport = async () => {
+        setIsExporting(true);
+        try {
+            const result = await exportR49DashboardToExcel(filters);
+            if (result.success && result.data) {
+                const ws = XLSX.utils.json_to_sheet(result.data.map((row: any) => ({
+                    'Customer': row.customerName || '',
+                    'Material': row.materialDescription || '',
+                    'Brand': row.matGrp2Desc || '',
+                    'Year': row.year || '',
+                    'Month': row.month || '',
+                    'Salesman': row.salesman || '',
+                    'Qty': row.qty || 0,
+                    'Revenue (IDR)': row.revenueDocCurr || 0,
+                    'Revenue (USD)': row.revenueLocCurr || 0,
+                })));
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, "R49 Dashboard");
+                XLSX.writeFile(wb, `R49_Dashboard_${new Date().toISOString().split('T')[0]}.xlsx`);
+            }
+        } catch (error) {
+            console.error("Export failed:", error);
+        } finally {
+            setIsExporting(false);
+        }
+    };
+
+    const years = data?.pivotTable ? Array.from(new Set(data.pivotTable.map((d: any) => d.year))).sort().reverse() : [];
+    console.log("Dashboard data:", { pivotTable: data?.pivotTable?.length, customerOrder: data?.customerOrder?.length, years: years.length, isLoading });
+
     return (
         <div className="space-y-6">
-            {/* Header section with minimal filters */}
-            <div className="flex flex-col md:flex-row gap-4 items-end bg-card p-4 rounded-xl shadow-sm border border-border">
-                <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-3">
-                    <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-muted-foreground uppercase ml-1">Tahun</label>
-                        <DropdownFilter
-                            label="Tahun"
-                            icon={<Calendar className="h-3 w-3" />}
-                            options={initialFilterOptions.years}
-                            selected={filters.years}
-                            onToggle={(val) => toggleFilter('years', val)}
-                        />
+            {/* Header section with filters and controls */}
+            <div className="flex flex-col gap-4 bg-card p-4 rounded-xl shadow-sm border border-border">
+                <div className="flex flex-col md:flex-row gap-4 items-end">
+                    <div className="flex-1 grid grid-cols-2 md:grid-cols-5 gap-3">
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-muted-foreground uppercase ml-1">Tahun</label>
+                            <DropdownFilter
+                                label="Tahun"
+                                icon={<Calendar className="h-3 w-3" />}
+                                options={initialFilterOptions.years}
+                                selected={filters.years}
+                                onToggle={(val) => toggleFilter('years', val)}
+                            />
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-muted-foreground uppercase ml-1">Bulan</label>
+                            <DropdownFilter
+                                label="Bulan"
+                                icon={<Calendar className="h-3 w-3" />}
+                                options={initialFilterOptions.months}
+                                selected={filters.months}
+                                onToggle={(val) => toggleFilter('months', val)}
+                                formatOption={(m) => {
+                                    const months = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+                                    return months[parseInt(m) - 1] || m;
+                                }}
+                            />
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-muted-foreground uppercase ml-1">Salesman</label>
+                            <DropdownFilter
+                                label="Salesman"
+                                icon={<User className="h-3 w-3" />}
+                                options={initialFilterOptions.salesmen}
+                                selected={filters.salesman}
+                                onToggle={(val) => toggleFilter('Salesman', val)}
+                            />
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-muted-foreground uppercase ml-1">Customer</label>
+                            <DropdownFilter
+                                label="Customer"
+                                icon={<Building2 className="h-3 w-3" />}
+                                options={initialFilterOptions.customers}
+                                selected={filters.customers}
+                                onToggle={(val) => toggleFilter('customers', val)}
+                            />
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-muted-foreground uppercase ml-1">Brand</label>
+                            <DropdownFilter
+                                label="Brand"
+                                icon={<Building2 className="h-3 w-3" />}
+                                options={initialFilterOptions.matGrp2Desc}
+                                selected={filters.matGrp2Desc}
+                                onToggle={(val) => toggleFilter('matGrp2Desc', val)}
+                            />
+                        </div>
                     </div>
-                    <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-muted-foreground uppercase ml-1">Bulan</label>
-                        <DropdownFilter
-                            label="Bulan"
-                            icon={<Calendar className="h-3 w-3" />}
-                            options={initialFilterOptions.months}
-                            selected={filters.months}
-                            onToggle={(val) => toggleFilter('months', val)}
-                            formatOption={(m) => {
-                                const months = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
-                                return months[parseInt(m) - 1] || m;
-                            }}
-                        />
-                    </div>
-                    <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-muted-foreground uppercase ml-1">Salesman</label>
-                        <DropdownFilter
-                            label="Salesman"
-                            icon={<User className="h-3 w-3" />}
-                            options={initialFilterOptions.salesmen}
-                            selected={filters.salesman}
-                            onToggle={(val) => toggleFilter('salesman', val)}
-                        />
-                    </div>
-                    <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-muted-foreground uppercase ml-1">Customer</label>
-                        <DropdownFilter
-                            label="Customer"
-                            icon={<Building2 className="h-3 w-3" />}
-                            options={initialFilterOptions.customers}
-                            selected={filters.customers}
-                            onToggle={(val) => toggleFilter('customers', val)}
-                        />
+                    <div className="flex gap-2">
+                        <Button
+                            onClick={fetchData}
+                            variant="outline"
+                            size="sm"
+                            className="h-10"
+                        >
+                            <RefreshCcw className="h-4 w-4 mr-2" />
+                            Refresh
+                        </Button>
                     </div>
                 </div>
-                <div className="flex gap-2">
+
+                {/* Currency Switch and Export */}
+                <div className="flex flex-col md:flex-row gap-4 items-center justify-between pt-2 border-t">
+                    <div className="flex items-center space-x-3">
+                        <Label htmlFor="currency-switch" className="text-sm font-medium flex items-center gap-2">
+                            <DollarSign className="h-4 w-4" />
+                            Currency:
+                        </Label>
+                        <div className="flex items-center gap-2">
+                            <span className={`text-xs font-semibold ${!useLocCurr ? 'text-blue-600' : 'text-gray-400'}`}>IDR (Rp)</span>
+                            <Switch
+                                id="currency-switch"
+                                checked={useLocCurr}
+                                onCheckedChange={setUseLocCurr}
+                            />
+                            <span className={`text-xs font-semibold ${useLocCurr ? 'text-blue-600' : 'text-gray-400'}`}>USD ($)</span>
+                        </div>
+                    </div>
                     <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={fetchData}
-                        disabled={isLoading}
-                        className="rounded-lg h-10 w-10 border-slate-200"
+                        onClick={handleExport}
+                        disabled={isExporting || isLoading}
+                        className="bg-green-600 hover:bg-green-700 text-white"
+                        size="sm"
                     >
-                        {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
+                        {isExporting ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                            <Download className="h-4 w-4 mr-2" />
+                        )}
+                        Export to Excel
                     </Button>
                 </div>
             </div>
 
-            {/* Analytics Charts Grid */}
-            <div className="pb-10">
-                <R49Charts
-                    data={data?.charts || {
-                        topCustomers: [],
-                        monthlyTrend: [],
-                        materialBreakdown: [],
-                        avgPriceTrend: [],
-                        revByOrg: [],
-                        qtyVsRev: []
-                    }}
-                    years={initialFilterOptions.years}
-                />
-            </div>
-
-            {/* Pivot Table Section */}
-            <div className="bg-card rounded-xl shadow-sm border border-border overflow-hidden">
-                <div className="bg-[#0052CC] px-4 py-2 flex justify-between items-center text-white">
-                    <h2 className="text-xs font-bold uppercase tracking-wider">EARTHMOVER TIRES R49 SALES ANALYSIS</h2>
-                    <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded">REV. TYPE: TRADING</span>
+            {/* Charts */}
+            {data?.charts && (
+                <div className="bg-card rounded-xl shadow-sm border border-border p-6">
+                    <h3 className="text-lg font-bold text-[#172B4D] mb-4">Analytics Overview</h3>
+                    <R49Charts charts={data.charts} isLoading={isLoading} />
                 </div>
+            )}
+
+            {/* Pivot Table */}
+            <div className="bg-card rounded-xl shadow-sm border border-border p-6">
+                <h3 className="text-lg font-bold text-[#172B4D] mb-4">Sales Data by Customer & Year</h3>
                 <R49PivotTable
                     pivotData={data?.pivotTable || []}
                     customerOrder={data?.customerOrder || []}
-                    years={filters.years.length > 0 ? filters.years : initialFilterOptions.years}
+                    years={years}
                     isLoading={isLoading}
+                    useLocCurr={useLocCurr}
                 />
-
-                {/* Pagination */}
-                {totalPages > 1 && (
-                    <div className="p-4 border-t border-border bg-muted/20">
-                        <Pagination>
-                            <PaginationContent>
-                                <PaginationItem>
-                                    <PaginationPrevious
-                                        onClick={() => handlePageChange(filters.page - 1)}
-                                        className={filters.page === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
-                                    />
-                                </PaginationItem>
-                                {(() => {
-                                    const pages = [];
-                                    const maxVisible = 5;
-                                    let start = Math.max(1, filters.page - 2);
-                                    const end = Math.min(totalPages, start + maxVisible - 1);
-
-                                    if (end - start + 1 < maxVisible) {
-                                        start = Math.max(1, end - maxVisible + 1);
-                                    }
-
-                                    for (let i = start; i <= end; i++) {
-                                        pages.push(
-                                            <PaginationItem key={i}>
-                                                <PaginationLink
-                                                    onClick={() => handlePageChange(i)}
-                                                    isActive={filters.page === i}
-                                                    className="cursor-pointer"
-                                                >
-                                                    {i}
-                                                </PaginationLink>
-                                            </PaginationItem>
-                                        );
-                                    }
-                                    return pages;
-                                })()}
-                                <PaginationItem>
-                                    <PaginationNext
-                                        onClick={() => handlePageChange(filters.page + 1)}
-                                        className={filters.page === totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
-                                    />
-                                </PaginationItem>
-                            </PaginationContent>
-                        </Pagination>
-                    </div>
-                )}
             </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+                <div className="flex justify-center">
+                    <Pagination>
+                        <PaginationContent>
+                            <PaginationItem>
+                                <PaginationPrevious
+                                    onClick={() => handlePageChange(filters.page - 1)}
+                                    className={filters.page === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                                />
+                            </PaginationItem>
+                            {(() => {
+                                const pages = [];
+                                const maxVisible = 5;
+                                let start = Math.max(1, filters.page - 2);
+                                const end = Math.min(totalPages, start + maxVisible - 1);
+
+                                if (end - start + 1 < maxVisible) {
+                                    start = Math.max(1, end - maxVisible + 1);
+                                }
+
+                                for (let i = start; i <= end; i++) {
+                                    pages.push(
+                                        <PaginationItem key={i}>
+                                            <PaginationLink
+                                                onClick={() => handlePageChange(i)}
+                                                isActive={filters.page === i}
+                                                className="cursor-pointer"
+                                            >
+                                                {i}
+                                            </PaginationLink>
+                                        </PaginationItem>
+                                    );
+                                }
+                                return pages;
+                            })()}
+                            <PaginationItem>
+                                <PaginationNext
+                                    onClick={() => handlePageChange(filters.page + 1)}
+                                    className={filters.page === totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                                />
+                            </PaginationItem>
+                        </PaginationContent>
+                    </Pagination>
+                </div>
+            )}
         </div>
     );
 }
@@ -253,8 +328,36 @@ function DropdownFilter({ label, icon, options, selected, onToggle, formatOption
     onToggle: (val: string) => void,
     formatOption?: (val: string) => string
 }) {
+    const [searchTerm, setSearchTerm] = useState("");
+    const [isOpen, setIsOpen] = useState(false);
+
+    const filteredOptions = options.filter(option => {
+        const displayText = formatOption ? formatOption(option) : option;
+        return displayText.toLowerCase().includes(searchTerm.toLowerCase());
+    });
+
+    const handleSelectAll = () => {
+        if (selected.length === filteredOptions.length) {
+            // Deselect all filtered
+            filteredOptions.forEach(opt => {
+                if (selected.includes(opt)) {
+                    onToggle(opt);
+                }
+            });
+        } else {
+            // Select all filtered
+            filteredOptions.forEach(opt => {
+                if (!selected.includes(opt)) {
+                    onToggle(opt);
+                }
+            });
+        }
+    };
+
+    const allSelected = filteredOptions.length > 0 && filteredOptions.every(opt => selected.includes(opt));
+
     return (
-        <Popover>
+        <Popover open={isOpen} onOpenChange={setIsOpen}>
             <PopoverTrigger asChild>
                 <Button
                     variant="outline"
@@ -280,21 +383,40 @@ function DropdownFilter({ label, icon, options, selected, onToggle, formatOption
                 </Button>
             </PopoverTrigger>
             <PopoverContent className="w-64 p-2" align="start">
-                <div className="max-h-80 overflow-y-auto space-y-1">
-                    {options.length === 0 ? (
-                        <p className="text-[10px] text-center py-4 text-slate-400 italic">No options available</p>
-                    ) : options.map((option) => (
-                        <div key={option} className="flex items-center space-x-2 p-2 hover:bg-slate-50 rounded-md cursor-pointer" onClick={() => onToggle(option)}>
+                <div className="space-y-2">
+                    <Input
+                        placeholder="Search..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="h-8 text-xs"
+                    />
+                    {filteredOptions.length > 0 && (
+                        <div className="flex items-center space-x-2 p-2 hover:bg-slate-100 rounded-md cursor-pointer border-b" onClick={handleSelectAll}>
                             <Checkbox
-                                id={`filter-${option}`}
-                                checked={selected.includes(option)}
-                                onCheckedChange={() => onToggle(option)}
+                                checked={allSelected}
+                                onCheckedChange={handleSelectAll}
                             />
-                            <label className="text-xs font-medium leading-none cursor-pointer w-full truncate">
-                                {formatOption ? formatOption(option) : option}
+                            <label className="text-xs font-bold leading-none cursor-pointer w-full">
+                                Select All ({filteredOptions.length})
                             </label>
                         </div>
-                    ))}
+                    )}
+                    <div className="max-h-60 overflow-y-auto space-y-1">
+                        {filteredOptions.length === 0 ? (
+                            <p className="text-[10px] text-center py-4 text-slate-400 italic">No options found</p>
+                        ) : filteredOptions.map((option) => (
+                            <div key={option} className="flex items-center space-x-2 p-2 hover:bg-slate-50 rounded-md cursor-pointer" onClick={() => onToggle(option)}>
+                                <Checkbox
+                                    id={`filter-${option}`}
+                                    checked={selected.includes(option)}
+                                    onCheckedChange={() => onToggle(option)}
+                                />
+                                <label className="text-xs font-medium leading-none cursor-pointer w-full truncate">
+                                    {formatOption ? formatOption(option) : option}
+                                </label>
+                            </div>
+                        ))}
+                    </div>
                 </div>
             </PopoverContent>
         </Popover>

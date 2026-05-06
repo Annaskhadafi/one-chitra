@@ -18,7 +18,8 @@ interface R49PivotData {
     materialDescription: string | null;
     year: string;
     qty: number;
-    revenue: number;
+    revenueDocCurr: number;
+    revenueLocCurr: number;
 }
 
 interface R49PivotTableProps {
@@ -26,18 +27,20 @@ interface R49PivotTableProps {
     customerOrder: { customerName: string | null; totalRevenue: number }[];
     years: string[];
     isLoading: boolean;
+    useLocCurr: boolean;
 }
 
 export function R49PivotTable({
     pivotData,
     customerOrder,
     years,
-    isLoading
+    isLoading,
+    useLocCurr
 }: R49PivotTableProps) {
     const formattedYears = useMemo(() => [...years].sort((a, b) => b.localeCompare(a)), [years]);
 
     const rows = useMemo(() => {
-        const dataMap = new Map<string, Record<string, Record<string, { qty: number, revenue: number }>>>();
+        const dataMap = new Map<string, Record<string, Record<string, { qty: number, revenueDocCurr: number, revenueLocCurr: number }>>>();
 
         pivotData.forEach(item => {
             const name = item.customerName || "Unknown Customer";
@@ -50,7 +53,8 @@ export function R49PivotTable({
             }
             dataMap.get(name)![mat][item.year] = {
                 qty: Number(item.qty),
-                revenue: Number(item.revenue)
+                revenueDocCurr: Number(item.revenueDocCurr),
+                revenueLocCurr: Number(item.revenueLocCurr)
             };
         });
 
@@ -88,16 +92,31 @@ export function R49PivotTable({
         }).format(val);
     };
 
+    const formatCurrency = (val: number, isUSD = false) => {
+        if (!val || val === 0) return "-";
+        const formatted = new Intl.NumberFormat("id-ID", {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0
+        }).format(val);
+        return isUSD ? `$ ${formatted}` : `Rp ${formatted}`;
+    };
+
+    const currencyLabel = useLocCurr ? "USD" : "IDR";
+
     // Grand totals for footer
     const grandTotals = useMemo(() => {
-        const totals: Record<string, { price: number, rev: number }> = {};
+        const totals: Record<string, { qty: number, priceDocCurr: number, revDocCurr: number, priceLocCurr: number, revLocCurr: number }> = {};
         formattedYears.forEach(year => {
             const yearData = pivotData.filter(d => d.year === year);
             const totalQty = yearData.reduce((sum, d) => sum + Number(d.qty), 0);
-            const totalRev = yearData.reduce((sum, d) => sum + Number(d.revenue), 0);
+            const totalRevDocCurr = yearData.reduce((sum, d) => sum + Number(d.revenueDocCurr), 0);
+            const totalRevLocCurr = yearData.reduce((sum, d) => sum + Number(d.revenueLocCurr), 0);
             totals[year] = {
-                price: totalQty > 0 ? totalRev / totalQty : 0,
-                rev: totalRev
+                qty: totalQty,
+                priceDocCurr: totalQty > 0 ? totalRevDocCurr / totalQty : 0,
+                revDocCurr: totalRevDocCurr,
+                priceLocCurr: totalQty > 0 ? totalRevLocCurr / totalQty : 0,
+                revLocCurr: totalRevLocCurr
             };
         });
         return totals;
@@ -154,7 +173,7 @@ export function R49PivotTable({
                                     {/* Year Stats */}
                                     {formattedYears.map((year) => {
                                         const totalQty = matKeys.reduce((sum, m) => sum + (row.materials[m][year]?.qty || 0), 0)
-                                        const totalRev = matKeys.reduce((sum, m) => sum + (row.materials[m][year]?.revenue || 0), 0)
+                                        const totalRev = matKeys.reduce((sum, m) => sum + (useLocCurr ? (row.materials[m][year]?.revenueLocCurr || 0) : (row.materials[m][year]?.revenueDocCurr || 0)), 0)
                                         const avgPrice = totalQty > 0 ? totalRev / totalQty : 0
 
                                         return (
@@ -164,17 +183,23 @@ export function R49PivotTable({
                                                         <span className="text-sm font-bold">{year}</span>
                                                     </div>
                                                 </div>
-                                                <div className="grid grid-cols-2 gap-3">
+                                                <div className="grid grid-cols-3 gap-3">
+                                                    <div>
+                                                        <div className="text-xs text-muted-foreground mb-1 font-medium">Qty</div>
+                                                        <div className="font-mono text-base font-bold text-gray-900 dark:text-gray-100">
+                                                            {formatValue(totalQty, false)}
+                                                        </div>
+                                                    </div>
                                                     <div>
                                                         <div className="text-xs text-muted-foreground mb-1 font-medium">Price Qty</div>
                                                         <div className="font-mono text-base font-bold text-gray-900 dark:text-gray-100">
-                                                            {formatValue(avgPrice)}
+                                                            {formatCurrency(avgPrice, useLocCurr)}
                                                         </div>
                                                     </div>
                                                     <div>
                                                         <div className="text-xs text-muted-foreground mb-1 font-medium">Revenue</div>
                                                         <div className="font-mono text-base font-black text-blue-600 dark:text-blue-400">
-                                                            {formatValue(totalRev)}
+                                                            {formatCurrency(totalRev, useLocCurr)}
                                                         </div>
                                                     </div>
                                                 </div>
@@ -207,12 +232,19 @@ export function R49PivotTable({
                                                             const d = row.materials[mat][year]
                                                             if (!d) return null
                                                             return (
-                                                                <div key={year} className="bg-white/60 dark:bg-gray-900/60 rounded-lg p-2">
-                                                                    <span className="text-muted-foreground font-medium">{year}:</span>
-                                                                    <span className="ml-1 font-mono font-bold text-gray-900 dark:text-gray-100">
-                                                                        {formatValue(d.revenue)}
-                                                                    </span>
-                                                                </div>
+                                                                    <div key={year} className="bg-white/60 dark:bg-gray-900/60 rounded-lg p-2 flex justify-between">
+                                                                        <div>
+                                                                            <span className="text-muted-foreground font-medium">{year}:</span>
+                                                                            <span className="ml-1 text-gray-900 dark:text-gray-100">
+                                                                                Qty: <span className="font-mono font-bold">{formatValue(d.qty, false)}</span>
+                                                                            </span>
+                                                                        </div>
+                                                                        <div>
+                                                                            <span className="font-mono font-bold text-blue-600 dark:text-blue-400">
+                                                                                {formatCurrency(useLocCurr ? d.revenueLocCurr : d.revenueDocCurr, useLocCurr)}
+                                                                            </span>
+                                                                        </div>
+                                                                    </div>
                                                             )
                                                         })}
                                                     </div>
@@ -243,11 +275,12 @@ export function R49PivotTable({
                                 </TableHead>
                                 {formattedYears.map(year => (
                                     <Fragment key={year}>
-                                        <TableHead className="text-white font-bold text-center py-2 border-r border-blue-400" colSpan={2}>
+                                        <TableHead className="text-white font-bold text-center py-2 border-r border-blue-400" colSpan={3}>
                                             {year}
                                             <div className="flex border-t border-blue-300 mt-1">
+                                                <div className="flex-1 py-1 text-[10px] border-r border-blue-300">Qty</div>
                                                 <div className="flex-1 py-1 text-[10px] border-r border-blue-300">Price Qty</div>
-                                                <div className="flex-1 py-1 text-[10px]">Revenue in Doc Curr.</div>
+                                                <div className="flex-1 py-1 text-[10px]">Revenue ({currencyLabel})</div>
                                             </div>
                                         </TableHead>
                                     </Fragment>
@@ -278,16 +311,19 @@ export function R49PivotTable({
                                             </TableCell>
                                             {formattedYears.map(year => {
                                                 const totalQty = matKeys.reduce((sum, m) => sum + (row.materials[m][year]?.qty || 0), 0);
-                                                const totalRev = matKeys.reduce((sum, m) => sum + (row.materials[m][year]?.revenue || 0), 0);
+                                                const totalRev = matKeys.reduce((sum, m) => sum + (useLocCurr ? (row.materials[m][year]?.revenueLocCurr || 0) : (row.materials[m][year]?.revenueDocCurr || 0)), 0);
                                                 const avgPrice = totalQty > 0 ? totalRev / totalQty : 0;
 
                                                 return (
                                                     <Fragment key={year}>
-                                                        <TableCell className="text-right border-r border-slate-100 py-2 font-mono text-[11px] text-[#6B778C] min-w-[120px]">
-                                                            {formatValue(avgPrice)}
+                                                        <TableCell className="text-right border-r border-slate-100 py-2 font-mono text-[11px] text-black min-w-[80px]">
+                                                            {formatValue(totalQty, false)}
                                                         </TableCell>
-                                                        <TableCell className="text-right border-r border-slate-100 py-2 font-mono text-[11px] font-bold text-[#172B4D] min-w-[140px] bg-[#E6F0FF]/30">
-                                                            {formatValue(totalRev)}
+                                                        <TableCell className="text-right border-r border-slate-100 py-2 font-mono text-[11px] text-black min-w-[120px]">
+                                                            {formatCurrency(avgPrice, useLocCurr)}
+                                                        </TableCell>
+                                                        <TableCell className="text-right border-r border-slate-100 py-2 font-mono text-[11px] font-bold text-black min-w-[140px] bg-[#E6F0FF]/30">
+                                                            {formatCurrency(totalRev, useLocCurr)}
                                                         </TableCell>
                                                     </Fragment>
                                                 );
@@ -314,11 +350,14 @@ export function R49PivotTable({
                                                     const d = row.materials[mat][year];
                                                     return (
                                                         <Fragment key={year}>
-                                                            <TableCell className="text-right border-r border-slate-100 py-1 font-mono text-[10px] text-slate-400">
-                                                                {formatValue(d?.revenue && d?.qty ? d.revenue / d.qty : 0)}
+                                                            <TableCell className="text-right border-r border-slate-100 py-1 font-mono text-[10px] text-black">
+                                                                {formatValue(d?.qty || 0, false)}
                                                             </TableCell>
-                                                            <TableCell className="text-right border-r border-slate-100 py-1 font-mono text-[10px] text-slate-500">
-                                                                {formatValue(d?.revenue || 0)}
+                                                            <TableCell className="text-right border-r border-slate-100 py-1 font-mono text-[10px] text-black">
+                                                                {formatCurrency(d?.qty ? (useLocCurr ? d.revenueLocCurr : d.revenueDocCurr) / d.qty : 0, useLocCurr)}
+                                                            </TableCell>
+                                                            <TableCell className="text-right border-r border-slate-100 py-1 font-mono text-[10px] text-black">
+                                                                {formatCurrency(useLocCurr ? (d?.revenueLocCurr || 0) : (d?.revenueDocCurr || 0), useLocCurr)}
                                                             </TableCell>
                                                         </Fragment>
                                                     );
@@ -337,11 +376,14 @@ export function R49PivotTable({
                                 </TableCell>
                                 {formattedYears.map(year => (
                                     <Fragment key={year}>
-                                        <TableCell className="text-right text-[#0052CC] font-mono text-sm min-w-[120px]">
-                                            {formatValue(grandTotals[year].price)}
+                                        <TableCell className="text-right text-black font-mono text-sm min-w-[80px]">
+                                            {formatValue(grandTotals[year].qty, false)}
                                         </TableCell>
-                                        <TableCell className="text-right text-[#0052CC] font-mono text-sm min-w-[140px]">
-                                            {formatValue(grandTotals[year].rev)}
+                                        <TableCell className="text-right text-black font-mono text-sm min-w-[120px]">
+                                            {formatCurrency(useLocCurr ? grandTotals[year].priceLocCurr : grandTotals[year].priceDocCurr, useLocCurr)}
+                                        </TableCell>
+                                        <TableCell className="text-right text-black font-mono text-sm min-w-[140px]">
+                                            {formatCurrency(useLocCurr ? grandTotals[year].revLocCurr : grandTotals[year].revDocCurr, useLocCurr)}
                                         </TableCell>
                                     </Fragment>
                                 ))}

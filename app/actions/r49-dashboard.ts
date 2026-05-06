@@ -14,6 +14,7 @@ export interface R49DashboardFilters {
     months?: string[];
     salesman?: string[];
     customers?: string[];
+    matGrp2Desc?: string[];
     page?: number;
     pageSize?: number;
     sortByYear?: string;
@@ -42,12 +43,16 @@ export async function getR49DashboardFilters() {
             sql`NULLIF(BTRIM(${salesRevenueSap.salesman}), '') IS NOT NULL`
         );
 
-        const [customers, salesmen] = await Promise.all([
+        const [customers, salesmen, matGrp2DescList] = await Promise.all([
             db.selectDistinct({ v: salesRevenueSap.customerName }).from(salesRevenueSap).where(baseWhere).orderBy(salesRevenueSap.customerName),
             db.selectDistinct({ v: sql<string>`BTRIM(${salesRevenueSap.salesman})` })
                 .from(salesRevenueSap)
                 .where(salesmanFilterWhere)
                 .orderBy(sql`BTRIM(${salesRevenueSap.salesman})`),
+            db.selectDistinct({ v: salesRevenueSap.matGrp2Desc })
+                .from(salesRevenueSap)
+                .where(baseWhere)
+                .orderBy(salesRevenueSap.matGrp2Desc),
         ]);
 
         const [yearsResult, monthsResult] = await Promise.all([
@@ -60,6 +65,7 @@ export async function getR49DashboardFilters() {
             data: {
                 customers: customers.map(c => c.v).filter(Boolean),
                 salesmen: salesmen.map(s => s.v).filter(Boolean),
+                matGrp2Desc: matGrp2DescList.map(m => m.v).filter(Boolean),
                 years: yearsResult.map(y => y.v).filter(Boolean).sort().reverse(),
                 months: monthsResult.map(m => m.v).filter(Boolean).sort(),
             }
@@ -78,6 +84,7 @@ export async function getR49DashboardData(filters: R49DashboardFilters = {}) {
             months = [],
             salesman = [],
             customers = [],
+            matGrp2Desc = [],
             page = 1,
             pageSize = 30,
             sortByYear = '',
@@ -103,6 +110,7 @@ export async function getR49DashboardData(filters: R49DashboardFilters = {}) {
 
         if (customers.length > 0) filterArray.push(inArray(salesRevenueSap.customerName, customers));
         if (salesman.length > 0) filterArray.push(inArray(sql<string>`BTRIM(${salesRevenueSap.salesman})`, salesman));
+        if (matGrp2Desc.length > 0) filterArray.push(inArray(salesRevenueSap.matGrp2Desc, matGrp2Desc));
 
         if (years.length > 0) {
             filterArray.push(inArray(sql`to_char(${salesRevenueSap.billingDate}, 'YYYY')`, years));
@@ -141,7 +149,8 @@ export async function getR49DashboardData(filters: R49DashboardFilters = {}) {
             materialDescription: salesRevenueSap.materialDescription,
             year: sql<string>`to_char(${salesRevenueSap.billingDate}, 'YYYY')`,
             qty: sql<number>`SUM(${salesRevenueCountableQty})`,
-            revenue: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInDocCurr}, 0))`
+            revenueDocCurr: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInDocCurr}, 0))`,
+            revenueLocCurr: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInLocCurr}, 0))`
         })
             .from(salesRevenueSap)
             .where(and(finalWhere, inArray(salesRevenueSap.customerName, customerNames)))
@@ -218,5 +227,82 @@ export async function getR49DashboardData(filters: R49DashboardFilters = {}) {
     } catch (error: unknown) {
         console.error("Failed to fetch R49 dashboard data:", error);
         return { success: false, error: "Failed to fetch data" };
+    }
+}
+
+export async function exportR49DashboardToExcel(filters: R49DashboardFilters = {}) {
+    try {
+        const {
+            years = [],
+            months = [],
+            salesman = [],
+            customers = [],
+            matGrp2Desc = []
+        } = filters;
+
+        const filterArray: (SQL | undefined)[] = [
+            and(
+                isNotNull(salesRevenueSap.billingDate),
+                ilike(salesRevenueSap.revType, '%Trading%'),
+                ilike(salesRevenueSap.matGrpDesc, '%EARTHMOVER TIRES R49%'),
+                or(
+                    sql`${salesRevenueSap.customerName} IS NULL`,
+                    and(
+                        notIlike(salesRevenueSap.customerName, '%Chitra Paratama Singapore Branch%'),
+                        notIlike(salesRevenueSap.customerName, '%PT. CHITRA PARATAMA%')
+                    )
+                )
+            )
+        ];
+
+        if (customers.length > 0) filterArray.push(inArray(salesRevenueSap.customerName, customers));
+        if (salesman.length > 0) filterArray.push(inArray(sql<string>`BTRIM(${salesRevenueSap.salesman})`, salesman));
+        if (matGrp2Desc.length > 0) filterArray.push(inArray(salesRevenueSap.matGrp2Desc, matGrp2Desc));
+
+        if (years.length > 0) {
+            filterArray.push(inArray(sql`to_char(${salesRevenueSap.billingDate}, 'YYYY')`, years));
+        }
+        if (months.length > 0) {
+            const monthList = months.flatMap(m => [m.padStart(2, '0'), parseInt(m).toString()]);
+            const uniqueMonthList = Array.from(new Set(monthList.map(m => m.padStart(2, '0'))));
+            filterArray.push(inArray(sql`to_char(${salesRevenueSap.billingDate}, 'MM')`, uniqueMonthList));
+        }
+
+        const finalWhere = and(...filterArray);
+
+        const exportData = await db.select({
+            customerName: salesRevenueSap.customerName,
+            materialDescription: salesRevenueSap.materialDescription,
+            matGrp2Desc: salesRevenueSap.matGrp2Desc,
+            year: sql<string>`to_char(${salesRevenueSap.billingDate}, 'YYYY')`,
+            month: sql<string>`to_char(${salesRevenueSap.billingDate}, 'MM')`,
+            salesman: sql<string>`BTRIM(${salesRevenueSap.salesman})`,
+            qty: sql<number>`SUM(${salesRevenueCountableQty})`,
+            revenueDocCurr: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInDocCurr}, 0))`,
+            revenueLocCurr: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInLocCurr}, 0))`
+        })
+            .from(salesRevenueSap)
+            .where(finalWhere)
+            .groupBy(
+                salesRevenueSap.customerName,
+                salesRevenueSap.materialDescription,
+                salesRevenueSap.matGrp2Desc,
+                sql`to_char(${salesRevenueSap.billingDate}, 'YYYY')`,
+                sql`to_char(${salesRevenueSap.billingDate}, 'MM')`,
+                sql`BTRIM(${salesRevenueSap.salesman})`
+            )
+            .orderBy(
+                sql`to_char(${salesRevenueSap.billingDate}, 'YYYY')`,
+                sql`to_char(${salesRevenueSap.billingDate}, 'MM')`,
+                salesRevenueSap.customerName
+            );
+
+        return {
+            success: true,
+            data: exportData
+        };
+    } catch (error: unknown) {
+        console.error("Failed to export R49 dashboard data:", error);
+        return { success: false, error: "Failed to export data" };
     }
 }

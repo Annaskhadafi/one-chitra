@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useState, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
@@ -229,9 +229,13 @@ export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDet
     const itemsSubtotal = quotation.items.reduce((sum, item) => {
         return sum + (item.quantity * Number(item.unitPrice) - Number(item.discount))
     }, 0)
+    const discountAmount = Number(quotation.discount)
+    const subtotalAfterDiscount = itemsSubtotal - discountAmount
     const itemTaxTotal = quotation.items.reduce((sum, item) => sum + Number(item.tax), 0)
-    const quotationTaxAmount = Number(quotation.tax) > 0 ? Number(quotation.tax) : itemTaxTotal
-    const grandTotal = itemsSubtotal - Number(quotation.discount) + quotationTaxAmount + Number(quotation.shipping)
+    const quotationTaxAmount = itemTaxTotal > 0
+        ? (itemTaxTotal / itemsSubtotal) * subtotalAfterDiscount
+        : (Number(quotation.tax) > 0 ? subtotalAfterDiscount * 0.11 : 0)
+    const grandTotal = subtotalAfterDiscount + quotationTaxAmount + Number(quotation.shipping)
 
     const getItemMaterialNumber = (item: QuotationDetailData["items"][number]) =>
         item.product?.materialNumber || item.description || `ITEM-${item.id}`
