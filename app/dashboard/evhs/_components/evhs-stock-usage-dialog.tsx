@@ -13,14 +13,15 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
-import { useForm } from "react-hook-form"
+import { useFieldArray, useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { toast } from "sonner"
-import { createEvhsVoucher } from "@/app/actions/evhs"
+import { createEvhsVoucher, getEvhsAllVhsStockData } from "@/app/actions/evhs"
 import { useQuery } from "@tanstack/react-query"
 import { getEvhsMasterPrices } from "@/app/actions/evhs-master"
 import { useRouter } from "next/navigation"
+import { Plus, Trash2 } from "lucide-react"
 
 const usageSchema = z.object({
     woNo: z.string().min(1, "Nomor WO wajib diisi"),
@@ -32,6 +33,10 @@ const usageSchema = z.object({
     remark: z.string().optional(),
     approvedByName: z.string().optional(),
     receivedByName: z.string().optional(),
+    additionalItems: z.array(z.object({
+        productId: z.number().min(1, "Produk harus dipilih"),
+        qty: z.number().min(1, "Qty minimal 1"),
+    })).default([]),
 })
 
 type UsageValues = z.infer<typeof usageSchema>
@@ -78,6 +83,11 @@ export function EvhsStockUsageDialog({
         queryFn: getEvhsMasterPrices,
         enabled: open,
     })
+    const { data: vhsStocks } = useQuery({
+        queryKey: ["evhs-all-vhs-stock-data"],
+        queryFn: getEvhsAllVhsStockData,
+        enabled: open && !!trackingItem,
+    })
     const masterPrices = data ?? EMPTY_MASTER_PRICES
 
     const suggestedMasterPrice = trackingItem
@@ -100,8 +110,22 @@ export function EvhsStockUsageDialog({
             remark: "",
             approvedByName: "",
             receivedByName: "",
+            additionalItems: [],
         }
     })
+
+    const { fields, append, remove } = useFieldArray({
+        control: form.control,
+        name: "additionalItems",
+    })
+
+    const availableAdditionalItems = vhsStocks?.filter(stock => 
+        stock.warehouseId === trackingItem?.warehouseId && 
+        stock.availableQty > 0 && 
+        stock.category?.toUpperCase() !== "TYRE" &&
+        stock.category?.toUpperCase() !== "TIRE" &&
+        stock.productId !== trackingItem?.productId // Don't add the same item
+    ) || []
 
     // Update form when tracking item changes
     // Update form when tracking item changes
@@ -122,6 +146,7 @@ export function EvhsStockUsageDialog({
                 remark: "",
                 approvedByName: "",
                 receivedByName: "",
+                additionalItems: [],
             })
         }
     }, [trackingItem, form, suggestedMaterialCk])
@@ -155,6 +180,24 @@ export function EvhsStockUsageDialog({
                     unitId: values.unitId,
                     stockBalance: 0, // No longer strictly needed or calculated properly here
                 }]
+            }
+
+            if (values.additionalItems && values.additionalItems.length > 0) {
+                for (const item of values.additionalItems) {
+                    const stockRef = availableAdditionalItems.find(s => s.productId === item.productId)
+                    if (stockRef) {
+                        voucherData.items.push({
+                            productId: item.productId,
+                            qty: item.qty,
+                            serialNumber: "",
+                            sourceType: "receipt", // Defaults to receipt for additional non-tyre parts, as tracking them strictly to legacy isn't easily done here without explicit mapping
+                            materialNumberCk: stockRef.materialNumberCk || "",
+                            pos: values.pos,
+                            unitId: values.unitId,
+                            stockBalance: 0,
+                        })
+                    }
+                }
             }
 
             const result = await createEvhsVoucher(voucherData)
@@ -272,6 +315,65 @@ export function EvhsStockUsageDialog({
                             <Input id="receivedByName" placeholder="Nama..." {...form.register("receivedByName")} />
                         </div>
                     </div>
+
+                    {availableAdditionalItems.length > 0 && (
+                        <div className="space-y-3 p-3 border rounded-md bg-slate-50">
+                            <div className="flex items-center justify-between">
+                                <Label className="font-semibold">Tambah Barang (Tube/Flap/ACC)</Label>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 text-xs gap-1"
+                                    onClick={() => append({ productId: 0, qty: 1 })}
+                                >
+                                    <Plus className="h-3 w-3" /> Tambah
+                                </Button>
+                            </div>
+                            {fields.length > 0 ? (
+                                <div className="space-y-3">
+                                    {fields.map((field, index) => (
+                                        <div key={field.id} className="flex items-start gap-2">
+                                            <div className="flex-1 space-y-1">
+                                                <select
+                                                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                                                    {...form.register(`additionalItems.${index}.productId`, { valueAsNumber: true })}
+                                                >
+                                                    <option value={0} disabled>Pilih Barang...</option>
+                                                    {availableAdditionalItems.map(stock => (
+                                                        <option key={stock.productId} value={stock.productId}>
+                                                            {stock.materialNumber} - {stock.materialDescription || "N/A"} (Stok: {stock.availableQty})
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                                {form.formState.errors.additionalItems?.[index]?.productId && (
+                                                    <p className="text-xs text-red-500">{form.formState.errors.additionalItems[index].productId?.message}</p>
+                                                )}
+                                            </div>
+                                            <div className="w-24 space-y-1">
+                                                <Input
+                                                    type="number"
+                                                    min={1}
+                                                    {...form.register(`additionalItems.${index}.qty`, { valueAsNumber: true })}
+                                                />
+                                            </div>
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-9 w-9 text-red-500 hover:text-red-600 hover:bg-red-50"
+                                                onClick={() => remove(index)}
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <p className="text-xs text-muted-foreground">Tidak ada barang tambahan yang dipilih.</p>
+                            )}
+                        </div>
+                    )}
 
                     <div className="space-y-2">
                         <Label htmlFor="remark">Remark</Label>
