@@ -1,8 +1,8 @@
 "use server";
 
 import { db } from "@/db";
-import { deliveryCostRequests, deliveryCostRequestItems, fleetDrivers, fleetVehicles, costSettlements, deliveries } from "@/db/schema";
-import { eq, desc, and, sql, gte, lte } from "drizzle-orm";
+import { deliveryCostRequests, deliveryCostRequestItems, deliveryCostCredits, fleetDrivers, fleetVehicles, costSettlements, deliveries } from "@/db/schema";
+import { eq, desc, asc, and, sql, gte, lte } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
 export type DeliveryCostItem = {
@@ -19,6 +19,9 @@ export type DeliveryCostItem = {
     washGreaseCost: number;
     escortCost: number;
     totalCost: number;
+    realizationStatus?: string;
+    realizationRemarks?: string;
+    realizationDetails?: Record<string, { status: string; remarks?: string }>;
 };
 
 type DeliveryCostItemInput = DeliveryCostItem & {
@@ -79,9 +82,57 @@ export type SavedDeliveryCostItem = {
     washGreaseCost: string | null;
     escortCost: string | null;
     totalCost: string | null;
+    realizationStatus: string | null;
+    realizationRemarks: string | null;
+    realizationDetails: Record<string, { status: string; remarks?: string }> | null;
 };
 
+export type DeliveryCostCredit = {
+    id: number;
+    creditDate: string;
+    amount: string;
+    remarks: string | null;
+};
+
+export type WeeklyCreditBalance = {
+    week: string;
+    dateIn: string;
+    credit: number;
+    debit: number;
+    balance: number;
+};
+
+async function ensureDeliveryCostRealizationColumns() {
+    await db.execute(sql`ALTER TABLE "delivery_cost_request_items" ADD COLUMN IF NOT EXISTS "realization_status" text DEFAULT 'Done'`);
+    await db.execute(sql`ALTER TABLE "delivery_cost_request_items" ADD COLUMN IF NOT EXISTS "realization_remarks" text`);
+    await db.execute(sql`ALTER TABLE "delivery_cost_request_items" ADD COLUMN IF NOT EXISTS "realization_details" jsonb`);
+}
+
+async function ensureDeliveryCostCreditTable() {
+    await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "delivery_cost_credits" (
+            "id" serial PRIMARY KEY,
+            "credit_date" date NOT NULL,
+            "amount" numeric(20, 2) NOT NULL DEFAULT '0',
+            "remarks" text,
+            "created_at" timestamp NOT NULL DEFAULT now(),
+            "updated_at" timestamp NOT NULL DEFAULT now()
+        )
+    `);
+    await db.execute(sql`ALTER TABLE "delivery_cost_credits" ADD COLUMN IF NOT EXISTS "remarks" text`);
+}
+
+function getWeekKey(dateText: string | Date) {
+    const date = new Date(dateText);
+    const firstDayOfMonth = new Date(date.getFullYear(), date.getMonth(), 1);
+    const firstWeekOffset = (firstDayOfMonth.getDay() + 6) % 7;
+    const weekOfMonth = Math.ceil((date.getDate() + firstWeekOffset) / 7);
+    const month = date.toLocaleDateString("id-ID", { month: "long" });
+    return `W${weekOfMonth} ${month}`;
+}
+
 export async function getSavedDeliveryCostRequests(filters?: { from?: Date; to?: Date; status?: string }): Promise<SavedDeliveryCostRequest[]> {
+    await ensureDeliveryCostRealizationColumns();
     const conditions = [];
     if (filters?.from) {
         conditions.push(gte(deliveryCostRequests.requestDate, filters.from.toISOString().split("T")[0]));
@@ -119,6 +170,9 @@ export async function getSavedDeliveryCostRequests(filters?: { from?: Date; to?:
                 washGreaseCost: item.washGreaseCost,
                 escortCost: item.escortCost,
                 totalCost: item.totalCost,
+                realizationStatus: item.realizationStatus,
+                realizationRemarks: item.realizationRemarks,
+                realizationDetails: item.realizationDetails as Record<string, { status: string; remarks?: string }> | null,
             }))
         } as SavedDeliveryCostRequest);
     }
@@ -142,6 +196,7 @@ export async function saveDeliveryCostRequest(data: {
     items: DeliveryCostItemInput[];
 }) {
     try {
+        await ensureDeliveryCostRealizationColumns();
         const [request] = await db.insert(deliveryCostRequests).values({
             requestDate: data.requestDate,
             accNo: data.accNo,
@@ -176,6 +231,9 @@ export async function saveDeliveryCostRequest(data: {
                     washGreaseCost: String(item.washGreaseCost),
                     escortCost: String(item.escortCost),
                     totalCost: String(item.totalCost),
+                    realizationStatus: item.realizationStatus ?? "Done",
+                    realizationRemarks: item.realizationStatus === "Other" ? item.realizationRemarks ?? "" : null,
+                    realizationDetails: item.realizationDetails ?? {},
                 }))
             );
         }
@@ -205,6 +263,7 @@ export async function updateDeliveryCostRequest(id: number, data: {
     items: DeliveryCostItemInput[];
 }) {
     try {
+        await ensureDeliveryCostRealizationColumns();
         await db.update(deliveryCostRequests).set({
             requestDate: data.requestDate,
             accNo: data.accNo,
@@ -241,6 +300,9 @@ export async function updateDeliveryCostRequest(id: number, data: {
                     washGreaseCost: String(item.washGreaseCost),
                     escortCost: String(item.escortCost),
                     totalCost: String(item.totalCost),
+                    realizationStatus: item.realizationStatus ?? "Done",
+                    realizationRemarks: item.realizationStatus === "Other" ? item.realizationRemarks ?? "" : null,
+                    realizationDetails: item.realizationDetails ?? {},
                 }))
             );
         }
@@ -326,6 +388,105 @@ export async function getDeliveryCostRequestStats(filters?: { from?: Date; to?: 
         console.error("Error getting stats:", error);
         return { totalDocument: 0, totalPengajuan: 0, totalDisetujui: 0, totalDitolak: 0, totalRupiah: 0 };
     }
+}
+
+export async function getDeliveryCostCredits(filters?: { from?: Date; to?: Date }): Promise<DeliveryCostCredit[]> {
+    try {
+        await ensureDeliveryCostCreditTable();
+        const conditions = [];
+        if (filters?.from) conditions.push(gte(deliveryCostCredits.creditDate, filters.from.toISOString().split("T")[0]));
+        if (filters?.to) conditions.push(lte(deliveryCostCredits.creditDate, filters.to.toISOString().split("T")[0]));
+
+        const credits = await db.select().from(deliveryCostCredits)
+            .where(conditions.length > 0 ? and(...conditions) : undefined)
+            .orderBy(asc(deliveryCostCredits.creditDate));
+
+        return credits.map(credit => ({
+            id: credit.id,
+            creditDate: credit.creditDate,
+            amount: credit.amount,
+            remarks: credit.remarks,
+        }));
+    } catch (error) {
+        console.error("Error getting delivery cost credits:", error);
+        return [];
+    }
+}
+
+export async function saveDeliveryCostCredit(data: { creditDate: string; amount: number; remarks?: string }) {
+    try {
+        await ensureDeliveryCostCreditTable();
+        await db.insert(deliveryCostCredits).values({
+            creditDate: data.creditDate,
+            amount: String(data.amount),
+            remarks: data.remarks,
+        });
+        revalidatePath("/dashboard/delivery-cost-request");
+        return { success: true };
+    } catch (error) {
+        console.error("Error saving delivery cost credit:", error);
+        return { success: false, error: "Gagal menyimpan uang masuk" };
+    }
+}
+
+export async function updateDeliveryCostCredit(id: number, data: { creditDate: string; amount: number; remarks?: string }) {
+    try {
+        await ensureDeliveryCostCreditTable();
+        await db.update(deliveryCostCredits).set({
+            creditDate: data.creditDate,
+            amount: String(data.amount),
+            remarks: data.remarks,
+            updatedAt: new Date(),
+        }).where(eq(deliveryCostCredits.id, id));
+        revalidatePath("/dashboard/delivery-cost-request");
+        return { success: true };
+    } catch (error) {
+        console.error("Error updating delivery cost credit:", error);
+        return { success: false, error: "Gagal mengupdate uang masuk" };
+    }
+}
+
+export async function deleteDeliveryCostCredit(id: number) {
+    try {
+        await ensureDeliveryCostCreditTable();
+        await db.delete(deliveryCostCredits).where(eq(deliveryCostCredits.id, id));
+        revalidatePath("/dashboard/delivery-cost-request");
+        return { success: true };
+    } catch (error) {
+        console.error("Error deleting delivery cost credit:", error);
+        return { success: false, error: "Gagal menghapus uang masuk" };
+    }
+}
+
+export async function getWeeklyCreditBalances(filters?: { from?: Date; to?: Date }): Promise<WeeklyCreditBalance[]> {
+    const [credits, requests] = await Promise.all([
+        getDeliveryCostCredits(filters),
+        getSavedDeliveryCostRequests({ from: filters?.from, to: filters?.to, status: "Semua" }),
+    ]);
+
+    const weekly = new Map<string, { dateIn: string; credit: number; debit: number }>();
+    for (const credit of credits) {
+        const week = getWeekKey(credit.creditDate);
+        const row = weekly.get(week) ?? { dateIn: credit.creditDate, credit: 0, debit: 0 };
+        row.credit += Number(credit.amount ?? 0);
+        if (!row.dateIn || new Date(credit.creditDate) < new Date(row.dateIn)) row.dateIn = credit.creditDate;
+        weekly.set(week, row);
+    }
+    for (const request of requests) {
+        const week = getWeekKey(request.requestDate);
+        const row = weekly.get(week) ?? { dateIn: request.requestDate, credit: 0, debit: 0 };
+        row.debit += Number(request.totalRequest ?? 0);
+        if (!row.dateIn || new Date(request.requestDate) < new Date(row.dateIn)) row.dateIn = request.requestDate;
+        weekly.set(week, row);
+    }
+
+    let runningBalance = 0;
+    return Array.from(weekly.entries())
+        .sort(([, a], [, b]) => new Date(a.dateIn).getTime() - new Date(b.dateIn).getTime())
+        .map(([week, row]) => {
+            runningBalance += row.credit - row.debit;
+            return { week, dateIn: row.dateIn, credit: row.credit, debit: row.debit, balance: runningBalance };
+        });
 }
 
 export async function getFleetData() {

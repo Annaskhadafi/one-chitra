@@ -1,7 +1,7 @@
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { FileText, CheckCircle, XCircle, DollarSign } from "lucide-react";
+import { FileText, CheckCircle, DollarSign, WalletCards } from "lucide-react";
 
 interface Stats {
     totalDocument: number;
@@ -11,9 +11,9 @@ interface Stats {
     totalRupiah: number;
 }
 
-export function DeliveryCostScorecard({ stats }: { stats: Stats }) {
+export function DeliveryCostScorecard({ stats, actualBalance }: { stats: Stats; actualBalance: number }) {
     return (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
             <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">Total Dokumen</CardTitle>
@@ -61,6 +61,20 @@ export function DeliveryCostScorecard({ stats }: { stats: Stats }) {
                     </div>
                     <p className="text-xs text-muted-foreground">
                         Total yang Disetujui/Pengajuan
+                    </p>
+                </CardContent>
+            </Card>
+            <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Saldo Rekening Aktual</CardTitle>
+                    <WalletCards className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                    <div className={`text-2xl font-bold ${actualBalance < 0 ? "text-destructive" : "text-emerald-700"}`}>
+                        Rp {actualBalance.toLocaleString("id-ID")}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                        Saldo akhir credit - debit
                     </p>
                 </CardContent>
             </Card>

@@ -198,9 +198,9 @@ const ensureLogisticsSettlementMenu = (sections: RuntimeNavSection[]): RuntimeNa
 
       const existingItems = item.items ?? []
       const hasLogisticsCostLog = existingItems.some((subItem) => subItem.url === "/dashboard/logistics-costs")
-      const hasCostSettlement = existingItems.some((subItem) => subItem.url === "/dashboard/cost-settlements")
-
-      const mergedItems = [...existingItems]
+      const visibleItems = existingItems.filter((subItem) => subItem.url !== "/dashboard/cost-settlements")
+      
+      const mergedItems = [...visibleItems]
       if (!hasLogisticsCostLog) {
         mergedItems.unshift({
           id: `${item.id}-logistics-cost-log`,
@@ -210,16 +210,6 @@ const ensureLogisticsSettlementMenu = (sections: RuntimeNavSection[]): RuntimeNa
           hidden: false,
         })
       }
-      if (!hasCostSettlement) {
-        mergedItems.push({
-          id: `${item.id}-cost-settlement`,
-          title: "Cost Settlement",
-          url: "/dashboard/cost-settlements",
-          resource: "cost-settlements",
-          hidden: false,
-        })
-      }
-
       return {
         ...item,
         url: "#",

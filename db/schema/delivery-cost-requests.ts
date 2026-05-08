@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, text, timestamp, decimal, date } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, timestamp, decimal, date, jsonb } from "drizzle-orm/pg-core";
 import { deliveries } from "./deliveries";
 
 export const deliveryCostRequests = pgTable("delivery_cost_requests", {
@@ -39,5 +39,17 @@ export const deliveryCostRequestItems = pgTable("delivery_cost_request_items", {
     washGreaseCost: decimal("wash_grease_cost", { precision: 20, scale: 2 }).default("0"),
     escortCost: decimal("escort_cost", { precision: 20, scale: 2 }).default("0"),
     totalCost: decimal("total_cost", { precision: 20, scale: 2 }).default("0"),
+    realizationStatus: text("realization_status").default("Done"),
+    realizationRemarks: text("realization_remarks"),
+    realizationDetails: jsonb("realization_details"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const deliveryCostCredits = pgTable("delivery_cost_credits", {
+    id: serial("id").primaryKey(),
+    creditDate: date("credit_date").notNull(),
+    amount: decimal("amount", { precision: 20, scale: 2 }).default("0").notNull(),
+    remarks: text("remarks"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

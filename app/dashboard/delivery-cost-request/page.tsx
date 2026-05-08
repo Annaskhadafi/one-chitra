@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import { Loader2, Calculator } from "lucide-react";
-import { getSavedDeliveryCostRequests, getFleetData, getDeliveryCostRequestStats } from "@/app/actions/delivery-cost-requests";
+import { getSavedDeliveryCostRequests, getFleetData, getDeliveryCostRequestStats, getDeliveryCostCredits, getWeeklyCreditBalances } from "@/app/actions/delivery-cost-requests";
 import { DeliveryCostRequestClient } from "./_components/delivery-cost-request-client";
 import { DeliveryCostScorecard } from "./_components/delivery-cost-scorecard";
 import { DeliveryCostFilters } from "./_components/delivery-cost-filters";
@@ -20,10 +20,12 @@ export default async function DeliveryCostRequestPage({
         status: searchParams.status || "Semua"
     };
 
-    const [savedRequests, fleetData, stats] = await Promise.all([
+    const [savedRequests, fleetData, stats, credits, weeklyBalances] = await Promise.all([
         getSavedDeliveryCostRequests(filters),
         getFleetData(),
-        getDeliveryCostRequestStats(filters)
+        getDeliveryCostRequestStats(filters),
+        getDeliveryCostCredits(filters),
+        getWeeklyCreditBalances(filters)
     ]);
 
     return (
@@ -41,7 +43,7 @@ export default async function DeliveryCostRequestPage({
                 </div>
             </div>
 
-            <DeliveryCostScorecard stats={stats} />
+            <DeliveryCostScorecard stats={stats} actualBalance={weeklyBalances[weeklyBalances.length - 1]?.balance ?? 0} />
 
             <DeliveryCostFilters />
 
@@ -53,6 +55,8 @@ export default async function DeliveryCostRequestPage({
                 <DeliveryCostRequestClient
                     savedRequests={savedRequests}
                     fleetData={fleetData}
+                    credits={credits}
+                    weeklyBalances={weeklyBalances}
                 />
             </Suspense>
         </div>

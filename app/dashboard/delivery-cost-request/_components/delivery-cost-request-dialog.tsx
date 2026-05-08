@@ -19,8 +19,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { Plus, Trash2, Loader2, Save, X, Search, Check, ChevronsUpDown, Calculator } from "lucide-react";
 import { toast } from "sonner";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -49,7 +51,25 @@ const emptyItem: DeliveryCostItem = {
     washGreaseCost: 0,
     escortCost: 0,
     totalCost: 0,
+    realizationStatus: "Done",
+    realizationRemarks: "",
+    realizationDetails: {},
 };
+
+const costColumns: Array<{ key: keyof DeliveryCostItem; label: string }> = [
+    { key: "fuelCostDexlite", label: "BIAYA DEXLITE" },
+    { key: "fuelCostBio", label: "BIAYA BIO SOLAR" },
+    { key: "mealAllowance", label: "BIAYA MAKAN" },
+    { key: "medicalTest", label: "RAPIT/TES KES" },
+    { key: "tollRoad", label: "JALAN TOL" },
+    { key: "ferryCost", label: "FERRY" },
+    { key: "portalCost", label: "PORTAL" },
+    { key: "washGreaseCost", label: "CUCI/GRIS" },
+    { key: "escortCost", label: "PENGAWALAN/ESCOT" },
+];
+
+type RealizationDetail = { status: string; remarks?: string };
+type CellEditor = { rowIndex: number; costKey: string; label: string } | null;
 
 export function DeliveryCostRequestDialog({ open, onOpenChange, editingRequest, fleetData, onSuccess }: Props) {
     const [isSaving, startSaving] = useTransition();
@@ -68,6 +88,7 @@ export function DeliveryCostRequestDialog({ open, onOpenChange, editingRequest, 
     const [unsettledDeliveries, setUnsettledDeliveries] = useState<UnsettledDeliveryCost[]>([]);
     const [isFetchingUnsettled, setIsFetchingUnsettled] = useState(false);
     const [isSelectionOpen, setIsSelectionOpen] = useState(false);
+    const [cellEditor, setCellEditor] = useState<CellEditor>(null);
 
     const [items, setItems] = useState<DeliveryCostItem[]>([{ ...emptyItem }]);
 
@@ -99,6 +120,9 @@ export function DeliveryCostRequestDialog({ open, onOpenChange, editingRequest, 
                 washGreaseCost: Number(i.washGreaseCost ?? 0),
                 escortCost: Number(i.escortCost ?? 0),
                 totalCost: Number(i.totalCost ?? 0),
+                realizationStatus: i.realizationStatus ?? "Done",
+                realizationRemarks: i.realizationRemarks ?? "",
+                realizationDetails: i.realizationDetails ?? {},
             })));
         } else {
             setRequestDate(new Date().toISOString().slice(0, 10));
@@ -142,6 +166,7 @@ export function DeliveryCostRequestDialog({ open, onOpenChange, editingRequest, 
             item.totalCost =
                 item.fuelCostDexlite + item.fuelCostBio + item.mealAllowance + item.medicalTest + item.tollRoad +
                 item.ferryCost + item.portalCost + item.washGreaseCost + item.escortCost;
+            item.realizationDetails = {};
             return item;
         });
 
@@ -180,6 +205,23 @@ export function DeliveryCostRequestDialog({ open, onOpenChange, editingRequest, 
 
         newItems[index] = item;
         setItems(newItems);
+    };
+
+    const updateRealizationCell = (rowIndex: number, costKey: string, detail: RealizationDetail) => {
+        const newItems = [...items];
+        const item = newItems[rowIndex];
+        newItems[rowIndex] = {
+            ...item,
+            realizationDetails: {
+                ...(item.realizationDetails ?? {}),
+                [costKey]: detail.status === "Other" ? detail : { status: detail.status, remarks: "" },
+            },
+        };
+        setItems(newItems);
+    };
+
+    const getRealizationCell = (rowIndex: number, costKey: string): RealizationDetail => {
+        return items[rowIndex]?.realizationDetails?.[costKey] ?? { status: "Outstanding", remarks: "" };
     };
 
     const totalRequest = items.reduce((sum, item) => sum + item.totalCost, 0);
@@ -221,7 +263,10 @@ export function DeliveryCostRequestDialog({ open, onOpenChange, editingRequest, 
         });
     };
 
+    const activeCell = cellEditor ? getRealizationCell(cellEditor.rowIndex, cellEditor.costKey) : { status: "Outstanding", remarks: "" };
+
     return (
+        <>
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="max-w-[100vw] max-h-[100dvh] sm:max-w-[95vw] sm:max-h-[90dvh] flex flex-col p-0 overflow-hidden">
                 <DialogHeader className="shrink-0 p-6 border-b">
@@ -231,8 +276,8 @@ export function DeliveryCostRequestDialog({ open, onOpenChange, editingRequest, 
                     </DialogTitle>
                 </DialogHeader>
 
-                <ScrollArea className="min-h-0 flex-1 overflow-y-auto p-6">
-                    <div className="space-y-8 pb-10">
+                <div className="min-h-0 flex-1 overflow-auto p-6">
+                    <div className="min-w-[1100px] space-y-8 pb-10">
                         {/* Header Info */}
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                             <div className="space-y-4 border p-4 rounded-lg bg-muted/20">
@@ -335,7 +380,13 @@ export function DeliveryCostRequestDialog({ open, onOpenChange, editingRequest, 
                                     </Button>
                                 </div>
                             </div>
-                            <div className="overflow-x-auto overscroll-x-contain">
+                            <Tabs defaultValue="riwayat" className="w-full">
+                                <TabsList className="m-3 mb-0 grid w-[360px] grid-cols-2">
+                                    <TabsTrigger value="riwayat">Riwayat Biaya</TabsTrigger>
+                                    <TabsTrigger value="realisasi">Realisasi</TabsTrigger>
+                                </TabsList>
+                                <TabsContent value="riwayat" className="mt-0">
+                                    <div className="overflow-x-auto overscroll-x-contain">
                                 <Table className="min-w-[1600px]">
                                     <TableHeader>
                                         <TableRow className="bg-muted/30">
@@ -474,7 +525,51 @@ export function DeliveryCostRequestDialog({ open, onOpenChange, editingRequest, 
                                         ))}
                                     </TableBody>
                                 </Table>
-                            </div>
+                                    </div>
+                                </TabsContent>
+                                <TabsContent value="realisasi" className="mt-0">
+                                    <div className="overflow-x-auto overscroll-x-contain">
+                                        <Table className="min-w-[1800px]">
+                                            <TableHeader>
+                                                <TableRow className="bg-muted/30">
+                                                    <TableHead className="w-[50px]">NO</TableHead>
+                                                    <TableHead className="min-w-[120px]">NO POL</TableHead>
+                                                    <TableHead className="min-w-[140px]">NAMA DRIVER</TableHead>
+                                                    <TableHead className="min-w-[160px]">TRIP DESTINATION</TableHead>
+                                                    {costColumns.map(column => (
+                                                        <TableHead key={column.key} className="w-[150px] text-center">{column.label}</TableHead>
+                                                    ))}
+                                                    <TableHead className="w-[120px] text-right">TOTAL</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {items.map((item, index) => (
+                                                    <TableRow key={index}>
+                                                        <TableCell>{index + 1}</TableCell>
+                                                        <TableCell className="text-xs font-medium">{item.noPol || "-"}</TableCell>
+                                                        <TableCell className="text-xs">{item.driverName || "-"}</TableCell>
+                                                        <TableCell className="text-xs">{item.tripDestination || "-"}</TableCell>
+                                                        {costColumns.map(column => (
+                                                            <TableCell key={column.key} className="align-top">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setCellEditor({ rowIndex: index, costKey: String(column.key), label: column.label })}
+                                                                    className="w-full rounded-md border bg-background px-2 py-2 text-right text-xs font-mono font-semibold transition hover:border-primary hover:bg-primary/5"
+                                                                >
+                                                                    Rp {Number(item[column.key] ?? 0).toLocaleString("id-ID")}
+                                                                </button>
+                                                            </TableCell>
+                                                        ))}
+                                                        <TableCell className="text-right font-mono font-bold text-primary">
+                                                            Rp {item.totalCost.toLocaleString("id-ID")}
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                    </div>
+                                </TabsContent>
+                            </Tabs>
                         </div>
 
                         {/* Footer Totals */}
@@ -500,7 +595,7 @@ export function DeliveryCostRequestDialog({ open, onOpenChange, editingRequest, 
                             </div>
                         </div>
                     </div>
-                </ScrollArea>
+                </div>
 
                 <DialogFooter className="shrink-0 p-6 border-t gap-2 bg-muted/20">
                     <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
@@ -513,5 +608,53 @@ export function DeliveryCostRequestDialog({ open, onOpenChange, editingRequest, 
                 </DialogFooter>
             </DialogContent>
         </Dialog>
+        <Dialog open={!!cellEditor} onOpenChange={(nextOpen) => !nextOpen && setCellEditor(null)}>
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle>Edit Status Realisasi</DialogTitle>
+                </DialogHeader>
+                {cellEditor ? (
+                    <div className="space-y-4">
+                        <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+                            <div className="font-semibold">{cellEditor.label}</div>
+                            <div className="text-muted-foreground">
+                                {items[cellEditor.rowIndex]?.noPol || "-"} · {items[cellEditor.rowIndex]?.driverName || "-"}
+                            </div>
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Status</Label>
+                            <Select
+                                value={activeCell.status}
+                                onValueChange={status => updateRealizationCell(cellEditor.rowIndex, cellEditor.costKey, { ...activeCell, status })}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="Outstanding">Outstanding</SelectItem>
+                                    <SelectItem value="Done">Done</SelectItem>
+                                    <SelectItem value="Cancel">Cancel</SelectItem>
+                                    <SelectItem value="Other">Other</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        {activeCell.status === "Other" ? (
+                            <div className="space-y-2">
+                                <Label>Remarks</Label>
+                                <Textarea
+                                    value={activeCell.remarks ?? ""}
+                                    onChange={event => updateRealizationCell(cellEditor.rowIndex, cellEditor.costKey, { ...activeCell, remarks: event.target.value })}
+                                    placeholder="Isi remarks"
+                                />
+                            </div>
+                        ) : null}
+                    </div>
+                ) : null}
+                <DialogFooter>
+                    <Button onClick={() => setCellEditor(null)}>Selesai</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+        </>
     );
 }
