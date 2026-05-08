@@ -335,8 +335,8 @@ export function DeliveryCostRequestDialog({ open, onOpenChange, editingRequest, 
                                     </Button>
                                 </div>
                             </div>
-                            <div className="overflow-x-auto">
-                                <Table>
+                            <div className="overflow-x-auto overscroll-x-contain">
+                                <Table className="min-w-[1600px]">
                                     <TableHeader>
                                         <TableRow className="bg-muted/30">
                                             <TableHead className="w-[50px]">NO</TableHead>
