@@ -223,15 +223,15 @@ export function DeliveryCostRequestDialog({ open, onOpenChange, editingRequest, 
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-[100vw] h-[100vh] sm:max-w-[95vw] sm:h-[90vh] flex flex-col p-0 overflow-hidden">
-                <DialogHeader className="p-6 border-b">
+            <DialogContent className="max-w-[100vw] max-h-[100dvh] sm:max-w-[95vw] sm:max-h-[90dvh] flex flex-col p-0 overflow-hidden">
+                <DialogHeader className="shrink-0 p-6 border-b">
                     <DialogTitle className="flex items-center gap-2">
                         <Calculator className="h-5 w-5 text-primary" />
                         {editingRequest ? "Edit Permintaan Biaya" : "Buat Permintaan Biaya Baru"}
                     </DialogTitle>
                 </DialogHeader>
 
-                <ScrollArea className="flex-1 p-6">
+                <ScrollArea className="min-h-0 flex-1 overflow-y-auto p-6">
                     <div className="space-y-8 pb-10">
                         {/* Header Info */}
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -502,7 +502,7 @@ export function DeliveryCostRequestDialog({ open, onOpenChange, editingRequest, 
                     </div>
                 </ScrollArea>
 
-                <DialogFooter className="p-6 border-t gap-2 bg-muted/20">
+                <DialogFooter className="shrink-0 p-6 border-t gap-2 bg-muted/20">
                     <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
                         Batal
                     </Button>
