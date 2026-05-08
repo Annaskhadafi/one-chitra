@@ -224,6 +224,13 @@ export function DeliveryCostRequestDialog({ open, onOpenChange, editingRequest, 
         return items[rowIndex]?.realizationDetails?.[costKey] ?? { status: "Outstanding", remarks: "" };
     };
 
+    const getRealizationCellClass = (rowIndex: number, costKey: string) => {
+        const status = getRealizationCell(rowIndex, costKey).status;
+        if (status === "Done") return "border-emerald-300 bg-emerald-50 text-emerald-800 hover:border-emerald-500 hover:bg-emerald-100";
+        if (status === "Cancel") return "border-rose-300 bg-rose-50 text-rose-800 hover:border-rose-500 hover:bg-rose-100";
+        return "border-border bg-background hover:border-primary hover:bg-primary/5";
+    };
+
     const totalRequest = items.reduce((sum, item) => sum + item.totalCost, 0);
 
     const handleSave = async () => {
@@ -554,7 +561,7 @@ export function DeliveryCostRequestDialog({ open, onOpenChange, editingRequest, 
                                                                 <button
                                                                     type="button"
                                                                     onClick={() => setCellEditor({ rowIndex: index, costKey: String(column.key), label: column.label })}
-                                                                    className="w-full rounded-md border bg-background px-2 py-2 text-right text-xs font-mono font-semibold transition hover:border-primary hover:bg-primary/5"
+                                                                    className={`w-full rounded-md border px-2 py-2 text-right text-xs font-mono font-semibold transition ${getRealizationCellClass(index, String(column.key))}`}
                                                                 >
                                                                     Rp {Number(item[column.key] ?? 0).toLocaleString("id-ID")}
                                                                 </button>
@@ -625,7 +632,10 @@ export function DeliveryCostRequestDialog({ open, onOpenChange, editingRequest, 
                             <Label>Status</Label>
                             <Select
                                 value={activeCell.status}
-                                onValueChange={status => updateRealizationCell(cellEditor.rowIndex, cellEditor.costKey, { ...activeCell, status })}
+                                onValueChange={status => {
+                                    updateRealizationCell(cellEditor.rowIndex, cellEditor.costKey, { ...activeCell, status });
+                                    if (status !== "Other") setCellEditor(null);
+                                }}
                             >
                                 <SelectTrigger>
                                     <SelectValue />
