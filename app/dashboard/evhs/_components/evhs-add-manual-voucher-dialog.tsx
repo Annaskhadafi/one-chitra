@@ -254,7 +254,7 @@ export function EvhsAddManualVoucherDialog({
         setIsSubmitting(true)
         try {
             const result = await createEvhsDraftVoucher({
-                date: selectedDate,
+                date: format(selectedDate, "yyyy-MM-dd"),
                 warehouseId,
                 woNo: woNo || undefined,
                 remark: remark || undefined,

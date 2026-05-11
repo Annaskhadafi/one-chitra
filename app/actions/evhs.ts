@@ -534,7 +534,7 @@ export async function confirmEvhsReceipt(data: z.infer<typeof _confirmReceiptSch
  */
 const _voucherSchema = z.object({
     woNo: z.string().optional(),
-    date: z.date(),
+    date: z.string(),
     warehouseId: z.number(),
     remark: z.string().optional(),
     approvedByName: z.string().optional(),
@@ -558,8 +558,7 @@ export async function createEvhsVoucher(data: z.infer<typeof _voucherSchema>) {
         await assertCurrentUserHasWarehouseAccess(data.warehouseId, "edit")
 
         // Generate VHS Number: VHS/CP/CK/YYYYMMDD-Random
-        const now = new Date()
-        const dateStr = now.toISOString().slice(0, 10).replace(/-/g, "")
+        const dateStr = data.date.replace(/-/g, "")
         const randomStr = Math.random().toString(36).substring(2, 7).toUpperCase()
         const vhsNo = `VHS/CP/CK/${dateStr}-${randomStr}`
 
@@ -757,7 +756,7 @@ export async function createEvhsVoucher(data: z.infer<typeof _voucherSchema>) {
             const [voucher] = await tx.insert(evhsVouchers).values({
                 vhsNo,
                 woNo: data.woNo,
-                date: data.date.toISOString().slice(0, 10), // Correct Date to string
+                date: data.date,
                 warehouseId: data.warehouseId,
                 remark: data.remark,
                 issuedBy: userId,
@@ -884,7 +883,7 @@ export async function updateEvhsUsage(data: z.infer<typeof _editUsageSchema>) {
 const _editVoucherSchema = z.object({
     id: z.number(),
     woNo: z.string().optional(),
-    date: z.date(),
+    date: z.string(),
     remark: z.string().optional(),
     approvedByName: z.string().optional(),
     receivedByName: z.string().optional(),
@@ -909,7 +908,7 @@ export async function updateEvhsVoucher(data: z.infer<typeof _editVoucherSchema>
         await db.update(evhsVouchers)
             .set({
                 woNo: data.woNo,
-                date: data.date.toISOString().slice(0, 10),
+                date: data.date,
                 remark: data.remark,
                 approvedByName: data.approvedByName,
                 receivedByName: data.receivedByName,
@@ -997,7 +996,7 @@ export async function deleteEvhsVoucher(voucherId: number) {
 
 const _draftVoucherSchema = z.object({
     woNo: z.string().optional(),
-    date: z.date(),
+    date: z.string(),
     warehouseId: z.number(),
     remark: z.string().optional(),
     approvedByName: z.string().optional(),
@@ -1032,8 +1031,7 @@ export async function createEvhsDraftVoucher(data: z.infer<typeof _draftVoucherS
             }
 
             // Generate nomor VHS
-            const now = new Date()
-            const dateStr = now.toISOString().slice(0, 10).replace(/-/g, "")
+            const dateStr = data.date.replace(/-/g, "")
             const randomStr = Math.random().toString(36).substring(2, 7).toUpperCase()
             const vhsNo = `VHS/CP/CK/${dateStr}-${randomStr}`
 
@@ -1041,7 +1039,7 @@ export async function createEvhsDraftVoucher(data: z.infer<typeof _draftVoucherS
             const [voucher] = await tx.insert(evhsVouchers).values({
                 vhsNo,
                 woNo: data.woNo,
-                date: data.date.toISOString().slice(0, 10),
+                date: data.date,
                 warehouseId: data.warehouseId,
                 remark: data.remark,
                 issuedBy: userId,

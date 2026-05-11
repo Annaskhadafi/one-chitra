@@ -84,7 +84,10 @@ export function EvhsEditVoucherDialog({
     const onSubmit = async (values: EditVoucherValues) => {
         setIsSubmitting(true)
         try {
-            const result = await updateEvhsVoucher(values)
+            const result = await updateEvhsVoucher({
+                ...values,
+                date: format(values.date, "yyyy-MM-dd"),
+            })
 
             if (result.success) {
                 toast.success("Berhasil memperbarui data Voucher.")
