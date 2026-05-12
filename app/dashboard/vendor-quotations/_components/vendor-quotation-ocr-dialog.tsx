@@ -503,7 +503,7 @@ export function VendorQuotationOcrDialog({ open, onOpenChange, initialUrl = "", 
                                 <div className="rounded-md border">
                                     <div className="flex items-center justify-between border-b px-4 py-2">
                                         <p className="text-xs font-semibold">Tabel Item</p>
-                                        <Button type="button" variant="outline" size="xs" onClick={handleAddItem} className="gap-1 h-7 text-[10px]">
+                                        <Button type="button" variant="outline" size="sm" onClick={handleAddItem} className="gap-1 h-7 text-[10px]">
                                             <Plus className="h-3 w-3" />
                                             Tambah Item
                                         </Button>

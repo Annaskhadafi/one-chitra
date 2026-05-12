@@ -823,6 +823,7 @@ export async function getA2RCompetitionData(rawFilters: z.input<typeof a2rCompet
             periods: Set<string>
             r49Points: number
             cosmeticPoints: number
+            cosmeticSerialNumbers: Set<string>
             inventoryPoints: number
             slowMovingPoints: number
         }>

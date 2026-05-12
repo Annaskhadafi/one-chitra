@@ -109,7 +109,8 @@ export async function getWipRepairInvoiceMappings(woNumbers: string[]): Promise<
       
       // It might match workOrder or poNo
       if (record.wo1 && uniqueWos.includes(record.wo1)) {
-        if (!result[record.wo1] || (formattedDate && (!result[record.wo1].tanggalInvoice || formattedDate > result[record.wo1].tanggalInvoice))) {
+        const currentMapping = result[record.wo1]
+        if (!currentMapping || (formattedDate && (!currentMapping.tanggalInvoice || formattedDate > currentMapping.tanggalInvoice))) {
           result[record.wo1] = {
             noInv: record.noInv,
             tanggalInvoice: formattedDate
@@ -118,7 +119,8 @@ export async function getWipRepairInvoiceMappings(woNumbers: string[]): Promise<
       }
       
       if (record.wo2 && uniqueWos.includes(record.wo2)) {
-         if (!result[record.wo2] || (formattedDate && (!result[record.wo2].tanggalInvoice || formattedDate > result[record.wo2].tanggalInvoice))) {
+        const currentMapping = result[record.wo2]
+         if (!currentMapping || (formattedDate && (!currentMapping.tanggalInvoice || formattedDate > currentMapping.tanggalInvoice))) {
           result[record.wo2] = {
             noInv: record.noInv,
             tanggalInvoice: formattedDate

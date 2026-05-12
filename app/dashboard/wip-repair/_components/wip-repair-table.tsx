@@ -1,7 +1,7 @@
 "use client"
 
-import { Fragment, useMemo, useState } from "react"
-import { Check, ChevronDown, ClipboardCopy, Search, Wrench, X, Download, Filter } from "lucide-react"
+import { Fragment, useEffect, useMemo, useState } from "react"
+import { Check, ChevronDown, ChevronLeft, ChevronRight, ClipboardCopy, Search, Wrench, X, Download, Filter } from "lucide-react"
 import { toast } from "sonner"
 import * as xlsx from "xlsx"
 
@@ -65,6 +65,20 @@ const TECO_DONE = "TECO_DONE"
 const TECO_PENDING = "TECO_PENDING"
 const MIGO_DONE = "MIGO_DONE"
 const MIGO_PENDING = "MIGO_PENDING"
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const
+const DETAIL_JOB_ORDER = [
+  "SKIVING",
+  "BUFFING",
+  "DIMENSI LUKA",
+  "CEMENTING",
+  "BUFFING INNERLINNER",
+  "INSTAL PATCH",
+  "BUILT UP",
+  "CURING",
+  "FINISHING",
+  "PAINTING",
+] as const
+const DETAIL_JOB_ORDER_INDEX = new Map<string, number>(DETAIL_JOB_ORDER.map((job, index) => [job, index]))
 
 type MultiSelectOption = {
   value: string
@@ -136,6 +150,29 @@ function getDetailGroupingKeys(detail: WipRepairWorkOrderDetailRecord) {
 
 function getNormalizedText(value: string | null | undefined) {
   return normalizeValue(value).toLowerCase()
+}
+
+function normalizeDetailJob(value: string | null | undefined) {
+  return normalizeValue(value)
+    .toUpperCase()
+    .replace(/\s+/g, " ")
+    .replace(/\bINSTALL\b/g, "INSTAL")
+    .replace(/\bINNERLINER\b/g, "INNERLINNER")
+    .replace(/\bBUILTUP\b/g, "BUILT UP")
+    .trim()
+}
+
+function hasVisibleDetailData(detail: WipRepairWorkOrderDetailRecord) {
+  return [
+    detail.job,
+    detail.material_id,
+    detail.material_name,
+    detail.category,
+    detail.qty,
+    detail.time,
+    detail.date,
+    detail.person,
+  ].some((value) => normalizeValue(value) !== "-")
 }
 
 function escapeRegExp(value: string) {
@@ -419,9 +456,15 @@ function getSortTimestamp(item: WipRepairRecord) {
 }
 
 function getDetailSortValue(detail: WipRepairWorkOrderDetailRecord) {
+  const orderedJobIndex = DETAIL_JOB_ORDER_INDEX.get(normalizeDetailJob(detail.job))
+
+  if (orderedJobIndex !== undefined) {
+    return orderedJobIndex
+  }
+
   const parsed = Number(detail.id_job)
 
-  return Number.isFinite(parsed) ? parsed : Number.MAX_SAFE_INTEGER
+  return Number.isFinite(parsed) ? DETAIL_JOB_ORDER.length + parsed : Number.MAX_SAFE_INTEGER
 }
 
 async function copyTextToClipboard(text: string) {
@@ -469,6 +512,8 @@ export function WipRepairTable({ data, workOrderDetails, invoiceMappings, pmoMap
   const [woPasteText, setWoPasteText] = useState("")
   const [expandedWorkOrders, setExpandedWorkOrders] = useState<Set<string>>(() => new Set())
   const [copiedSapKey, setCopiedSapKey] = useState<string | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState<(typeof PAGE_SIZE_OPTIONS)[number]>(25)
 
   const detailsByWorkOrder = useMemo(() => {
     const grouped = workOrderDetails.reduce<Record<string, WipRepairWorkOrderDetailRecord[]>>((accumulator, detail) => {
@@ -480,7 +525,9 @@ export function WipRepairTable({ data, workOrderDetails, invoiceMappings, pmoMap
 
       for (const key of keys) {
         accumulator[key] ??= []
-        accumulator[key].push(detail)
+        if (hasVisibleDetailData(detail)) {
+          accumulator[key].push(detail)
+        }
       }
 
       return accumulator
@@ -591,6 +638,23 @@ export function WipRepairTable({ data, workOrderDetails, invoiceMappings, pmoMap
       })
       .sort((left, right) => getSortTimestamp(right) - getSortTimestamp(left))
   }, [brandFilter, customerFilters, data, detailsByWorkOrder, injuryFilters, invoiceFilter, invoiceMappings, migoFilter, pmoMappings, query, repairMasterSites, siteFilter, sizeFilters, statusFilter, storeLocFilter, tecoFilter, woFilters])
+
+  const totalPages = Math.max(1, Math.ceil(filteredData.length / pageSize))
+  const safePage = Math.min(currentPage, totalPages)
+  const pageStartIndex = (safePage - 1) * pageSize
+  const pageEndIndex = Math.min(pageStartIndex + pageSize, filteredData.length)
+  const paginatedData = filteredData.slice(pageStartIndex, pageEndIndex)
+  const displayStart = filteredData.length > 0 ? pageStartIndex + 1 : 0
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [query, statusFilter, storeLocFilter, siteFilter, brandFilter, customerFilters, sizeFilters, injuryFilters, invoiceFilter, tecoFilter, migoFilter, woFilters, pageSize])
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages)
+    }
+  }, [currentPage, totalPages])
 
   function toggleWorkOrder(wo: string) {
     setExpandedWorkOrders((current) => {
@@ -905,7 +969,7 @@ export function WipRepairTable({ data, workOrderDetails, invoiceMappings, pmoMap
             </TableHeader>
             <TableBody>
               {filteredData.length > 0 ? (
-                filteredData.map((item) => {
+                paginatedData.map((item) => {
                   const workOrder = normalizeValue(item.wo)
                   const detailKey = getWorkOrderDetailKey(item)
                   const details = getDetailLookupKeys(item).flatMap((key) => detailsByWorkOrder[key] ?? [])
@@ -1122,9 +1186,60 @@ export function WipRepairTable({ data, workOrderDetails, invoiceMappings, pmoMap
         </div>
       </Card>
 
-      <p className="text-right text-xs text-muted-foreground">
-        Menampilkan <span className="tabular-nums">{filteredData.length.toLocaleString("id-ID")}</span> dari <span className="tabular-nums">{data.length.toLocaleString("id-ID")}</span> data WIP Repair
-      </p>
+      <div className="flex flex-col gap-3 text-xs text-muted-foreground md:flex-row md:items-center md:justify-between">
+        <p>
+          Menampilkan{" "}
+          <span className="tabular-nums">
+            {displayStart.toLocaleString("id-ID")}-{pageEndIndex.toLocaleString("id-ID")}
+          </span>{" "}
+          dari <span className="tabular-nums">{filteredData.length.toLocaleString("id-ID")}</span> data terfilter
+          <span className="tabular-nums"> (total {data.length.toLocaleString("id-ID")} data)</span>
+        </p>
+        <div className="flex flex-wrap items-center gap-2 md:justify-end md:pr-24">
+          <Select
+            value={String(pageSize)}
+            onValueChange={(value) => setPageSize(Number(value) as (typeof PAGE_SIZE_OPTIONS)[number])}
+          >
+            <SelectTrigger className="h-9 w-[116px] rounded-xl">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PAGE_SIZE_OPTIONS.map((option) => (
+                <SelectItem key={option} value={String(option)}>
+                  {option} / halaman
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <div className="flex items-center gap-1">
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-9 w-9 rounded-xl"
+              disabled={safePage <= 1}
+              onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+              aria-label="Halaman sebelumnya"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="min-w-24 text-center tabular-nums">
+              Halaman {safePage.toLocaleString("id-ID")} / {totalPages.toLocaleString("id-ID")}
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-9 w-9 rounded-xl"
+              disabled={safePage >= totalPages}
+              onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+              aria-label="Halaman berikutnya"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

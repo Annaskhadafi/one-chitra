@@ -274,6 +274,28 @@ function normalizeEvhsPrice(value?: string | number | null) {
     return Number.isFinite(numericValue) ? numericValue : null
 }
 
+const evhsVoucherDateInputSchema = z.union([z.string(), z.date()])
+
+function formatEvhsVoucherDateInput(date: z.infer<typeof evhsVoucherDateInputSchema>) {
+    if (date instanceof Date) {
+        if (Number.isNaN(date.getTime())) {
+            throw new Error("Tanggal voucher tidak valid.")
+        }
+
+        const year = date.getFullYear()
+        const month = String(date.getMonth() + 1).padStart(2, "0")
+        const day = String(date.getDate()).padStart(2, "0")
+        return `${year}-${month}-${day}`
+    }
+
+    const trimmedDate = date.trim()
+    if (!trimmedDate) {
+        throw new Error("Tanggal voucher wajib diisi.")
+    }
+
+    return trimmedDate
+}
+
 function getEvhsVoucherItemUnitPrice(
     masterPrices: CkMasterPriceReference[],
     warehouseId: number,
@@ -534,7 +556,7 @@ export async function confirmEvhsReceipt(data: z.infer<typeof _confirmReceiptSch
  */
 const _voucherSchema = z.object({
     woNo: z.string().optional(),
-    date: z.string(),
+    date: evhsVoucherDateInputSchema,
     warehouseId: z.number(),
     remark: z.string().optional(),
     approvedByName: z.string().optional(),
@@ -556,9 +578,10 @@ export async function createEvhsVoucher(data: z.infer<typeof _voucherSchema>) {
         const session = await getAuthenticatedSession('evhs', 'create')
         const userId = session.user.id
         await assertCurrentUserHasWarehouseAccess(data.warehouseId, "edit")
+        const voucherDate = formatEvhsVoucherDateInput(data.date)
 
         // Generate VHS Number: VHS/CP/CK/YYYYMMDD-Random
-        const dateStr = data.date.replace(/-/g, "")
+        const dateStr = voucherDate.replace(/-/g, "")
         const randomStr = Math.random().toString(36).substring(2, 7).toUpperCase()
         const vhsNo = `VHS/CP/CK/${dateStr}-${randomStr}`
 
@@ -756,7 +779,7 @@ export async function createEvhsVoucher(data: z.infer<typeof _voucherSchema>) {
             const [voucher] = await tx.insert(evhsVouchers).values({
                 vhsNo,
                 woNo: data.woNo,
-                date: data.date,
+                date: voucherDate,
                 warehouseId: data.warehouseId,
                 remark: data.remark,
                 issuedBy: userId,
@@ -996,7 +1019,7 @@ export async function deleteEvhsVoucher(voucherId: number) {
 
 const _draftVoucherSchema = z.object({
     woNo: z.string().optional(),
-    date: z.string(),
+    date: evhsVoucherDateInputSchema,
     warehouseId: z.number(),
     remark: z.string().optional(),
     approvedByName: z.string().optional(),
@@ -1017,6 +1040,7 @@ export async function createEvhsDraftVoucher(data: z.infer<typeof _draftVoucherS
         const session = await getAuthenticatedSession('evhs', 'create')
         const userId = session.user.id
         await assertCurrentUserHasWarehouseAccess(data.warehouseId, "edit")
+        const voucherDate = formatEvhsVoucherDateInput(data.date)
 
         return await db.transaction(async (tx) => {
             const warehouse = await tx.query.warehouses.findFirst({
@@ -1031,7 +1055,7 @@ export async function createEvhsDraftVoucher(data: z.infer<typeof _draftVoucherS
             }
 
             // Generate nomor VHS
-            const dateStr = data.date.replace(/-/g, "")
+            const dateStr = voucherDate.replace(/-/g, "")
             const randomStr = Math.random().toString(36).substring(2, 7).toUpperCase()
             const vhsNo = `VHS/CP/CK/${dateStr}-${randomStr}`
 
@@ -1039,7 +1063,7 @@ export async function createEvhsDraftVoucher(data: z.infer<typeof _draftVoucherS
             const [voucher] = await tx.insert(evhsVouchers).values({
                 vhsNo,
                 woNo: data.woNo,
-                date: data.date,
+                date: voucherDate,
                 warehouseId: data.warehouseId,
                 remark: data.remark,
                 issuedBy: userId,

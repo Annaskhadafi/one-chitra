@@ -54,7 +54,6 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 
-type FilterMode = "current" | "ytd" | "custom"
 type FilterMode = "current" | "ytd" | "custom" | "april" | "mei" | "juni" | "juli" | "agustus" | "september" | "oktober" | "november" | "desember"
 
 type PeriodLabel = {
@@ -483,16 +482,6 @@ function TargetSetupDialog({
     const [isSaving, startSavingTransition] = useTransition()
 
     useEffect(() => {
-        if (!open) {
-            return
-        }
-
-        if (!selectedPeriod && periods[0]?.period) {
-            setSelectedPeriod(periods[0].period)
-        }
-    }, [open, periods, selectedPeriod])
-
-    useEffect(() => {
         if (!open || !selectedPeriod) {
             return
         }
@@ -654,6 +643,17 @@ export function A2RCompetitionClient({
     const currentYear = currentDate.getFullYear()
     const currentMonth = currentDate.getMonth() + 1 // 1-12
     const a2rStartMonth = 4 // April
+    const monthFilterMap: Record<string, string> = {
+        april: "04",
+        mei: "05",
+        juni: "06",
+        juli: "07",
+        agustus: "08",
+        september: "09",
+        oktober: "10",
+        november: "11",
+        desember: "12",
+    }
 
     // Get YTD months from April to current month
     const getYTDMonths = (year: number) => {
@@ -684,67 +684,58 @@ export function A2RCompetitionClient({
         return months.length > 0 ? months : availableForYear
     }
 
-    // Update selected months when filter mode changes
-    useEffect(() => {
-        const monthFilterMap: Record<string, string> = {
-            april: "04",
-            mei: "05",
-            juni: "06",
-            juli: "07",
-            agustus: "08",
-            september: "09",
-            oktober: "10",
-            november: "11",
-            desember: "12",
+    function refreshData(nextYear = selectedYear, nextMonths = selectedMonths) {
+        startTransition(async () => {
+            const response = await getA2RCompetitionData({
+                year: nextYear,
+                months: nextMonths,
+            })
+
+            if (!response.success) {
+                toast.error("Gagal memuat data A2R competition")
+                return
+            }
+
+            setData(normalizeCompetitionData(response.data))
+        })
+    }
+
+    const getMonthsForFilterMode = (mode: FilterMode, year: number) => {
+        const months = monthsByYear[year] || []
+
+        if (mode in monthFilterMap) {
+            const monthStr = monthFilterMap[mode]
+            return months.includes(monthStr) ? [monthStr] : months.slice(0, 1)
         }
 
-        if (filterMode in monthFilterMap) {
-            // Single month filter
-            const monthStr = monthFilterMap[filterMode]
-            const availableForYear = monthsByYear[selectedYear] || []
-            const newMonths = availableForYear.includes(monthStr) ? [monthStr] : availableForYear.slice(0, 1)
-            
-            if (newMonths.length > 0) {
-                setSelectedMonths(newMonths)
-                refreshData(selectedYear, newMonths)
-            }
-        } else if (filterMode === "current") {
-            const availableForYear = monthsByYear[selectedYear] || []
-            let newMonths: string[]
-            
-            if (selectedYear === currentYear) {
+        if (mode === "current") {
+            if (year === currentYear) {
                 const currentMonthStr = String(currentMonth).padStart(2, "0")
-                newMonths = availableForYear.includes(currentMonthStr) ? [currentMonthStr] : availableForYear.slice(0, 1)
-            } else {
-                // For other years, default to first available month (usually April)
-                newMonths = availableForYear.slice(0, 1)
+                return months.includes(currentMonthStr) ? [currentMonthStr] : months.slice(0, 1)
             }
-            
-            if (newMonths.length > 0) {
-                setSelectedMonths(newMonths)
-                refreshData(selectedYear, newMonths)
-            }
-        } else if (filterMode === "ytd") {
-            const newMonths = getYTDMonths(selectedYear)
-            if (newMonths.length > 0) {
-                setSelectedMonths(newMonths)
-                refreshData(selectedYear, newMonths)
-            }
-        }
-        // For custom mode, keep the manually selected months
-    }, [filterMode])
 
-    const availableMonths = useMemo(() => monthsByYear[selectedYear] || [], [monthsByYear, selectedYear])
-    const periods = useMemo(
-        () => {
-            const monthNames = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"]
-            return availableMonths.map((month) => ({
-                period: `${month}.${selectedYear}`,
-                label: `${monthNames[Number(month) - 1] || month} ${selectedYear}`,
-            }))
-        },
-        [availableMonths, selectedYear]
-    )
+            return months.slice(0, 1)
+        }
+
+        if (mode === "ytd") {
+            return getYTDMonths(year)
+        }
+
+        return months
+    }
+
+    const handleFilterModeChange = (mode: FilterMode) => {
+        setFilterMode(mode)
+        const newMonths = getMonthsForFilterMode(mode, selectedYear)
+        if (newMonths.length === 0) {
+            return
+        }
+
+        setSelectedMonths(newMonths)
+        refreshData(selectedYear, newMonths)
+    }
+
+    const availableMonths = monthsByYear[selectedYear] || []
 
     // All periods for target setup (April to December for selected year)
     const allTargetPeriods = useMemo(() => {
@@ -763,59 +754,10 @@ export function A2RCompetitionClient({
         return targetPeriods
     }, [selectedYear])
 
-    const refreshData = (nextYear = selectedYear, nextMonths = selectedMonths) => {
-        startTransition(async () => {
-            const response = await getA2RCompetitionData({
-                year: nextYear,
-                months: nextMonths,
-            })
-
-            if (!response.success) {
-                toast.error("Gagal memuat data A2R competition")
-                return
-            }
-
-            setData(normalizeCompetitionData(response.data))
-        })
-    }
-
     const handleYearChange = (year: number) => {
-        const months = monthsByYear[year] || []
         setSelectedYear(year)
-        
-        const monthFilterMap: Record<string, string> = {
-            april: "04",
-            mei: "05",
-            juni: "06",
-            juli: "07",
-            agustus: "08",
-            september: "09",
-            oktober: "10",
-            november: "11",
-            desember: "12",
-        }
 
-        // Apply filter mode logic when year changes
-        let newMonths: string[]
-        
-        if (filterMode in monthFilterMap) {
-            // Single month filter
-            const monthStr = monthFilterMap[filterMode]
-            newMonths = months.includes(monthStr) ? [monthStr] : months.slice(0, 1)
-        } else if (filterMode === "current") {
-            if (year === currentYear) {
-                const currentMonthStr = String(currentMonth).padStart(2, "0")
-                newMonths = months.includes(currentMonthStr) ? [currentMonthStr] : months.slice(0, 1)
-            } else {
-                newMonths = months.slice(0, 1)
-            }
-        } else if (filterMode === "ytd") {
-            newMonths = getYTDMonths(year)
-        } else {
-            // Custom mode: use all available months
-            newMonths = months
-        }
-        
+        const newMonths = getMonthsForFilterMode(filterMode, year)
         setSelectedMonths(newMonths)
         refreshData(year, newMonths)
     }
@@ -900,7 +842,7 @@ export function A2RCompetitionClient({
                         <div className="flex flex-col gap-4">
                             <div className="flex flex-col gap-2">
                                 <label className="text-sm font-semibold text-slate-700">Mode Filter:</label>
-                                <Select value={filterMode} onValueChange={(value) => setFilterMode(value as FilterMode)}>
+                                <Select value={filterMode} onValueChange={(value) => handleFilterModeChange(value as FilterMode)}>
                                     <SelectTrigger className="w-full">
                                         <SelectValue />
                                     </SelectTrigger>

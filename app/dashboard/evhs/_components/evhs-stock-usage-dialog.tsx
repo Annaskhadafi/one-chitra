@@ -36,7 +36,7 @@ const usageSchema = z.object({
     additionalItems: z.array(z.object({
         productId: z.number().min(1, "Produk harus dipilih"),
         qty: z.number().min(1, "Qty minimal 1"),
-    })).default([]),
+    })),
 })
 
 type UsageValues = z.infer<typeof usageSchema>

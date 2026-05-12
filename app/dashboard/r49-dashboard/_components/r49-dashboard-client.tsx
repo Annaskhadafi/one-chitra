@@ -45,6 +45,8 @@ interface R49DashboardClientProps {
     }
 }
 
+type R49MultiFilterKey = "years" | "months" | "salesman" | "customers" | "matGrp2Desc"
+
 function getDefaultR49Filters(initialFilterOptions: R49DashboardClientProps["initialFilterOptions"]) {
     const today = new Date();
     const currentYear = String(today.getFullYear());
@@ -102,9 +104,9 @@ export function R49DashboardClient({ initialFilterOptions }: R49DashboardClientP
         }
     };
 
-    const toggleFilter = (key: keyof typeof filters, value: string) => {
+    const toggleFilter = (key: R49MultiFilterKey, value: string) => {
         setFilters(prev => {
-            const current = (prev[key] as string[]);
+            const current = prev[key];
             if (current.includes(value)) {
                 return { ...prev, [key]: current.filter(v => v !== value), page: 1 };
             } else {
@@ -140,7 +142,9 @@ export function R49DashboardClient({ initialFilterOptions }: R49DashboardClientP
         }
     };
 
-    const years = data?.pivotTable ? Array.from(new Set(data.pivotTable.map((d: any) => d.year))).sort().reverse() : [];
+    const years = data?.pivotTable
+        ? Array.from(new Set<string>(data.pivotTable.map((d: any) => String(d.year)))).sort().reverse()
+        : [];
     console.log("Dashboard data:", { pivotTable: data?.pivotTable?.length, customerOrder: data?.customerOrder?.length, years: years.length, isLoading });
 
     return (
@@ -180,7 +184,7 @@ export function R49DashboardClient({ initialFilterOptions }: R49DashboardClientP
                                 icon={<User className="h-3 w-3" />}
                                 options={initialFilterOptions.salesmen}
                                 selected={filters.salesman}
-                                onToggle={(val) => toggleFilter('Salesman', val)}
+                                onToggle={(val) => toggleFilter('salesman', val)}
                             />
                         </div>
                         <div className="space-y-1">
