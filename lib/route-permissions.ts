@@ -60,6 +60,7 @@ export const dashboardRoutePermissionRules: DashboardRoutePermissionRule[] = [
     { prefix: "/dashboard/revenue-forecast", resource: "revenue-forecast" },
     { prefix: "/dashboard/revenue-ml", resource: "revenue-forecast" },
     { prefix: "/dashboard/sales-dashboard", resource: "sales-dashboard" },
+    { prefix: "/dashboard/tire-performance", resource: "sales-dashboard" },
     { prefix: "/dashboard/sales-documents", resource: "sales-documents" },
     { prefix: "/dashboard/sales-orders", resource: "sales-orders" },
     { prefix: "/dashboard/summary-order", resource: "sales-order-summary" },
