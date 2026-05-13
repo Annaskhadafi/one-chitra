@@ -62,6 +62,42 @@ export function stringifyImportCell(value: unknown) {
     return String(value).trim()
 }
 
+/**
+ * Convert a date value to "Mon YYYY" format (e.g. "Mar 2024").
+ * Handles Excel serial dates, Date objects, and date strings.
+ */
+function toMonthYear(value: unknown): string {
+    if (value === null || value === undefined) return ""
+
+    let date: Date | null = null
+
+    if (value instanceof Date) {
+        date = value
+    } else {
+        const raw = String(value).trim()
+        if (!raw) return ""
+
+        // Excel serial date number
+        const num = Number(raw)
+        if (Number.isFinite(num) && num > 0 && num < 2958466) {
+            // Excel epoch is 1900-01-01, but has a leap year bug (+1 day offset for dates after Feb 28 1900)
+            const excelEpoch = new Date(1899, 11, 30)
+            date = new Date(excelEpoch.getTime() + num * 86400000)
+        } else {
+            // Try parsing as date string
+            const parsed = new Date(raw)
+            if (!isNaN(parsed.getTime())) {
+                date = parsed
+            }
+        }
+    }
+
+    if (!date || isNaN(date.getTime())) return String(value).trim()
+
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    return `${months[date.getMonth()]} ${date.getFullYear()}`
+}
+
 export function parseImportNumber(value: unknown) {
     const raw = stringifyImportCell(value)
         .replace(/\s/g, "")
@@ -82,9 +118,21 @@ export function normalizeTirePerformanceImportRow(
     type: TirePerformanceType,
 ): TirePerformanceInput {
     const rawRecordCount = Math.max(0, Math.round(parseImportNumber(pickImportValue(row, HEADER_ALIASES.recordCount))))
+
+    // For scrap type, convert Date Removed to month-year format
+    let performanceDate: string
+    if (type === "scrap") {
+        const dateAliases = HEADER_ALIASES.performanceDate
+        const normalizedAliases = new Set(dateAliases)
+        const entry = Object.entries(row).find(([key]) => normalizedAliases.has(normalizeImportHeader(key)))
+        performanceDate = entry ? toMonthYear(entry[1]) : ""
+    } else {
+        performanceDate = pickImportValue(row, HEADER_ALIASES.performanceDate)
+    }
+
     return {
         type,
-        performanceDate: pickImportValue(row, HEADER_ALIASES.performanceDate),
+        performanceDate,
         endUser: pickImportValue(row, HEADER_ALIASES.endUser),
         mineSite: pickImportValue(row, HEADER_ALIASES.mineSite),
         manufacture: pickImportValue(row, HEADER_ALIASES.manufacture),
