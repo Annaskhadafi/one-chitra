@@ -32,6 +32,7 @@ import { LogisticsMasterPriceModal } from "@/components/logistics-master-price-m
 import { VendorQuotationSearchModal } from "@/components/vendor-quotation-search-modal"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
+import { DEFAULT_QUOTATION_TERMS, normalizeQuotationText } from "@/lib/quotation-text"
 import {
     Dialog,
     DialogContent,
@@ -456,13 +457,11 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
     const [currency, setCurrency] = useState(initialData?.currency || "IDR")
     const [referenceNumber, setReferenceNumber] = useState(initialData?.referenceNumber || "")
     const [adminNote, setAdminNote] = useState(initialData?.adminNote || "")
-    const [clientNote, setClientNote] = useState(initialData?.clientNote || "")
+    const [clientNote, setClientNote] = useState(normalizeQuotationText(initialData?.clientNote) || "")
     const [discountType, setDiscountType] = useState<"fixed" | "percent">(initialData?.discountType === "percent" ? "percent" : "fixed")
     const [status, setStatus] = useState(initialData?.status || "draft")
     const [paymentTerms, setPaymentTerms] = useState(initialData?.paymentTerms || "")
-    const [termsConditions, setTermsConditions] = useState(
-        initialData?.termsConditions || "Payment Terms : 30 days after Date Invoice\nStock :\nDDP :\nExclude Tax\n\nPT. CHITRA PARATAMA\nBANK MANDIRI\nBranch Cilandak KKO, Jakarta Selatan 12560\nIDR A/C NO:127 â€“ 000 â€“ 00 â€“ 17416"
-    )
+    const [termsConditions, setTermsConditions] = useState(normalizeQuotationText(initialData?.termsConditions) || DEFAULT_QUOTATION_TERMS)
     const [notes, setNotes] = useState(initialData?.notes || "")
     const [discount, setDiscount] = useState(Number(initialData?.discount || 0))
     const [tax] = useState(Number(initialData?.tax || 0))

@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { toast } from "sonner"
 import Link from "next/link"
+import { normalizeQuotationText } from "@/lib/quotation-text"
 import {
     ArrowLeft,
     Pencil,
@@ -749,7 +750,7 @@ export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDet
                         {quotation.termsConditions && (
                             <div>
                                 <p className="text-sm font-medium text-muted-foreground mb-1">Terms & Conditions</p>
-                                <p className="text-sm whitespace-pre-line">{quotation.termsConditions}</p>
+                                <p className="text-sm whitespace-pre-line">{normalizeQuotationText(quotation.termsConditions)}</p>
                             </div>
                         )}
                         {quotation.notes && (

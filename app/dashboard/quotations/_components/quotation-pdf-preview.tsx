@@ -14,6 +14,7 @@ import { toast } from "sonner"
 import type { Customer, Product } from "@/lib/types"
 import type { user } from "@/db/schema"
 import type { InferSelectModel } from "drizzle-orm"
+import { normalizeQuotationText } from "@/lib/quotation-text"
 import { buildQuotationPdfPayload } from "./quotation-pdf-generator"
 
 type User = InferSelectModel<typeof user>
@@ -518,7 +519,7 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                                                     >
                                                         <div style={{ fontSize: "8pt", fontWeight: 700, color: "#1e293b", marginBottom: "1.5mm", borderBottom: "1px solid #e2e8f0", paddingBottom: "1mm" }}>TERMS & CONDITIONS</div>
                                                         <div style={{ fontSize: "7pt", color: "#475569", lineHeight: 1.35, whiteSpace: "pre-line" }}>
-                                                            {[quotation.termsConditions, quotation.clientNote].filter(Boolean).join("\n\n") || "-"}
+                                                            {[normalizeQuotationText(quotation.termsConditions), normalizeQuotationText(quotation.clientNote)].filter(Boolean).join("\n\n") || "-"}
                                                         </div>
                                                     </div>
                                                 </div>

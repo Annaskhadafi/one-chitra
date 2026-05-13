@@ -1,5 +1,6 @@
 ﻿import { toast } from "sonner"
 import type { Customer, Product } from "@/lib/types"
+import { normalizeQuotationText } from "@/lib/quotation-text"
 import { resolveUploadDocumentUrl } from "@/lib/upload-url"
 
 interface QuotationPdfData {
@@ -106,8 +107,8 @@ export function buildQuotationPdfPayload(source: QuotationPdfPayloadSource): Quo
         discount: source.discount,
         tax: source.tax,
         shipping: source.shipping,
-        termsConditions: source.termsConditions,
-        clientNote: source.clientNote,
+        termsConditions: normalizeQuotationText(source.termsConditions) ?? null,
+        clientNote: normalizeQuotationText(source.clientNote) ?? null,
         items: source.items.map((item) => ({
             product: item.product,
             description: item.description,
@@ -578,7 +579,7 @@ export async function generateQuotationPdf(
             doc.setFont("helvetica", "normal")
             doc.setTextColor(grayText[0], grayText[1], grayText[2])
             
-            const termsText = [quotation.termsConditions, quotation.clientNote].filter(Boolean).join("\n\n")
+            const termsText = [normalizeQuotationText(quotation.termsConditions), normalizeQuotationText(quotation.clientNote)].filter(Boolean).join("\n\n")
             const formattedTerms = doc.splitTextToSize(termsText, 170)
             doc.text(formattedTerms, 20, termsY)
             finalY = termsY + (formattedTerms.length * 4) + 12
