@@ -46,8 +46,8 @@ const HEADER_ALIASES = {
     endUser: ["enduser", "customer", "customername", "user"],
     mineSite: ["minesite", "site", "minesitearea"],
     manufacture: ["manufacture", "manufacturer", "brand", "merk"],
-    specification: ["specification", "spec", "size", "tirespecification"],
-    avgHours: ["avghours", "averagehours", "averagehour", "hours", "hm"],
+    specification: ["specification", "spesification", "spec", "size", "tirespecification"],
+    avgHours: ["avghours", "averagehours", "averagehour", "hours", "hm", "totalh"],
     recordCount: ["recordcount", "recordcou", "count", "qty", "totalrecord"],
     remarks: ["remarks", "remark", "note", "notes", "keterangan"],
 }
@@ -81,6 +81,7 @@ export function normalizeTirePerformanceImportRow(
     row: Record<string, unknown>,
     type: TirePerformanceType,
 ): TirePerformanceInput {
+    const rawRecordCount = Math.max(0, Math.round(parseImportNumber(pickImportValue(row, HEADER_ALIASES.recordCount))))
     return {
         type,
         performanceDate: pickImportValue(row, HEADER_ALIASES.performanceDate),
@@ -89,7 +90,7 @@ export function normalizeTirePerformanceImportRow(
         manufacture: pickImportValue(row, HEADER_ALIASES.manufacture),
         specification: pickImportValue(row, HEADER_ALIASES.specification),
         avgHours: String(parseImportNumber(pickImportValue(row, HEADER_ALIASES.avgHours))),
-        recordCount: Math.max(0, Math.round(parseImportNumber(pickImportValue(row, HEADER_ALIASES.recordCount)))),
+        recordCount: rawRecordCount > 0 ? rawRecordCount : 1,
         remarks: pickImportValue(row, HEADER_ALIASES.remarks),
     }
 }
