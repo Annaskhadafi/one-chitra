@@ -61,10 +61,6 @@ type LostSaleRecord = {
     customer: string
     productDetail: string
     reason: string
-    totalOffering: number
-    competitor: string
-    competitorPrice: number
-    competitorProduct: string
     remark: string
     actionPlan: string
 }
@@ -155,6 +151,29 @@ async function fetchSheet(gid: string) {
     }).data
 }
 
+function normalizeBrand(raw: string) {
+    const cleaned = cleanText(raw).toUpperCase();
+    if (cleaned.includes("GOOD") && cleaned.includes("YEAR")) return "Goodyear";
+    if (cleaned.includes("MICHELIN")) return "Michelin";
+    if (cleaned.includes("BRIDGESTONE")) return "Bridgestone";
+    if (cleaned.includes("YOKOHAMA")) return "Yokohama";
+    if (cleaned.includes("MAXAM")) return "Maxam";
+    if (cleaned.includes("BKT")) return "BKT";
+    if (cleaned.includes("ADVANCE")) return "Advance";
+    if (cleaned.includes("TRIANGLE")) return "Triangle";
+    if (cleaned.includes("AEOLUS")) return "Aeolus";
+    if (cleaned.includes("SAILUN")) return "Sailun";
+    if (cleaned.includes("LINGLONG")) return "Linglong";
+    if (cleaned.includes("TECHKING")) return "Techking";
+    if (cleaned.includes("MAGNA")) return "Magna";
+    if (cleaned.includes("GALAXY")) return "Galaxy";
+    if (cleaned.includes("TRELLEBORG")) return "Trelleborg";
+    if (cleaned.includes("AMBERSTONE")) return "Amberstone";
+    if (cleaned.includes("HENAN")) return "Henan";
+    if (!raw) return "Unknown";
+    return raw.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+}
+
 function parsePrice(row: SheetRow, index: number): CompetitorPriceRecord | null {
     const customer = getField(row, ["Nama Customer"])
     const size = getField(row, ["Size Tire"])
@@ -166,7 +185,7 @@ function parsePrice(row: SheetRow, index: number): CompetitorPriceRecord | null 
         consultant: getField(row, ["Business Consultant"]),
         customer,
         size,
-        brand,
+        brand: normalizeBrand(brand),
         category: getField(row, ["Category Tire"]),
         supplier: getField(row, ["Supplier"]),
         currency: getField(row, ["Currency"]) || "IDR",
@@ -208,10 +227,6 @@ function parseLostSale(row: SheetRow, index: number): LostSaleRecord | null {
         customer,
         productDetail,
         reason: getField(row, ["Penyebab Lost Sale"]) || "OTHER",
-        totalOffering: parseMoney(getField(row, ["Total Penawaran"])),
-        competitor: getField(row, ["Competitor"]),
-        competitorPrice: parseMoney(getField(row, ["Competitor Price"])),
-        competitorProduct: getField(row, ["Product"]),
         remark: getField(row, ["Remark"]),
         actionPlan: getField(row, ["Action Plan"]),
     }
@@ -240,14 +255,6 @@ function sizeSegment(size: string, price: number) {
     if (size.includes("24.00R35") || size.includes("33.25R29") || price >= 60_000_000) return "Large"
     if (price >= 30_000_000) return "Medium"
     return "Small"
-}
-
-function varianceType(lost: LostSaleRecord) {
-    if (!lost.competitorPrice || !lost.totalOffering) return "No competitor price"
-    const gap = lost.totalOffering - lost.competitorPrice
-    if (gap > 0) return "Competitor cheaper"
-    if (gap < 0) return "We are cheaper"
-    return "Same price"
 }
 
 function inDateRange(date: Date | null, startDate: string, endDate: string) {
@@ -316,7 +323,7 @@ export function CompetitorDashboardTab({ scope = "all" }: { scope?: DashboardSco
                 && inDateRange(item.date, startDate, endDate)
         })
         const lostSales = rawData.lostSales.filter((item) => {
-            return [item.customer, item.productDetail, item.competitor, item.reason, item.consultant].join(" ").toLowerCase().includes(query)
+            return [item.customer, item.productDetail, item.reason, item.consultant].join(" ").toLowerCase().includes(query)
                 && (reasonFilter === "all" || item.reason === reasonFilter)
                 && inDateRange(item.date, startDate, endDate)
         })
@@ -324,30 +331,28 @@ export function CompetitorDashboardTab({ scope = "all" }: { scope?: DashboardSco
     }, [rawData, reasonFilter, search, segmentFilter, impactFilter, startDate, endDate])
 
     const stats = useMemo(() => {
-        const totalLostValue = filtered.lostSales.reduce((sum, item) => sum + item.totalOffering, 0)
         const topReason = aggregate(filtered.lostSales.map((item) => item.reason), 1)[0]?.name ?? "-"
         const highImpact = filtered.activities.filter((item) => item.businessImpact === "Tinggi").length
         const median27 = filtered.prices.filter((item) => item.size.includes("27.00R49")).map((item) => item.price).sort((a, b) => a - b)
         const median27Price = median27.length ? median27[Math.floor(median27.length / 2)] : 0
-        return { totalLostValue, topReason, highImpact, median27Price }
+        return { topReason, highImpact, median27Price }
     }, [filtered])
 
     const brandChart = useMemo(() => aggregate(filtered.prices.map((item) => item.brand)), [filtered.prices])
     const segmentChart = useMemo(() => aggregate(filtered.prices.map((item) => sizeSegment(item.size, item.price))), [filtered.prices])
     const activityChart = useMemo(() => aggregate(filtered.activities.map((item) => item.activityType)), [filtered.activities])
     const impactChart = useMemo(() => aggregate(filtered.activities.map((item) => item.businessImpact)), [filtered.activities])
-    const reasonChart = useMemo(() => aggregateMoney(filtered.lostSales.map((item) => ({ name: item.reason, value: item.totalOffering }))), [filtered.lostSales])
-    const competitorChart = useMemo(() => aggregateMoney(filtered.lostSales.map((item) => ({ name: item.competitor || "Unknown", value: item.totalOffering }))), [filtered.lostSales])
-    const varianceChart = useMemo(() => aggregate(filtered.lostSales.map(varianceType)), [filtered.lostSales])
+    const reasonChart = useMemo(() => aggregate(filtered.lostSales.map((item) => item.reason)), [filtered.lostSales])
+    const customerLostChart = useMemo(() => aggregate(filtered.lostSales.map((item) => item.customer)), [filtered.lostSales])
     const consultantChart = useMemo(() => aggregate([...filtered.lostSales.map((item) => item.consultant), ...filtered.activities.map((item) => item.consultant), ...filtered.prices.map((item) => item.consultant)]), [filtered])
     const reasons = useMemo(() => aggregate(rawData.lostSales.map((item) => item.reason), 40).map((item) => item.name), [rawData.lostSales])
     const impacts = useMemo(() => aggregate(rawData.activities.map((item) => item.businessImpact), 40).map((item) => item.name), [rawData.activities])
 
     const exportCsv = () => {
         const csv = Papa.unparse({
-            fields: ["worksheet", "date", "consultant", "customer", "competitor", "topic", "value", "note"],
+            fields: ["worksheet", "date", "consultant", "customer", "topic", "note"],
             data: [
-                ...filtered.lostSales.map((item) => ["Lost Sale", formatDate(item.date), item.consultant, item.customer, item.competitor, item.reason, item.totalOffering, item.actionPlan || item.remark]),
+                ...filtered.lostSales.map((item) => ["Lost Sale", formatDate(item.date), item.consultant, item.customer, item.reason, item.actionPlan || item.remark]),
                 ...filtered.activities.map((item) => ["Competitor Activity", formatDate(item.date), item.consultant, item.customer, item.competitor, item.activityType, item.businessImpact, item.strategy || item.description]),
                 ...filtered.prices.map((item) => ["Competitor Price", formatDate(item.date), item.consultant, item.customer, item.brand, item.size, item.price, item.deliveryPoint]),
             ],
@@ -400,7 +405,7 @@ export function CompetitorDashboardTab({ scope = "all" }: { scope?: DashboardSco
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <ScoreCard title="Price Records" value={isLoading ? "..." : filtered.prices.length} icon={Database} description={`${SHEETS.prices.name} worksheet`} />
                 <ScoreCard title="Activity Records" value={isLoading ? "..." : filtered.activities.length} icon={Zap} description={`${stats.highImpact} high impact`} gradient="from-indigo-500/10 via-blue-400/5 to-cyan-500/10 border-indigo-200/50" iconColor="text-indigo-600" textColor="text-indigo-900" />
-                <ScoreCard title="Lost Sale Value" value={isLoading ? "..." : formatMoney(stats.totalLostValue)} icon={DollarSign} description="Nilai potensi hilang" gradient="from-red-500/10 via-red-400/5 to-orange-500/10 border-red-200/50" iconColor="text-red-600" textColor="text-red-900" />
+                <ScoreCard title="Lost Sale Records" value={isLoading ? "..." : filtered.lostSales.length} icon={Target} description="Jumlah potensial hilang" gradient="from-red-500/10 via-red-400/5 to-orange-500/10 border-red-200/50" iconColor="text-red-600" textColor="text-red-900" />
                 <ScoreCard title="Median 27.00R49" value={stats.median27Price ? formatMoney(stats.median27Price) : "-"} icon={Target} description="Benchmark premium segment" gradient="from-purple-500/10 via-purple-400/5 to-pink-500/10 border-purple-200/50" iconColor="text-purple-600" textColor="text-purple-900" />
             </div>
 
@@ -451,16 +456,16 @@ export function CompetitorDashboardTab({ scope = "all" }: { scope?: DashboardSco
             <div className="grid gap-4 lg:grid-cols-3">
                 <Card className="lg:col-span-2">
                     <CardHeader>
-                        <CardTitle className="text-base">Lost Sale Value by Reason</CardTitle>
-                        <CardDescription>Prioritas akar masalah berdasarkan nilai rupiah.</CardDescription>
+                        <CardTitle className="text-base">Lost Sale Count by Reason</CardTitle>
+                        <CardDescription>Frekuensi kehilangan berdasarkan alasan.</CardDescription>
                     </CardHeader>
                     <CardContent className="h-[320px]">
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={reasonChart}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                                 <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                                <YAxis tickFormatter={formatMoney} tick={{ fontSize: 11 }} />
-                                <Tooltip formatter={(value) => formatMoney(Number(value))} />
+                                <YAxis tick={{ fontSize: 11 }} />
+                                <Tooltip />
                                 <Bar dataKey="value" radius={[8, 8, 0, 0]} fill="#f97316" />
                             </BarChart>
                         </ResponsiveContainer>
@@ -507,20 +512,18 @@ export function CompetitorDashboardTab({ scope = "all" }: { scope?: DashboardSco
 
                 <Card>
                     <CardHeader>
-                        <CardTitle className="text-base">Business Impact & Price Gap</CardTitle>
-                        <CardDescription>Sinyal risiko competitor activity dan gap harga lost sale.</CardDescription>
+                        <CardTitle className="text-base">Business Impact (Activity)</CardTitle>
+                        <CardDescription>Perkiraan pengaruh competitor activity ke bisnis.</CardDescription>
                     </CardHeader>
                     <CardContent className="h-[300px]">
                         <ResponsiveContainer width="100%" height="100%">
-                            <ComposedChart data={[...impactChart.map((item) => ({ ...item, group: "Impact" })), ...varianceChart.map((item) => ({ ...item, group: "Gap" }))]}>
+                            <BarChart data={impactChart}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                                 <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                                 <YAxis tick={{ fontSize: 11 }} />
                                 <Tooltip />
-                                <Legend />
                                 <Bar dataKey="value" fill="#dc2626" radius={[8, 8, 0, 0]} />
-                                <Line type="monotone" dataKey="value" stroke="#111827" strokeWidth={2} />
-                            </ComposedChart>
+                            </BarChart>
                         </ResponsiveContainer>
                     </CardContent>
                 </Card>
@@ -529,16 +532,16 @@ export function CompetitorDashboardTab({ scope = "all" }: { scope?: DashboardSco
             <div className="grid gap-4 lg:grid-cols-2">
                 <Card>
                     <CardHeader>
-                        <CardTitle className="text-base">Top Competitor by Lost Value</CardTitle>
-                        <CardDescription>Prioritas follow-up berdasarkan rupiah hilang.</CardDescription>
+                        <CardTitle className="text-base">Top Customer in Lost Sale</CardTitle>
+                        <CardDescription>Customer yang sering dilaporkan di Lost Sale.</CardDescription>
                     </CardHeader>
                     <CardContent className="h-[280px]">
                         <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={competitorChart} layout="vertical" margin={{ left: 24 }}>
+                            <BarChart data={customerLostChart} layout="vertical" margin={{ left: 24 }}>
                                 <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                                <XAxis type="number" tickFormatter={formatMoney} tick={{ fontSize: 11 }} />
+                                <XAxis type="number" tick={{ fontSize: 11 }} />
                                 <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 11 }} />
-                                <Tooltip formatter={(value) => formatMoney(Number(value))} />
+                                <Tooltip />
                                 <Bar dataKey="value" radius={[0, 8, 8, 0]} fill="#9333ea" />
                             </BarChart>
                         </ResponsiveContainer>
@@ -582,7 +585,7 @@ export function CompetitorDashboardTab({ scope = "all" }: { scope?: DashboardSco
                     <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead>Date</TableHead><TableHead>BC</TableHead><TableHead>Customer</TableHead><TableHead>Product</TableHead><TableHead>Reason</TableHead><TableHead>Offering</TableHead><TableHead>Competitor</TableHead><TableHead>Gap</TableHead><TableHead>Action Plan</TableHead>
+                                <TableHead>Date</TableHead><TableHead>BC</TableHead><TableHead>Customer</TableHead><TableHead>Product Type</TableHead><TableHead>Detail Product</TableHead><TableHead>Reason</TableHead><TableHead>Remark</TableHead><TableHead>Action Plan</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -591,12 +594,11 @@ export function CompetitorDashboardTab({ scope = "all" }: { scope?: DashboardSco
                                     <TableCell>{formatDate(item.date)}</TableCell>
                                     <TableCell className="font-medium">{item.consultant || "-"}</TableCell>
                                     <TableCell>{item.customer}</TableCell>
+                                    <TableCell>{item.productType}</TableCell>
                                     <TableCell className="max-w-[220px] whitespace-normal">{item.productDetail}</TableCell>
                                     <TableCell><Badge variant={item.reason === "Price" ? "warning" : "secondary"}>{item.reason}</Badge></TableCell>
-                                    <TableCell>{formatMoney(item.totalOffering)}</TableCell>
-                                    <TableCell>{item.competitor || "-"}</TableCell>
-                                    <TableCell><Badge variant={varianceType(item) === "Competitor cheaper" ? "destructive" : "outline"}>{varianceType(item)}</Badge></TableCell>
-                                    <TableCell className="max-w-[320px] whitespace-normal">{item.actionPlan || item.remark || "-"}</TableCell>
+                                    <TableCell className="max-w-[220px] whitespace-normal">{item.remark || "-"}</TableCell>
+                                    <TableCell className="max-w-[320px] whitespace-normal">{item.actionPlan || "-"}</TableCell>
                                 </TableRow>
                             ))}
                         </TableBody>

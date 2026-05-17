@@ -33,10 +33,6 @@ type LostSaleRecord = {
     customer: string
     productDetail: string
     reason: string
-    totalOffering: number
-    competitor: string
-    competitorPrice: number
-    competitorProduct: string
     remark: string
     actionPlan: string
 }
@@ -160,13 +156,6 @@ function toggleValue(values: string[], value: string) {
     return values.includes(value) ? values.filter((item) => item !== value) : [...values, value]
 }
 
-function gapSignal(record: LostSaleRecord) {
-    if (!record.competitorPrice || !record.totalOffering) return "No competitor price"
-    if (record.totalOffering > record.competitorPrice) return "Competitor cheaper"
-    if (record.totalOffering < record.competitorPrice) return "We are cheaper"
-    return "Same price"
-}
-
 function parseLostRows(rows: SheetRow[]) {
     return rows
         .map((row, index): LostSaleRecord | null => {
@@ -182,10 +171,6 @@ function parseLostRows(rows: SheetRow[]) {
                 customer,
                 productDetail,
                 reason: getField(row, "Penyebab Lost Sale") || "OTHER",
-                totalOffering: parseMoney(getField(row, "Total Penawaran")),
-                competitor: getField(row, "Competitor") || "Unknown",
-                competitorPrice: parseMoney(getField(row, "Competitor Price")),
-                competitorProduct: getField(row, "Product"),
                 remark: getField(row, "Remark"),
                 actionPlan: getField(row, "Action Plan"),
             }
@@ -234,8 +219,8 @@ export function LostSaleDashboard() {
     const [endDate, setEndDate] = useState(initialRange.endDate)
     const [search, setSearch] = useState("")
     const [reasonFilter, setReasonFilter] = useState<string[]>([])
-    const [competitorFilter, setCompetitorFilter] = useState<string[]>([])
     const [consultantFilter, setConsultantFilter] = useState<string[]>([])
+    const [customerFilter, setCustomerFilter] = useState<string[]>([])
     const [page, setPage] = useState(0)
 
     useEffect(() => {
@@ -272,28 +257,28 @@ export function LostSaleDashboard() {
 
     const options = useMemo(() => ({
         reasons: aggregateCount(records.map((record) => record.reason), 100).map((item) => item.name),
-        competitors: aggregateCount(records.map((record) => record.competitor), 100).map((item) => item.name),
         consultants: aggregateCount(records.map((record) => record.consultant), 100).map((item) => item.name),
+        customers: aggregateCount(records.map((record) => record.customer), 100).map((item) => item.name),
     }), [records])
 
     const filtered = useMemo(() => {
         const query = search.toLowerCase()
         return records.filter((record) => {
-            const searchable = [record.customer, record.productDetail, record.competitor, record.competitorProduct, record.remark, record.actionPlan].join(" ").toLowerCase()
+            const searchable = [record.customer, record.productDetail, record.remark, record.actionPlan].join(" ").toLowerCase()
             return inDateRange(record.offeringDate, startDate, endDate)
                 && (!query || searchable.includes(query))
                 && (!reasonFilter.length || reasonFilter.includes(record.reason))
-                && (!competitorFilter.length || competitorFilter.includes(record.competitor))
+                && (!customerFilter.length || customerFilter.includes(record.customer))
                 && (!consultantFilter.length || consultantFilter.includes(record.consultant))
         })
-    }, [records, startDate, endDate, search, reasonFilter, competitorFilter, consultantFilter])
+    }, [records, startDate, endDate, search, reasonFilter, customerFilter, consultantFilter])
 
-    const totalLost = filtered.reduce((sum, record) => sum + record.totalOffering, 0)
-    const avgLost = filtered.length ? totalLost / filtered.length : 0
-    const competitorCheaper = filtered.filter((record) => gapSignal(record) === "Competitor cheaper").length
-    const reasonValueChart = useMemo(() => aggregateMoney(filtered.map((record) => ({ name: record.reason, value: record.totalOffering })), 8), [filtered])
-    const competitorValueChart = useMemo(() => aggregateMoney(filtered.map((record) => ({ name: record.competitor, value: record.totalOffering })), 8), [filtered])
-    const gapChart = useMemo(() => aggregateCount(filtered.map((record) => gapSignal(record)), 4).map((item, index) => ({ ...item, fill: BAR_COLORS[index % BAR_COLORS.length] })), [filtered])
+    const topReason = aggregateCount(filtered.map((record) => record.reason), 1)[0]?.name || "-"
+    const topCustomer = aggregateCount(filtered.map((record) => record.customer), 1)[0]?.name || "-"
+    const topConsultant = aggregateCount(filtered.map((record) => record.consultant), 1)[0]?.name || "-"
+    const reasonChart = useMemo(() => aggregateCount(filtered.map((record) => record.reason), 8).map((item, index) => ({ ...item, fill: BAR_COLORS[index % BAR_COLORS.length] })), [filtered])
+    const customerChart = useMemo(() => aggregateCount(filtered.map((record) => record.customer), 8).map((item, index) => ({ ...item, fill: BAR_COLORS[index % BAR_COLORS.length] })), [filtered])
+    const productTypeChart = useMemo(() => aggregateCount(filtered.map((record) => record.productType || "Unknown"), 4).map((item, index) => ({ ...item, fill: BAR_COLORS[index % BAR_COLORS.length] })), [filtered])
     const consultantChart = useMemo(() => aggregateCount(filtered.map((record) => record.consultant), 8).map((item, index) => ({ ...item, fill: BAR_COLORS[index % BAR_COLORS.length] })), [filtered])
     const paginatedData = filtered.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE)
     const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
@@ -352,7 +337,7 @@ export function LostSaleDashboard() {
                                 <Input value={search} onChange={(event) => { setSearch(event.target.value); setPage(0) }} placeholder="Cari customer, product, competitor, action plan..." className="h-10 rounded-xl bg-slate-50 pl-9" />
                             </div>
                             <MultiSelectFilter title="Reason" options={options.reasons} selected={reasonFilter} onChange={setReasonFilter} />
-                            <MultiSelectFilter title="Competitor" options={options.competitors} selected={competitorFilter} onChange={setCompetitorFilter} />
+                            <MultiSelectFilter title="Customer" options={options.customers} selected={customerFilter} onChange={setCustomerFilter} />
                             <MultiSelectFilter title="Consultant" options={options.consultants} selected={consultantFilter} onChange={setConsultantFilter} />
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
@@ -375,24 +360,24 @@ export function LostSaleDashboard() {
 
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <ScoreCard title="Lost Records" value={filtered.length.toLocaleString("id-ID")} icon={Target} />
-                <ScoreCard title="Lost Value" value={formatMoney(totalLost)} icon={DollarSign} />
-                <ScoreCard title="Avg Deal Lost" value={formatMoney(avgLost)} icon={TrendingDown} />
-                <ScoreCard title="Price Threat" value={`${competitorCheaper} kasus`} description="Competitor cheaper" icon={AlertTriangle} />
+                <ScoreCard title="Top Reason" value={topReason} icon={AlertTriangle} />
+                <ScoreCard title="Top Customer" value={topCustomer} icon={TrendingDown} />
+                <ScoreCard title="Top Consultant" value={topConsultant} icon={Users} />
             </div>
 
             <div className="grid gap-4 xl:grid-cols-2">
                 <Card className="border-0 shadow-sm shadow-slate-200">
-                    <CardHeader className="pb-2"><CardTitle className="text-base">Alasan Lost Sale by Value</CardTitle><CardDescription>Ranking alasan berdasarkan total nilai penawaran yang hilang.</CardDescription></CardHeader>
+                    <CardHeader className="pb-2"><CardTitle className="text-base">Alasan Lost Sale</CardTitle><CardDescription>Jumlah record berdasarkan alasan.</CardDescription></CardHeader>
                     <CardContent className="h-[430px] pr-6">
-                        {reasonValueChart.length ? <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={reasonValueChart} layout="vertical" margin={{ top: 10, right: 78, bottom: 20, left: 130 }}>
+                        {reasonChart.length ? <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={reasonChart} layout="vertical" margin={{ top: 10, right: 38, bottom: 20, left: 130 }}>
                                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
-                                <XAxis type="number" tickFormatter={formatMoney} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                                <XAxis type="number" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
                                 <YAxis dataKey="name" type="category" width={128} tickFormatter={(value) => shortLabel(String(value), 20)} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-                                <Tooltip formatter={(value) => formatMoney(Number(value))} labelFormatter={(label) => String(label)} />
+                                <Tooltip formatter={(value) => Number(value)} labelFormatter={(label) => String(label)} />
                                 <Bar dataKey="value" radius={[0, 10, 10, 0]}>
-                                    {reasonValueChart.map((item) => <Cell key={item.name} fill={item.fill} />)}
-                                    <LabelList dataKey="value" position="right" formatter={(value: number) => formatMoney(value)} className="fill-slate-700 text-[11px]" />
+                                    {reasonChart.map((item) => <Cell key={item.name} fill={item.fill} />)}
+                                    <LabelList dataKey="value" position="right" className="fill-slate-700 text-[11px]" />
                                 </Bar>
                             </BarChart>
                         </ResponsiveContainer> : <EmptyState message="Tidak ada data sesuai filter." />}
@@ -400,17 +385,17 @@ export function LostSaleDashboard() {
                 </Card>
 
                 <Card className="border-0 shadow-sm shadow-slate-200">
-                    <CardHeader className="pb-2"><CardTitle className="text-base">Competitor by Lost Value</CardTitle><CardDescription>Nama competitor diambil dari kolom Competitor, bukan deskripsi/action plan.</CardDescription></CardHeader>
+                    <CardHeader className="pb-2"><CardTitle className="text-base">Top Customers</CardTitle><CardDescription>Jumlah record berdasarkan customer.</CardDescription></CardHeader>
                     <CardContent className="h-[430px] pr-6">
-                        {competitorValueChart.length ? <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={competitorValueChart} layout="vertical" margin={{ top: 10, right: 78, bottom: 20, left: 130 }}>
+                        {customerChart.length ? <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={customerChart} layout="vertical" margin={{ top: 10, right: 38, bottom: 20, left: 130 }}>
                                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
-                                <XAxis type="number" tickFormatter={formatMoney} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                                <XAxis type="number" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
                                 <YAxis dataKey="name" type="category" width={128} tickFormatter={(value) => shortLabel(String(value), 20)} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-                                <Tooltip formatter={(value) => formatMoney(Number(value))} labelFormatter={(label) => String(label)} />
+                                <Tooltip formatter={(value) => Number(value)} labelFormatter={(label) => String(label)} />
                                 <Bar dataKey="value" radius={[0, 10, 10, 0]}>
-                                    {competitorValueChart.map((item) => <Cell key={item.name} fill={item.fill} />)}
-                                    <LabelList dataKey="value" position="right" formatter={(value: number) => formatMoney(value)} className="fill-slate-700 text-[11px]" />
+                                    {customerChart.map((item) => <Cell key={item.name} fill={item.fill} />)}
+                                    <LabelList dataKey="value" position="right" className="fill-slate-700 text-[11px]" />
                                 </Bar>
                             </BarChart>
                         </ResponsiveContainer> : <EmptyState message="Tidak ada data sesuai filter." />}
@@ -420,15 +405,15 @@ export function LostSaleDashboard() {
 
             <div className="grid gap-4 xl:grid-cols-2">
                 <Card className="border-0 shadow-sm shadow-slate-200">
-                    <CardHeader className="pb-2"><CardTitle className="text-base">Gap Signal</CardTitle><CardDescription>Bar chart lebih mudah dibaca daripada pie yang sering terpotong.</CardDescription></CardHeader>
+                    <CardHeader className="pb-2"><CardTitle className="text-base">Product Type</CardTitle><CardDescription>Tipe produk yang lost sale.</CardDescription></CardHeader>
                     <CardContent className="h-[340px] pr-6">
                         <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={gapChart} margin={{ top: 24, right: 36, bottom: 70, left: 24 }}>
+                            <BarChart data={productTypeChart} margin={{ top: 24, right: 36, bottom: 70, left: 24 }}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                                 <XAxis dataKey="name" angle={-28} textAnchor="end" interval={0} height={88} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
                                 <YAxis allowDecimals={false} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
                                 <Tooltip />
-                                <Bar dataKey="value" radius={[10, 10, 0, 0]}>{gapChart.map((item) => <Cell key={item.name} fill={item.fill} />)}<LabelList dataKey="value" position="top" className="fill-slate-700 text-[11px]" /></Bar>
+                                <Bar dataKey="value" radius={[10, 10, 0, 0]}>{productTypeChart.map((item) => <Cell key={item.name} fill={item.fill} />)}<LabelList dataKey="value" position="top" className="fill-slate-700 text-[11px]" /></Bar>
                             </BarChart>
                         </ResponsiveContainer>
                     </CardContent>
@@ -465,32 +450,30 @@ export function LostSaleDashboard() {
                                 <TableHeader className="sticky top-0 z-10 bg-slate-50 shadow-sm">
                                     <TableRow className="hover:bg-slate-50">
                                         <TableHead className="w-[60px]">No</TableHead>
-                                        <TableHead className="w-[130px]">Tanggal</TableHead>
+                                        <TableHead className="w-[160px]">Timestamp</TableHead>
                                         <TableHead className="w-[170px]">Consultant</TableHead>
-                                        <TableHead className="w-[240px]">Customer</TableHead>
-                                        <TableHead className="w-[330px]">Detail Produk</TableHead>
-                                        <TableHead className="w-[170px]">Reason</TableHead>
-                                        <TableHead className="w-[150px] text-right">Total Offer</TableHead>
-                                        <TableHead className="w-[180px]">Competitor</TableHead>
-                                        <TableHead className="w-[150px] text-right">Competitor Price</TableHead>
-                                        <TableHead className="w-[180px]">Gap Signal</TableHead>
-                                        <TableHead className="w-[360px]">Action Plan</TableHead>
+                                        <TableHead className="w-[150px]">Tipe Produk</TableHead>
+                                        <TableHead className="w-[140px]">Tgl Penawaran</TableHead>
+                                        <TableHead className="w-[200px]">Customer</TableHead>
+                                        <TableHead className="w-[300px]">Detail Produk</TableHead>
+                                        <TableHead className="w-[150px]">Reason</TableHead>
+                                        <TableHead className="w-[240px]">Remark</TableHead>
+                                        <TableHead className="w-[300px]">Action Plan</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     {paginatedData.map((record, index) => (
                                         <TableRow key={record.id} className="align-top hover:bg-blue-50/50">
                                             <TableCell className="text-xs text-slate-500">{page * PAGE_SIZE + index + 1}</TableCell>
-                                            <TableCell className="whitespace-nowrap text-xs">{formatDate(record.offeringDate)}</TableCell>
+                                            <TableCell className="whitespace-nowrap text-xs">{formatDate(record.timestamp)}</TableCell>
                                             <TableCell className="font-medium">{record.consultant || "-"}</TableCell>
-                                            <TableCell><div className="font-semibold text-slate-900">{record.customer}</div><div className="mt-1 text-xs text-slate-500">{record.productType}</div></TableCell>
+                                            <TableCell className="text-xs text-slate-500">{record.productType || "-"}</TableCell>
+                                            <TableCell className="whitespace-nowrap text-xs">{formatDate(record.offeringDate)}</TableCell>
+                                            <TableCell><div className="font-semibold text-slate-900">{record.customer}</div></TableCell>
                                             <TableCell className="whitespace-normal text-sm leading-relaxed">{record.productDetail}</TableCell>
                                             <TableCell><Badge variant="secondary" className="rounded-full">{record.reason}</Badge></TableCell>
-                                            <TableCell className="text-right font-semibold tabular-nums">{formatMoney(record.totalOffering)}</TableCell>
-                                            <TableCell className="font-medium text-blue-700 whitespace-normal break-words max-w-[180px]">{record.competitor}</TableCell>
-                                            <TableCell className="text-right tabular-nums">{record.competitorPrice ? formatMoney(record.competitorPrice) : "-"}</TableCell>
-                                            <TableCell><Badge variant={gapSignal(record) === "Competitor cheaper" ? "destructive" : "outline"} className="rounded-full">{gapSignal(record)}</Badge></TableCell>
-                                            <TableCell className="whitespace-normal text-sm leading-relaxed text-slate-600">{record.actionPlan || record.remark || "-"}</TableCell>
+                                            <TableCell className="whitespace-normal text-sm leading-relaxed text-slate-600">{record.remark || "-"}</TableCell>
+                                            <TableCell className="whitespace-normal text-sm leading-relaxed text-slate-600">{record.actionPlan || "-"}</TableCell>
                                         </TableRow>
                                     ))}
                                 </TableBody>

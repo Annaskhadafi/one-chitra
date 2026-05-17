@@ -308,6 +308,29 @@ function renderPieLabel({ name, percent, value }: { name?: string; percent?: num
     return `${name ?? ""} ${value ?? 0} (${(percent * 100).toFixed(0)}%)`
 }
 
+function normalizeBrand(raw: string) {
+    const cleaned = cleanText(raw).toUpperCase();
+    if (cleaned.includes("GOOD") && cleaned.includes("YEAR")) return "Goodyear";
+    if (cleaned.includes("MICHELIN")) return "Michelin";
+    if (cleaned.includes("BRIDGESTONE")) return "Bridgestone";
+    if (cleaned.includes("YOKOHAMA")) return "Yokohama";
+    if (cleaned.includes("MAXAM")) return "Maxam";
+    if (cleaned.includes("BKT")) return "BKT";
+    if (cleaned.includes("ADVANCE")) return "Advance";
+    if (cleaned.includes("TRIANGLE")) return "Triangle";
+    if (cleaned.includes("AEOLUS")) return "Aeolus";
+    if (cleaned.includes("SAILUN")) return "Sailun";
+    if (cleaned.includes("LINGLONG")) return "Linglong";
+    if (cleaned.includes("TECHKING")) return "Techking";
+    if (cleaned.includes("MAGNA")) return "Magna";
+    if (cleaned.includes("GALAXY")) return "Galaxy";
+    if (cleaned.includes("TRELLEBORG")) return "Trelleborg";
+    if (cleaned.includes("AMBERSTONE")) return "Amberstone";
+    if (cleaned.includes("HENAN")) return "Henan";
+    if (!raw) return "Unknown";
+    return raw.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+}
+
 function parsePriceRows(rows: SheetRow[]) {
     return rows.map((row, index): PriceRecord | null => {
         const customer = cleanText(row["Nama Customer"])
@@ -320,7 +343,7 @@ function parsePriceRows(rows: SheetRow[]) {
             infoDate: parseDateValue(row["Tanggal Informasi"]),
             customer,
             size,
-            brand,
+            brand: normalizeBrand(brand),
             category: cleanText(row["Category Tire"]),
             supplier: cleanText(row.Supplier),
             currency: cleanText(row.Currency) || "IDR",
