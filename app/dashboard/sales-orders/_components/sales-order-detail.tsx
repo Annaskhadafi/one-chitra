@@ -212,6 +212,11 @@ export function SalesOrderDetail({ open, onOpenChange, order, showEditButton = t
                                                                 <p className="text-sm font-bold uppercase tracking-tight text-slate-800">{item.product?.materialDescription}</p>
                                                                 <div className="flex items-center gap-3">
                                                                     <span className="rounded border border-slate-100 bg-slate-50 px-1.5 py-0.5 font-mono text-[9px] font-bold text-slate-500">{item.product?.materialNumber}</span>
+                                                                    {item.product?.category && (
+                                                                        <span className="rounded border border-indigo-200 bg-indigo-50 px-1.5 py-0.5 text-[9px] font-bold text-indigo-600">
+                                                                            {item.product.category}
+                                                                        </span>
+                                                                    )}
                                                                     {item.product?.oldMaterialNo && <span className="text-[9px] font-medium text-slate-400">| {item.product.oldMaterialNo}</span>}
                                                                 </div>
                                                             </div>

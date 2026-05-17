@@ -312,6 +312,11 @@ export const navigationConfig: NavSection[] = [
                         resource: "sales-dashboard",
                     },
                     {
+                        title: "Competitor",
+                        url: "/dashboard/competitor-info-new",
+                        resource: "competitor-info-new",
+                    },
+                    {
                         title: "Tire Performance",
                         url: "/dashboard/tire-performance",
                         resource: "sales-dashboard",
