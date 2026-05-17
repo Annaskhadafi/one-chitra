@@ -291,7 +291,6 @@ export function LostSaleDashboard() {
     const totalLost = filtered.reduce((sum, record) => sum + record.totalOffering, 0)
     const avgLost = filtered.length ? totalLost / filtered.length : 0
     const competitorCheaper = filtered.filter((record) => gapSignal(record) === "Competitor cheaper").length
-    const topCompetitor = aggregateMoney(filtered.map((record) => ({ name: record.competitor, value: record.totalOffering })), 1)[0]
     const reasonValueChart = useMemo(() => aggregateMoney(filtered.map((record) => ({ name: record.reason, value: record.totalOffering })), 8), [filtered])
     const competitorValueChart = useMemo(() => aggregateMoney(filtered.map((record) => ({ name: record.competitor, value: record.totalOffering })), 8), [filtered])
     const gapChart = useMemo(() => aggregateCount(filtered.map((record) => gapSignal(record)), 4).map((item, index) => ({ ...item, fill: BAR_COLORS[index % BAR_COLORS.length] })), [filtered])
@@ -374,11 +373,10 @@ export function LostSaleDashboard() {
                 </CardContent>
             </Card>
 
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <ScoreCard title="Lost Records" value={filtered.length.toLocaleString("id-ID")} icon={Target} />
                 <ScoreCard title="Lost Value" value={formatMoney(totalLost)} icon={DollarSign} />
                 <ScoreCard title="Avg Deal Lost" value={formatMoney(avgLost)} icon={TrendingDown} />
-                <ScoreCard title="Top Competitor" value={shortLabel(topCompetitor?.name ?? "-")} description={topCompetitor ? formatMoney(topCompetitor.value) : "-"} icon={Users} />
                 <ScoreCard title="Price Threat" value={`${competitorCheaper} kasus`} description="Competitor cheaper" icon={AlertTriangle} />
             </div>
 
