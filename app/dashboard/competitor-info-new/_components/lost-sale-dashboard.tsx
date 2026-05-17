@@ -8,6 +8,7 @@ import { AlertTriangle, CalendarDays, ChevronLeft, ChevronRight, DollarSign, Dow
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 
 import { ScoreCard } from "@/components/score-card"
+import { cleanText, normalizeNames } from "./utils"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -39,9 +40,7 @@ type LostSaleRecord = {
 
 type ChartDatum = { name: string; value: number; count?: number; fill?: string }
 
-function cleanText(value?: string) {
-    return (value ?? "").replace(/\s+/g, " ").trim()
-}
+
 
 function getField(row: SheetRow, ...keys: string[]) {
     const normalized = Object.entries(row).reduce<Record<string, string>>((acc, [key, value]) => {
@@ -156,27 +155,24 @@ function toggleValue(values: string[], value: string) {
     return values.includes(value) ? values.filter((item) => item !== value) : [...values, value]
 }
 
-function parseLostRows(rows: SheetRow[]) {
-    return rows
-        .map((row, index): LostSaleRecord | null => {
-            const customer = getField(row, "Customer")
-            const productDetail = getField(row, "Detail Produk")
-            if (!customer || !productDetail) return null
-            return {
-                id: `lost-${index}`,
-                timestamp: parseDateValue(getField(row, "Timestamp")),
-                consultant: getField(row, "Business Consultant"),
-                productType: getField(row, "Tipe Produk"),
-                offeringDate: parseDateValue(getField(row, "Tanggal Penawaran")),
-                customer,
-                productDetail,
-                reason: getField(row, "Penyebab Lost Sale") || "OTHER",
-                remark: getField(row, "Remark"),
-                actionPlan: getField(row, "Action Plan"),
-            }
-        })
-        .filter(Boolean)
-        .sort((a, b) => (b?.offeringDate?.getTime() ?? 0) - (a?.offeringDate?.getTime() ?? 0)) as LostSaleRecord[]
+function parseLostRows(rows: SheetRow[], customerMapping: Record<string, string>): LostSaleRecord[] {
+    return rows.map((row, index): LostSaleRecord | null => {
+        const rawCustomer = getField(row, "Customer", "Nama Customer")
+        const productDetail = getField(row, "Detail Produk")
+        if (!rawCustomer || !productDetail) return null
+        return {
+            id: `lost-${index}`,
+            timestamp: parseDateValue(getField(row, "Timestamp")),
+            consultant: getField(row, "Business Consultant", "Sales", "Konsultan"),
+            productType: getField(row, "Tipe Produk"),
+            offeringDate: parseDateValue(getField(row, "Tanggal Penawaran")),
+            customer: customerMapping[rawCustomer] || rawCustomer,
+            productDetail,
+            reason: getField(row, "Penyebab Lost Sale", "Alasan") || "OTHER",
+            remark: getField(row, "Remark", "Catatan"),
+            actionPlan: getField(row, "Action Plan"),
+        }
+    }).filter(Boolean) as LostSaleRecord[]
 }
 
 function MultiSelectFilter({ title, options, selected, onChange }: { title: string; options: string[]; selected: string[]; onChange: (value: string[]) => void }) {
@@ -231,8 +227,8 @@ export function LostSaleDashboard() {
             const raw = localStorage.getItem(CACHE_KEY)
             if (raw) {
                 const parsed = JSON.parse(raw)
-                if (mounted) { setRecords(parseLostRows(parsed.data)); setIsLoading(false) }
-                if (Date.now() - parsed.ts < CACHE_TTL) return () => { mounted = false }
+                if (mounted) { setRecords(parsed.data); setIsLoading(false) }
+                if (Date.now() - parsed.timestamp < CACHE_TTL) return () => { mounted = false }
             }
         } catch { /* ignore */ }
         Papa.parse(LOST_SALE_SHEET_URL, {
@@ -241,8 +237,13 @@ export function LostSaleDashboard() {
             skipEmptyLines: true,
             complete: (result) => {
                 if (!mounted) return
-                try { localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: result.data })) } catch { /* ignore */ }
-                setRecords(parseLostRows(result.data as SheetRow[]))
+                try {
+                    const rawCustomerNames = (result.data as SheetRow[]).map(row => getField(row, "Customer", "Nama Customer")).filter(Boolean) as string[]
+                    const customerMapping = normalizeNames(rawCustomerNames)
+                    const mapped = parseLostRows(result.data as SheetRow[], customerMapping)
+                    setRecords(mapped)
+                    localStorage.setItem(CACHE_KEY, JSON.stringify({ timestamp: Date.now(), data: mapped }))
+                } catch { /* ignore */ }
                 setError("")
                 setIsLoading(false)
             },

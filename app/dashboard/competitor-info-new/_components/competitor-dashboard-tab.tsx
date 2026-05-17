@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { ScoreCard } from "@/components/score-card"
+import { cleanText, normalizeBrand, normalizeNames } from "./utils"
 
 const PUBLISHED_BASE = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTFCYrDPugIyxFQMQaUS2e11OY8NIGSOqd-jz5jznHSMGORjl0SSFEFNA2p0Iw_r8FHz3PGJ78IncXk"
 const SHEETS = {
@@ -72,10 +73,6 @@ type DashboardData = {
 }
 
 type DashboardScope = "all" | "prices" | "activities" | "lostSales"
-
-function cleanText(value?: string) {
-    return (value ?? "").replace(/\s*\+\d+\s*$/g, "").replace(/\s+/g, " ").trim()
-}
 
 function getField(row: SheetRow, names: string[]) {
     const entries = Object.entries(row)
@@ -151,39 +148,16 @@ async function fetchSheet(gid: string) {
     }).data
 }
 
-function normalizeBrand(raw: string) {
-    const cleaned = cleanText(raw).toUpperCase();
-    if (cleaned.includes("GOOD") && cleaned.includes("YEAR")) return "Goodyear";
-    if (cleaned.includes("MICHELIN")) return "Michelin";
-    if (cleaned.includes("BRIDGESTONE")) return "Bridgestone";
-    if (cleaned.includes("YOKOHAMA")) return "Yokohama";
-    if (cleaned.includes("MAXAM")) return "Maxam";
-    if (cleaned.includes("BKT")) return "BKT";
-    if (cleaned.includes("ADVANCE")) return "Advance";
-    if (cleaned.includes("TRIANGLE")) return "Triangle";
-    if (cleaned.includes("AEOLUS")) return "Aeolus";
-    if (cleaned.includes("SAILUN")) return "Sailun";
-    if (cleaned.includes("LINGLONG")) return "Linglong";
-    if (cleaned.includes("TECHKING")) return "Techking";
-    if (cleaned.includes("MAGNA")) return "Magna";
-    if (cleaned.includes("GALAXY")) return "Galaxy";
-    if (cleaned.includes("TRELLEBORG")) return "Trelleborg";
-    if (cleaned.includes("AMBERSTONE")) return "Amberstone";
-    if (cleaned.includes("HENAN")) return "Henan";
-    if (!raw) return "Unknown";
-    return raw.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
-}
-
-function parsePrice(row: SheetRow, index: number): CompetitorPriceRecord | null {
-    const customer = getField(row, ["Nama Customer"])
+function parsePrice(row: SheetRow, index: number, customerMapping: Record<string, string>): CompetitorPriceRecord | null {
+    const rawCustomer = getField(row, ["Nama Customer"])
     const size = getField(row, ["Size Tire"])
     const brand = getField(row, ["Brand"])
-    if (!customer || !size || !brand) return null
+    if (!rawCustomer || !size || !brand) return null
     return {
         id: `price-${index}`,
         date: parseDateValue(getField(row, ["Tanggal Informasi"])),
         consultant: getField(row, ["Business Consultant"]),
-        customer,
+        customer: customerMapping[rawCustomer] || rawCustomer,
         size,
         brand: normalizeBrand(brand),
         category: getField(row, ["Category Tire"]),
@@ -195,7 +169,8 @@ function parsePrice(row: SheetRow, index: number): CompetitorPriceRecord | null 
     }
 }
 
-function parseActivity(row: SheetRow, index: number): CompetitorActivityRecord | null {
+function parseActivity(row: SheetRow, index: number, customerMapping: Record<string, string>): CompetitorActivityRecord | null {
+    const rawCustomer = getField(row, ["Customer", "Nama Customer"])
     const competitor = getField(row, ["Competitor"])
     const activityType = getField(row, ["Jenis Aktivitas"])
     if (!competitor || !activityType) return null
@@ -207,7 +182,7 @@ function parseActivity(row: SheetRow, index: number): CompetitorActivityRecord |
         industry: getField(row, ["Industri / Kategori"]),
         location: getField(row, ["Lokasi"]),
         activityType,
-        customer: getField(row, ["Customer"]),
+        customer: customerMapping[rawCustomer] || rawCustomer,
         marketResponse: getField(row, ["Respon Pasar"]),
         businessImpact: getField(row, ["Perkiraan Pengaruh ke Bisnis"]),
         strategy: getField(row, ["Strategi yang bisa di terapkan", "Strategi"]),
@@ -215,16 +190,16 @@ function parseActivity(row: SheetRow, index: number): CompetitorActivityRecord |
     }
 }
 
-function parseLostSale(row: SheetRow, index: number): LostSaleRecord | null {
-    const customer = getField(row, ["Customer"])
+function parseLostSale(row: SheetRow, index: number, customerMapping: Record<string, string>): LostSaleRecord | null {
+    const rawCustomer = getField(row, ["Customer", "Nama Customer"])
     const productDetail = getField(row, ["Detail Produk"])
-    if (!customer || !productDetail) return null
+    if (!rawCustomer || !productDetail) return null
     return {
         id: `lost-${index}`,
         date: parseDateValue(getField(row, ["Tanggal Penawaran"])),
         consultant: getField(row, ["Business Consultant"]),
         productType: getField(row, ["Tipe Produk"]),
-        customer,
+        customer: customerMapping[rawCustomer] || rawCustomer,
         productDetail,
         reason: getField(row, ["Penyebab Lost Sale"]) || "OTHER",
         remark: getField(row, ["Remark"]),
@@ -293,10 +268,19 @@ export function CompetitorDashboardTab({ scope = "all" }: { scope?: DashboardSco
                 scope === "all" || scope === "prices" ? fetchSheet(SHEETS.prices.gid) : Promise.resolve([]),
                 scope === "all" || scope === "activities" ? fetchSheet(SHEETS.activities.gid) : Promise.resolve([]),
             ])
+
+            const rawCustomerNames = [
+                ...priceRows.map((row) => getField(row, ["Nama Customer"])),
+                ...activityRows.map((row) => getField(row, ["Customer", "Nama Customer"])),
+                ...lostRows.map((row) => getField(row, ["Customer", "Nama Customer"])),
+            ].filter(Boolean) as string[]
+
+            const customerMapping = normalizeNames(rawCustomerNames)
+
             setRawData({
-                prices: priceRows.map(parsePrice).filter(Boolean) as CompetitorPriceRecord[],
-                activities: activityRows.map(parseActivity).filter(Boolean) as CompetitorActivityRecord[],
-                lostSales: lostRows.map(parseLostSale).filter(Boolean) as LostSaleRecord[],
+                prices: priceRows.map((r, i) => parsePrice(r, i, customerMapping)).filter(Boolean) as CompetitorPriceRecord[],
+                activities: activityRows.map((r, i) => parseActivity(r, i, customerMapping)).filter(Boolean) as CompetitorActivityRecord[],
+                lostSales: lostRows.map((r, i) => parseLostSale(r, i, customerMapping)).filter(Boolean) as LostSaleRecord[],
             })
         } catch (caught) {
             setError(caught instanceof Error ? caught.message : "Gagal memuat data")

@@ -14,6 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { ScoreCard } from "@/components/score-card"
+import { cleanText, normalizeBrand, normalizeNames } from "./utils"
 
 const PRICE_SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTFCYrDPugIyxFQMQaUS2e11OY8NIGSOqd-jz5jznHSMGORjl0SSFEFNA2p0Iw_r8FHz3PGJ78IncXk/pub?output=csv&gid=1444121083"
 const COLORS = ["#1d4ed8", "#2563eb", "#3b82f6", "#60a5fa", "#93c5fd", "#0f766e", "#f97316"]
@@ -39,9 +40,7 @@ type PriceRecord = {
 
 type DatePreset = "current-year" | "current-month" | "last-30-days" | "all" | "custom"
 
-function cleanText(value?: string) {
-    return (value ?? "").replace(/\s+/g, " ").trim()
-}
+
 
 function parseDateValue(value?: string) {
     const text = cleanText(value)
@@ -308,40 +307,17 @@ function renderPieLabel({ name, percent, value }: { name?: string; percent?: num
     return `${name ?? ""} ${value ?? 0} (${(percent * 100).toFixed(0)}%)`
 }
 
-function normalizeBrand(raw: string) {
-    const cleaned = cleanText(raw).toUpperCase();
-    if (cleaned.includes("GOOD") && cleaned.includes("YEAR")) return "Goodyear";
-    if (cleaned.includes("MICHELIN")) return "Michelin";
-    if (cleaned.includes("BRIDGESTONE")) return "Bridgestone";
-    if (cleaned.includes("YOKOHAMA")) return "Yokohama";
-    if (cleaned.includes("MAXAM")) return "Maxam";
-    if (cleaned.includes("BKT")) return "BKT";
-    if (cleaned.includes("ADVANCE")) return "Advance";
-    if (cleaned.includes("TRIANGLE")) return "Triangle";
-    if (cleaned.includes("AEOLUS")) return "Aeolus";
-    if (cleaned.includes("SAILUN")) return "Sailun";
-    if (cleaned.includes("LINGLONG")) return "Linglong";
-    if (cleaned.includes("TECHKING")) return "Techking";
-    if (cleaned.includes("MAGNA")) return "Magna";
-    if (cleaned.includes("GALAXY")) return "Galaxy";
-    if (cleaned.includes("TRELLEBORG")) return "Trelleborg";
-    if (cleaned.includes("AMBERSTONE")) return "Amberstone";
-    if (cleaned.includes("HENAN")) return "Henan";
-    if (!raw) return "Unknown";
-    return raw.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
-}
-
-function parsePriceRows(rows: SheetRow[]) {
+function parsePriceRows(rows: SheetRow[], customerMapping: Record<string, string>) {
     return rows.map((row, index): PriceRecord | null => {
-        const customer = cleanText(row["Nama Customer"])
+        const rawCustomer = cleanText(row["Nama Customer"])
         const size = cleanText(row["Size Tire"])
         const brand = cleanText(row["Brand"])
-        if (!customer || !size || !brand) return null
+        if (!rawCustomer || !size || !brand) return null
         return {
             id: `price-${index}`,
             timestamp: parseDateValue(row.Timestamp),
             infoDate: parseDateValue(row["Tanggal Informasi"]),
-            customer,
+            customer: customerMapping[rawCustomer] || rawCustomer,
             size,
             brand: normalizeBrand(brand),
             category: cleanText(row["Category Tire"]),
@@ -432,7 +408,11 @@ export function PriceCompetitorDashboard() {
                 skipEmptyLines: true,
                 transformHeader: (header) => header.trim(),
             })
-            setRecords(parsePriceRows(parsed.data))
+            
+            const rawCustomerNames = parsed.data.map(row => cleanText(row["Nama Customer"])).filter(Boolean) as string[]
+            const customerMapping = normalizeNames(rawCustomerNames)
+
+            setRecords(parsePriceRows(parsed.data, customerMapping))
         } catch (caught) {
             setError(caught instanceof Error ? caught.message : "Gagal memuat data")
         } finally {
