@@ -240,13 +240,13 @@ function buildMonthlyBrandTrend(records: PriceRecord[], targetSize: string) {
     return { size: targetSize, brands: topBrands, data }
 }
 
-function buildMonthlySizeTrend(records: PriceRecord[]) {
+function buildMonthlySizeTrend(records: PriceRecord[], activeSizes: string[]) {
     const monthSet = new Set<string>()
     const groups = new Map<string, number[]>()
 
     records.forEach((record) => {
         const month = formatMonthKey(record.infoDate)
-        const matchedSize = FOCUS_SIZES.find((size) => sizeMatches(record.size, size))
+        const matchedSize = activeSizes.find((size) => sizeMatches(record.size, size))
         if (!month || !matchedSize || record.price <= 0) return
         monthSet.add(month)
         const key = `${month}__${matchedSize}`
@@ -255,7 +255,7 @@ function buildMonthlySizeTrend(records: PriceRecord[]) {
 
     return Array.from(monthSet).sort().map((month) => {
         const row: Record<string, string | number | null> = { month }
-        FOCUS_SIZES.forEach((size) => {
+        activeSizes.forEach((size) => {
             const value = median(groups.get(`${month}__${size}`) ?? [])
             row[size] = value || null
         })
@@ -467,7 +467,10 @@ export function PriceCompetitorDashboard() {
     const brandDistribution = useMemo(() => aggregate(filtered.map((record) => record.brand), 7), [filtered])
     const consultantRecords = useMemo(() => aggregate(filtered.map((record) => record.consultant), 12), [filtered])
     const historyPrice = useMemo(() => priceStatsBy(filtered, "customer", 10), [filtered])
-    const focusSizeAnalysis = useMemo(() => FOCUS_SIZES.map((size) => buildSizeAnalysis(filtered, size)), [filtered])
+    
+    const activeSizes = useMemo(() => sizeFilter.length > 0 ? sizeFilter : FOCUS_SIZES, [sizeFilter])
+
+    const focusSizeAnalysis = useMemo(() => activeSizes.map((size) => buildSizeAnalysis(filtered, size)), [filtered, activeSizes])
     const focusSizeSummary = useMemo(() => focusSizeAnalysis.map((item) => ({
         name: item.size,
         medianPrice: item.medianPrice,
@@ -477,8 +480,8 @@ export function PriceCompetitorDashboard() {
         recordCount: item.recordCount,
         supplierCount: item.supplierCount,
     })), [focusSizeAnalysis])
-    const monthlySizeTrend = useMemo(() => buildMonthlySizeTrend(records), [records])
-    const monthlyBrandTrends = useMemo(() => FOCUS_SIZES.map((size) => buildMonthlyBrandTrend(records, size)), [records])
+    const monthlySizeTrend = useMemo(() => buildMonthlySizeTrend(records, activeSizes), [records, activeSizes])
+    const monthlyBrandTrends = useMemo(() => activeSizes.map((size) => buildMonthlyBrandTrend(records, size)), [records, activeSizes])
 
     const exportCsv = () => {
         const csv = Papa.unparse(filtered)
@@ -806,13 +809,13 @@ export function PriceCompetitorDashboard() {
                 <CardHeader>
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                         <div>
-                            <CardTitle className="text-base">Trend Harga Competitor Bulanan - 3 Size Utama</CardTitle>
+                            <CardTitle className="text-base">Trend Harga Competitor Bulanan - by Size</CardTitle>
                             <CardDescription>
-                                Median harga competitor tiap bulan untuk 27.00R49, 24.00R35, dan 12.00R24. Grafik ini memakai seluruh data API, tidak mengikuti filter date range.
+                                Median harga competitor tiap bulan untuk size yang dipilih (default: 3 Size Utama). Grafik ini memakai seluruh data API, tidak mengikuti filter date range.
                             </CardDescription>
                         </div>
                         <div className="grid gap-2 sm:grid-cols-3">
-                            {FOCUS_SIZES.map((size, index) => (
+                            {activeSizes.map((size, index) => (
                                 <TrendBadge
                                     key={size}
                                     label={size}
@@ -831,7 +834,7 @@ export function PriceCompetitorDashboard() {
                             <YAxis tickFormatter={formatMoney} tick={{ fontSize: 11 }} />
                             <Tooltip formatter={(value) => formatMoney(Number(value))} />
                             <Legend verticalAlign="top" height={32} wrapperStyle={{ fontSize: 12 }} />
-                            {FOCUS_SIZES.map((size, index) => (
+                            {activeSizes.map((size, index) => (
                                 <Line
                                     key={size}
                                     type="monotone"
