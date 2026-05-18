@@ -38,7 +38,7 @@ export async function getCompetitorInfo() {
         const formattedData: CompetitorItem[] = data.map((item) => ({
             timestamp: String(item["Timestamp"] ?? ""),
             customer: String(item["Nama Customer"] ?? ""),
-            size_tire: String(item["Size Tire"] ?? ""),
+            size_tire: String(item["Size Tire"] ?? "").replace(/\s+/g, ""),
             brand: String(item["Brand"] ?? ""),
             category_tire: String(item["Category Tire"] ?? ""),
             supplier: String(item["Supplier"] ?? ""),

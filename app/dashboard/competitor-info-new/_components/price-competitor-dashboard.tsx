@@ -310,7 +310,7 @@ function renderPieLabel({ name, percent, value }: { name?: string; percent?: num
 function parsePriceRows(rows: SheetRow[], companyMapping: Record<string, string>) {
     return rows.map((row, index): PriceRecord | null => {
         const rawCustomer = cleanText(row["Nama Customer"])
-        const size = cleanText(row["Size Tire"])
+        const size = cleanText(row["Size Tire"]).replace(/\s+/g, "")
         const brand = cleanText(row["Brand"])
         const rawSupplier = cleanText(row.Supplier)
         if (!rawCustomer || !size || !brand) return null

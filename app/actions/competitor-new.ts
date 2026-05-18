@@ -42,8 +42,11 @@ export async function createCompetitorPrice(data: Omit<InferInsertModel<typeof c
         // If consultantName is not provided but businessConsultantId is, 
         // we might want to fetch the name, but for now let's just use what's passed.
 
+        const productSizeNormalized = data.productSize ? data.productSize.replace(/\s+/g, '') : data.productSize;
+
         await db.insert(competitorPrices).values({
             ...data,
+            productSize: productSizeNormalized,
             createdById: userId,
         })
         revalidatePath("/dashboard/competitor-info-new")
@@ -137,6 +140,7 @@ export async function importCompetitorPrices(data: InferInsertModel<typeof compe
 
         const values = data.map(item => ({
             ...item,
+            productSize: item.productSize ? item.productSize.replace(/\s+/g, '') : item.productSize,
             createdById: userId,
             createdAt: new Date(),
             updatedAt: new Date(),
@@ -226,7 +230,7 @@ export async function syncCompetitorPricesFromApi() {
 
         for (const item of data as { [key: string]: string | undefined }[]) {
             const customerName = item['Nama Customer'] || ''
-            const productSize = item['Size Tire'] || ''
+            const productSize = (item['Size Tire'] || '').replace(/\s+/g, '')
             const brand = item['Brand'] || ''
             const infoDateRaw = item['Tanggal Informasi'] || ''
 
