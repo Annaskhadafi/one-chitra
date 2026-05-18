@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useState, useMemo, useRef, useEffect, useCallback } from "react"
-import { Search, RefreshCcw, Check, ListFilter, X, DollarSign, Package, ShoppingCart, Users, Settings2, ChevronUp, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react"
+import { Search, RefreshCcw, Check, ListFilter, X, DollarSign, Package, ShoppingCart, Users, Settings2, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Download } from "lucide-react"
 import { ProgressLoading } from "@/components/ui/progress-loading"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -66,6 +66,7 @@ export function HistoryOrderTable() {
     const [yearFilter, setYearFilter] = useState<string[]>([])
     const [monthFilter, setMonthFilter] = useState<string[]>([])
     const [matGrpFilter, setMatGrpFilter] = useState<string[]>([])
+    const [isExporting, setIsExporting] = useState(false)
 
     const [sorting, setSorting] = useState<SortingState>([{ id: "billing_date", desc: true }])
     const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
@@ -314,6 +315,48 @@ export function HistoryOrderTable() {
 
     const chartData = meta?.charts
 
+    const handleExportExcel = async () => {
+        try {
+            setIsExporting(true)
+            const result = await getHistoryOrder({
+                ...activeFilters,
+                page: 1,
+                pageSize: Math.max(totalCount, pageSize),
+            })
+
+            if (!result.success || !result.data?.length) {
+                toast.error("Tidak ada data untuk diexport")
+                return
+            }
+
+            const exportRows = result.data.map((item) => ({
+                "Billing Date": item.billing_date,
+                "Customer Name": item.customer_name,
+                "Material No": item.material_no,
+                Description: item.description,
+                Qty: item.qty,
+                Revenue: item.revenue,
+                Plant: item.plant,
+                "PO Number": item.po_number,
+                "PO Date": item.po_date,
+                "Material Group": item.mat_grp_desc,
+                Salesman: item.salesman,
+            }))
+
+            const XLSX = await import("xlsx")
+            const worksheet = XLSX.utils.json_to_sheet(exportRows)
+            const workbook = XLSX.utils.book_new()
+            XLSX.utils.book_append_sheet(workbook, worksheet, "History Order")
+            XLSX.writeFile(workbook, `history-order-${new Date().toISOString().slice(0, 10)}.xlsx`)
+            toast.success(`Export Excel berhasil: ${exportRows.length.toLocaleString("id-ID")} baris`)
+        } catch (error) {
+            console.error("Failed to export history order:", error)
+            toast.error("Export Excel gagal")
+        } finally {
+            setIsExporting(false)
+        }
+    }
+
 
     return (
         <div className="space-y-6 relative">
@@ -421,6 +464,21 @@ export function HistoryOrderTable() {
                     <Button variant="outline" size="sm" onClick={() => refetch()} className="ml-auto">
                         <RefreshCcw className="mr-2 h-4 w-4" />
                         Refresh
+                    </Button>
+
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleExportExcel}
+                        disabled={isExporting || isFetching || totalCount === 0}
+                        className="gap-2"
+                    >
+                        {isExporting ? (
+                            <RefreshCcw className="h-4 w-4 animate-spin" />
+                        ) : (
+                            <Download className="h-4 w-4" />
+                        )}
+                        Export Excel
                     </Button>
 
                     <DropdownMenu>
