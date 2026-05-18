@@ -172,7 +172,7 @@ function parseLostRows(rows: SheetRow[], customerMapping: Record<string, string>
             remark: getField(row, "Remark", "Catatan"),
             actionPlan: getField(row, "Action Plan"),
         }
-    }).filter(Boolean).sort((a, b) => (b.offeringDate?.getTime() ?? 0) - (a.offeringDate?.getTime() ?? 0)) as LostSaleRecord[]
+    }).filter((row): row is LostSaleRecord => Boolean(row)).sort((a, b) => (b.offeringDate?.getTime() ?? 0) - (a.offeringDate?.getTime() ?? 0))
 }
 
 function MultiSelectFilter({ title, options, selected, onChange }: { title: string; options: string[]; selected: string[]; onChange: (value: string[]) => void }) {
@@ -227,7 +227,13 @@ export function LostSaleDashboard() {
             const raw = localStorage.getItem(CACHE_KEY)
             if (raw) {
                 const parsed = JSON.parse(raw)
-                if (mounted) { setRecords(parsed.data); setIsLoading(false) }
+                if (mounted) {
+                    queueMicrotask(() => {
+                        if (!mounted) return
+                        setRecords(parsed.data)
+                        setIsLoading(false)
+                    })
+                }
                 if (Date.now() - parsed.timestamp < CACHE_TTL) return () => { mounted = false }
             }
         } catch { /* ignore */ }
@@ -463,20 +469,28 @@ export function LostSaleDashboard() {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {paginatedData.map((record, index) => (
-                                        <TableRow key={record.id} className="align-top hover:bg-blue-50/50">
-                                            <TableCell className="text-xs text-slate-500">{page * PAGE_SIZE + index + 1}</TableCell>
-                                            <TableCell className="whitespace-nowrap text-xs">{formatDate(record.timestamp)}</TableCell>
-                                            <TableCell className="font-medium">{record.consultant || "-"}</TableCell>
-                                            <TableCell className="text-xs text-slate-500">{record.productType || "-"}</TableCell>
-                                            <TableCell className="whitespace-nowrap text-xs">{formatDate(record.offeringDate)}</TableCell>
-                                            <TableCell><div className="font-semibold text-slate-900">{record.customer}</div></TableCell>
-                                            <TableCell className="whitespace-normal text-sm leading-relaxed">{record.productDetail}</TableCell>
-                                            <TableCell><Badge variant="secondary" className="rounded-full">{record.reason}</Badge></TableCell>
-                                            <TableCell className="whitespace-normal text-sm leading-relaxed text-slate-600">{record.remark || "-"}</TableCell>
-                                            <TableCell className="whitespace-normal text-sm leading-relaxed text-slate-600">{record.actionPlan || "-"}</TableCell>
+                                    {paginatedData.length > 0 ? (
+                                        paginatedData.map((record, index) => (
+                                            <TableRow key={`row-${record.id || index}-${page}`} className="align-top hover:bg-blue-50/50">
+                                                <TableCell className="text-xs text-slate-500">{page * PAGE_SIZE + index + 1}</TableCell>
+                                                <TableCell className="whitespace-nowrap text-xs">{formatDate(record.timestamp)}</TableCell>
+                                                <TableCell className="font-medium">{record.consultant || "-"}</TableCell>
+                                                <TableCell className="text-xs text-slate-500">{record.productType || "-"}</TableCell>
+                                                <TableCell className="whitespace-nowrap text-xs">{formatDate(record.offeringDate)}</TableCell>
+                                                <TableCell><div className="font-semibold text-slate-900">{record.customer}</div></TableCell>
+                                                <TableCell className="whitespace-normal text-sm leading-relaxed">{record.productDetail}</TableCell>
+                                                <TableCell><Badge variant="secondary" className="rounded-full">{record.reason}</Badge></TableCell>
+                                                <TableCell className="whitespace-normal text-sm leading-relaxed text-slate-600">{record.remark || "-"}</TableCell>
+                                                <TableCell className="whitespace-normal text-sm leading-relaxed text-slate-600">{record.actionPlan || "-"}</TableCell>
+                                            </TableRow>
+                                        ))
+                                    ) : (
+                                        <TableRow>
+                                            <TableCell colSpan={10} className="h-24 text-center text-muted-foreground">
+                                                Tidak ada data
+                                            </TableCell>
                                         </TableRow>
-                                    ))}
+                                    )}
                                 </TableBody>
                             </Table>
                         </div>

@@ -269,6 +269,11 @@ export const navigationConfig: NavSection[] = [
                         resource: "marketing",
                     },
                     {
+                        title: "Instagram Generator",
+                        url: "/dashboard/marketing/instagram-generator",
+                        resource: "marketing",
+                    },
+                    {
                         title: "Contact & Grup Email",
                         url: "/dashboard/marketing/email-lists",
                         resource: "marketing",
