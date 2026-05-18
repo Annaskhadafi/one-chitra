@@ -32,6 +32,7 @@ type GeneratedImageResult = {
 
 const API_URL = process.env.INSTAGRAM_IMAGE_API_URL || "https://9router.chitraparatama.com/v1/images/generations"
 const API_MODEL = process.env.INSTAGRAM_IMAGE_MODEL || "cx/gpt-5.4-image"
+const ENABLE_PROVIDER_IMAGE_REFERENCES = process.env.INSTAGRAM_ENABLE_PROVIDER_IMAGE_REFERENCES === "true"
 
 export async function POST(req: NextRequest) {
   try {
@@ -56,8 +57,8 @@ export async function POST(req: NextRequest) {
 
     if (body.mode === "variations") {
       const variations = await Promise.all([
-        generateOneImage({ apiKey, prompt, format, contentType, referenceAssets, variationInstruction: "Variasi 1: gaya visual corporate premium, clean, elegan, komposisi seimbang, warna brand tegas." }),
-        generateOneImage({ apiKey, prompt, format, contentType, referenceAssets, variationInstruction: "Variasi 2: gaya visual modern editorial, lebih dinamis, depth lebih kuat, aksen visual berbeda namun tetap profesional." }),
+        generateOneImage({ apiKey, prompt, format, contentType, referenceAssets, variationInstruction: "Variasi 1: gaya visual corporate premium, clean, elegan, komposisi seimbang, warna brand tegas, wajib ada headline utama besar yang relevan." }),
+        generateOneImage({ apiKey, prompt, format, contentType, referenceAssets, variationInstruction: "Variasi 2: gaya visual modern editorial, dinamis, depth lebih kuat, angle berbeda, wajib ada headline utama besar yang relevan agar konten tidak kosong." }),
       ])
       return Response.json({ variations })
     }
@@ -78,13 +79,15 @@ async function generateOneImage(input: {
   referenceAssets: UploadedAsset[]
   variationInstruction?: string
 }): Promise<GeneratedImageResult> {
+  const referenceImages = ENABLE_PROVIDER_IMAGE_REFERENCES ? await resolveReferenceImages(input.referenceAssets) : []
+  const referenceSummaries = ENABLE_PROVIDER_IMAGE_REFERENCES ? [] : await resolveReferenceSummaries(input.referenceAssets)
   const enhancedPrompt = buildEnhancedPrompt({
     prompt: input.variationInstruction ? `${input.prompt}. ${input.variationInstruction}` : input.prompt,
     format: input.format,
     contentType: input.contentType,
     referenceAssets: input.referenceAssets,
+    referenceSummaries,
   })
-  const referenceImages = await resolveReferenceImages(input.referenceAssets)
 
   const response = await fetch(API_URL, {
     method: "POST",
@@ -145,6 +148,22 @@ async function resolveReferenceImages(assets: UploadedAsset[]) {
   return images
 }
 
+async function resolveReferenceSummaries(assets: UploadedAsset[]) {
+  return Promise.all(assets.slice(0, 4).map(async (asset) => {
+    const read = await readManagedUpload(asset.url)
+    if (!read) {
+      throw new Error(`Aset referensi tidak ditemukan: ${asset.filename}`)
+    }
+    const metadata = await sharp(read.buffer).metadata()
+    const stats = await sharp(read.buffer)
+      .resize(1, 1, { fit: "cover" })
+      .raw()
+      .toBuffer()
+    const color = `rgb(${stats[0]}, ${stats[1]}, ${stats[2]})`
+    return `${asset.filename}: gambar referensi ${metadata.width || 0}x${metadata.height || 0}px, warna dominan sekitar ${color}`
+  }))
+}
+
 function normalizeReferenceAssets(value: GenerateImageBody["referenceAssets"]): UploadedAsset[] {
   if (!Array.isArray(value)) return []
   return value.map((asset) => {
@@ -160,10 +179,11 @@ function buildEnhancedPrompt(input: {
   format: NonNullable<GenerateImageBody["format"]>
   contentType: string
   referenceAssets: UploadedAsset[]
+  referenceSummaries: string[]
 }) {
   const ratio = input.format === "story" ? "Instagram Story 9:16 vertical" : input.format === "portrait" ? "Instagram feed portrait 4:5" : "Instagram feed square 1:1"
   const references = input.referenceAssets.length > 0
-    ? ` Gunakan image upload sebagai referensi visual utama: ${input.referenceAssets.map((asset) => asset.filename).join(", ")}. Ambil identitas, objek, warna, atau produk penting dari referensi, tetapi jangan tempel sebagai kotak/logo mentah di atas desain.`
+    ? ` Gunakan aset upload sebagai referensi visual, bukan ditempel mentah: ${input.referenceSummaries.length > 0 ? input.referenceSummaries.join("; ") : input.referenceAssets.map((asset) => asset.filename).join(", ")}. Adaptasi warna, objek, dan identitas visualnya secara natural ke desain.`
     : ""
 
   return [
@@ -290,7 +310,7 @@ async function makeTemplateOverlay(templatePath: string, width: number, height: 
     .raw()
     .toBuffer({ resolveWithObject: true })
   const data = template.data
-  const footerStart = Math.floor(height * 0.88)
+  const footerStart = Math.floor(height * 0.93)
   for (let index = 0; index < data.length; index += 4) {
     const pixel = index / 4
     const y = Math.floor(pixel / width)
