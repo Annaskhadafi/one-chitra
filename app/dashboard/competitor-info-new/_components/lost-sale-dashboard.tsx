@@ -172,7 +172,7 @@ function parseLostRows(rows: SheetRow[], customerMapping: Record<string, string>
             remark: getField(row, "Remark", "Catatan"),
             actionPlan: getField(row, "Action Plan"),
         }
-    }).filter(Boolean) as LostSaleRecord[]
+    }).filter(Boolean).sort((a, b) => (b.offeringDate?.getTime() ?? 0) - (a.offeringDate?.getTime() ?? 0)) as LostSaleRecord[]
 }
 
 function MultiSelectFilter({ title, options, selected, onChange }: { title: string; options: string[]; selected: string[]; onChange: (value: string[]) => void }) {

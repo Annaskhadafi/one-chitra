@@ -303,17 +303,17 @@ export function CompetitorDashboardTab({ scope = "all" }: { scope?: DashboardSco
             return [item.customer, item.brand, item.size, item.supplier, item.consultant].join(" ").toLowerCase().includes(query)
                 && (segmentFilter === "all" || segment === segmentFilter)
                 && inDateRange(item.date, startDate, endDate)
-        })
+        }).sort((a, b) => (b.date?.getTime() ?? 0) - (a.date?.getTime() ?? 0))
         const activities = rawData.activities.filter((item) => {
             return [item.customer, item.competitor, item.activityType, item.location, item.consultant].join(" ").toLowerCase().includes(query)
                 && (impactFilter === "all" || item.businessImpact === impactFilter)
                 && inDateRange(item.date, startDate, endDate)
-        })
+        }).sort((a, b) => (b.date?.getTime() ?? 0) - (a.date?.getTime() ?? 0))
         const lostSales = rawData.lostSales.filter((item) => {
             return [item.customer, item.productDetail, item.reason, item.consultant].join(" ").toLowerCase().includes(query)
                 && (reasonFilter === "all" || item.reason === reasonFilter)
                 && inDateRange(item.date, startDate, endDate)
-        })
+        }).sort((a, b) => (b.date?.getTime() ?? 0) - (a.date?.getTime() ?? 0))
         return { prices, activities, lostSales }
     }, [rawData, reasonFilter, search, segmentFilter, impactFilter, startDate, endDate])
 
