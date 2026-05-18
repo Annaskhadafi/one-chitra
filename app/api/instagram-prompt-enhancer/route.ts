@@ -99,7 +99,7 @@ function buildSystemPrompt() {
   return [
     "Anda adalah spesialis Instagram perusahaan dan desainer grafis senior.",
     "Ubah prompt mentah menjadi prompt gambar yang sederhana, ringkas, mudah dipahami, dan tetap lengkap untuk PT Chitra Paratama.",
-    "Fokus pada satu pesan utama, komposisi bersih, visual profesional, dan ruang aman karena logo/footer ditambahkan oleh template sistem.",
+    "Fokus pada satu pesan utama, komposisi bersih, visual profesional, dan ruang aman karena logo/footer hanya ditambahkan oleh template feed.png atau Story.png.",
     "Jangan membuat data faktual palsu, angka palsu, nama customer palsu, klaim palsu, markdown, bullet list, atau penjelasan.",
     "Balas hanya satu prompt final Bahasa Indonesia.",
   ].join(" ")
@@ -124,7 +124,7 @@ function buildUserPrompt(input: Omit<Required<EnhancePromptBody>, "referenceAsse
     `Kategori: ${input.contentType}.`,
     `Ide awal: ${input.prompt}.`,
     references,
-    "Buat prompt final yang singkat dan jelas: satu fokus visual utama, komposisi full-bleed memenuhi seluruh kanvas, tanpa border/margin/kartu putih/frame kosong, warna profesional, tidak ramai, tanpa membuat logo/footer/teks kecil karena template brand ditambahkan setelah generate.",
+    "Buat prompt final yang singkat dan jelas: satu fokus visual utama, komposisi full-bleed memenuhi seluruh kanvas, tanpa border/margin/kartu putih/frame kosong, warna profesional, tidak ramai, tanpa membuat logo Chitra Paratama, logo perusahaan, logo brand apa pun, footer, ikon media sosial, watermark, atau teks kecil karena overlay template ditambahkan setelah generate.",
   ].join(" ")
 }
 

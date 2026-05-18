@@ -191,7 +191,7 @@ function buildEnhancedPrompt(input: {
     `Kategori: ${input.contentType}.`,
     `Tema: ${input.prompt}.`,
     "Desain sederhana, profesional, rapi, mudah dipahami, satu fokus utama, dan komposisi full-bleed yang mengisi seluruh kanvas tanpa border, margin, kartu putih, atau frame kosong.",
-    "Jangan buat logo, footer, watermark, atau teks kecil; sistem akan menambahkan template brand setelah gambar dibuat.",
+    "Jangan buat logo Chitra Paratama, logo perusahaan, logo brand apa pun, footer, watermark, ikon media sosial, atau teks kecil; semua elemen brand resmi hanya berasal dari overlay template feed.png atau Story.png setelah gambar dibuat.",
     references,
   ].join(" ").trim()
 }
@@ -310,16 +310,17 @@ async function makeTemplateOverlay(templatePath: string, width: number, height: 
     .raw()
     .toBuffer({ resolveWithObject: true })
   const data = template.data
-  const footerStart = Math.floor(height * 0.93)
+  const footerStart = Math.floor(height * 0.9)
   for (let index = 0; index < data.length; index += 4) {
     const pixel = index / 4
+    const x = pixel % width
     const y = Math.floor(pixel / width)
     const red = data[index]
     const green = data[index + 1]
     const blue = data[index + 2]
-    const isFooterArea = y >= footerStart
     const isNearWhite = red > 242 && green > 242 && blue > 242
-    if (!isFooterArea && isNearWhite) {
+    const keepFooterText = y >= footerStart && isNearWhite && hasColoredNeighbor(data, width, height, x, y)
+    if (isNearWhite && !keepFooterText) {
       data[index + 3] = 0
     }
   }
@@ -327,6 +328,25 @@ async function makeTemplateOverlay(templatePath: string, width: number, height: 
   return sharp(data, { raw: template.info })
     .png()
     .toBuffer()
+}
+
+function hasColoredNeighbor(data: Buffer, width: number, height: number, x: number, y: number) {
+  const radius = 3
+  for (let offsetY = -radius; offsetY <= radius; offsetY++) {
+    for (let offsetX = -radius; offsetX <= radius; offsetX++) {
+      const nx = x + offsetX
+      const ny = y + offsetY
+      if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue
+      const index = (ny * width + nx) * 4
+      const red = data[index]
+      const green = data[index + 1]
+      const blue = data[index + 2]
+      const isNearWhite = red > 242 && green > 242 && blue > 242
+      const isDark = red < 80 && green < 80 && blue < 80
+      if (!isNearWhite && !isDark) return true
+    }
+  }
+  return false
 }
 
 function getTargetSize(format: NonNullable<GenerateImageBody["format"]>) {

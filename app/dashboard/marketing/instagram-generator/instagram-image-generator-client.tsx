@@ -372,11 +372,17 @@ export function InstagramImageGeneratorClient() {
                 </div>
                 {isUploading && <p className="mt-3 text-xs text-muted-foreground">Sedang mengunggah dan memvalidasi gambar...</p>}
                 {uploadedAssets.length > 0 && (
-                  <div className="mt-4 grid grid-cols-4 gap-2">
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
                     {uploadedAssets.map((asset) => (
-                      <div key={asset.url} className="group relative aspect-square overflow-hidden rounded-lg border bg-muted">
-                        <Image src={asset.url} alt={asset.filename} fill className="object-cover" unoptimized />
-                        <button type="button" onClick={() => removeAsset(asset.url)} className="absolute right-1 top-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] text-white opacity-0 transition-opacity group-hover:opacity-100">Hapus</button>
+                      <div key={asset.url} className="group overflow-hidden rounded-xl border bg-background shadow-sm">
+                        <div className="relative aspect-[4/3] bg-muted">
+                          <Image src={asset.url} alt={asset.filename} fill className="object-contain p-2" unoptimized />
+                          <button type="button" onClick={() => removeAsset(asset.url)} className="absolute right-2 top-2 rounded bg-black/75 px-2 py-1 text-xs text-white opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">Hapus</button>
+                        </div>
+                        <div className="space-y-1 p-2 text-xs">
+                          <p className="truncate font-medium">{asset.filename}</p>
+                          <p className="text-muted-foreground">{asset.width} × {asset.height}px</p>
+                        </div>
                       </div>
                     ))}
                   </div>
