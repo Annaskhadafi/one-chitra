@@ -148,20 +148,21 @@ async function fetchSheet(gid: string) {
     }).data
 }
 
-function parsePrice(row: SheetRow, index: number, customerMapping: Record<string, string>): CompetitorPriceRecord | null {
+function parsePrice(row: SheetRow, index: number, companyMapping: Record<string, string>): CompetitorPriceRecord | null {
     const rawCustomer = getField(row, ["Nama Customer"])
     const size = getField(row, ["Size Tire"])
     const brand = getField(row, ["Brand"])
+    const rawSupplier = getField(row, ["Supplier"])
     if (!rawCustomer || !size || !brand) return null
     return {
         id: `price-${index}`,
         date: parseDateValue(getField(row, ["Tanggal Informasi"])),
         consultant: getField(row, ["Business Consultant"]),
-        customer: customerMapping[rawCustomer] || rawCustomer,
+        customer: companyMapping[rawCustomer] || rawCustomer,
         size,
         brand: normalizeBrand(brand),
         category: getField(row, ["Category Tire"]),
-        supplier: getField(row, ["Supplier"]),
+        supplier: companyMapping[rawSupplier] || rawSupplier,
         currency: getField(row, ["Currency"]) || "IDR",
         price: parseMoney(getField(row, ["PRICE", "Price"])),
         status: "",
@@ -169,20 +170,20 @@ function parsePrice(row: SheetRow, index: number, customerMapping: Record<string
     }
 }
 
-function parseActivity(row: SheetRow, index: number, customerMapping: Record<string, string>): CompetitorActivityRecord | null {
+function parseActivity(row: SheetRow, index: number, companyMapping: Record<string, string>): CompetitorActivityRecord | null {
     const rawCustomer = getField(row, ["Customer", "Nama Customer"])
-    const competitor = getField(row, ["Competitor"])
+    const rawCompetitor = getField(row, ["Competitor"])
     const activityType = getField(row, ["Jenis Aktivitas"])
-    if (!competitor || !activityType) return null
+    if (!rawCompetitor || !activityType) return null
     return {
         id: `activity-${index}`,
         date: parseDateValue(getField(row, ["Tanggal Informasi"])),
         consultant: getField(row, ["Business Consultant"]),
-        competitor,
+        competitor: companyMapping[rawCompetitor] || rawCompetitor,
         industry: getField(row, ["Industri / Kategori"]),
         location: getField(row, ["Lokasi"]),
         activityType,
-        customer: customerMapping[rawCustomer] || rawCustomer,
+        customer: companyMapping[rawCustomer] || rawCustomer,
         marketResponse: getField(row, ["Respon Pasar"]),
         businessImpact: getField(row, ["Perkiraan Pengaruh ke Bisnis"]),
         strategy: getField(row, ["Strategi yang bisa di terapkan", "Strategi"]),
@@ -190,7 +191,7 @@ function parseActivity(row: SheetRow, index: number, customerMapping: Record<str
     }
 }
 
-function parseLostSale(row: SheetRow, index: number, customerMapping: Record<string, string>): LostSaleRecord | null {
+function parseLostSale(row: SheetRow, index: number, companyMapping: Record<string, string>): LostSaleRecord | null {
     const rawCustomer = getField(row, ["Customer", "Nama Customer"])
     const productDetail = getField(row, ["Detail Produk"])
     if (!rawCustomer || !productDetail) return null
@@ -199,7 +200,7 @@ function parseLostSale(row: SheetRow, index: number, customerMapping: Record<str
         date: parseDateValue(getField(row, ["Tanggal Penawaran"])),
         consultant: getField(row, ["Business Consultant"]),
         productType: getField(row, ["Tipe Produk"]),
-        customer: customerMapping[rawCustomer] || rawCustomer,
+        customer: companyMapping[rawCustomer] || rawCustomer,
         productDetail,
         reason: getField(row, ["Penyebab Lost Sale"]) || "OTHER",
         remark: getField(row, ["Remark"]),
@@ -269,18 +270,20 @@ export function CompetitorDashboardTab({ scope = "all" }: { scope?: DashboardSco
                 scope === "all" || scope === "activities" ? fetchSheet(SHEETS.activities.gid) : Promise.resolve([]),
             ])
 
-            const rawCustomerNames = [
+            const rawCompanyNames = [
                 ...priceRows.map((row) => getField(row, ["Nama Customer"])),
+                ...priceRows.map((row) => getField(row, ["Supplier"])),
                 ...activityRows.map((row) => getField(row, ["Customer", "Nama Customer"])),
+                ...activityRows.map((row) => getField(row, ["Competitor"])),
                 ...lostRows.map((row) => getField(row, ["Customer", "Nama Customer"])),
             ].filter(Boolean) as string[]
 
-            const customerMapping = normalizeNames(rawCustomerNames)
+            const companyMapping = normalizeNames(rawCompanyNames)
 
             setRawData({
-                prices: priceRows.map((r, i) => parsePrice(r, i, customerMapping)).filter(Boolean) as CompetitorPriceRecord[],
-                activities: activityRows.map((r, i) => parseActivity(r, i, customerMapping)).filter(Boolean) as CompetitorActivityRecord[],
-                lostSales: lostRows.map((r, i) => parseLostSale(r, i, customerMapping)).filter(Boolean) as LostSaleRecord[],
+                prices: priceRows.map((r, i) => parsePrice(r, i, companyMapping)).filter(Boolean) as CompetitorPriceRecord[],
+                activities: activityRows.map((r, i) => parseActivity(r, i, companyMapping)).filter(Boolean) as CompetitorActivityRecord[],
+                lostSales: lostRows.map((r, i) => parseLostSale(r, i, companyMapping)).filter(Boolean) as LostSaleRecord[],
             })
         } catch (caught) {
             setError(caught instanceof Error ? caught.message : "Gagal memuat data")

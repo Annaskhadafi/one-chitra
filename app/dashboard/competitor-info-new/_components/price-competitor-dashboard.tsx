@@ -307,21 +307,22 @@ function renderPieLabel({ name, percent, value }: { name?: string; percent?: num
     return `${name ?? ""} ${value ?? 0} (${(percent * 100).toFixed(0)}%)`
 }
 
-function parsePriceRows(rows: SheetRow[], customerMapping: Record<string, string>) {
+function parsePriceRows(rows: SheetRow[], companyMapping: Record<string, string>) {
     return rows.map((row, index): PriceRecord | null => {
         const rawCustomer = cleanText(row["Nama Customer"])
         const size = cleanText(row["Size Tire"])
         const brand = cleanText(row["Brand"])
+        const rawSupplier = cleanText(row.Supplier)
         if (!rawCustomer || !size || !brand) return null
         return {
             id: `price-${index}`,
             timestamp: parseDateValue(row.Timestamp),
             infoDate: parseDateValue(row["Tanggal Informasi"]),
-            customer: customerMapping[rawCustomer] || rawCustomer,
+            customer: companyMapping[rawCustomer] || rawCustomer,
             size,
             brand: normalizeBrand(brand),
             category: cleanText(row["Category Tire"]),
-            supplier: cleanText(row.Supplier),
+            supplier: companyMapping[rawSupplier] || rawSupplier,
             currency: cleanText(row.Currency) || "IDR",
             price: parseMoney(row.PRICE || row.Price),
             deliveryPoint: cleanText(row["Remark / Delivery Drop Point"]),
@@ -409,10 +410,13 @@ export function PriceCompetitorDashboard() {
                 transformHeader: (header) => header.trim(),
             })
             
-            const rawCustomerNames = parsed.data.map(row => cleanText(row["Nama Customer"])).filter(Boolean) as string[]
-            const customerMapping = normalizeNames(rawCustomerNames)
+            const rawCompanyNames = [
+                ...parsed.data.map(row => cleanText(row["Nama Customer"])),
+                ...parsed.data.map(row => cleanText(row.Supplier))
+            ].filter(Boolean) as string[]
+            const companyMapping = normalizeNames(rawCompanyNames)
 
-            setRecords(parsePriceRows(parsed.data, customerMapping))
+            setRecords(parsePriceRows(parsed.data, companyMapping))
         } catch (caught) {
             setError(caught instanceof Error ? caught.message : "Gagal memuat data")
         } finally {
