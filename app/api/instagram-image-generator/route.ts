@@ -1,5 +1,7 @@
 import { NextRequest } from "next/server"
 import sharp from "sharp"
+import fs from "fs/promises"
+import path from "path"
 import { composeInstagramImage } from "@/lib/instagram-compose-engine"
 import { readManagedUpload } from "@/lib/upload-storage"
 
@@ -81,8 +83,18 @@ async function generateOneImage(input: {
   referenceAssets: UploadedAsset[]
   variationInstruction?: string
 }): Promise<GeneratedImageResult> {
-  const referenceImages = ENABLE_PROVIDER_IMAGE_REFERENCES ? await resolveReferenceImages(input.referenceAssets) : []
+  const needsWearpackReference = /orang|person|people|pekerja|karyawan|teknisi|operator|tim|team|mekanik|mechanic|worker|staff|employee|industrial|warehouse|workshop|safety|ban|tire|alat berat|heavy equipment|service|maintenance/i.test(input.prompt)
+  
+  let referenceImages = ENABLE_PROVIDER_IMAGE_REFERENCES ? await resolveReferenceImages(input.referenceAssets) : []
   const referenceSummaries = ENABLE_PROVIDER_IMAGE_REFERENCES ? [] : await resolveReferenceSummaries(input.referenceAssets)
+  
+  if (needsWearpackReference && ENABLE_PROVIDER_IMAGE_REFERENCES) {
+    const wearpackImage = await loadWearpackReference()
+    if (wearpackImage) {
+      referenceImages = [wearpackImage, ...referenceImages]
+    }
+  }
+  
   const enhancedPrompt = buildEnhancedPrompt({
     prompt: input.variationInstruction ? `${input.prompt}. ${input.variationInstruction}` : input.prompt,
     format: input.format,
@@ -132,6 +144,21 @@ async function generateOneImage(input: {
     height: metadata.height || 0,
     prompt: input.prompt,
     enhancedPrompt,
+  }
+}
+
+async function loadWearpackReference() {
+  try {
+    const wearpackPath = path.join(process.cwd(), "public", "wearpack.png")
+    const buffer = await fs.readFile(wearpackPath)
+    const normalized = await sharp(buffer)
+      .rotate()
+      .resize({ width: 1536, height: 1536, fit: "inside", withoutEnlargement: true })
+      .png({ quality: 100, compressionLevel: 9 })
+      .toBuffer()
+    return `data:image/png;base64,${normalized.toString("base64")}`
+  } catch {
+    return null
   }
 }
 
