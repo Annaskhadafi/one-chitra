@@ -647,13 +647,6 @@ function QuotationTableInner({ data: initialData }: QuotationTableProps) {
     const [statusFilters, setStatusFilters] = useState<string[]>([])
     const [userFilters, setUserFilters] = useState<string[]>([])
 
-    // Set default user filter to current user once session is loaded
-    useEffect(() => {
-        if (currentUserId) {
-            setUserFilters((current) => (current.length > 0 ? current : [currentUserId]))
-        }
-    }, [currentUserId])
-
     const [customerFilters, setCustomerFilters] = useState<string[]>([])
     const [quotationDateRange, setQuotationDateRange] = useState<DateRange | undefined>(undefined)
     const [rowSelection, setRowSelection] = useState({})
