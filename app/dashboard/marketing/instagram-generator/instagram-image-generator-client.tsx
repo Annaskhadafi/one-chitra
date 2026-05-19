@@ -38,6 +38,8 @@ type Holiday = {
   is_national_holiday: boolean
 }
 
+type VisualStyle = "Modern & Clean" | "Elegant & Luxury" | "Playful & Vibrant" | "Corporate & Professional" | "Minimalist"
+
 const contentTypes = [
   "Ucapan ulang tahun customer",
   "Edukasi",
@@ -45,24 +47,232 @@ const contentTypes = [
   "Event perusahaan",
   "Promosi produk",
   "Hari Nasional",
+] as const
+
+const visualStyles: VisualStyle[] = [
+  "Modern & Clean",
+  "Elegant & Luxury",
+  "Playful & Vibrant",
+  "Corporate & Professional",
+  "Minimalist",
 ]
 
 function formatDate(date: string) {
   return new Intl.DateTimeFormat("id-ID", { dateStyle: "long" }).format(new Date(`${date}T00:00:00+08:00`))
 }
 
-const promptTemplates: Record<string, string> = {
-  "Ucapan ulang tahun customer": "Buat visual ucapan ulang tahun yang hangat dan profesional untuk customer PT Chitra Paratama, nuansa apresiasi bisnis, elegan, tidak berlebihan.",
-  Edukasi: "Buat konten edukasi Instagram tentang solusi, layanan, atau insight industri PT Chitra Paratama dengan visual profesional dan mudah dipahami.",
-  "Pencapaian perusahaan": "Buat visual pencapaian perusahaan yang menunjukkan pertumbuhan, kolaborasi tim, kepercayaan customer, dan kredibilitas PT Chitra Paratama.",
-  "Event perusahaan": "Buat visual dokumentasi atau pengumuman event perusahaan yang modern, dinamis, dan mencerminkan profesionalisme PT Chitra Paratama.",
-  "Promosi produk": "Buat visual promosi produk yang premium, jelas, dan meyakinkan untuk audiens B2B PT Chitra Paratama.",
-  "Hari Nasional": "Buat visual Hari Nasional resmi yang relevan untuk PT Chitra Paratama, bernuansa nasional, profesional, dan cocok untuk publikasi Instagram perusahaan.",
+const defaultVisualStyleByContentType: Record<(typeof contentTypes)[number], VisualStyle> = {
+  "Ucapan ulang tahun customer": "Elegant & Luxury",
+  Edukasi: "Modern & Clean",
+  "Pencapaian perusahaan": "Corporate & Professional",
+  "Event perusahaan": "Playful & Vibrant",
+  "Promosi produk": "Elegant & Luxury",
+  "Hari Nasional": "Corporate & Professional",
+}
+
+const promptTemplates: Record<(typeof contentTypes)[number], Record<VisualStyle, string>> = {
+  "Ucapan ulang tahun customer": {
+    "Modern & Clean": `Content focus: Ucapan selamat ulang tahun untuk [NAMA CUSTOMER/PERUSAHAAN] dari PT Chitra Paratama.
+Headline text: "[UCAPAN ULANG TAHUN SINGKAT]"
+Brand/Source: "PT Chitra Paratama"
+Visual style: modern, clean layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use clean iconography and structured information hierarchy.
+Additional elements: [ELEMEN TAMBAHAN MISAL: KUE, PITA, BACKGROUND KANTOR].
+Variant note: Include a professional illustration or photo integrated naturally into the design.`,
+    "Elegant & Luxury": `Content focus: Ucapan selamat ulang tahun untuk [NAMA CUSTOMER/PERUSAHAAN] dari PT Chitra Paratama.
+Headline text: "[UCAPAN ULANG TAHUN SINGKAT]"
+Brand/Source: "PT Chitra Paratama"
+Visual style: elegant, luxury, and sophisticated layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use premium textures, subtle background patterns, and balanced composition.
+Additional elements: [ELEMEN TAMBAHAN MISAL: KUE, PITA, BACKGROUND KANTOR].
+Variant note: Include a professional illustration or photo integrated naturally into the design.`,
+    "Playful & Vibrant": `Content focus: Ucapan selamat ulang tahun untuk [NAMA CUSTOMER/PERUSAHAAN] dari PT Chitra Paratama.
+Headline text: "[UCAPAN ULANG TAHUN SINGKAT]"
+Brand/Source: "PT Chitra Paratama"
+Visual style: playful, vibrant, and energetic layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use friendly shapes, bright accents, and dynamic composition.
+Additional elements: [ELEMEN TAMBAHAN MISAL: KUE, PITA, BACKGROUND KANTOR].
+Variant note: Include a professional illustration or photo integrated naturally into the design.`,
+    "Corporate & Professional": `Content focus: Ucapan selamat ulang tahun untuk [NAMA CUSTOMER/PERUSAHAAN] dari PT Chitra Paratama.
+Headline text: "[UCAPAN ULANG TAHUN SINGKAT]"
+Brand/Source: "PT Chitra Paratama"
+Visual style: corporate, professional, and trustworthy layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use structured grids, clean lines, and business-appropriate composition.
+Additional elements: [ELEMEN TAMBAHAN MISAL: KUE, PITA, BACKGROUND KANTOR].
+Variant note: Include a professional illustration or photo integrated naturally into the design.`,
+    Minimalist: `Content focus: Ucapan selamat ulang tahun untuk [NAMA CUSTOMER/PERUSAHAAN] dari PT Chitra Paratama.
+Headline text: "[UCAPAN ULANG TAHUN SINGKAT]"
+Brand/Source: "PT Chitra Paratama"
+Visual style: minimalist, simple, and clean layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use plenty of whitespace, simple geometry, and high contrast.
+Additional elements: [ELEMEN TAMBAHAN MISAL: KUE, PITA, BACKGROUND KANTOR].
+Variant note: Include a professional illustration or photo integrated naturally into the design.`,
+  },
+  Edukasi: {
+    "Modern & Clean": `Content focus: Educational post about [TOPIK EDUKASI] for [TARGET AUDIENCE].
+Headline text: "[HEADLINE EDUKASI]"
+Brand/Source: "PT Chitra Paratama"
+Visual style: modern, clean layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use clean iconography, data visualization elements, and structured information hierarchy.
+Additional elements: [ELEMEN TAMBAHAN].
+Variant note: Include a professional photo of a person (smiling, confident, representing the brand) integrated naturally into the design.`,
+    "Elegant & Luxury": `Content focus: Educational post about [TOPIK EDUKASI] for [TARGET AUDIENCE].
+Headline text: "[HEADLINE EDUKASI]"
+Brand/Source: "PT Chitra Paratama"
+Visual style: elegant, luxury, and sophisticated layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use premium textures, data visualization elements, and structured information hierarchy. Include subtle background patterns.
+Additional elements: [ELEMEN TAMBAHAN].
+Variant note: Include a professional photo of a person (smiling, confident, representing the brand) integrated naturally into the design.`,
+    "Playful & Vibrant": `Content focus: Educational post about [TOPIK EDUKASI] for [TARGET AUDIENCE].
+Headline text: "[HEADLINE EDUKASI]"
+Brand/Source: "PT Chitra Paratama"
+Visual style: playful, vibrant, and engaging layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use bold typography, dynamic data visualization, and structured information hierarchy.
+Additional elements: [ELEMEN TAMBAHAN].
+Variant note: Include a professional photo of a person (smiling, confident, representing the brand) integrated naturally into the design.`,
+    "Corporate & Professional": `Content focus: Educational post about [TOPIK EDUKASI] for [TARGET AUDIENCE].
+Headline text: "[HEADLINE EDUKASI]"
+Brand/Source: "PT Chitra Paratama"
+Visual style: corporate, professional, and authoritative layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use business iconography, formal data visualization, and strict information hierarchy.
+Additional elements: [ELEMEN TAMBAHAN].
+Variant note: Include a professional photo of a person (smiling, confident, representing the brand) integrated naturally into the design.`,
+    Minimalist: `Content focus: Educational post about [TOPIK EDUKASI] for [TARGET AUDIENCE].
+Headline text: "[HEADLINE EDUKASI]"
+Brand/Source: "PT Chitra Paratama"
+Visual style: minimalist, highly focused layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use simple data visualization elements, abundant whitespace, and strict information hierarchy.
+Additional elements: [ELEMEN TAMBAHAN].
+Variant note: Include a professional photo of a person (smiling, confident, representing the brand) integrated naturally into the design.`,
+  },
+  "Pencapaian perusahaan": {
+    "Modern & Clean": `Content focus: Company milestone or achievement about [DETAIL PENCAPAIAN] for [TARGET AUDIENCE].
+Headline text: "[HEADLINE PENCAPAIAN]"
+Brand/Source: "PT Chitra Paratama"
+Visual style: modern, clean layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use bold numbers, clean iconography, and a structured layout that highlights the milestone.
+Additional elements: [ELEMEN TAMBAHAN MISAL: TROFI, GRAFIK NAIK, GEDUNG KANTOR].
+Variant note: Include a professional photo of a team or office integrated naturally into the design.`,
+    "Elegant & Luxury": `Content focus: Company milestone or achievement about [DETAIL PENCAPAIAN] for [TARGET AUDIENCE].
+Headline text: "[HEADLINE PENCAPAIAN]"
+Brand/Source: "PT Chitra Paratama"
+Visual style: elegant, luxury, and sophisticated layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use premium typography, gold/silver accents if applicable, and a prestigious composition.
+Additional elements: [ELEMEN TAMBAHAN MISAL: TROFI, GRAFIK NAIK, GEDUNG KANTOR].
+Variant note: Include a professional photo of a team or office integrated naturally into the design.`,
+    "Playful & Vibrant": `Content focus: Company milestone or achievement about [DETAIL PENCAPAIAN] for [TARGET AUDIENCE].
+Headline text: "[HEADLINE PENCAPAIAN]"
+Brand/Source: "PT Chitra Paratama"
+Visual style: playful, vibrant, and celebratory layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use dynamic shapes, energetic composition, and a festive mood.
+Additional elements: [ELEMEN TAMBAHAN MISAL: TROFI, GRAFIK NAIK, GEDUNG KANTOR].
+Variant note: Include a professional photo of a team or office integrated naturally into the design.`,
+    "Corporate & Professional": `Content focus: Company milestone or achievement about [DETAIL PENCAPAIAN] for [TARGET AUDIENCE].
+Headline text: "[HEADLINE PENCAPAIAN]"
+Brand/Source: "PT Chitra Paratama"
+Visual style: corporate, professional, and prestigious layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use formal typography, solid business aesthetics, and strict grids.
+Additional elements: [ELEMEN TAMBAHAN MISAL: TROFI, GRAFIK NAIK, GEDUNG KANTOR].
+Variant note: Include a professional photo of a team or office integrated naturally into the design.`,
+    Minimalist: `Content focus: Company milestone or achievement about [DETAIL PENCAPAIAN] for [TARGET AUDIENCE].
+Headline text: "[HEADLINE PENCAPAIAN]"
+Brand/Source: "PT Chitra Paratama"
+Visual style: minimalist, clean layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Focus entirely on the milestone number/text with ample whitespace.
+Additional elements: [ELEMEN TAMBAHAN MISAL: TROFI, GRAFIK NAIK, GEDUNG KANTOR].
+Variant note: Include a professional photo of a team or office integrated naturally into the design.`,
+  },
+  "Event perusahaan": {
+    "Modern & Clean": `Content focus: Company event announcement or coverage about [NAMA EVENT] for [TARGET AUDIENCE].
+Headline text: "[HEADLINE EVENT]"
+Brand/Source: "PT Chitra Paratama"
+Visual style: modern, clean layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use dynamic angles, clear date/time layout, and structured event information.
+Additional elements: [ELEMEN TAMBAHAN MISAL: MIC, PANGGUNG, TIKET].
+Variant note: Include a professional photo of the event or speakers integrated naturally into the design.`,
+    "Elegant & Luxury": `Content focus: Company event announcement or coverage about [NAMA EVENT] for [TARGET AUDIENCE].
+Headline text: "[HEADLINE EVENT]"
+Brand/Source: "PT Chitra Paratama"
+Visual style: elegant, luxury, and exclusive layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use premium textures, sophisticated typography, and a VIP atmosphere.
+Additional elements: [ELEMEN TAMBAHAN MISAL: MIC, PANGGUNG, TIKET].
+Variant note: Include a professional photo of the event or speakers integrated naturally into the design.`,
+    "Playful & Vibrant": `Content focus: Company event announcement or coverage about [NAMA EVENT] for [TARGET AUDIENCE].
+Headline text: "[HEADLINE EVENT]"
+Brand/Source: "PT Chitra Paratama"
+Visual style: playful, vibrant, and exciting layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use bold graphics, high energy, and inviting composition.
+Additional elements: [ELEMEN TAMBAHAN MISAL: MIC, PANGGUNG, TIKET].
+Variant note: Include a professional photo of the event or speakers integrated naturally into the design.`,
+    "Corporate & Professional": `Content focus: Company event announcement or coverage about [NAMA EVENT] for [TARGET AUDIENCE].
+Headline text: "[HEADLINE EVENT]"
+Brand/Source: "PT Chitra Paratama"
+Visual style: corporate, professional, and formal layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use clean business graphics, structured agenda layout, and authoritative tone.
+Additional elements: [ELEMEN TAMBAHAN MISAL: MIC, PANGGUNG, TIKET].
+Variant note: Include a professional photo of the event or speakers integrated naturally into the design.`,
+    Minimalist: `Content focus: Company event announcement or coverage about [NAMA EVENT] for [TARGET AUDIENCE].
+Headline text: "[HEADLINE EVENT]"
+Brand/Source: "PT Chitra Paratama"
+Visual style: minimalist, modern layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Focus purely on the event title and essential details with a clean background.
+Additional elements: [ELEMEN TAMBAHAN MISAL: MIC, PANGGUNG, TIKET].
+Variant note: Include a professional photo of the event or speakers integrated naturally into the design.`,
+  },
+  "Promosi produk": {
+    "Modern & Clean": `Content focus: Product promotion for [NAMA PRODUK/LAYANAN] aimed at [TARGET AUDIENCE].
+Headline text: "[HEADLINE PROMOSI]"
+Brand/Source: "PT Chitra Paratama"
+Visual style: modern, clean layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use sharp product focus, clear features hierarchy, and sleek typography.
+Additional elements: [ELEMEN TAMBAHAN MISAL: BAN, ALAT BERAT, SERVIS].
+Variant note: Include a professional photo of the product or service in action integrated naturally into the design.`,
+    "Elegant & Luxury": `Content focus: Product promotion for [NAMA PRODUK/LAYANAN] aimed at [TARGET AUDIENCE].
+Headline text: "[HEADLINE PROMOSI]"
+Brand/Source: "PT Chitra Paratama"
+Visual style: elegant, luxury, and premium layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use high-end aesthetics, dramatic lighting, and sophisticated composition.
+Additional elements: [ELEMEN TAMBAHAN MISAL: BAN, ALAT BERAT, SERVIS].
+Variant note: Include a professional photo of the product or service in action integrated naturally into the design.`,
+    "Playful & Vibrant": `Content focus: Product promotion for [NAMA PRODUK/LAYANAN] aimed at [TARGET AUDIENCE].
+Headline text: "[HEADLINE PROMOSI]"
+Brand/Source: "PT Chitra Paratama"
+Visual style: playful, vibrant, and eye-catching layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use dynamic bursts, strong contrast, and an inviting promotional feel.
+Additional elements: [ELEMEN TAMBAHAN MISAL: BAN, ALAT BERAT, SERVIS].
+Variant note: Include a professional photo of the product or service in action integrated naturally into the design.`,
+    "Corporate & Professional": `Content focus: Product promotion for [NAMA PRODUK/LAYANAN] aimed at [TARGET AUDIENCE].
+Headline text: "[HEADLINE PROMOSI]"
+Brand/Source: "PT Chitra Paratama"
+Visual style: corporate, professional, and reliable layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use industrial/business aesthetics, clear benefits list, and a trustworthy tone.
+Additional elements: [ELEMEN TAMBAHAN MISAL: BAN, ALAT BERAT, SERVIS].
+Variant note: Include a professional photo of the product or service in action integrated naturally into the design.`,
+    Minimalist: `Content focus: Product promotion for [NAMA PRODUK/LAYANAN] aimed at [TARGET AUDIENCE].
+Headline text: "[HEADLINE PROMOSI]"
+Brand/Source: "PT Chitra Paratama"
+Visual style: minimalist, ultra-clean layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use negative space to make the product the sole hero of the visual.
+Additional elements: [ELEMEN TAMBAHAN MISAL: BAN, ALAT BERAT, SERVIS].
+Variant note: Include a professional photo of the product or service in action integrated naturally into the design.`,
+  },
+  "Hari Nasional": {
+    "Modern & Clean": `Content focus: National holiday greeting for [NAMA HARI NASIONAL].
+Headline text: "Selamat [NAMA HARI NASIONAL]"
+Brand/Source: "PT Chitra Paratama"
+Visual style: modern, clean layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use relevant national/cultural symbols with a contemporary design approach.
+Additional elements: [ELEMEN TAMBAHAN SESUAI HARI RAYA].
+Variant note: Include a professional illustration or photo relevant to the holiday integrated naturally into the design.`,
+    "Elegant & Luxury": `Content focus: National holiday greeting for [NAMA HARI NASIONAL].
+Headline text: "Selamat [NAMA HARI NASIONAL]"
+Brand/Source: "PT Chitra Paratama"
+Visual style: elegant, luxury, and respectful layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use premium textures, sophisticated cultural motifs, and a distinguished atmosphere.
+Additional elements: [ELEMEN TAMBAHAN SESUAI HARI RAYA].
+Variant note: Include a professional illustration or photo relevant to the holiday integrated naturally into the design.`,
+    "Playful & Vibrant": `Content focus: National holiday greeting for [NAMA HARI NASIONAL].
+Headline text: "Selamat [NAMA HARI NASIONAL]"
+Brand/Source: "PT Chitra Paratama"
+Visual style: playful, vibrant, and festive layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use bright cultural graphics, joyful energy, and celebratory composition.
+Additional elements: [ELEMEN TAMBAHAN SESUAI HARI RAYA].
+Variant note: Include a professional illustration or photo relevant to the holiday integrated naturally into the design.`,
+    "Corporate & Professional": `Content focus: National holiday greeting for [NAMA HARI NASIONAL].
+Headline text: "Selamat [NAMA HARI NASIONAL]"
+Brand/Source: "PT Chitra Paratama"
+Visual style: corporate, professional, and formal layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use official business greetings, clean cultural accents, and a respectful tone.
+Additional elements: [ELEMEN TAMBAHAN SESUAI HARI RAYA].
+Variant note: Include a professional illustration or photo relevant to the holiday integrated naturally into the design.`,
+    Minimalist: `Content focus: National holiday greeting for [NAMA HARI NASIONAL].
+Headline text: "Selamat [NAMA HARI NASIONAL]"
+Brand/Source: "PT Chitra Paratama"
+Visual style: minimalist, modern layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Focus purely on a single strong cultural icon and the greeting text with ample whitespace.
+Additional elements: [ELEMEN TAMBAHAN SESUAI HARI RAYA].
+Variant note: Include a professional illustration or photo relevant to the holiday integrated naturally into the design.`,
+  },
+}
+
+function getPromptTemplate(contentType: (typeof contentTypes)[number], visualStyle: VisualStyle) {
+  return promptTemplates[contentType][visualStyle]
 }
 
 export function InstagramImageGeneratorClient() {
-  const [prompt, setPrompt] = React.useState(promptTemplates.Edukasi)
-  const [contentType, setContentType] = React.useState("Edukasi")
+  const [contentType, setContentType] = React.useState<(typeof contentTypes)[number]>("Edukasi")
+  const [visualStyle, setVisualStyle] = React.useState<VisualStyle>(defaultVisualStyleByContentType.Edukasi)
+  const [prompt, setPrompt] = React.useState(getPromptTemplate("Edukasi", defaultVisualStyleByContentType.Edukasi))
   const [format, setFormat] = React.useState<ImageFormat>("portrait")
   const [uploadedAssets, setUploadedAssets] = React.useState<UploadedAsset[]>([])
   const [nearestHoliday, setNearestHoliday] = React.useState<Holiday | null>(null)
@@ -77,18 +287,29 @@ export function InstagramImageGeneratorClient() {
   React.useEffect(() => {
     if (contentType !== "Hari Nasional") return
     let mounted = true
+    const controller = new AbortController()
+    
     queueMicrotask(() => {
       if (mounted) setIsLoadingHoliday(true)
     })
-    fetch("/api/national-holidays")
+    
+    fetch("/api/national-holidays", { signal: controller.signal })
       .then((response) => response.json())
       .then((data: { nearestHoliday?: Holiday; error?: string }) => {
         if (!mounted) return
         if (!data.nearestHoliday) throw new Error(data.error || "Data Hari Nasional tidak tersedia")
         setNearestHoliday(data.nearestHoliday)
-        setPrompt(`Buat konten Instagram resmi PT Chitra Paratama untuk ${data.nearestHoliday.name} tanggal ${formatDate(data.nearestHoliday.date)}. Visual harus relevan dengan momentum nasional tersebut, profesional, berkelas, menghormati konteks hari nasional, dan tetap sesuai identitas perusahaan.`)
+        
+        // Use the current visual style template for Hari Nasional and replace the placeholders
+        const baseTemplate = getPromptTemplate("Hari Nasional", visualStyle)
+        const updatedPrompt = baseTemplate
+          .replace(/\[NAMA HARI NASIONAL\]/g, data.nearestHoliday.name)
+          .replace(/\[ELEMEN TAMBAHAN SESUAI HARI RAYA\]/g, "Elemen relevan untuk " + data.nearestHoliday.name)
+        
+        setPrompt(updatedPrompt)
       })
       .catch((err) => {
+        if (err.name === 'AbortError') return
         const message = err instanceof Error ? err.message : "Gagal mengambil Hari Nasional terdekat"
         setError(message)
         toast.error(message)
@@ -96,10 +317,12 @@ export function InstagramImageGeneratorClient() {
       .finally(() => {
         if (mounted) setIsLoadingHoliday(false)
       })
+      
     return () => {
       mounted = false
+      controller.abort()
     }
-  }, [contentType])
+  }, [contentType, visualStyle])
 
   const generateImage = async () => {
     const trimmedPrompt = prompt.trim()
@@ -113,6 +336,9 @@ export function InstagramImageGeneratorClient() {
     setResult(null)
     setVariationResults([])
 
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 180000) // 3 mins timeout
+
     try {
       const response = await fetch("/api/instagram-image-generator", {
         method: "POST",
@@ -121,8 +347,10 @@ export function InstagramImageGeneratorClient() {
           prompt: trimmedPrompt,
           format,
           contentType,
+          visualStyle,
           referenceAssets: uploadedAssets,
         }),
+        signal: controller.signal,
       })
       const data = await response.json().catch(() => null) as GeneratedImageResult & { error?: string } | null
       if (!response.ok || !data) {
@@ -131,10 +359,11 @@ export function InstagramImageGeneratorClient() {
       setResult(data)
       toast.success("Gambar Instagram berhasil dibuat")
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Gagal generate gambar"
+      const message = err instanceof Error ? (err.name === 'AbortError' ? 'Waktu proses habis (timeout)' : err.message) : "Gagal generate gambar"
       setError(message)
       toast.error(message)
     } finally {
+      clearTimeout(timeout)
       setIsGenerating(false)
     }
   }
@@ -151,6 +380,9 @@ export function InstagramImageGeneratorClient() {
     setResult(null)
     setVariationResults([])
 
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 240000) // 4 mins timeout
+
     try {
       const response = await fetch("/api/instagram-image-generator", {
         method: "POST",
@@ -159,9 +391,11 @@ export function InstagramImageGeneratorClient() {
           prompt: trimmedPrompt,
           format,
           contentType,
+          visualStyle,
           referenceAssets: uploadedAssets,
           mode: "variations",
         }),
+        signal: controller.signal,
       })
       const data = await response.json().catch(() => null) as { variations?: GeneratedImageResult[]; error?: string } | null
       if (!response.ok || data?.variations?.length !== 2) {
@@ -170,10 +404,11 @@ export function InstagramImageGeneratorClient() {
       setVariationResults(data.variations)
       toast.success("2 variasi gambar berhasil dibuat")
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Gagal membuat variasi gambar"
+      const message = err instanceof Error ? (err.name === 'AbortError' ? 'Waktu proses habis (timeout)' : err.message) : "Gagal membuat variasi gambar"
       setError(message)
       toast.error(message)
     } finally {
+      clearTimeout(timeout)
       setIsGenerating(false)
     }
   }
@@ -188,6 +423,9 @@ export function InstagramImageGeneratorClient() {
     setIsEnhancing(true)
     setError(null)
 
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 60000) // 1 min timeout
+
     try {
       const response = await fetch("/api/instagram-prompt-enhancer", {
         method: "POST",
@@ -196,8 +434,10 @@ export function InstagramImageGeneratorClient() {
           prompt: trimmedPrompt,
           format,
           contentType,
+          visualStyle,
           referenceAssets: uploadedAssets,
         }),
+        signal: controller.signal,
       })
       const data = await response.json().catch(() => null) as { enhancedPrompt?: string; error?: string } | null
       if (!response.ok || !data?.enhancedPrompt) {
@@ -206,10 +446,11 @@ export function InstagramImageGeneratorClient() {
       setPrompt(data.enhancedPrompt)
       toast.success("Prompt berhasil ditingkatkan oleh spesialis Instagram")
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Gagal meningkatkan prompt"
+      const message = err instanceof Error ? (err.name === 'AbortError' ? 'Waktu proses habis (timeout)' : err.message) : "Gagal meningkatkan prompt"
       setError(message)
       toast.error(message)
     } finally {
+      clearTimeout(timeout)
       setIsEnhancing(false)
     }
   }
@@ -237,28 +478,51 @@ export function InstagramImageGeneratorClient() {
     setError(null)
 
     try {
-      const uploaded = await Promise.all(validFiles.map(async (file) => {
-        const formData = new FormData()
-        formData.append("file", file)
-        const response = await fetch("/api/instagram-assets", {
-          method: "POST",
-          body: formData,
-        })
-        const data = await response.json().catch(() => null) as UploadedAsset & { success?: boolean; error?: string } | null
-        if (!response.ok || !data?.success) {
-          throw new Error(data?.error || `${file.name}: upload gagal`)
-        }
-        return {
-          url: data.url,
-          filename: data.filename,
-          contentType: data.contentType,
-          width: data.width,
-          height: data.height,
-          size: data.size,
+      const results = await Promise.allSettled(validFiles.map(async (file) => {
+        const controller = new AbortController()
+        const timeout = setTimeout(() => controller.abort(), 30000)
+        try {
+          const formData = new FormData()
+          formData.append("file", file)
+          const response = await fetch("/api/instagram-assets", {
+            method: "POST",
+            body: formData,
+            signal: controller.signal,
+          })
+          const data = await response.json().catch(() => null) as UploadedAsset & { success?: boolean; error?: string } | null
+          if (!response.ok || !data?.success) {
+            throw new Error(data?.error || `${file.name}: upload gagal`)
+          }
+          return {
+            url: data.url,
+            filename: data.filename,
+            contentType: data.contentType,
+            width: data.width,
+            height: data.height,
+            size: data.size,
+          } as UploadedAsset
+        } finally {
+          clearTimeout(timeout)
         }
       }))
-      setUploadedAssets((current) => [...current, ...uploaded].slice(0, 8))
-      toast.success(`${uploaded.length} gambar berhasil diunggah`)
+
+      const uploaded: UploadedAsset[] = []
+      for (let i = 0; i < results.length; i++) {
+        const result = results[i]
+        if (result.status === "fulfilled") {
+          uploaded.push(result.value)
+        } else {
+          const message = result.reason instanceof Error ? result.reason.message : `${validFiles[i]?.name ?? "File"}: upload gagal`
+          toast.error(message)
+        }
+      }
+
+      if (uploaded.length > 0) {
+        setUploadedAssets((current) => [...current, ...uploaded].slice(0, 8))
+        toast.success(`${uploaded.length} gambar berhasil diunggah`)
+      } else {
+        setError("Semua file gagal diunggah. Periksa format dan ukuran file.")
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Upload gambar gagal"
       setError(message)
@@ -307,8 +571,13 @@ export function InstagramImageGeneratorClient() {
               <Select
                 value={contentType}
                 onValueChange={(value) => {
-                  setContentType(value)
-                  setPrompt(promptTemplates[value] || prompt)
+                  const newContentType = value as (typeof contentTypes)[number]
+                  const newVisualStyle = defaultVisualStyleByContentType[newContentType]
+                  setContentType(newContentType)
+                  setVisualStyle(newVisualStyle)
+                  if (newContentType !== "Hari Nasional") {
+                    setPrompt(getPromptTemplate(newContentType, newVisualStyle))
+                  }
                 }}
               >
                 <SelectTrigger>
@@ -325,6 +594,30 @@ export function InstagramImageGeneratorClient() {
                   {isLoadingHoliday ? "Mengambil Hari Nasional terdekat..." : nearestHoliday ? `Hari Nasional terdekat: ${nearestHoliday.name} (${formatDate(nearestHoliday.date)})` : "Hari Nasional belum tersedia"}
                 </div>
               )}
+            </div>
+
+            <div className="grid gap-2">
+              <Label>Gaya Visual</Label>
+              <Select
+                value={visualStyle}
+                onValueChange={(value) => {
+                  const newVisualStyle = value as VisualStyle
+                  setVisualStyle(newVisualStyle)
+                  if (contentType !== "Hari Nasional") {
+                    setPrompt(getPromptTemplate(contentType, newVisualStyle))
+                  }
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Pilih gaya visual" />
+                </SelectTrigger>
+                <SelectContent>
+                  {visualStyles.map((style) => (
+                    <SelectItem key={style} value={style}>{style}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">Gaya visual menentukan nuansa desain. Prompt di bawah akan otomatis disesuaikan dan bisa diedit lebih lanjut.</p>
             </div>
 
             <div className="grid gap-2">

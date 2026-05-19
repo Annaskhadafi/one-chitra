@@ -13,6 +13,7 @@ type EnhancePromptBody = {
   prompt?: string
   format?: "feed" | "portrait" | "story"
   contentType?: string
+  visualStyle?: string
   referenceAssets?: Array<string | UploadedAsset>
 }
 
@@ -62,6 +63,7 @@ export async function POST(req: NextRequest) {
               prompt,
               format: body.format || "feed",
               contentType: body.contentType || "Edukasi",
+              visualStyle: body.visualStyle || "Modern & Clean",
               referenceAssets: normalizeReferenceAssets(body.referenceAssets),
             }),
           },
@@ -97,11 +99,17 @@ function getEnhancerUrl() {
 
 function buildSystemPrompt() {
   return [
-    "Anda adalah spesialis Instagram perusahaan dan desainer grafis senior.",
-    "Ubah prompt mentah menjadi prompt gambar yang sederhana, ringkas, mudah dipahami, dan tetap lengkap untuk PT Chitra Paratama.",
-    "Fokus pada satu pesan utama, komposisi bersih, visual profesional, dan ruang aman karena logo/footer hanya ditambahkan oleh template feed.png atau Story.png.",
-    "Jangan membuat data faktual palsu, angka palsu, nama customer palsu, klaim palsu, markdown, bullet list, atau penjelasan.",
-    "Balas hanya satu prompt final Bahasa Indonesia.",
+    "Anda adalah spesialis konten Instagram perusahaan B2B dan desainer grafis senior untuk PT Chitra Paratama (Total Tire Solution).",
+    "Tugas Anda: terima input singkat dari user (bisa hanya beberapa kata atau kalimat pendek), lalu kembangkan menjadi prompt gambar Instagram yang lengkap, detail, dan siap dipakai AI image generator.",
+    "Warna brand resmi PT Chitra Paratama: Michelin Blue (#004C98), Sky Blue (#009EBE), Fresh Green (#8DC63F), Navy/Blue Black Tire (#002D56). Selalu gunakan palet ini dalam prompt.",
+    "Format output WAJIB mengikuti struktur berikut (isi bagian dalam kurung siku berdasarkan konteks input user, jangan biarkan placeholder kosong):",
+    "Content focus: [deskripsi fokus konten yang dikembangkan dari input user].",
+    "Headline text: \"[teks headline yang relevan, singkat, dan kuat]\"",
+    "Brand/Source: \"PT Chitra Paratama\"",
+    "Visual style: [gaya visual sesuai pilihan user] with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. [deskripsi detail elemen visual, komposisi, tipografi, dan mood].",
+    "Additional elements: [elemen visual tambahan yang relevan dengan topik, misal: ban, alat berat, peta distribusi, grafik, dll].",
+    "Variant note: [saran foto atau ilustrasi yang cocok untuk diintegrasikan ke desain].",
+    "Aturan ketat: jangan buat logo Chitra Paratama, footer, watermark, atau ikon media sosial karena ditambahkan oleh overlay template. Jangan letakkan teks/headline di pojok kiri atas (area logo). Jangan buat data palsu, angka palsu, atau klaim palsu. Jangan tambahkan markdown, bullet list, atau penjelasan di luar format. Balas hanya satu prompt final dalam Bahasa Inggris mengikuti format di atas.",
   ].join(" ")
 }
 
@@ -122,9 +130,10 @@ function buildUserPrompt(input: Omit<Required<EnhancePromptBody>, "referenceAsse
   return [
     `Format: ${ratio}.`,
     `Kategori: ${input.contentType}.`,
+    `Gaya visual: ${input.visualStyle}.`,
     `Ide awal: ${input.prompt}.`,
     references,
-    "Buat prompt final yang singkat dan jelas: satu fokus visual utama, komposisi full-bleed memenuhi seluruh kanvas, tanpa border/margin/kartu putih/frame kosong, warna profesional, tidak ramai, tanpa membuat logo Chitra Paratama, logo perusahaan, logo brand apa pun, footer, ikon media sosial, watermark, atau teks kecil karena overlay template ditambahkan setelah generate.",
+    "Kembangkan input singkat di atas menjadi prompt komprehensif mengikuti format struktur (Content focus, Headline text, Brand/Source, Visual style, Additional elements, Variant note).",
   ].join(" ")
 }
 

@@ -16,6 +16,7 @@ type GenerateImageBody = {
   prompt?: string
   format?: "feed" | "portrait" | "story"
   contentType?: string
+  visualStyle?: string
   referenceAssets?: Array<string | UploadedAsset>
   mode?: "single" | "variations"
 }
@@ -52,17 +53,18 @@ export async function POST(req: NextRequest) {
 
     const format = body.format || "feed"
     const contentType = body.contentType || "Edukasi"
+    const visualStyle = body.visualStyle || "Modern & Clean"
     const referenceAssets = normalizeReferenceAssets(body.referenceAssets)
 
     if (body.mode === "variations") {
       const variations = await Promise.all([
-        generateOneImage({ apiKey, prompt, format, contentType, referenceAssets, variationInstruction: "Variasi 1: gaya visual corporate premium, clean, elegan, komposisi seimbang, warna brand tegas, wajib ada headline utama besar yang relevan." }),
-        generateOneImage({ apiKey, prompt, format, contentType, referenceAssets, variationInstruction: "Variasi 2: gaya visual modern editorial, dinamis, depth lebih kuat, angle berbeda, wajib ada headline utama besar yang relevan agar konten tidak kosong." }),
+        generateOneImage({ apiKey, prompt, format, contentType, visualStyle, referenceAssets, variationInstruction: "Variasi 1: gaya visual corporate premium, clean, elegan, komposisi seimbang, warna brand tegas, wajib ada headline utama besar yang relevan." }),
+        generateOneImage({ apiKey, prompt, format, contentType, visualStyle, referenceAssets, variationInstruction: "Variasi 2: gaya visual modern editorial, dinamis, depth lebih kuat, angle berbeda, wajib ada headline utama besar yang relevan agar konten tidak kosong." }),
       ])
       return Response.json({ variations })
     }
 
-    const result = await generateOneImage({ apiKey, prompt, format, contentType, referenceAssets })
+    const result = await generateOneImage({ apiKey, prompt, format, contentType, visualStyle, referenceAssets })
     return Response.json(result)
   } catch (error) {
     const message = error instanceof Error ? error.message : "Gagal membuat gambar Instagram"
@@ -75,6 +77,7 @@ async function generateOneImage(input: {
   prompt: string
   format: NonNullable<GenerateImageBody["format"]>
   contentType: string
+  visualStyle: string
   referenceAssets: UploadedAsset[]
   variationInstruction?: string
 }): Promise<GeneratedImageResult> {
@@ -84,6 +87,7 @@ async function generateOneImage(input: {
     prompt: input.variationInstruction ? `${input.prompt}. ${input.variationInstruction}` : input.prompt,
     format: input.format,
     contentType: input.contentType,
+    visualStyle: input.visualStyle,
     referenceAssets: input.referenceAssets,
     referenceSummaries,
   })
@@ -177,6 +181,7 @@ function buildEnhancedPrompt(input: {
   prompt: string
   format: NonNullable<GenerateImageBody["format"]>
   contentType: string
+  visualStyle: string
   referenceAssets: UploadedAsset[]
   referenceSummaries: string[]
 }) {
@@ -188,8 +193,10 @@ function buildEnhancedPrompt(input: {
   return [
     `Buat visual Instagram PT Chitra Paratama format ${ratio}.`,
     `Kategori: ${input.contentType}.`,
+    `Gaya visual: ${input.visualStyle}.`,
     `Tema: ${input.prompt}.`,
     "Desain sederhana, profesional, rapi, mudah dipahami, satu fokus utama, dan komposisi full-bleed yang mengisi seluruh kanvas tanpa border, margin, kartu putih, atau frame kosong.",
+    "PENTING: Hindari menempatkan teks, headline, atau elemen penting di pojok kiri atas (area 300x300px dari sudut kiri atas) karena area tersebut akan tertutup logo perusahaan. Posisikan teks utama di tengah, kanan, atau bawah gambar dengan ruang aman yang cukup.",
     "Jangan buat logo Chitra Paratama, logo perusahaan, logo brand apa pun, footer, watermark, ikon media sosial, atau teks kecil; semua elemen brand resmi hanya berasal dari overlay template feed.png atau Story.png setelah gambar dibuat.",
     references,
   ].join(" ").trim()
