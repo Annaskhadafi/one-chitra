@@ -616,3 +616,13 @@ export async function uploadLocalFileToObjectStorage(
         filename,
     }
 }
+
+export async function uploadBase64Image(base64Data: string, filename: string) {
+    const base64Content = base64Data.includes(",") ? base64Data.split(",")[1] : base64Data
+    const buffer = Buffer.from(base64Content, "base64")
+    const contentType = base64Data.startsWith("data:")
+        ? base64Data.split(";")[0].replace("data:", "")
+        : "image/png"
+
+    return saveManagedUpload({ filename, buffer, contentType })
+}

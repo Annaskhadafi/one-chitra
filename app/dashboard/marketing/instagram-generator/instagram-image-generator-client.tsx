@@ -2,7 +2,8 @@
 
 import * as React from "react"
 import Image from "next/image"
-import { Download, ImagePlus, Loader2, Sparkles, UploadCloud } from "lucide-react"
+import Link from "next/link"
+import { Download, History as HistoryIcon, ImagePlus, Loader2, Sparkles, UploadCloud } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -562,8 +563,18 @@ export function InstagramImageGeneratorClient() {
       <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
         <Card>
           <CardHeader>
-            <CardTitle>Konfigurasi Konten</CardTitle>
-            <CardDescription>Isi prompt, pilih kebutuhan konten, dan unggah referensi visual bila ada.</CardDescription>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <CardTitle>Konfigurasi Konten</CardTitle>
+                <CardDescription>Isi prompt, pilih kebutuhan konten, dan unggah referensi visual bila ada.</CardDescription>
+              </div>
+              <Link href="/dashboard/marketing/instagram-generator/history">
+                <Button variant="outline" size="sm">
+                  <HistoryIcon className="mr-2 h-4 w-4" />
+                  Riwayat
+                </Button>
+              </Link>
+            </div>
           </CardHeader>
           <CardContent className="space-y-5">
             <div className="grid gap-2">

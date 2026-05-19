@@ -2,8 +2,13 @@ import { NextRequest } from "next/server"
 import sharp from "sharp"
 import fs from "fs/promises"
 import path from "path"
+import { headers } from "next/headers"
 import { composeInstagramImage } from "@/lib/instagram-compose-engine"
-import { readManagedUpload } from "@/lib/upload-storage"
+import { readManagedUpload, uploadBase64Image } from "@/lib/upload-storage"
+import { auth } from "@/lib/auth"
+import { db } from "@/db"
+import { instagramImageHistory } from "@/db/schema/instagram-history"
+import { eq, count } from "drizzle-orm"
 
 export const runtime = "nodejs"
 export const maxDuration = 120
@@ -58,15 +63,30 @@ export async function POST(req: NextRequest) {
     const visualStyle = body.visualStyle || "Modern & Clean"
     const referenceAssets = normalizeReferenceAssets(body.referenceAssets)
 
+    const session = await auth.api.getSession({ headers: await headers() })
+    const userId = session?.user?.id
+
     if (body.mode === "variations") {
       const variations = await Promise.all([
         generateOneImage({ apiKey, prompt, format, contentType, visualStyle, referenceAssets, variationInstruction: "Variasi 1: gaya visual corporate premium, clean, elegan, komposisi seimbang, warna brand tegas, wajib ada headline utama besar yang relevan." }),
         generateOneImage({ apiKey, prompt, format, contentType, visualStyle, referenceAssets, variationInstruction: "Variasi 2: gaya visual modern editorial, dinamis, depth lebih kuat, angle berbeda, wajib ada headline utama besar yang relevan agar konten tidak kosong." }),
       ])
+      
+      if (userId) {
+        // Fire and forget history save
+        Promise.all(variations.map(v => saveToHistorySafely(userId, v, format, contentType, visualStyle))).catch(console.error)
+      }
+      
       return Response.json({ variations })
     }
 
     const result = await generateOneImage({ apiKey, prompt, format, contentType, visualStyle, referenceAssets })
+    
+    if (userId) {
+      // Fire and forget history save
+      saveToHistorySafely(userId, result, format, contentType, visualStyle).catch(console.error)
+    }
+    
     return Response.json(result)
   } catch (error) {
     const message = error instanceof Error ? error.message : "Gagal membuat gambar Instagram"
@@ -83,7 +103,7 @@ async function generateOneImage(input: {
   referenceAssets: UploadedAsset[]
   variationInstruction?: string
 }): Promise<GeneratedImageResult> {
-  const needsWearpackReference = /orang|person|people|pekerja|karyawan|teknisi|operator|tim|team|mekanik|mechanic|worker|staff|employee|industrial|warehouse|workshop|safety|ban|tire|alat berat|heavy equipment|service|maintenance/i.test(input.prompt)
+  const needsWearpackReference = /orang|person|people|pekerja|karyawan|teknisi|operator|tim lapangan|team|mekanik|mechanic|worker|staff|employee/i.test(input.prompt)
   
   let referenceImages = ENABLE_PROVIDER_IMAGE_REFERENCES ? await resolveReferenceImages(input.referenceAssets) : []
   const referenceSummaries = ENABLE_PROVIDER_IMAGE_REFERENCES ? [] : await resolveReferenceSummaries(input.referenceAssets)
@@ -204,6 +224,62 @@ function normalizeReferenceAssets(value: GenerateImageBody["referenceAssets"]): 
   }).filter((asset): asset is UploadedAsset => Boolean(asset?.url && asset.filename))
 }
 
+async function saveToHistorySafely(
+  userId: string,
+  result: GeneratedImageResult,
+  format: string,
+  contentType: string,
+  visualStyle: string
+) {
+  try {
+    const filename = `instagram-gen-${userId}-${Date.now()}.png`
+    const uploadResult = await uploadBase64Image(result.image, filename)
+    if (!uploadResult?.url) return
+
+    const base64Data = result.image.split(",")[1] || result.image
+    const sizeBytes = Math.round(base64Data.length * 0.75)
+
+    // Transaction for enforcing limit and inserting new entry
+    await db.transaction(async (tx) => {
+      const userHistoryCount = await tx
+        .select({ value: count() })
+        .from(instagramImageHistory)
+        .where(eq(instagramImageHistory.userId, userId))
+
+      if (userHistoryCount[0].value >= 50) {
+        const oldestEntries = await tx
+          .select({ id: instagramImageHistory.id })
+          .from(instagramImageHistory)
+          .where(eq(instagramImageHistory.userId, userId))
+          .orderBy(instagramImageHistory.createdAt)
+          .limit(userHistoryCount[0].value - 49)
+
+        if (oldestEntries.length > 0) {
+          for (const entry of oldestEntries) {
+            await tx.delete(instagramImageHistory).where(eq(instagramImageHistory.id, entry.id))
+          }
+        }
+      }
+
+      await tx.insert(instagramImageHistory).values({
+        userId,
+        prompt: result.prompt,
+        enhancedPrompt: result.enhancedPrompt,
+        format,
+        contentType,
+        visualStyle,
+        width: result.width,
+        height: result.height,
+        mimeType: result.mimeType,
+        sizeBytes,
+        imageUrl: uploadResult.url,
+      })
+    })
+  } catch (err) {
+    console.error("Failed to save instagram generation history:", err)
+  }
+}
+
 function buildEnhancedPrompt(input: {
   prompt: string
   format: NonNullable<GenerateImageBody["format"]>
@@ -223,8 +299,8 @@ function buildEnhancedPrompt(input: {
     `Gaya visual: ${input.visualStyle}.`,
     `Tema: ${input.prompt}.`,
     "Desain sederhana, profesional, rapi, mudah dipahami, satu fokus utama, dan komposisi full-bleed yang mengisi seluruh kanvas tanpa border, margin, kartu putih, atau frame kosong.",
-    "WAJIB: Jika ada sosok manusia (pekerja, mekanik, tim, operator), mereka HARUS memakai wearpack safety resmi PT Chitra Paratama dengan spesifikasi PRESISI: kemeja kerja lengan panjang TWO-TONE (BUKAN rompi/vest terpisah), SELURUH LENGAN (atas dan bawah) berwarna BIRU NAVY GELAP (#002D56), area DADA dan BAHU berwarna HIJAU NEON TERANG/Lime Green (#8DC63F), ada STRIP REFLEKTIF SILVER di PUNDAK KANAN dan KIRI (horizontal di bahu), ada SATU GARIS REFLEKTIF HORIZONTAL di TENGAH PERUT tepat di batas antara area hijau atas dan biru navy bawah, kerah kancing penuh, dua saku dada di area hijau, logo kecil di dada kiri.",
-    "PENTING: Hindari menempatkan teks, headline, atau elemen penting di pojok kiri atas (area 300x300px dari sudut kiri atas) karena area tersebut akan tertutup logo perusahaan. Posisikan teks utama di tengah, kanan, atau bawah gambar dengan ruang aman yang cukup.",
+    "WAJIB: Jika prompt SECARA EKSPLISIT meminta atau menampilkan sosok manusia (pekerja, mekanik, tim, operator, karyawan), mereka HARUS memakai wearpack safety resmi PT Chitra Paratama dengan spesifikasi PRESISI: kemeja kerja lengan panjang TWO-TONE (BUKAN rompi/vest terpisah), SELURUH LENGAN (atas dan bawah) berwarna BIRU NAVY GELAP (#002D56), area DADA dan BAHU berwarna HIJAU NEON TERANG/Lime Green (#8DC63F), ada STRIP REFLEKTIF SILVER di PUNDAK KANAN dan KIRI (horizontal di bahu), ada SATU GARIS REFLEKTIF HORIZONTAL di TENGAH PERUT tepat di batas antara area hijau atas dan biru navy bawah, kerah kancing penuh, dua saku dada di area hijau, logo kecil di dada kiri. Jika prompt TIDAK meminta orang, jangan paksa ada orang dalam gambar.",
+    "PENTING: Hindari menempatkan teks, headline, atau elemen penting di pojok kiri atas (area 300x300px dari sudut kiri atas) karena area tersebut akan tertutup logo perusahaan. Hindari juga menempatkan teks atau elemen penting di bagian BAWAH gambar (area 150px dari tepi bawah) karena area tersebut akan tertutup footer overlay. Posisikan teks utama di tengah atau sepertiga atas gambar dengan ruang aman yang cukup.",
     "Jangan buat logo Chitra Paratama, logo perusahaan, logo brand apa pun, footer, watermark, ikon media sosial, atau teks kecil; semua elemen brand resmi hanya berasal dari overlay template feed.png atau Story.png setelah gambar dibuat.",
     references,
   ].join(" ").trim()
