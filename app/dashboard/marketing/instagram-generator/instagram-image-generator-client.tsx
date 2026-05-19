@@ -73,31 +73,31 @@ const defaultVisualStyleByContentType: Record<(typeof contentTypes)[number], Vis
 const promptTemplates: Record<(typeof contentTypes)[number], Record<VisualStyle, string>> = {
   "Ucapan ulang tahun customer": {
     "Modern & Clean": `Content focus: Ucapan selamat ulang tahun untuk [NAMA CUSTOMER/PERUSAHAAN] dari PT Chitra Paratama.
-Headline text: "[UCAPAN ULANG TAHUN SINGKAT]"
+Headline text: "Selamat Ulang Tahun"
 Brand/Source: "PT Chitra Paratama"
 Visual style: modern, clean layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use clean iconography and structured information hierarchy.
 Additional elements: [ELEMEN TAMBAHAN MISAL: KUE, PITA, BACKGROUND KANTOR].
 Variant note: Include a professional illustration or photo integrated naturally into the design.`,
     "Elegant & Luxury": `Content focus: Ucapan selamat ulang tahun untuk [NAMA CUSTOMER/PERUSAHAAN] dari PT Chitra Paratama.
-Headline text: "[UCAPAN ULANG TAHUN SINGKAT]"
+Headline text: "Selamat Ulang Tahun"
 Brand/Source: "PT Chitra Paratama"
 Visual style: elegant, luxury, and sophisticated layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use premium textures, subtle background patterns, and balanced composition.
 Additional elements: [ELEMEN TAMBAHAN MISAL: KUE, PITA, BACKGROUND KANTOR].
 Variant note: Include a professional illustration or photo integrated naturally into the design.`,
     "Playful & Vibrant": `Content focus: Ucapan selamat ulang tahun untuk [NAMA CUSTOMER/PERUSAHAAN] dari PT Chitra Paratama.
-Headline text: "[UCAPAN ULANG TAHUN SINGKAT]"
+Headline text: "Selamat Ulang Tahun"
 Brand/Source: "PT Chitra Paratama"
 Visual style: playful, vibrant, and energetic layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use friendly shapes, bright accents, and dynamic composition.
 Additional elements: [ELEMEN TAMBAHAN MISAL: KUE, PITA, BACKGROUND KANTOR].
 Variant note: Include a professional illustration or photo integrated naturally into the design.`,
     "Corporate & Professional": `Content focus: Ucapan selamat ulang tahun untuk [NAMA CUSTOMER/PERUSAHAAN] dari PT Chitra Paratama.
-Headline text: "[UCAPAN ULANG TAHUN SINGKAT]"
+Headline text: "Selamat Ulang Tahun"
 Brand/Source: "PT Chitra Paratama"
 Visual style: corporate, professional, and trustworthy layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use structured grids, clean lines, and business-appropriate composition.
 Additional elements: [ELEMEN TAMBAHAN MISAL: KUE, PITA, BACKGROUND KANTOR].
 Variant note: Include a professional illustration or photo integrated naturally into the design.`,
     Minimalist: `Content focus: Ucapan selamat ulang tahun untuk [NAMA CUSTOMER/PERUSAHAAN] dari PT Chitra Paratama.
-Headline text: "[UCAPAN ULANG TAHUN SINGKAT]"
+Headline text: "Selamat Ulang Tahun"
 Brand/Source: "PT Chitra Paratama"
 Visual style: minimalist, simple, and clean layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use plenty of whitespace, simple geometry, and high contrast.
 Additional elements: [ELEMEN TAMBAHAN MISAL: KUE, PITA, BACKGROUND KANTOR].
