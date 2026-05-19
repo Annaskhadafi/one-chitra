@@ -1019,6 +1019,23 @@ export async function createQuotation(data: QuotationInput) {
                 )
             }
 
+            if (data.attachments && data.attachments.length > 0) {
+                await tx.insert(quotationAttachments).values(
+                    data.attachments.map((attachment) => ({
+                        quotationId: newQuotation.id,
+                        kind: attachment.kind || "supporting",
+                        title: attachment.title,
+                        fileUrl: attachment.fileUrl,
+                        fileName: attachment.fileName,
+                        mimeType: attachment.mimeType || null,
+                        fileSize: attachment.fileSize || 0,
+                        description: normalizeText(attachment.description),
+                        includeInPdf: attachment.includeInPdf ?? true,
+                        uploadedBy: userId,
+                    }))
+                )
+            }
+
             await insertRevisionSnapshot(tx, newQuotation.id, 1, userId, "Initial revision created")
 
             revalidatePath("/dashboard/quotations")
@@ -1043,7 +1060,7 @@ export async function createQuotation(data: QuotationInput) {
 
 export async function updateQuotation(id: number, data: QuotationInput) {
     try {
-        const userId = await getAuthenticatedUserId()
+        const userId = (await getAuthenticatedUserId()) || "system"
 
         const result = await db.transaction(async (tx) => {
             const originalQuotation = await tx.query.quotations.findFirst({
@@ -1104,6 +1121,36 @@ export async function updateQuotation(id: number, data: QuotationInput) {
                         discount: item.discount.toString(),
                         tax: item.tax.toString(),
                     })),
+                )
+            }
+
+            // Handle Update Attachments
+            const oldAttachments = originalQuotation.attachments || []
+            const currentUrls = new Set((data.attachments || []).map(a => a.fileUrl))
+            const urlsToDelete = oldAttachments
+                .filter(a => !currentUrls.has(a.fileUrl))
+                .map(a => a.fileUrl)
+
+            if (urlsToDelete.length > 0) {
+                await cleanupQuotationFiles(urlsToDelete)
+            }
+
+            await tx.delete(quotationAttachments).where(eq(quotationAttachments.quotationId, id))
+
+            if (data.attachments && data.attachments.length > 0) {
+                await tx.insert(quotationAttachments).values(
+                    data.attachments.map((attachment) => ({
+                        quotationId: id,
+                        kind: attachment.kind || "supporting",
+                        title: attachment.title,
+                        fileUrl: attachment.fileUrl,
+                        fileName: attachment.fileName,
+                        mimeType: attachment.mimeType || null,
+                        fileSize: attachment.fileSize || 0,
+                        description: normalizeText(attachment.description),
+                        includeInPdf: attachment.includeInPdf ?? true,
+                        uploadedBy: userId,
+                    }))
                 )
             }
 

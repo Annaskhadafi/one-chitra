@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import { useEffect, useRef, useState } from "react"
 import {
@@ -65,6 +65,7 @@ interface QuotationPdfData {
         mimeType: string | null
         kind: string
         includeInPdf: boolean
+        description?: string | null
     }[]
 }
 
@@ -519,7 +520,7 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                                                     >
                                                         <div style={{ fontSize: "8pt", fontWeight: 700, color: "#1e293b", marginBottom: "1.5mm", borderBottom: "1px solid #e2e8f0", paddingBottom: "1mm" }}>TERMS & CONDITIONS</div>
                                                         <div style={{ fontSize: "7pt", color: "#475569", lineHeight: 1.35, whiteSpace: "pre-line" }}>
-                                                            {[normalizeQuotationText(quotation.termsConditions), normalizeQuotationText(quotation.clientNote)].filter(Boolean).join("\n\n") || "-"}
+                                                            {[normalizeQuotationText(quotation.clientNote), normalizeQuotationText(quotation.termsConditions)].filter(Boolean).join("\n\n") || "-"}
                                                         </div>
                                                     </div>
                                                 </div>
@@ -550,6 +551,95 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                                 </div>
                             )
                         })}
+
+                        {/* Rendering Lampiran sebagai Halaman A4 Tambahan secara WYSIWYG */}
+                        {visibleAttachments.map((attachment, idx) => (
+                            <div
+                                key={`attachment-page-${idx}`}
+                                className="print-page relative bg-white shadow-2xl ring-1 ring-slate-200"
+                                style={{
+                                    width: "210mm",
+                                    height: "297mm",
+                                    minWidth: "210mm",
+                                    minHeight: "297mm",
+                                    position: "relative",
+                                    overflow: "hidden",
+                                    background: "#ffffff",
+                                    color: "#163153",
+                                    fontFamily: "Arial, Helvetica, sans-serif",
+                                    lineHeight: "1.35",
+                                    pageBreakBefore: "always",
+                                    flexShrink: 0
+                                }}
+                            >
+                                {/* Letterhead Background */}
+                                <img
+                                    src="/ChitraParatama_Stationery_Letterhead_jkt.jpg"
+                                    alt=""
+                                    className="bg-letterhead pointer-events-none absolute inset-0 h-full w-full select-none"
+                                    style={{ objectFit: "cover", zIndex: 0 }}
+                                />
+
+                                <div className="page-content relative z-10 px-[15mm] pb-[25mm] pt-[14mm] flex flex-col h-full">
+                                    {/* Spacing A4 Header */}
+                                    <div style={{ height: "32mm" }} />
+
+                                    {/* Judul Lampiran */}
+                                    <div style={{ marginBottom: "4mm", borderBottom: "2px solid #2563eb", paddingBottom: "2mm" }}>
+                                        <div style={{ fontSize: "14pt", fontWeight: 700, color: "#2563eb", textTransform: "uppercase" }}>
+                                            LAMPIRAN {idx + 1}: {attachment.title}
+                                        </div>
+                                    </div>
+
+                                    {/* Keterangan Product */}
+                                    {attachment.description && (
+                                        <div
+                                            style={{
+                                                marginBottom: "6mm",
+                                                background: "#f8fafc",
+                                                border: "1px solid #dde6f0",
+                                                padding: "4mm",
+                                                borderRadius: "1.5mm",
+                                                fontSize: "9.5pt",
+                                                color: "#334155",
+                                                lineHeight: 1.5,
+                                                whiteSpace: "pre-line"
+                                            }}
+                                        >
+                                            <div style={{ fontWeight: 700, fontSize: "8.5pt", color: "#1e293b", marginBottom: "1mm", textTransform: "uppercase" }}>
+                                                Keterangan Product:
+                                            </div>
+                                            {attachment.description}
+                                        </div>
+                                    )}
+
+                                    {/* Gambar Lampiran */}
+                                    <div 
+                                        style={{ 
+                                            flexGrow: 1, 
+                                            display: "flex", 
+                                            alignItems: "center", 
+                                            justifyContent: "center",
+                                            background: "#fafafa",
+                                            border: "1px dashed #cbd5e1",
+                                            borderRadius: "2mm",
+                                            padding: "4mm",
+                                            overflow: "hidden"
+                                        }}
+                                    >
+                                        <img 
+                                            src={attachment.fileUrl} 
+                                            alt={attachment.title}
+                                            style={{ 
+                                                maxWidth: "100%", 
+                                                maxHeight: "150mm", 
+                                                objectFit: "contain" 
+                                            }}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 </div>
             </DialogContent>

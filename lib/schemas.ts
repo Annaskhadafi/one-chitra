@@ -152,6 +152,18 @@ export const quotationItemSchema = z.object({
     tax: z.number().min(0).default(0),
 })
 
+export const quotationAttachmentSchema = z.object({
+    id: z.number().optional(),
+    kind: z.string().default("supporting"),
+    title: z.string().min(1, "Title is required"),
+    fileUrl: z.string().min(1, "File URL is required"),
+    fileName: z.string().min(1, "File name is required"),
+    mimeType: z.string().optional().nullable(),
+    fileSize: z.number().default(0),
+    description: z.string().optional().nullable(),
+    includeInPdf: z.boolean().default(true),
+})
+
 export const quotationSchema = z.object({
     quotationNumber: z.string().optional(),
     customerId: z.number().min(1, "Customer is required"),
@@ -176,6 +188,7 @@ export const quotationSchema = z.object({
     clientNote: z.string().optional(),
     discountType: z.enum(["percent", "fixed"]).default("fixed"),
     items: z.array(quotationItemSchema).min(1, "At least one item is required"),
+    attachments: z.array(quotationAttachmentSchema).optional().default([]),
 })
 
 export const fleetTripSchema = z.object({

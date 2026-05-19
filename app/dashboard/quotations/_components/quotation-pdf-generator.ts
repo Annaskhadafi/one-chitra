@@ -1,4 +1,4 @@
-﻿import { toast } from "sonner"
+import { toast } from "sonner"
 import type { Customer, Product } from "@/lib/types"
 import { normalizeQuotationText } from "@/lib/quotation-text"
 import { resolveUploadDocumentUrl } from "@/lib/upload-url"
@@ -35,6 +35,7 @@ interface QuotationPdfData {
         mimeType?: string | null
         kind: string
         includeInPdf: boolean
+        description?: string | null
     }[]
 }
 
@@ -70,6 +71,7 @@ type QuotationPdfPayloadSource = {
         mimeType?: string | null
         kind: string
         includeInPdf: boolean
+        description?: string | null
     }[]
 }
 
@@ -125,6 +127,7 @@ export function buildQuotationPdfPayload(source: QuotationPdfPayloadSource): Quo
             mimeType: attachment.mimeType,
             kind: attachment.kind,
             includeInPdf: attachment.includeInPdf,
+            description: (attachment as any).description ?? null,
         })),
     }
 }
@@ -579,7 +582,7 @@ export async function generateQuotationPdf(
             doc.setFont("helvetica", "normal")
             doc.setTextColor(grayText[0], grayText[1], grayText[2])
             
-            const termsText = [normalizeQuotationText(quotation.termsConditions), normalizeQuotationText(quotation.clientNote)].filter(Boolean).join("\n\n")
+            const termsText = [normalizeQuotationText(quotation.clientNote), normalizeQuotationText(quotation.termsConditions)].filter(Boolean).join("\n\n")
             const formattedTerms = doc.splitTextToSize(termsText, 170)
             doc.text(formattedTerms, 20, termsY)
             finalY = termsY + (formattedTerms.length * 4) + 12
@@ -623,13 +626,59 @@ export async function generateQuotationPdf(
             return
         }
 
-        const { PDFDocument } = await import("pdf-lib")
+        const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib")
         const mergedPdf = await PDFDocument.load(basePdfBytes)
         const skippedAttachments: string[] = []
         const A4_WIDTH = 595.28
         const A4_HEIGHT = 841.89
         const PAGE_MARGIN = 24
         const TITLE_SPACE = 24
+
+        let letterheadImage: any = null
+        if (base64data) {
+            try {
+                const base64Content = base64data.split(",")[1]
+                const binaryString = atob(base64Content)
+                const len = binaryString.length
+                const bytes = new Uint8Array(len)
+                for (let i = 0; i < len; i++) {
+                    bytes[i] = binaryString.charCodeAt(i)
+                }
+                letterheadImage = await mergedPdf.embedJpg(bytes)
+            } catch (err) {
+                console.error("Failed to embed letterhead into merged PDF:", err)
+            }
+        }
+
+        const helveticaFont = await mergedPdf.embedFont(StandardFonts.Helvetica)
+        const helveticaBold = await mergedPdf.embedFont(StandardFonts.HelveticaBold)
+
+        const wrapText = (text: string, maxCharsPerLine: number): string[] => {
+            const lines: string[] = []
+            const rawLines = text.split("\n")
+            for (const rawLine of rawLines) {
+                if (rawLine.trim() === "") {
+                    lines.push("")
+                    continue
+                }
+                let currentLine = ""
+                const words = rawLine.split(" ")
+                for (const word of words) {
+                    if ((currentLine + " " + word).trim().length <= maxCharsPerLine) {
+                        currentLine = (currentLine + " " + word).trim()
+                    } else {
+                        if (currentLine !== "") {
+                            lines.push(currentLine)
+                        }
+                        currentLine = word
+                    }
+                }
+                if (currentLine !== "") {
+                    lines.push(currentLine)
+                }
+            }
+            return lines
+        }
 
         for (const attachment of includedAttachments) {
             const attachmentUrl = resolveUploadDocumentUrl(attachment.fileUrl)
@@ -665,25 +714,126 @@ export async function generateQuotationPdf(
                         : await mergedPdf.embedJpg(attachmentBytes)
 
                     const page = mergedPdf.addPage([A4_WIDTH, A4_HEIGHT])
-                    const availableWidth = A4_WIDTH - PAGE_MARGIN * 2
-                    const availableHeight = A4_HEIGHT - PAGE_MARGIN * 2 - TITLE_SPACE
-                    const scale = Math.min(availableWidth / image.width, availableHeight / image.height, 1)
-                    const imageWidth = image.width * scale
-                    const imageHeight = image.height * scale
-                    const x = (A4_WIDTH - imageWidth) / 2
-                    const y = PAGE_MARGIN + Math.max((availableHeight - imageHeight) / 2, 0)
+                    
+                    if (letterheadImage) {
+                        page.drawImage(letterheadImage, {
+                            x: 0,
+                            y: 0,
+                            width: A4_WIDTH,
+                            height: A4_HEIGHT,
+                        })
+                    }
 
-                    page.drawText(attachment.title || attachment.fileName, {
-                        x: PAGE_MARGIN,
-                        y: A4_HEIGHT - PAGE_MARGIN - 4,
-                        size: 12,
+                    const LEFT_MARGIN = 42.5
+                    const RIGHT_MARGIN = 42.5
+                    const TOP_MARGIN = 39.7
+                    const BOTTOM_MARGIN = 70.8
+                    const HEADER_SPACING = 90.7
+
+                    const contentWidth = A4_WIDTH - LEFT_MARGIN - RIGHT_MARGIN
+                    let currentY = A4_HEIGHT - TOP_MARGIN - HEADER_SPACING
+
+                    const attachmentIdx = includedAttachments.indexOf(attachment)
+                    const titleText = `LAMPIRAN ${attachmentIdx + 1}: ${(attachment.title || attachment.fileName).toUpperCase()}`
+                    
+                    page.drawText(titleText, {
+                        x: LEFT_MARGIN,
+                        y: currentY - 14,
+                        size: 14,
+                        font: helveticaBold,
+                        color: rgb(37/255, 99/255, 235/255)
                     })
-                    page.drawImage(image, {
-                        x,
-                        y,
-                        width: imageWidth,
-                        height: imageHeight,
+                    
+                    page.drawLine({
+                        start: { x: LEFT_MARGIN, y: currentY - 22 },
+                        end: { x: A4_WIDTH - RIGHT_MARGIN, y: currentY - 22 },
+                        thickness: 2,
+                        color: rgb(37/255, 99/255, 235/255)
                     })
+
+                    currentY -= 46
+
+                    if (attachment.description) {
+                        const maxChars = 85
+                        const descLines = wrapText(attachment.description, maxChars)
+                        
+                        const headerPadding = 11.3
+                        const headerFontSize = 8.5
+                        const descFontSize = 9.5
+                        const lineHeight = descFontSize * 1.5
+                        
+                        const boxHeight = 11.3 + headerFontSize + 4 + (descLines.length * lineHeight) + 11.3
+                        const boxWidth = contentWidth
+                        const boxX = LEFT_MARGIN
+                        const boxY = currentY - boxHeight
+
+                        page.drawRectangle({
+                            x: boxX,
+                            y: boxY,
+                            width: boxWidth,
+                            height: boxHeight,
+                            color: rgb(248/255, 250/255, 252/255),
+                            borderColor: rgb(221/255, 230/255, 240/255),
+                            borderWidth: 1,
+                        })
+
+                        page.drawText("KETERANGAN PRODUCT:", {
+                            x: boxX + 11.3,
+                            y: boxY + boxHeight - 11.3 - headerFontSize,
+                            size: headerFontSize,
+                            font: helveticaBold,
+                            color: rgb(30/255, 41/255, 59/255),
+                        })
+
+                        let textY = boxY + boxHeight - 11.3 - headerFontSize - 4 - descFontSize
+                        for (const line of descLines) {
+                            page.drawText(line, {
+                                x: boxX + 11.3,
+                                y: textY,
+                                size: descFontSize,
+                                font: helveticaFont,
+                                color: rgb(51/255, 65/255, 85/255),
+                            })
+                            textY -= lineHeight
+                        }
+
+                        currentY -= (boxHeight + 17)
+                    }
+
+                    const remainingHeight = currentY - BOTTOM_MARGIN
+                    if (remainingHeight > 40) {
+                        const containerWidth = contentWidth
+                        const containerHeight = remainingHeight
+                        const containerX = LEFT_MARGIN
+                        const containerY = BOTTOM_MARGIN
+
+                        page.drawRectangle({
+                            x: containerX,
+                            y: containerY,
+                            width: containerWidth,
+                            height: containerHeight,
+                            color: rgb(250/255, 250/255, 250/255),
+                            borderColor: rgb(203/255, 211/255, 225/255),
+                            borderWidth: 1,
+                        })
+
+                        const maxImgWidth = containerWidth - 22.6
+                        const maxImgHeight = containerHeight - 22.6
+                        const imgScale = Math.min(maxImgWidth / image.width, maxImgHeight / image.height, 1)
+                        const imageWidth = image.width * imgScale
+                        const imageHeight = image.height * imgScale
+                        
+                        const imgX = containerX + 11.3 + (maxImgWidth - imageWidth) / 2
+                        const imgY = containerY + 11.3 + (maxImgHeight - imageHeight) / 2
+
+                        page.drawImage(image, {
+                            x: imgX,
+                            y: imgY,
+                            width: imageWidth,
+                            height: imageHeight,
+                        })
+                    }
+
                     continue
                 }
 

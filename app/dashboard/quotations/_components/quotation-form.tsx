@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import { useState, useMemo, useCallback, useEffect, useTransition } from "react"
 import { useRouter } from "next/navigation"
@@ -23,6 +23,7 @@ import { restrictToVerticalAxis } from "@dnd-kit/modifiers"
 import { createQuotation, getQuotation, updateQuotation } from "@/app/actions/quotation"
 import { getBundleItemsForExpansion } from "@/app/actions/product-bundle"
 import { getSetting } from "@/app/actions/settings"
+import { uploadFile } from "@/app/actions/upload"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -71,7 +72,7 @@ import {
 import { Card, CardContent } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
-import { ArrowLeft, Plus, Trash2, Save, Search, ChevronsUpDown, Check, Package, FileDown, Pencil, AlertTriangle, XCircle, Loader2, Calculator, Copy, Eye, EyeOff, Truck, BadgeDollarSign, DollarSign, Building2, ChevronUp, ChevronDown, GripVertical } from "lucide-react"
+import { ArrowLeft, Plus, Trash2, Save, Search, ChevronsUpDown, Check, Package, FileDown, Pencil, AlertTriangle, XCircle, Loader2, Calculator, Copy, Eye, EyeOff, Truck, BadgeDollarSign, DollarSign, Building2, ChevronUp, ChevronDown, GripVertical, Paperclip, Image, UploadCloud } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 import type { Customer, Product } from "@/lib/types"
@@ -280,6 +281,17 @@ interface QuotationFormProps {
             discount: string
             tax: string
             product: Product | null
+        }[]
+        attachments?: {
+            id?: number
+            kind: string
+            title: string
+            fileUrl: string
+            fileName: string
+            mimeType?: string | null
+            fileSize: number
+            description?: string | null
+            includeInPdf: boolean
         }[]
     }
 }
@@ -501,6 +513,29 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
             bundleRole: item.product?.isBundle ? "parent" : undefined,
         })) || []
     )
+
+    const [attachments, setAttachments] = useState<any[]>(
+        initialData?.attachments?.map((attachment) => ({
+            id: attachment.id,
+            kind: attachment.kind,
+            title: attachment.title,
+            fileUrl: attachment.fileUrl,
+            fileName: attachment.fileName,
+            mimeType: attachment.mimeType,
+            fileSize: attachment.fileSize,
+            description: attachment.description || "",
+            includeInPdf: attachment.includeInPdf ?? true,
+        })) || []
+    )
+
+    const [tempTitle, setTempTitle] = useState("")
+    const [tempDescription, setTempDescription] = useState("")
+    const [tempFileUrl, setTempFileUrl] = useState("")
+    const [tempFileName, setTempFileName] = useState("")
+    const [tempFileSize, setTempFileSize] = useState(0)
+    const [tempMimeType, setTempMimeType] = useState("")
+    const [tempIncludeInPdf, setTempIncludeInPdf] = useState(true)
+    const [isUploading, setIsUploading] = useState(false)
 
     // Popover states
     const [customerOpen, setCustomerOpen] = useState(false)
@@ -1203,6 +1238,81 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
         return Math.max(calculatorPriceAfterMargin - calculatorDiscountAmount, 0)
     }, [calculatorDiscountAmount, calculatorPriceAfterMargin])
 
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+
+        if (!file.type.startsWith("image/")) {
+            toast.error("Format file tidak didukung. Harap unggah file gambar (PNG, JPG, JPEG, WebP, GIF).")
+            return
+        }
+
+        setIsUploading(true)
+        const toastId = toast.loading("Mengunggah file...")
+
+        try {
+            const formData = new FormData()
+            formData.append("file", file)
+
+            const result = await uploadFile(formData)
+            if (result.success && result.url) {
+                setTempFileUrl(result.url)
+                setTempFileName(file.name)
+                setTempFileSize(file.size)
+                setTempMimeType(file.type)
+                if (!tempTitle) {
+                    setTempTitle(file.name.substring(0, file.name.lastIndexOf(".")) || file.name)
+                }
+                toast.success("File berhasil diunggah", { id: toastId })
+            } else {
+                toast.error(result.error || "Gagal mengunggah file", { id: toastId })
+            }
+        } catch (error) {
+            console.error("Upload error:", error)
+            toast.error("Terjadi kesalahan saat mengunggah file", { id: toastId })
+        } finally {
+            setIsUploading(false)
+        }
+    }
+
+    const handleAddAttachment = () => {
+        if (!tempTitle.trim()) {
+            toast.error("Judul Lampiran harus diisi")
+            return
+        }
+        if (!tempFileUrl) {
+            toast.error("File Lampiran harus diunggah terlebih dahulu")
+            return
+        }
+
+        const newAttachment = {
+            kind: "supporting",
+            title: tempTitle.trim(),
+            fileUrl: tempFileUrl,
+            fileName: tempFileName,
+            mimeType: tempMimeType,
+            fileSize: tempFileSize,
+            description: tempDescription.trim() || null,
+            includeInPdf: tempIncludeInPdf,
+        }
+
+        setAttachments((prev) => [...prev, newAttachment])
+
+        setTempTitle("")
+        setTempDescription("")
+        setTempFileUrl("")
+        setTempFileName("")
+        setTempFileSize(0)
+        setTempMimeType("")
+        setTempIncludeInPdf(true)
+        toast.success("Lampiran ditambahkan ke daftar")
+    }
+
+    const handleRemoveAttachment = (index: number) => {
+        setAttachments((prev) => prev.filter((_, i) => i !== index))
+        toast.success("Lampiran berhasil dihapus")
+    }
+
     const navigateToQuotationList = useCallback((savedId: number | null) => {
         const listParams = new URLSearchParams({
             refresh: Date.now().toString(),
@@ -1238,7 +1348,7 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
             shipping: String(savedQuotation.shipping ?? 0),
         })
 
-        await generateQuotationPdf(pdfPayload, { mergeAttachments: false })
+        await generateQuotationPdf(pdfPayload, { mergeAttachments: true })
     }, [])
 
     const copyCalculatorValue = useCallback(async (value: number, label: string) => {
@@ -1300,6 +1410,17 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                     unitPrice: item.unitPrice,
                     discount: item.discount,
                     tax: item.tax,
+                })),
+                attachments: attachments.map(attachment => ({
+                    id: attachment.id,
+                    kind: attachment.kind,
+                    title: attachment.title,
+                    fileUrl: attachment.fileUrl,
+                    fileName: attachment.fileName,
+                    mimeType: attachment.mimeType,
+                    fileSize: attachment.fileSize,
+                    description: attachment.description || undefined,
+                    includeInPdf: attachment.includeInPdf,
                 })),
             }
 
@@ -1379,6 +1500,17 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                     unitPrice: item.unitPrice,
                     discount: item.discount,
                     tax: item.tax,
+                })),
+                attachments: attachments.map(attachment => ({
+                    id: attachment.id,
+                    kind: attachment.kind,
+                    title: attachment.title,
+                    fileUrl: attachment.fileUrl,
+                    fileName: attachment.fileName,
+                    mimeType: attachment.mimeType,
+                    fileSize: attachment.fileSize,
+                    description: attachment.description || undefined,
+                    includeInPdf: attachment.includeInPdf,
                 })),
             }
 
@@ -2148,7 +2280,7 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                         className="resize-none"
                     />
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-2 hidden">
                     <Label className="text-sm font-medium text-blue-600">Payment Terms</Label>
                     <Textarea
                         rows={3}
@@ -2157,7 +2289,7 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                         className="resize-none"
                     />
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-2 hidden">
                     <Label className="text-sm font-medium text-blue-600">Internal Notes</Label>
                     <Textarea
                         rows={3}
@@ -2177,9 +2309,164 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                 </div>
             </div>
 
-            {/* Footer: Terms & Summary */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            </div>
+            {/* Seksi Attachment & Keterangan Produk */}
+            <Card className="border-blue-100 bg-blue-50/10 dark:bg-blue-950/5">
+                <CardContent className="p-6 space-y-6">
+                    <div className="flex items-center gap-2 border-b pb-3 border-blue-100 dark:border-blue-900">
+                        <Paperclip className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                        <div>
+                            <h3 className="text-lg font-bold text-blue-900 dark:text-blue-100">Attachment & Keterangan Product</h3>
+                            <p className="text-xs text-muted-foreground">Tambahkan lampiran gambar beserta keterangan produk yang akan disertakan pada PDF</p>
+                        </div>
+                    </div>
+
+                    {/* Form Input Lampiran Baru */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-white dark:bg-zinc-900/50 p-4 rounded-lg border border-blue-50 dark:border-zinc-800">
+                        <div className="space-y-4">
+                            <div className="space-y-2">
+                                <Label className="text-sm font-semibold">File Gambar Lampiran</Label>
+                                <div className="flex flex-col gap-2">
+                                    {tempFileUrl ? (
+                                        <div className="relative flex items-center justify-between p-2 border rounded bg-zinc-50 dark:bg-zinc-800/50">
+                                            <div className="flex items-center gap-2 truncate pr-6">
+                                                <Image className="h-5 w-5 text-emerald-600 flex-shrink-0" />
+                                                <span className="text-sm font-medium truncate">{tempFileName}</span>
+                                                <span className="text-xs text-muted-foreground">({(tempFileSize / 1024).toFixed(1)} KB)</span>
+                                            </div>
+                                            <Button 
+                                                type="button" 
+                                                variant="ghost" 
+                                                size="icon" 
+                                                onClick={() => {
+                                                    setTempFileUrl("")
+                                                    setTempFileName("")
+                                                    setTempFileSize(0)
+                                                    setTempMimeType("")
+                                                }}
+                                                className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                        </div>
+                                    ) : (
+                                        <div className="relative border-2 border-dashed rounded-lg p-6 flex flex-col items-center justify-center hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition border-zinc-200 dark:border-zinc-800">
+                                            <input 
+                                                type="file" 
+                                                accept="image/*" 
+                                                onChange={handleFileUpload} 
+                                                className="absolute inset-0 opacity-0 cursor-pointer"
+                                                disabled={isUploading}
+                                            />
+                                            <UploadCloud className="h-8 w-8 text-muted-foreground mb-2" />
+                                            <span className="text-sm font-medium text-muted-foreground">Klik atau drag gambar di sini untuk unggah</span>
+                                            <span className="text-xs text-muted-foreground mt-1">Hanya mendukung format gambar (PNG, JPG, WebP, GIF)</span>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label className="text-sm font-semibold">Judul Lampiran</Label>
+                                <Input 
+                                    placeholder="Contoh: Detail Ban 12R22.5, Dimensi Produk..."
+                                    value={tempTitle}
+                                    onChange={(e) => setTempTitle(e.target.value)}
+                                />
+                            </div>
+
+                            <div className="flex items-center justify-between p-2 border rounded bg-zinc-50 dark:bg-zinc-800/50">
+                                <div className="space-y-0.5">
+                                    <Label className="text-sm font-semibold">Sertakan di PDF / Preview</Label>
+                                    <p className="text-xs text-muted-foreground">Aktifkan untuk merender gambar ini sebagai halaman A4 baru di PDF</p>
+                                </div>
+                                <input
+                                    type="checkbox"
+                                    checked={tempIncludeInPdf}
+                                    onChange={(e) => setTempIncludeInPdf(e.target.checked)}
+                                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="space-y-4 flex flex-col">
+                            <div className="space-y-2 flex-1 flex flex-col">
+                                <Label className="text-sm font-semibold">Keterangan Product</Label>
+                                <Textarea 
+                                    placeholder="Masukkan penjelasan detail produk, dimensi, spesifikasi, atau info lainnya yang akan tampil di bawah gambar lampiran..."
+                                    value={tempDescription}
+                                    onChange={(e) => setTempDescription(e.target.value)}
+                                    className="resize-none flex-1 min-h-[140px]"
+                                />
+                            </div>
+
+                            <Button 
+                                type="button" 
+                                onClick={handleAddAttachment}
+                                disabled={isUploading || !tempFileUrl}
+                                className="w-full gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+                            >
+                                <Plus className="h-4 w-4" />
+                                Tambah ke Daftar Lampiran
+                            </Button>
+                        </div>
+                    </div>
+
+                    {/* Daftar Lampiran Terunggah */}
+                    <div className="space-y-3">
+                        <Label className="text-sm font-bold">Daftar Lampiran ({attachments.length})</Label>
+                        {attachments.length === 0 ? (
+                            <div className="text-center p-6 border rounded-lg border-zinc-100 bg-white dark:bg-zinc-900/20 text-muted-foreground text-sm">
+                                Belum ada lampiran yang ditambahkan. Gunakan form di atas untuk mengunggah dan menambahkan lampiran.
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {attachments.map((attachment, idx) => (
+                                    <div key={idx} className="relative flex gap-3 p-3 border rounded-lg bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 shadow-sm">
+                                        <div className="h-16 w-16 bg-zinc-100 dark:bg-zinc-800 rounded overflow-hidden flex-shrink-0 flex items-center justify-center border border-zinc-200">
+                                            {attachment.fileUrl ? (
+                                                <img 
+                                                    src={attachment.fileUrl} 
+                                                    alt={attachment.title} 
+                                                    className="h-full w-full object-cover"
+                                                />
+                                            ) : (
+                                                <Image className="h-8 w-8 text-muted-foreground" />
+                                            )}
+                                        </div>
+                                        <div className="flex-1 min-w-0 pr-8">
+                                            <div className="flex items-center gap-1.5 mb-1">
+                                                <h4 className="font-bold text-sm truncate">{attachment.title}</h4>
+                                                {attachment.includeInPdf ? (
+                                                    <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 text-[10px] h-4">PDF</Badge>
+                                                ) : (
+                                                    <Badge variant="outline" className="text-[10px] h-4">Skip PDF</Badge>
+                                                )}
+                                            </div>
+                                            <p className="text-xs text-muted-foreground truncate mb-1">
+                                                File: <span className="font-mono">{attachment.fileName}</span> ({(attachment.fileSize / 1024).toFixed(1)} KB)
+                                            </p>
+                                            {attachment.description && (
+                                                <p className="text-xs text-zinc-600 dark:text-zinc-400 line-clamp-2 bg-zinc-50 dark:bg-zinc-800/30 p-1.5 rounded border border-zinc-100 dark:border-zinc-800/50">
+                                                    {attachment.description}
+                                                </p>
+                                            )}
+                                        </div>
+                                        <Button 
+                                            type="button" 
+                                            variant="ghost" 
+                                            size="icon" 
+                                            onClick={() => handleRemoveAttachment(idx)}
+                                            className="absolute top-2 right-2 h-7 w-7 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-full"
+                                        >
+                                            <Trash2 className="h-3.5 w-3.5" />
+                                        </Button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </CardContent>
+            </Card>
 
             {/* Bottom Save Buttons */}
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pb-6 px-4">

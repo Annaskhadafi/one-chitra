@@ -1,0 +1,12 @@
+{
+  "id": "TASK-002",
+  "status": "completed",
+  "priority": "P0",
+  "title": "Add Quotation Attachments and Descriptions Feature",
+  "description": "Menambahkan fitur attachment gambar dan keterangan produk di form Quotation, di mana data ini akan di-render di preview dan diekspor ke PDF jika opsi nested lampiran aktif.",
+  "createdAt": "2026-05-20T06:21:29.000Z",
+  "updatedAt": "2026-05-19T22:36:58.637Z",
+  "startedAt": "2026-05-19T22:23:16.206Z",
+  "completedAt": "2026-05-19T22:36:58.637Z",
+  "completionDetails": "Fitur Attachment Gambar & Keterangan Produk pada Quotation telah diimplementasikan sepenuhnya pada Zod schema, Server Actions, UI Form, Screen Preview, dan PDF Generator dengan format visual WYSIWYG premium."
+}
