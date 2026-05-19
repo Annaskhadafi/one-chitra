@@ -680,6 +680,10 @@ export async function generateQuotationPdf(
             return lines
         }
 
+        // Group image attachments into pairs (2 per page)
+        type ImageAttachment = { attachment: typeof includedAttachments[number]; image: any; globalIdx: number }
+        const imageAttachments: ImageAttachment[] = []
+
         for (const attachment of includedAttachments) {
             const attachmentUrl = resolveUploadDocumentUrl(attachment.fileUrl)
 
@@ -712,128 +716,7 @@ export async function generateQuotationPdf(
                     const image = detectedMimeType.includes("png")
                         ? await mergedPdf.embedPng(attachmentBytes)
                         : await mergedPdf.embedJpg(attachmentBytes)
-
-                    const page = mergedPdf.addPage([A4_WIDTH, A4_HEIGHT])
-                    
-                    if (letterheadImage) {
-                        page.drawImage(letterheadImage, {
-                            x: 0,
-                            y: 0,
-                            width: A4_WIDTH,
-                            height: A4_HEIGHT,
-                        })
-                    }
-
-                    const LEFT_MARGIN = 42.5
-                    const RIGHT_MARGIN = 42.5
-                    const TOP_MARGIN = 39.7
-                    const BOTTOM_MARGIN = 70.8
-                    const HEADER_SPACING = 90.7
-
-                    const contentWidth = A4_WIDTH - LEFT_MARGIN - RIGHT_MARGIN
-                    let currentY = A4_HEIGHT - TOP_MARGIN - HEADER_SPACING
-
-                    const attachmentIdx = includedAttachments.indexOf(attachment)
-                    const titleText = `LAMPIRAN ${attachmentIdx + 1}: ${(attachment.title || attachment.fileName).toUpperCase()}`
-                    
-                    page.drawText(titleText, {
-                        x: LEFT_MARGIN,
-                        y: currentY - 14,
-                        size: 14,
-                        font: helveticaBold,
-                        color: rgb(37/255, 99/255, 235/255)
-                    })
-                    
-                    page.drawLine({
-                        start: { x: LEFT_MARGIN, y: currentY - 22 },
-                        end: { x: A4_WIDTH - RIGHT_MARGIN, y: currentY - 22 },
-                        thickness: 2,
-                        color: rgb(37/255, 99/255, 235/255)
-                    })
-
-                    currentY -= 46
-
-                    if (attachment.description) {
-                        const maxChars = 85
-                        const descLines = wrapText(attachment.description, maxChars)
-                        
-                        const headerPadding = 11.3
-                        const headerFontSize = 8.5
-                        const descFontSize = 9.5
-                        const lineHeight = descFontSize * 1.5
-                        
-                        const boxHeight = 11.3 + headerFontSize + 4 + (descLines.length * lineHeight) + 11.3
-                        const boxWidth = contentWidth
-                        const boxX = LEFT_MARGIN
-                        const boxY = currentY - boxHeight
-
-                        page.drawRectangle({
-                            x: boxX,
-                            y: boxY,
-                            width: boxWidth,
-                            height: boxHeight,
-                            color: rgb(248/255, 250/255, 252/255),
-                            borderColor: rgb(221/255, 230/255, 240/255),
-                            borderWidth: 1,
-                        })
-
-                        page.drawText("KETERANGAN PRODUCT:", {
-                            x: boxX + 11.3,
-                            y: boxY + boxHeight - 11.3 - headerFontSize,
-                            size: headerFontSize,
-                            font: helveticaBold,
-                            color: rgb(30/255, 41/255, 59/255),
-                        })
-
-                        let textY = boxY + boxHeight - 11.3 - headerFontSize - 4 - descFontSize
-                        for (const line of descLines) {
-                            page.drawText(line, {
-                                x: boxX + 11.3,
-                                y: textY,
-                                size: descFontSize,
-                                font: helveticaFont,
-                                color: rgb(51/255, 65/255, 85/255),
-                            })
-                            textY -= lineHeight
-                        }
-
-                        currentY -= (boxHeight + 17)
-                    }
-
-                    const remainingHeight = currentY - BOTTOM_MARGIN
-                    if (remainingHeight > 40) {
-                        const containerWidth = contentWidth
-                        const containerHeight = remainingHeight
-                        const containerX = LEFT_MARGIN
-                        const containerY = BOTTOM_MARGIN
-
-                        page.drawRectangle({
-                            x: containerX,
-                            y: containerY,
-                            width: containerWidth,
-                            height: containerHeight,
-                            color: rgb(250/255, 250/255, 250/255),
-                            borderColor: rgb(203/255, 211/255, 225/255),
-                            borderWidth: 1,
-                        })
-
-                        const maxImgWidth = containerWidth - 22.6
-                        const maxImgHeight = containerHeight - 22.6
-                        const imgScale = Math.min(maxImgWidth / image.width, maxImgHeight / image.height, 1)
-                        const imageWidth = image.width * imgScale
-                        const imageHeight = image.height * imgScale
-                        
-                        const imgX = containerX + 11.3 + (maxImgWidth - imageWidth) / 2
-                        const imgY = containerY + 11.3 + (maxImgHeight - imageHeight) / 2
-
-                        page.drawImage(image, {
-                            x: imgX,
-                            y: imgY,
-                            width: imageWidth,
-                            height: imageHeight,
-                        })
-                    }
-
+                    imageAttachments.push({ attachment, image, globalIdx: imageAttachments.length })
                     continue
                 }
 
@@ -841,6 +724,173 @@ export async function generateQuotationPdf(
             } catch (attachmentError) {
                 console.error(`Failed to merge attachment ${attachment.fileName}:`, attachmentError)
                 skippedAttachments.push(`${attachment.title}: gagal digabung`)
+            }
+        }
+
+        // Render image attachments in 2-column grid, 2 per A4 page
+        const LEFT_MARGIN = 42.5
+        const RIGHT_MARGIN = 42.5
+        const TOP_MARGIN = 39.7
+        const BOTTOM_MARGIN = 56.7
+        const HEADER_SPACING = 90.7
+
+        const contentWidth = A4_WIDTH - LEFT_MARGIN - RIGHT_MARGIN
+        const contentHeight = A4_HEIGHT - TOP_MARGIN - HEADER_SPACING - BOTTOM_MARGIN
+        const CARD_GAP = 14.2  // 5mm in points
+        const cardWidth = (contentWidth - CARD_GAP) / 2
+
+        for (let pageStart = 0; pageStart < imageAttachments.length; pageStart += 2) {
+            const pageItems = imageAttachments.slice(pageStart, pageStart + 2)
+            const pageNum = Math.floor(pageStart / 2)
+            const totalPages = Math.ceil(imageAttachments.length / 2)
+
+            const page = mergedPdf.addPage([A4_WIDTH, A4_HEIGHT])
+
+            if (letterheadImage) {
+                page.drawImage(letterheadImage, {
+                    x: 0, y: 0,
+                    width: A4_WIDTH, height: A4_HEIGHT,
+                })
+            }
+
+            // Header: LAMPIRAN PENDUKUNG
+            const headerY = A4_HEIGHT - TOP_MARGIN - HEADER_SPACING
+            page.drawText("LAMPIRAN PENDUKUNG", {
+                x: LEFT_MARGIN,
+                y: headerY - 12,
+                size: 12,
+                font: helveticaBold,
+                color: rgb(37/255, 99/255, 235/255),
+            })
+            // Page number
+            const pageLabel = `Halaman ${pageNum + 1} dari ${totalPages}`
+            const pageLabelWidth = helveticaFont.widthOfTextAtSize(pageLabel, 8)
+            page.drawText(pageLabel, {
+                x: A4_WIDTH - RIGHT_MARGIN - pageLabelWidth,
+                y: headerY - 12,
+                size: 8,
+                font: helveticaFont,
+                color: rgb(100/255, 116/255, 139/255),
+            })
+            // Blue underline
+            page.drawLine({
+                start: { x: LEFT_MARGIN, y: headerY - 20 },
+                end: { x: A4_WIDTH - RIGHT_MARGIN, y: headerY - 20 },
+                thickness: 2,
+                color: rgb(37/255, 99/255, 235/255),
+            })
+
+            const gridStartY = headerY - 28
+            const gridHeight = gridStartY - BOTTOM_MARGIN
+
+            for (let col = 0; col < pageItems.length; col++) {
+                const { attachment, image, globalIdx } = pageItems[col]
+                const cardX = LEFT_MARGIN + col * (cardWidth + CARD_GAP)
+                const cardY = BOTTOM_MARGIN
+                const cardH = gridHeight
+
+                // Card background
+                page.drawRectangle({
+                    x: cardX, y: cardY,
+                    width: cardWidth, height: cardH,
+                    color: rgb(248/255, 250/255, 252/255),
+                    borderColor: rgb(221/255, 230/255, 240/255),
+                    borderWidth: 1,
+                })
+
+                // Blue header bar
+                const headerBarH = 18
+                page.drawRectangle({
+                    x: cardX, y: cardY + cardH - headerBarH,
+                    width: cardWidth, height: headerBarH,
+                    color: rgb(37/255, 99/255, 235/255),
+                })
+
+                // Circle badge number
+                const badgeR = 7
+                const badgeCX = cardX + 10
+                const badgeCY = cardY + cardH - headerBarH / 2
+                page.drawEllipse({
+                    x: badgeCX, y: badgeCY,
+                    xScale: badgeR, yScale: badgeR,
+                    color: rgb(100/255, 149/255, 237/255),
+                })
+                page.drawText(`${globalIdx + 1}`, {
+                    x: badgeCX - 2.5,
+                    y: badgeCY - 3,
+                    size: 7,
+                    font: helveticaBold,
+                    color: rgb(1, 1, 1),
+                })
+
+                // Title text (truncated to fit card width)
+                const maxTitleChars = Math.floor((cardWidth - 28) / 5.5)
+                const rawTitle = (attachment.title || attachment.fileName).toUpperCase()
+                const titleText = rawTitle.length > maxTitleChars ? rawTitle.slice(0, maxTitleChars - 1) + "…" : rawTitle
+                page.drawText(titleText, {
+                    x: badgeCX + badgeR + 4,
+                    y: badgeCY - 3.5,
+                    size: 7.5,
+                    font: helveticaBold,
+                    color: rgb(1, 1, 1),
+                })
+
+                // Calculate description height
+                let descBoxH = 0
+                const descPad = 8.5
+                const descFontSize = 7.5
+                const descLineH = descFontSize * 1.45
+                const descMaxChars = Math.floor((cardWidth - descPad * 2) / 4.5)
+                let descLines: string[] = []
+                if (attachment.description) {
+                    descLines = wrapText(attachment.description, descMaxChars)
+                    descBoxH = descPad + descFontSize + 3 + descLines.length * descLineH + descPad * 0.5
+                }
+
+                // Image area
+                const imgAreaY = cardY + descBoxH
+                const imgAreaH = cardH - headerBarH - descBoxH - 8
+                if (imgAreaH > 20) {
+                    const maxImgW = cardWidth - 16
+                    const maxImgH = imgAreaH - 16
+                    const imgScale = Math.min(maxImgW / image.width, maxImgH / image.height, 1)
+                    const imgW = image.width * imgScale
+                    const imgH = image.height * imgScale
+                    const imgX = cardX + 8 + (maxImgW - imgW) / 2
+                    const imgY = imgAreaY + 8 + (maxImgH - imgH) / 2
+
+                    page.drawImage(image, { x: imgX, y: imgY, width: imgW, height: imgH })
+                }
+
+                // Description box at bottom
+                if (attachment.description && descBoxH > 0) {
+                    page.drawLine({
+                        start: { x: cardX, y: cardY + descBoxH },
+                        end: { x: cardX + cardWidth, y: cardY + descBoxH },
+                        thickness: 0.5,
+                        color: rgb(226/255, 232/255, 240/255),
+                    })
+                    // "Ket:" label
+                    page.drawText("Ket:", {
+                        x: cardX + descPad,
+                        y: cardY + descBoxH - descPad - descFontSize,
+                        size: descFontSize,
+                        font: helveticaBold,
+                        color: rgb(30/255, 41/255, 59/255),
+                    })
+                    // Description lines
+                    let textY = cardY + descBoxH - descPad - descFontSize - 3 - descLineH
+                    for (const line of descLines.slice(0, 3)) {
+                        page.drawText(line, {
+                            x: cardX + descPad,
+                            y: textY,
+                            size: descFontSize,
+                            font: helveticaFont,
+                            color: rgb(71/255, 85/255, 105/255),
+                        })
+                        textY -= descLineH
+                    }
+                }
             }
         }
 

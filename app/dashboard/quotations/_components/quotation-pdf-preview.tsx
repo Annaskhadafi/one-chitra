@@ -16,6 +16,7 @@ import type { user } from "@/db/schema"
 import type { InferSelectModel } from "drizzle-orm"
 import { normalizeQuotationText } from "@/lib/quotation-text"
 import { buildQuotationPdfPayload } from "./quotation-pdf-generator"
+import { resolveUploadDocumentUrl } from "@/lib/upload-url"
 
 type User = InferSelectModel<typeof user>
 
@@ -552,94 +553,153 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                             )
                         })}
 
-                        {/* Rendering Lampiran sebagai Halaman A4 Tambahan secara WYSIWYG */}
-                        {visibleAttachments.map((attachment, idx) => (
-                            <div
-                                key={`attachment-page-${idx}`}
-                                className="print-page relative bg-white shadow-2xl ring-1 ring-slate-200"
-                                style={{
-                                    width: "210mm",
-                                    height: "297mm",
-                                    minWidth: "210mm",
-                                    minHeight: "297mm",
-                                    position: "relative",
-                                    overflow: "hidden",
-                                    background: "#ffffff",
-                                    color: "#163153",
-                                    fontFamily: "Arial, Helvetica, sans-serif",
-                                    lineHeight: "1.35",
-                                    pageBreakBefore: "always",
-                                    flexShrink: 0
-                                }}
-                            >
-                                {/* Letterhead Background */}
-                                <img
-                                    src="/ChitraParatama_Stationery_Letterhead_jkt.jpg"
-                                    alt=""
-                                    className="bg-letterhead pointer-events-none absolute inset-0 h-full w-full select-none"
-                                    style={{ objectFit: "cover", zIndex: 0 }}
-                                />
+                        {/* Rendering Lampiran sebagai Halaman A4 Tambahan dengan Grid 2-kolom */}
+                        {(() => {
+                            // Group attachments into pages of 2 per page
+                            const pages: typeof visibleAttachments[] = []
+                            for (let i = 0; i < visibleAttachments.length; i += 2) {
+                                pages.push(visibleAttachments.slice(i, i + 2))
+                            }
+                            return pages.map((pageAttachments, pageIdx) => (
+                                <div
+                                    key={`attachment-page-${pageIdx}`}
+                                    className="print-page relative bg-white shadow-2xl ring-1 ring-slate-200"
+                                    style={{
+                                        width: "210mm",
+                                        height: "297mm",
+                                        minWidth: "210mm",
+                                        minHeight: "297mm",
+                                        position: "relative",
+                                        overflow: "hidden",
+                                        background: "#ffffff",
+                                        color: "#163153",
+                                        fontFamily: "Arial, Helvetica, sans-serif",
+                                        lineHeight: "1.35",
+                                        pageBreakBefore: "always",
+                                        flexShrink: 0
+                                    }}
+                                >
+                                    {/* Letterhead Background */}
+                                    <img
+                                        src="/ChitraParatama_Stationery_Letterhead_jkt.jpg"
+                                        alt=""
+                                        className="bg-letterhead pointer-events-none absolute inset-0 h-full w-full select-none"
+                                        style={{ objectFit: "cover", zIndex: 0 }}
+                                    />
 
-                                <div className="page-content relative z-10 px-[15mm] pb-[25mm] pt-[14mm] flex flex-col h-full">
-                                    {/* Spacing A4 Header */}
-                                    <div style={{ height: "32mm" }} />
+                                    <div className="page-content relative z-10 px-[15mm] pb-[18mm] pt-[14mm] flex flex-col h-full">
+                                        {/* Spacing A4 Header */}
+                                        <div style={{ height: "32mm" }} />
 
-                                    {/* Judul Lampiran */}
-                                    <div style={{ marginBottom: "4mm", borderBottom: "2px solid #2563eb", paddingBottom: "2mm" }}>
-                                        <div style={{ fontSize: "14pt", fontWeight: 700, color: "#2563eb", textTransform: "uppercase" }}>
-                                            LAMPIRAN {idx + 1}: {attachment.title}
-                                        </div>
-                                    </div>
-
-                                    {/* Keterangan Product */}
-                                    {attachment.description && (
-                                        <div
-                                            style={{
-                                                marginBottom: "6mm",
-                                                background: "#f8fafc",
-                                                border: "1px solid #dde6f0",
-                                                padding: "4mm",
-                                                borderRadius: "1.5mm",
-                                                fontSize: "9.5pt",
-                                                color: "#334155",
-                                                lineHeight: 1.5,
-                                                whiteSpace: "pre-line"
-                                            }}
-                                        >
-                                            <div style={{ fontWeight: 700, fontSize: "8.5pt", color: "#1e293b", marginBottom: "1mm", textTransform: "uppercase" }}>
-                                                Keterangan Product:
+                                        {/* Header Halaman Lampiran */}
+                                        <div style={{ marginBottom: "5mm", borderBottom: "2px solid #2563eb", paddingBottom: "2mm", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                                            <div style={{ fontSize: "11pt", fontWeight: 700, color: "#2563eb", textTransform: "uppercase" }}>
+                                                LAMPIRAN PENDUKUNG
                                             </div>
-                                            {attachment.description}
+                                            <div style={{ fontSize: "8pt", color: "#64748b" }}>
+                                                Halaman {pageIdx + 1} dari {pages.length}
+                                            </div>
                                         </div>
-                                    )}
 
-                                    {/* Gambar Lampiran */}
-                                    <div 
-                                        style={{ 
-                                            flexGrow: 1, 
-                                            display: "flex", 
-                                            alignItems: "center", 
-                                            justifyContent: "center",
-                                            background: "#fafafa",
-                                            border: "1px dashed #cbd5e1",
-                                            borderRadius: "2mm",
-                                            padding: "4mm",
-                                            overflow: "hidden"
-                                        }}
-                                    >
-                                        <img 
-                                            src={attachment.fileUrl} 
-                                            alt={attachment.title}
-                                            style={{ 
-                                                maxWidth: "100%", 
-                                                maxHeight: "150mm", 
-                                                objectFit: "contain" 
-                                            }}
-                                        />
+                                        {/* Grid 2-kolom attachment */}
+                                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "5mm", flex: 1 }}>
+                                            {pageAttachments.map((attachment, itemIdx) => {
+                                                const globalIdx = pageIdx * 2 + itemIdx
+                                                const resolvedUrl = resolveUploadDocumentUrl(attachment.fileUrl)
+                                                return (
+                                                    <div
+                                                        key={`att-${globalIdx}`}
+                                                        style={{
+                                                            display: "flex",
+                                                            flexDirection: "column",
+                                                            background: "#f8fafc",
+                                                            border: "1px solid #dde6f0",
+                                                            borderRadius: "2mm",
+                                                            overflow: "hidden",
+                                                        }}
+                                                    >
+                                                        {/* Card Header: Judul */}
+                                                        <div style={{
+                                                            background: "#2563eb",
+                                                            padding: "2.5mm 3.5mm",
+                                                            display: "flex",
+                                                            alignItems: "center",
+                                                            gap: "2mm"
+                                                        }}>
+                                                            <div style={{
+                                                                background: "rgba(255,255,255,0.25)",
+                                                                borderRadius: "50%",
+                                                                width: "5mm",
+                                                                height: "5mm",
+                                                                display: "flex",
+                                                                alignItems: "center",
+                                                                justifyContent: "center",
+                                                                fontSize: "7pt",
+                                                                color: "#fff",
+                                                                fontWeight: 700,
+                                                                flexShrink: 0
+                                                            }}>{globalIdx + 1}</div>
+                                                            <div style={{ fontSize: "8.5pt", fontWeight: 700, color: "#ffffff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                                                {attachment.title}
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Gambar */}
+                                                        <div style={{
+                                                            flex: 1,
+                                                            display: "flex",
+                                                            alignItems: "center",
+                                                            justifyContent: "center",
+                                                            padding: "3mm",
+                                                            background: "#fff",
+                                                            minHeight: "70mm",
+                                                            maxHeight: "90mm",
+                                                            overflow: "hidden"
+                                                        }}>
+                                                            {resolvedUrl ? (
+                                                                <img
+                                                                    src={resolvedUrl}
+                                                                    alt={attachment.title}
+                                                                    style={{
+                                                                        maxWidth: "100%",
+                                                                        maxHeight: "84mm",
+                                                                        objectFit: "contain"
+                                                                    }}
+                                                                    onError={(e) => {
+                                                                        // fallback: try original fileUrl
+                                                                        const el = e.currentTarget
+                                                                        if (el.src !== attachment.fileUrl) {
+                                                                            el.src = attachment.fileUrl
+                                                                        }
+                                                                    }}
+                                                                />
+                                                            ) : (
+                                                                <div style={{ fontSize: "8pt", color: "#94a3b8" }}>Gambar tidak tersedia</div>
+                                                            )}
+                                                        </div>
+
+                                                        {/* Keterangan */}
+                                                        {attachment.description && (
+                                                            <div style={{
+                                                                padding: "2.5mm 3.5mm",
+                                                                borderTop: "1px solid #e2e8f0",
+                                                                fontSize: "7.5pt",
+                                                                color: "#475569",
+                                                                lineHeight: 1.4,
+                                                                whiteSpace: "pre-line"
+                                                            }}>
+                                                                <span style={{ fontWeight: 700, color: "#1e293b" }}>Ket: </span>
+                                                                {attachment.description}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        ))}
+                            ))
+                        })()}
                     </div>
                 </div>
             </DialogContent>
