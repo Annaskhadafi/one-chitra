@@ -39,7 +39,7 @@ type Holiday = {
   is_national_holiday: boolean
 }
 
-type VisualStyle = "Modern & Clean" | "Elegant & Luxury" | "Playful & Vibrant" | "Corporate & Professional" | "Minimalist" | "Vector Kartun Simple"
+type VisualStyle = "Modern & Clean" | "Elegant & Luxury" | "Playful & Vibrant" | "Corporate & Professional" | "Minimalist" | "Vectorize Minimalis" | "Vector Kartun Simple"
 
 const contentTypes = [
   "Ucapan ulang tahun customer",
@@ -56,6 +56,7 @@ const visualStyles: VisualStyle[] = [
   "Playful & Vibrant",
   "Corporate & Professional",
   "Minimalist",
+  "Vectorize Minimalis",
   "Vector Kartun Simple",
 ]
 
@@ -292,9 +293,9 @@ function getVectorCartoonPromptTemplate(contentType: (typeof contentTypes)[numbe
   return `Content focus: ${focusByContentType[contentType]}
 Headline text: "${headlineByContentType[contentType]}"
 Brand/Source: "PT Chitra Paratama"
-Visual style: vector kartun simple, flat vector illustration, clean cartoon shapes, bold outline, friendly corporate character or object illustration, minimal details, high readability, Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56). Avoid photorealistic rendering, 3D render, complex texture, clutter, and excessive small text.
+Visual style: vectorize minimalis, flat vector illustration, clean semi-cartoon corporate artwork, neat bold outlines, simplified realistic proportions, soft gradient background, minimal details, high readability, Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56). If people are shown, render them like polished vector characters with friendly faces and neat Chitra safety workwear. Avoid photorealistic rendering, 3D render, complex texture, clutter, and excessive small text.
 Additional elements: [ELEMEN TAMBAHAN YANG RELEVAN].
-Variant note: Create a simple cartoon vector composition with one clear focal illustration and readable headline.`
+Variant note: Create a clean minimalist vectorized composition like a professional corporate poster illustration: one clear focal scene, readable headline, balanced whitespace, and polished flat-vector character style.`
 }
 
 export function InstagramImageGeneratorClient() {
