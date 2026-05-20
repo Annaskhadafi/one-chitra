@@ -1,3 +1,5 @@
+import Fuse from "fuse.js"
+
 export type TirePerformanceType = "running" | "scrap"
 
 export type TirePerformanceInput = {
@@ -193,4 +195,90 @@ export function aggregateTirePerformanceRows(rows: TirePerformanceRow[]): TirePe
         ...row,
         avgHours: row.recordCount > 0 ? Number((weightedHours / row.recordCount).toFixed(2)) : 0,
     }))
+}
+
+// ─── Manufacture Normalization (Fuse.js) ──────────────────────────────────────
+
+function toTitleCase(str: string): string {
+    return str
+        .trim()
+        .toLowerCase()
+        .replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+/**
+ * Builds a Map from every raw manufacture name found in `rows` to its
+ * canonical (Title Case, fuzzy-deduplicated) form.
+ *
+ * Algorithm:
+ *  1. Collect all unique raw names.
+ *  2. Sort longest-first so the most descriptive variant wins as canonical.
+ *  3. Title-case each name before comparison.
+ *  4. Use Fuse.js fuzzy search against the growing canonical list.
+ *     – threshold 0.25 handles case differences + minor typos (1-2 chars).
+ *  5. If a match is found, map the raw name to that canonical.
+ *     Otherwise, add the title-cased name as a new canonical.
+ *
+ * Examples that get merged:
+ *   "MICHELIN" | "michelin" | "Michelin"        → "Michelin"
+ *   "BRIDGESTONE" | "Bridgestone"               → "Bridgestone"
+ *   "GAJAH TUNGGAL" | "Gajah Tunggal"           → "Gajah Tunggal"
+ *   "GOODYEAR" | "Goodyear" | "GoodyEar"        → "Goodyear"
+ */
+export function buildManufactureNormalizationMap(
+    rows: { manufacture: string }[],
+): Map<string, string> {
+    const rawSet = new Set(rows.map((r) => (r.manufacture ?? "").trim()))
+    const rawNames = Array.from(rawSet).filter(Boolean)
+
+    // Prefer longest names as the master (more descriptive)
+    const sorted = [...rawNames].sort((a, b) => b.length - a.length)
+
+    const canonicals: string[] = []
+    const rawToCanonical = new Map<string, string>()
+
+    for (const raw of sorted) {
+        const titleCased = toTitleCase(raw)
+
+        if (canonicals.length === 0) {
+            canonicals.push(titleCased)
+            rawToCanonical.set(raw, titleCased)
+            continue
+        }
+
+        const fuse = new Fuse(canonicals, {
+            includeScore: true,
+            threshold: 0.25,
+            isCaseSensitive: false,
+        })
+
+        const results = fuse.search(titleCased)
+        const best = results[0]
+
+        if (best && best.score !== undefined && best.score < 0.25) {
+            // Close enough → map to existing canonical
+            rawToCanonical.set(raw, best.item)
+        } else {
+            // New canonical
+            canonicals.push(titleCased)
+            rawToCanonical.set(raw, titleCased)
+        }
+    }
+
+    // Always handle the empty / unknown fallback
+    rawToCanonical.set("", "Unknown")
+
+    return rawToCanonical
+}
+
+/**
+ * Convenience: normalise a single manufacture name using a pre-built map.
+ * Falls back to Title Case if the raw name is not in the map.
+ */
+export function normalizeManufacture(
+    raw: string | null | undefined,
+    map: Map<string, string>,
+): string {
+    const trimmed = (raw ?? "").trim()
+    return map.get(trimmed) ?? toTitleCase(trimmed) || "Unknown"
 }

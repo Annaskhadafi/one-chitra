@@ -32,6 +32,8 @@ import {
 } from "lucide-react"
 
 import {
+    buildManufactureNormalizationMap,
+    normalizeManufacture,
     type TirePerformanceRow,
     type TirePerformanceType,
 } from "@/lib/tire-performance"
@@ -85,11 +87,19 @@ function isMichelin(name: string) {
 
 // ─── Data Computation Hooks ──────────────────────────────────────────────────
 
-function useManufactureStats(rows: TirePerformanceRow[]) {
+/**
+ * Build a Fuse.js-based normalization map for all manufacture names in `rows`.
+ * Returns a stable Map<rawName, canonicalName> memoized on `rows`.
+ */
+function useManufactureNormMap(rows: TirePerformanceRow[]) {
+    return React.useMemo(() => buildManufactureNormalizationMap(rows), [rows])
+}
+
+function useManufactureStats(rows: TirePerformanceRow[], normMap: Map<string, string>) {
     return React.useMemo(() => {
         const map = new Map<string, { wh: number; rc: number }>()
         rows.forEach((r) => {
-            const key = r.manufacture || "Unknown"
+            const key = normalizeManufacture(r.manufacture, normMap)
             const cur = map.get(key) ?? { wh: 0, rc: 0 }
             const h = Number(r.avgHours) || 0
             const c = Number(r.recordCount) || 0
@@ -105,10 +115,10 @@ function useManufactureStats(rows: TirePerformanceRow[]) {
                 isMich: isMichelin(name),
             }))
             .sort((a, b) => b.avgHours - a.avgHours)
-    }, [rows])
+    }, [rows, normMap])
 }
 
-function useSpecStats(rows: TirePerformanceRow[]) {
+function useSpecStats(rows: TirePerformanceRow[], normMap: Map<string, string>) {
     return React.useMemo(() => {
         const map = new Map<string, { wh: number; rc: number; manufactures: Set<string> }>()
         rows.forEach((r) => {
@@ -118,7 +128,7 @@ function useSpecStats(rows: TirePerformanceRow[]) {
             const c = Number(r.recordCount) || 0
             cur.wh += h * c
             cur.rc += c
-            cur.manufactures.add(r.manufacture || "Unknown")
+            cur.manufactures.add(normalizeManufacture(r.manufacture, normMap))
             map.set(key, cur)
         })
         return Array.from(map.entries())
@@ -134,12 +144,15 @@ function useSpecStats(rows: TirePerformanceRow[]) {
                 }
             })
             .sort((a, b) => b.avgHours - a.avgHours)
-    }, [rows])
+    }, [rows, normMap])
 }
 
-function useSpecByManufacture(rows: TirePerformanceRow[]) {
+function useSpecByManufacture(rows: TirePerformanceRow[], normMap: Map<string, string>) {
     return React.useMemo(() => {
-        const manufactures = Array.from(new Set(rows.map((r) => r.manufacture || "Unknown")))
+        // Use normalized manufacture names throughout
+        const manufactures = Array.from(
+            new Set(rows.map((r) => normalizeManufacture(r.manufacture, normMap)))
+        )
         const specs = Array.from(new Set(rows.map((r) => r.specification || "-"))).slice(0, 12)
 
         const dataMap = new Map<string, Record<string, number>>()
@@ -148,11 +161,10 @@ function useSpecByManufacture(rows: TirePerformanceRow[]) {
         rows.forEach((r) => {
             const spec = r.specification || "-"
             if (!specs.includes(spec)) return
-            const manuf = r.manufacture || "Unknown"
+            const manuf = normalizeManufacture(r.manufacture, normMap)
             const sData = dataMap.get(spec)!
             const h = Number(r.avgHours) || 0
             const c = Number(r.recordCount) || 0
-            // weighted average accumulation
             sData[`${manuf}_wh`] = (sData[`${manuf}_wh`] ?? 0) + h * c
             sData[`${manuf}_rc`] = (sData[`${manuf}_rc`] ?? 0) + c
         })
@@ -169,7 +181,7 @@ function useSpecByManufacture(rows: TirePerformanceRow[]) {
         })
 
         return { data, manufactures }
-    }, [rows])
+    }, [rows, normMap])
 }
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
@@ -289,9 +301,10 @@ function PieLabelLine({ cx, cy, midAngle, innerRadius, outerRadius, percent }: {
 // ─── Running Dashboard ────────────────────────────────────────────────────────
 
 function RunningDashboard({ rows }: { rows: TirePerformanceRow[] }) {
-    const manufactureStats = useManufactureStats(rows)
-    const specStats = useSpecStats(rows)
-    const { data: specByManuf, manufactures } = useSpecByManufacture(rows)
+    const normMap = useManufactureNormMap(rows)
+    const manufactureStats = useManufactureStats(rows, normMap)
+    const specStats = useSpecStats(rows, normMap)
+    const { data: specByManuf, manufactures } = useSpecByManufacture(rows, normMap)
 
     // KPIs
     const totalTires = rows.reduce((acc, r) => acc + (Number(r.recordCount) || 0), 0)
@@ -302,20 +315,20 @@ function RunningDashboard({ rows }: { rows: TirePerformanceRow[] }) {
     }, [rows])
     const michelinAvg = React.useMemo(() => {
         let wh = 0; let rc = 0
-        rows.filter((r) => isMichelin(r.manufacture || "")).forEach((r) => {
+        rows.filter((r) => isMichelin(normalizeManufacture(r.manufacture, normMap))).forEach((r) => {
             const h = Number(r.avgHours) || 0; const c = Number(r.recordCount) || 0; wh += h * c; rc += c
         })
         return rc > 0 ? wh / rc : 0
-    }, [rows])
+    }, [rows, normMap])
     const topSpec = specStats[0]
     const michelinStat = manufactureStats.find((m) => isMichelin(m.name))
     const allOthersAvg = React.useMemo(() => {
         let wh = 0; let rc = 0
-        rows.filter((r) => !isMichelin(r.manufacture || "")).forEach((r) => {
+        rows.filter((r) => !isMichelin(normalizeManufacture(r.manufacture, normMap))).forEach((r) => {
             const h = Number(r.avgHours) || 0; const c = Number(r.recordCount) || 0; wh += h * c; rc += c
         })
         return rc > 0 ? wh / rc : 0
-    }, [rows])
+    }, [rows, normMap])
     const michelinAdvantage = michelinAvg - allOthersAvg
     const totalUniqueSpec = new Set(rows.map((r) => r.specification)).size
 
@@ -694,25 +707,26 @@ function RunningDashboard({ rows }: { rows: TirePerformanceRow[] }) {
 // ─── Scrap Dashboard ──────────────────────────────────────────────────────────
 
 function ScrapDashboard({ rows }: { rows: TirePerformanceRow[] }) {
-    const manufactureStats = useManufactureStats(rows)
-    const specStats = useSpecStats(rows)
-    const { data: specByManuf, manufactures } = useSpecByManufacture(rows)
+    const normMap = useManufactureNormMap(rows)
+    const manufactureStats = useManufactureStats(rows, normMap)
+    const specStats = useSpecStats(rows, normMap)
+    const { data: specByManuf, manufactures } = useSpecByManufacture(rows, normMap)
 
     const totalScrapped = rows.reduce((acc, r) => acc + (Number(r.recordCount) || 0), 0)
     const michelinAvg = React.useMemo(() => {
         let wh = 0; let rc = 0
-        rows.filter((r) => isMichelin(r.manufacture || "")).forEach((r) => {
+        rows.filter((r) => isMichelin(normalizeManufacture(r.manufacture, normMap))).forEach((r) => {
             const h = Number(r.avgHours) || 0; const c = Number(r.recordCount) || 0; wh += h * c; rc += c
         })
         return rc > 0 ? wh / rc : 0
-    }, [rows])
+    }, [rows, normMap])
     const allOthersAvg = React.useMemo(() => {
         let wh = 0; let rc = 0
-        rows.filter((r) => !isMichelin(r.manufacture || "")).forEach((r) => {
+        rows.filter((r) => !isMichelin(normalizeManufacture(r.manufacture, normMap))).forEach((r) => {
             const h = Number(r.avgHours) || 0; const c = Number(r.recordCount) || 0; wh += h * c; rc += c
         })
         return rc > 0 ? wh / rc : 0
-    }, [rows])
+    }, [rows, normMap])
     const michelinStat = manufactureStats.find((m) => isMichelin(m.name))
     const michelinAdvantage = michelinAvg - allOthersAvg
     const topSpec = specStats[0]

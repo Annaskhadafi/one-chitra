@@ -16,6 +16,8 @@ import {
 } from "@/app/actions/tire-performance"
 import {
     aggregateTirePerformanceRows,
+    buildManufactureNormalizationMap,
+    normalizeManufacture,
     normalizeTirePerformanceImportRow,
     type TirePerformanceRow,
     type TirePerformanceType,
@@ -94,6 +96,20 @@ function rowToTypedRecord(row: TirePerformanceDbRow): TirePerformanceRow {
 
 function uniqueOptions(rows: TirePerformanceRow[], key: keyof Pick<TirePerformanceRow, "performanceDate" | "endUser" | "mineSite" | "manufacture" | "specification">) {
     return Array.from(new Set(rows.map((row) => row[key]).filter(Boolean))).sort((left, right) => left.localeCompare(right))
+}
+
+/**
+ * Like uniqueOptions but deduplicates manufacture names using Fuse.js fuzzy
+ * normalization — "MICHELIN", "michelin", "Michelin" all appear as one entry.
+ */
+function uniqueManufactureOptions(rows: TirePerformanceRow[]): string[] {
+    const normMap = buildManufactureNormalizationMap(rows)
+    const canonicals = new Set<string>()
+    rows.forEach((r) => {
+        const raw = (r.manufacture ?? "").trim()
+        if (raw) canonicals.add(normMap.get(raw) ?? raw)
+    })
+    return Array.from(canonicals).sort((a, b) => a.localeCompare(b))
 }
 
 function TirePerformanceDialog({
@@ -414,10 +430,18 @@ function PerformanceTab({
     const [viewMode, setViewMode] = React.useState<"dashboard" | "summary" | "detail">("dashboard")
     const [deletingId, setDeletingId] = React.useState<number | null>(null)
 
+    const normMap = React.useMemo(() => buildManufactureNormalizationMap(rows), [rows])
+
     const filteredRows = React.useMemo(() => {
         const keyword = search.trim().toLowerCase()
         return rows.filter((row) => {
-            const matchesFilters = Object.entries(filters).every(([key, value]) => !value || String(row[key as keyof typeof filters]) === value)
+            const matchesFilters = Object.entries(filters).every(([key, value]) => {
+                if (!value) return true
+                if (key === "manufacture") {
+                    return normalizeManufacture(row.manufacture, normMap) === value
+                }
+                return String(row[key as keyof typeof filters]) === value
+            })
             if (!matchesFilters) return false
             if (!keyword) return true
             return [row.performanceDate, row.endUser, row.mineSite, row.manufacture, row.specification, row.avgHours, row.recordCount, row.remarks]
@@ -426,7 +450,7 @@ function PerformanceTab({
                 .toLowerCase()
                 .includes(keyword)
         })
-    }, [filters, rows, search])
+    }, [filters, rows, search, normMap])
 
     const aggregates = React.useMemo(() => aggregateTirePerformanceRows(filteredRows), [filteredRows])
 
@@ -485,7 +509,7 @@ function PerformanceTab({
                             <FilterSelect label={config.dateLabel} value={filters.performanceDate} onChange={(value) => setFilters((current) => ({ ...current, performanceDate: value }))} options={uniqueOptions(rows, "performanceDate")} />
                             <FilterSelect label="End User" value={filters.endUser} onChange={(value) => setFilters((current) => ({ ...current, endUser: value }))} options={uniqueOptions(rows, "endUser")} />
                             <FilterSelect label="Mine Site" value={filters.mineSite} onChange={(value) => setFilters((current) => ({ ...current, mineSite: value }))} options={uniqueOptions(rows, "mineSite")} />
-                            <FilterSelect label="Manufacture" value={filters.manufacture} onChange={(value) => setFilters((current) => ({ ...current, manufacture: value }))} options={uniqueOptions(rows, "manufacture")} />
+                            <FilterSelect label="Manufacture" value={filters.manufacture} onChange={(value) => setFilters((current) => ({ ...current, manufacture: value }))} options={uniqueManufactureOptions(rows)} />
                             <FilterSelect label="Specification" value={filters.specification} onChange={(value) => setFilters((current) => ({ ...current, specification: value }))} options={uniqueOptions(rows, "specification")} />
                         </div>
                     </div>
