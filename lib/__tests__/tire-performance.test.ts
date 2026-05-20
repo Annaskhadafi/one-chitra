@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest"
 import {
     aggregateTirePerformanceRows,
+    buildManufactureNormalizationMap,
+    normalizeManufacture,
     normalizeTirePerformanceImportRow,
 } from "@/lib/tire-performance"
 
@@ -121,6 +123,27 @@ describe("tire performance helpers", () => {
                 recordCount: 3,
                 sourceCount: 2,
             },
+        ])
+    })
+
+    it("normalizes manufacture variants for filter grouping", () => {
+        const rows = [
+            { manufacture: "MICHELIN" },
+            { manufacture: "Michelin" },
+            { manufacture: "GOOD YEAR" },
+            { manufacture: "GOODYEAR" },
+            { manufacture: "CEAT" },
+            { manufacture: "ECED" },
+        ]
+        const map = buildManufactureNormalizationMap(rows)
+
+        expect(rows.map((row) => normalizeManufacture(row.manufacture, map))).toEqual([
+            "Michelin",
+            "Michelin",
+            "Goodyear",
+            "Goodyear",
+            "Ceat",
+            "Ceat",
         ])
     })
 })

@@ -73,6 +73,18 @@ const emptyForm = (type: TirePerformanceType): TirePerformanceActionInput => ({
     remarks: "",
 })
 
+const getFormInitialValue = (type: TirePerformanceType, row?: TirePerformanceRow): TirePerformanceActionInput => ({
+    ...emptyForm(type),
+    performanceDate: row?.performanceDate || "",
+    endUser: row?.endUser || "",
+    mineSite: row?.mineSite || "",
+    manufacture: row?.manufacture || "",
+    specification: row?.specification || "",
+    avgHours: row?.avgHours || "",
+    recordCount: row?.recordCount || "",
+    remarks: row?.remarks || "",
+})
+
 const formatNumber = (value: number | string) => {
     const parsed = Number(value) || 0
     return new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(parsed)
@@ -130,32 +142,12 @@ function TirePerformanceDialog({
 }) {
     const [open, setOpen] = React.useState(false)
     const [loading, setLoading] = React.useState(false)
-    const [form, setForm] = React.useState<TirePerformanceActionInput>(() => ({
-        ...emptyForm(type),
-        performanceDate: row?.performanceDate || "",
-        endUser: row?.endUser || "",
-        mineSite: row?.mineSite || "",
-        manufacture: row?.manufacture || "",
-        specification: row?.specification || "",
-        avgHours: row?.avgHours || "",
-        recordCount: row?.recordCount || "",
-        remarks: row?.remarks || "",
-    }))
+    const [form, setForm] = React.useState<TirePerformanceActionInput>(() => getFormInitialValue(type, row))
 
-    React.useEffect(() => {
-        if (!open) return
-        setForm({
-            ...emptyForm(type),
-            performanceDate: row?.performanceDate || "",
-            endUser: row?.endUser || "",
-            mineSite: row?.mineSite || "",
-            manufacture: row?.manufacture || "",
-            specification: row?.specification || "",
-            avgHours: row?.avgHours || "",
-            recordCount: row?.recordCount || "",
-            remarks: row?.remarks || "",
-        })
-    }, [open, row, type])
+    const handleOpenChange = (nextOpen: boolean) => {
+        if (nextOpen) setForm(getFormInitialValue(type, row))
+        setOpen(nextOpen)
+    }
 
     const updateField = (key: keyof TirePerformanceActionInput, value: string) => {
         setForm((current) => ({ ...current, [key]: value }))
@@ -181,7 +173,7 @@ function TirePerformanceDialog({
     }
 
     return (
-        <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogTrigger asChild>{trigger}</DialogTrigger>
             <DialogContent className="sm:max-w-[760px]">
                 <form onSubmit={handleSubmit}>
@@ -443,13 +435,22 @@ function PerformanceTab({
         return rows.filter((row) => {
             const matchesFilters = Object.entries(filters).every(([key, value]) => {
                 if (!value) return true
-                if (key === "manufacture") {
-                    return normalizeManufacture(row.manufacture, normMap) === value
+                switch (key) {
+                    case "performanceDate":
+                        return row.performanceDate === value
+                    case "endUser":
+                        return row.endUser === value
+                    case "mineSite":
+                        return row.mineSite === value
+                    case "manufacture":
+                        return normalizeManufacture(row.manufacture, normMap) === value
+                    case "specification":
+                        return row.specification === value
+                    case "tireSize":
+                        return extractTireSize(row.specification) === value
+                    default:
+                        return true
                 }
-                if (key === "tireSize") {
-                    return extractTireSize(row.specification) === value
-                }
-                return String(row[key as keyof typeof filters]) === value
             })
             if (!matchesFilters) return false
             if (!keyword) return true
@@ -526,7 +527,7 @@ function PerformanceTab({
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <Filter className="h-3.5 w-3.5" />
                         {viewMode === "dashboard"
-                            ? <>{filteredRows.length} rows · {new Set(filteredRows.map(r => r.specification)).size} spec · {new Set(filteredRows.map(r => r.manufacture)).size} manufacture</>
+                            ? <>{filteredRows.length} rows · {new Set(filteredRows.map(r => r.specification)).size} spec · {new Set(filteredRows.map(r => normalizeManufacture(r.manufacture, normMap))).size} manufacture</>
                             : <>{filteredRows.length} detail row, {aggregates.length} summary group</>
                         }
                     </div>

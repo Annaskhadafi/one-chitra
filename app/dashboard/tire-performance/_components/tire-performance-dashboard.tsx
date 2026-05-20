@@ -334,6 +334,7 @@ function RunningDashboard({ rows }: { rows: TirePerformanceRow[] }) {
     const normMap = useManufactureNormMap(rows)
     const manufactureStats = useManufactureStats(rows, normMap)
     const specStats = useSpecStats(rows, normMap)
+    const sizeStats = useSizeStats(rows, normMap)
     const { data: specByManuf, manufactures } = useSpecByManufacture(rows, normMap)
 
     // KPIs

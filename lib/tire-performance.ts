@@ -157,13 +157,15 @@ export function hasTirePerformanceContent(row: TirePerformanceInput) {
 
 export function aggregateTirePerformanceRows(rows: TirePerformanceRow[]): TirePerformanceAggregateRow[] {
     const grouped = new Map<string, TirePerformanceAggregateRow & { weightedHours: number }>()
+    const manufactureMap = buildManufactureNormalizationMap(rows)
 
     for (const row of rows) {
+        const manufacture = normalizeManufacture(row.manufacture, manufactureMap)
         const key = [
             row.performanceDate || "-",
             row.endUser || "-",
             row.mineSite || "-",
-            row.manufacture || "-",
+            manufacture,
             row.specification || "-",
         ].join("||")
         const avgHours = Number(row.avgHours) || 0
@@ -176,7 +178,7 @@ export function aggregateTirePerformanceRows(rows: TirePerformanceRow[]): TirePe
                 performanceDate: row.performanceDate || "-",
                 endUser: row.endUser || "-",
                 mineSite: row.mineSite || "-",
-                manufacture: row.manufacture || "-",
+                manufacture,
                 specification: row.specification || "-",
                 avgHours: 0,
                 recordCount,
@@ -206,6 +208,49 @@ function toTitleCase(str: string): string {
         .replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
+function normalizeManufactureSearchKey(value: string): string {
+    return value
+        .trim()
+        .toLowerCase()
+        .replace(/&/g, " and ")
+        .replace(/[^a-z0-9]+/g, "")
+}
+
+const MANUFACTURE_CANONICAL_NAMES = [
+    "Advance",
+    "Apollo",
+    "Bkt",
+    "Bridgestone",
+    "Ceat",
+    "Gajah Tunggal",
+    "Giti",
+    "Goodyear",
+    "Hilo",
+    "Jk Tyre",
+    "Jtr",
+    "Maxam",
+    "Maxxis",
+    "Michelin",
+] as const
+
+const MANUFACTURE_ALIASES = new Map<string, string>([
+    ["eced", "Ceat"],
+    ["good year", "Goodyear"],
+    ["jk tyre", "Jk Tyre"],
+    ["j k tyre", "Jk Tyre"],
+].map(([alias, canonical]) => [normalizeManufactureSearchKey(alias), canonical]))
+
+type ManufactureCandidate = {
+    name: string
+    key: string
+}
+
+function shouldUseFuzzyManufactureMatch(query: string, candidate: string, score: number) {
+    if (query.length <= 3 || candidate.length <= 3) return false
+    if (query[0] !== candidate[0]) return false
+    return score <= 0.28
+}
+
 /**
  * Builds a Map from every raw manufacture name found in `rows` to its
  * canonical (Title Case, fuzzy-deduplicated) form.
@@ -231,38 +276,47 @@ export function buildManufactureNormalizationMap(
     const rawSet = new Set(rows.map((r) => (r.manufacture ?? "").trim()))
     const rawNames = Array.from(rawSet).filter(Boolean)
 
-    // Prefer longest names as the master (more descriptive)
-    const sorted = [...rawNames].sort((a, b) => b.length - a.length)
-
-    const canonicals: string[] = []
+    const sorted = [...rawNames].sort((a, b) => a.localeCompare(b))
+    const canonicals: ManufactureCandidate[] = MANUFACTURE_CANONICAL_NAMES.map((name) => ({
+        name,
+        key: normalizeManufactureSearchKey(name),
+    }))
     const rawToCanonical = new Map<string, string>()
+    const fuse = new Fuse(canonicals, {
+        includeScore: true,
+        keys: ["key", "name"],
+        threshold: 0.35,
+        ignoreLocation: true,
+        distance: 100,
+    })
 
     for (const raw of sorted) {
-        const titleCased = toTitleCase(raw)
+        const key = normalizeManufactureSearchKey(raw)
+        const alias = MANUFACTURE_ALIASES.get(key)
 
-        if (canonicals.length === 0) {
-            canonicals.push(titleCased)
-            rawToCanonical.set(raw, titleCased)
+        if (alias) {
+            rawToCanonical.set(raw, alias)
             continue
         }
 
-        const fuse = new Fuse(canonicals, {
-            includeScore: true,
-            threshold: 0.25,
-            isCaseSensitive: false,
-        })
+        const exact = canonicals.find((candidate) => candidate.key === key)
+        if (exact) {
+            rawToCanonical.set(raw, exact.name)
+            continue
+        }
 
-        const results = fuse.search(titleCased)
+        const results = fuse.search(key)
         const best = results[0]
 
-        if (best && best.score !== undefined && best.score < 0.25) {
-            // Close enough → map to existing canonical
-            rawToCanonical.set(raw, best.item)
-        } else {
-            // New canonical
-            canonicals.push(titleCased)
-            rawToCanonical.set(raw, titleCased)
+        if (best?.score !== undefined && shouldUseFuzzyManufactureMatch(key, best.item.key, best.score)) {
+            rawToCanonical.set(raw, best.item.name)
+            continue
         }
+
+        const titleCased = toTitleCase(raw)
+        canonicals.push({ name: titleCased, key })
+        fuse.setCollection(canonicals)
+        rawToCanonical.set(raw, titleCased)
     }
 
     // Always handle the empty / unknown fallback
@@ -280,7 +334,7 @@ export function normalizeManufacture(
     map: Map<string, string>,
 ): string {
     const trimmed = (raw ?? "").trim()
-    return map.get(trimmed) ?? toTitleCase(trimmed) || "Unknown"
+    return map.get(trimmed) ?? (toTitleCase(trimmed) || "Unknown")
 }
 
 // ─── Tire Size Extraction ───────────────────────────────────────────────────
