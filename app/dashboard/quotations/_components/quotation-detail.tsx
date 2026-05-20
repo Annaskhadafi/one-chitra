@@ -206,7 +206,7 @@ export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDet
 
         try {
             const { generateQuotationPdf } = await import("./quotation-pdf-generator")
-            await generateQuotationPdf(buildQuotationPdfPayload(quotation), { mergeAttachments: false })
+            await generateQuotationPdf(buildQuotationPdfPayload(quotation), { mergeAttachments: true })
         } catch (error) {
             console.error("Failed to download quotation PDF:", error)
             toast.error(error instanceof Error ? error.message : "Download PDF gagal")

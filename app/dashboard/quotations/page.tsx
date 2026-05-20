@@ -1,13 +1,10 @@
 import { getQuotations } from "@/app/actions/quotation"
 import { QuotationTable } from "./_components/quotation-table"
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Plus, FileText } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
 import { Suspense } from "react"
 import { Providers } from "@/components/providers"
-import { PermissionGuard } from "@/components/permission-guard"
-import { RestrictedActionButton } from "@/components/restricted-action-button"
+import { CreateQuotationButton } from "./_components/create-quotation-button"
+import { FileText } from "lucide-react"
 
 export const dynamic = 'force-dynamic'
 
@@ -24,30 +21,7 @@ export default async function QuotationsPage() {
                         icon={FileText}
                     />
                 </div>
-                <PermissionGuard
-                    resource="quotations"
-                    action="create"
-                    fallback={
-                        <RestrictedActionButton
-                            title="Create Quotation tidak diizinkan"
-                            description="Anda belum memiliki akses untuk membuat quotation baru."
-                            reasons={[
-                                "Role Anda tidak memiliki permission create pada modul Quotation.",
-                                "Hubungi admin jika akses ini memang diperlukan.",
-                            ]}
-                        >
-                            <Plus className="mr-2 h-4 w-4" />
-                            Create Quotation
-                        </RestrictedActionButton>
-                    }
-                >
-                    <Link href="/dashboard/quotations/create">
-                        <Button>
-                            <Plus className="mr-2 h-4 w-4" />
-                            Create Quotation
-                        </Button>
-                    </Link>
-                </PermissionGuard>
+                <CreateQuotationButton />
             </div>
 
             <div className="flex-1">

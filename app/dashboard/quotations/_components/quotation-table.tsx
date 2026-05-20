@@ -160,6 +160,16 @@ interface QuotationWithRelations {
         tax: string
         product: Product
     }[]
+    attachments?: {
+        id: number
+        title: string
+        fileName: string
+        fileUrl: string
+        mimeType: string | null
+        kind: string
+        includeInPdf: boolean
+        description?: string | null
+    }[]
 }
 
 interface QuotationTableProps {
@@ -304,11 +314,14 @@ const CHART_CURSOR_STYLE = {
 }
 
 function formatCurrency(value: number) {
+    const roundedValue = Math.round(Number.isFinite(value) ? value : 0)
+
     return new Intl.NumberFormat("id-ID", {
         style: "currency",
         currency: "IDR",
         minimumFractionDigits: 0,
-    }).format(value)
+        maximumFractionDigits: 0,
+    }).format(roundedValue)
 }
 
 function formatCompactCurrency(value: number) {
@@ -493,16 +506,6 @@ function MultiSelectFilter(props: {
  * Wrapper component to avoid "No QueryClient set" error during SSR.
  */
 export function QuotationTable(props: QuotationTableProps) {
-    const mounted = useMounted()
-
-    if (!mounted) {
-        return (
-            <div className="space-y-6">
-                <div className="h-64 rounded-md border bg-muted/20 animate-pulse" />
-            </div>
-        )
-    }
-
     return <QuotationTableInner {...props} />
 }
 
@@ -571,13 +574,22 @@ function QuotationTableInner({ data: initialData }: QuotationTableProps) {
 
     useEffect(() => {
         const queryState = queryClient.getQueryState<QuotationWithRelations[]>(["quotations"])
+        const cachedQuotations = queryClient.getQueryData<QuotationWithRelations[]>(["quotations"])
 
-        if ((queryState?.dataUpdatedAt ?? 0) > 0) {
+        if ((queryState?.dataUpdatedAt ?? 0) > 0 && (cachedQuotations?.length ?? 0) >= initialData.length) {
             return
         }
 
         queryClient.setQueryData<QuotationWithRelations[]>(["quotations"], initialData)
     }, [initialData, queryClient])
+
+    useEffect(() => {
+        if (!currentUserId) {
+            return
+        }
+
+        setUserFilters((current) => current.length > 0 ? current : [currentUserId])
+    }, [currentUserId])
 
     useEffect(() => {
         if (!refreshToken) return
@@ -696,6 +708,8 @@ function QuotationTableInner({ data: initialData }: QuotationTableProps) {
         quotations.forEach(q => {
             if (q.createdByUser) {
                 users.set(q.createdByUser.id, q.createdByUser.name)
+            } else if (q.createdBy) {
+                users.set(q.createdBy, q.createdBy)
             }
         })
         return Array.from(users.entries()).map(([id, name]) => ({ id, name }))

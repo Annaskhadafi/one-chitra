@@ -848,6 +848,12 @@ export async function getQuotations() {
                     product: true,
                 },
             },
+            attachments: {
+                with: {
+                    uploadedByUser: true,
+                },
+                orderBy: [desc(quotationAttachments.createdAt)],
+            },
         },
         orderBy: [desc(quotations.createdAt)],
     })

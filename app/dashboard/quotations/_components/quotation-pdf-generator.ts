@@ -151,6 +151,13 @@ function inferMimeType(fileName: string, mimeType?: string | null) {
     }
 }
 
+function isImageAttachment(attachment: NonNullable<QuotationPdfData["attachments"]>[number]) {
+    const mimeType = attachment.mimeType?.toLowerCase() ?? ""
+    const extension = attachment.fileName.split(".").pop()?.toLowerCase() ?? ""
+
+    return mimeType.startsWith("image/") || ["png", "jpg", "jpeg", "webp"].includes(extension)
+}
+
 function downloadBlob(blob: Blob, filename: string) {
     const url = URL.createObjectURL(blob)
     const link = document.createElement("a")
@@ -214,6 +221,87 @@ async function getLetterheadDataUrl() {
     }
 
     return await cachedLetterheadDataUrlPromise
+}
+
+async function fetchArrayBufferWithTimeout(url: string, timeoutMs = 4_000) {
+    const controller = new AbortController()
+    const timeout = window.setTimeout(() => controller.abort(), timeoutMs)
+
+    try {
+        const response = await fetch(url, {
+            cache: "no-store",
+            signal: controller.signal,
+        })
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`)
+        }
+
+        const contentLength = Number(response.headers.get("content-length") || 0)
+        if (contentLength > 2_000_000) {
+            throw new Error("IMAGE_TOO_LARGE")
+        }
+
+        const bytes = await response.arrayBuffer()
+        if (bytes.byteLength > 2_000_000) {
+            throw new Error("IMAGE_TOO_LARGE")
+        }
+
+        return {
+            bytes,
+            contentType: response.headers.get("content-type"),
+        }
+    } finally {
+        window.clearTimeout(timeout)
+    }
+}
+
+async function resizeImageAttachmentForPdf(bytes: ArrayBuffer, mimeType: string) {
+    const blob = new Blob([bytes], { type: mimeType })
+    const objectUrl = URL.createObjectURL(blob)
+
+    try {
+        const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+            const nextImage = new Image()
+            nextImage.onload = () => resolve(nextImage)
+            nextImage.onerror = () => reject(new Error("Failed to decode attachment image"))
+            nextImage.src = objectUrl
+        })
+
+        const maxSide = 700
+        const scale = Math.min(maxSide / image.naturalWidth, maxSide / image.naturalHeight, 1)
+        const width = Math.max(1, Math.round(image.naturalWidth * scale))
+        const height = Math.max(1, Math.round(image.naturalHeight * scale))
+
+        const canvas = document.createElement("canvas")
+        canvas.width = width
+        canvas.height = height
+
+        const context = canvas.getContext("2d")
+        if (!context) {
+            return { dataUrl: await blobToDataUrl(blob), width: image.naturalWidth, height: image.naturalHeight, format: mimeType.includes("png") ? "PNG" : "JPEG" }
+        }
+
+        context.drawImage(image, 0, 0, width, height)
+
+        const outputMimeType = "image/jpeg"
+        const resizedBlob = await new Promise<Blob | null>((resolve) => {
+            canvas.toBlob(resolve, outputMimeType, 0.5)
+        })
+
+        if (!resizedBlob) {
+            return { dataUrl: canvas.toDataURL(outputMimeType, 0.5), width, height, format: "JPEG" }
+        }
+
+        return {
+            dataUrl: await blobToDataUrl(resizedBlob),
+            width,
+            height,
+            format: "JPEG",
+        }
+    } finally {
+        URL.revokeObjectURL(objectUrl)
+    }
 }
 
 export async function generateQuotationPdf(
@@ -588,7 +676,9 @@ export async function generateQuotationPdf(
             finalY = termsY + (formattedTerms.length * 4) + 12
         }
 
-        const includedAttachments = quotation.attachments?.filter((attachment) => attachment.includeInPdf) ?? []
+        const includedAttachments = quotation.attachments
+            ?.filter((attachment) => attachment.includeInPdf && isImageAttachment(attachment))
+            .slice(0, 4) ?? []
         if (includedAttachments.length > 0) {
             let attachmentY = finalY
             if (attachmentY > 235) {
@@ -613,11 +703,10 @@ export async function generateQuotationPdf(
             })
         }
 
-        const basePdfBytes = doc.output("arraybuffer")
         const outputFilename = `Quotation_${sanitizeFilenamePart(quotation.quotationNumber)}.pdf`
 
         if (!shouldMergeAttachments || includedAttachments.length === 0 || includedAttachments.every((attachment) => !attachment.fileUrl)) {
-            downloadBlob(new Blob([basePdfBytes], { type: "application/pdf" }), outputFilename)
+            downloadBlob(new Blob([doc.output("arraybuffer")], { type: "application/pdf" }), outputFilename)
             toast.success(
                 shouldMergeAttachments
                     ? "PDF quotation berhasil didownload"
@@ -626,32 +715,7 @@ export async function generateQuotationPdf(
             return
         }
 
-        const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib")
-        const mergedPdf = await PDFDocument.load(basePdfBytes)
         const skippedAttachments: string[] = []
-        const A4_WIDTH = 595.28
-        const A4_HEIGHT = 841.89
-        const PAGE_MARGIN = 24
-        const TITLE_SPACE = 24
-
-        let letterheadImage: any = null
-        if (base64data) {
-            try {
-                const base64Content = base64data.split(",")[1]
-                const binaryString = atob(base64Content)
-                const len = binaryString.length
-                const bytes = new Uint8Array(len)
-                for (let i = 0; i < len; i++) {
-                    bytes[i] = binaryString.charCodeAt(i)
-                }
-                letterheadImage = await mergedPdf.embedJpg(bytes)
-            } catch (err) {
-                console.error("Failed to embed letterhead into merged PDF:", err)
-            }
-        }
-
-        const helveticaFont = await mergedPdf.embedFont(StandardFonts.Helvetica)
-        const helveticaBold = await mergedPdf.embedFont(StandardFonts.HelveticaBold)
 
         const wrapText = (text: string, maxCharsPerLine: number): string[] => {
             const lines: string[] = []
@@ -680,8 +744,14 @@ export async function generateQuotationPdf(
             return lines
         }
 
-        // Group image attachments into pairs (2 per page)
-        type ImageAttachment = { attachment: typeof includedAttachments[number]; image: any; globalIdx: number }
+        type ImageAttachment = {
+            attachment: typeof includedAttachments[number]
+            dataUrl: string
+            width: number
+            height: number
+            format: string
+            globalIdx: number
+        }
         const imageAttachments: ImageAttachment[] = []
 
         for (const attachment of includedAttachments) {
@@ -693,213 +763,148 @@ export async function generateQuotationPdf(
             }
 
             try {
-                const response = await fetch(attachmentUrl, { cache: "no-store" })
-                if (!response.ok) {
-                    skippedAttachments.push(`${attachment.title}: file tidak bisa diakses`)
-                    continue
-                }
-
-                const attachmentBytes = await response.arrayBuffer()
+                const fetchedAttachment = await fetchArrayBufferWithTimeout(attachmentUrl)
                 const detectedMimeType = inferMimeType(
                     attachment.fileName,
-                    response.headers.get("content-type") || attachment.mimeType,
+                    fetchedAttachment.contentType || attachment.mimeType,
                 )
 
-                if (detectedMimeType.includes("pdf")) {
-                    const attachmentPdf = await PDFDocument.load(attachmentBytes)
-                    const copiedPages = await mergedPdf.copyPages(attachmentPdf, attachmentPdf.getPageIndices())
-                    copiedPages.forEach((page) => mergedPdf.addPage(page))
-                    continue
-                }
-
                 if (detectedMimeType.includes("png") || detectedMimeType.includes("jpeg") || detectedMimeType.includes("jpg")) {
-                    const image = detectedMimeType.includes("png")
-                        ? await mergedPdf.embedPng(attachmentBytes)
-                        : await mergedPdf.embedJpg(attachmentBytes)
-                    imageAttachments.push({ attachment, image, globalIdx: imageAttachments.length })
+                    const resizedAttachment = await resizeImageAttachmentForPdf(fetchedAttachment.bytes, detectedMimeType)
+                    imageAttachments.push({
+                        attachment,
+                        dataUrl: resizedAttachment.dataUrl,
+                        width: resizedAttachment.width,
+                        height: resizedAttachment.height,
+                        format: resizedAttachment.format,
+                        globalIdx: imageAttachments.length,
+                    })
                     continue
                 }
 
                 skippedAttachments.push(`${attachment.title}: format ${attachment.fileName.split(".").pop()?.toUpperCase() || "file"} belum didukung untuk merge`)
             } catch (attachmentError) {
                 console.error(`Failed to merge attachment ${attachment.fileName}:`, attachmentError)
-                skippedAttachments.push(`${attachment.title}: gagal digabung`)
+                const isTimeout = attachmentError instanceof DOMException && attachmentError.name === "AbortError"
+                const isTooLarge = attachmentError instanceof Error && attachmentError.message === "IMAGE_TOO_LARGE"
+                skippedAttachments.push(`${attachment.title}: ${isTimeout ? "timeout saat diambil" : isTooLarge ? "gambar terlalu besar" : "gagal digabung"}`)
             }
         }
 
-        // Render image attachments in 2-column grid, 2 per A4 page
-        const LEFT_MARGIN = 42.5
-        const RIGHT_MARGIN = 42.5
-        const TOP_MARGIN = 39.7
-        const BOTTOM_MARGIN = 56.7
-        const HEADER_SPACING = 90.7
-
+        const LEFT_MARGIN = 15
+        const RIGHT_MARGIN = 15
+        const TOP_MARGIN = 14
+        const BOTTOM_MARGIN = 18
+        const HEADER_SPACING = 32
+        const A4_WIDTH = 210
+        const A4_HEIGHT = 297
         const contentWidth = A4_WIDTH - LEFT_MARGIN - RIGHT_MARGIN
-        const contentHeight = A4_HEIGHT - TOP_MARGIN - HEADER_SPACING - BOTTOM_MARGIN
-        const CARD_GAP = 14.2  // 5mm in points
+        const CARD_GAP = 5
+        const ROW_GAP = 5
         const cardWidth = (contentWidth - CARD_GAP) / 2
 
-        for (let pageStart = 0; pageStart < imageAttachments.length; pageStart += 2) {
-            const pageItems = imageAttachments.slice(pageStart, pageStart + 2)
-            const pageNum = Math.floor(pageStart / 2)
-            const totalPages = Math.ceil(imageAttachments.length / 2)
+        for (let pageStart = 0; pageStart < imageAttachments.length; pageStart += 4) {
+            const pageItems = imageAttachments.slice(pageStart, pageStart + 4)
+            const pageNum = Math.floor(pageStart / 4)
+            const totalPages = Math.ceil(imageAttachments.length / 4)
 
-            const page = mergedPdf.addPage([A4_WIDTH, A4_HEIGHT])
+            doc.addPage()
 
-            if (letterheadImage) {
-                page.drawImage(letterheadImage, {
-                    x: 0, y: 0,
-                    width: A4_WIDTH, height: A4_HEIGHT,
-                })
+            if (base64data) {
+                doc.addImage(base64data, "JPEG", 0, 0, A4_WIDTH, A4_HEIGHT)
             }
 
-            // Header: LAMPIRAN PENDUKUNG
-            const headerY = A4_HEIGHT - TOP_MARGIN - HEADER_SPACING
-            page.drawText("LAMPIRAN PENDUKUNG", {
-                x: LEFT_MARGIN,
-                y: headerY - 12,
-                size: 12,
-                font: helveticaBold,
-                color: rgb(37/255, 99/255, 235/255),
-            })
-            // Page number
+            const headerY = TOP_MARGIN + HEADER_SPACING
+            doc.setFont("helvetica", "bold")
+            doc.setFontSize(12)
+            doc.setTextColor(37, 99, 235)
+            doc.text("LAMPIRAN PENDUKUNG", LEFT_MARGIN, headerY)
+
             const pageLabel = `Halaman ${pageNum + 1} dari ${totalPages}`
-            const pageLabelWidth = helveticaFont.widthOfTextAtSize(pageLabel, 8)
-            page.drawText(pageLabel, {
-                x: A4_WIDTH - RIGHT_MARGIN - pageLabelWidth,
-                y: headerY - 12,
-                size: 8,
-                font: helveticaFont,
-                color: rgb(100/255, 116/255, 139/255),
-            })
-            // Blue underline
-            page.drawLine({
-                start: { x: LEFT_MARGIN, y: headerY - 20 },
-                end: { x: A4_WIDTH - RIGHT_MARGIN, y: headerY - 20 },
-                thickness: 2,
-                color: rgb(37/255, 99/255, 235/255),
-            })
+            doc.setFont("helvetica", "normal")
+            doc.setFontSize(8)
+            doc.setTextColor(100, 116, 139)
+            doc.text(pageLabel, A4_WIDTH - RIGHT_MARGIN, headerY, { align: "right" })
+            doc.setDrawColor(37, 99, 235)
+            doc.setLineWidth(0.7)
+            doc.line(LEFT_MARGIN, headerY + 4, A4_WIDTH - RIGHT_MARGIN, headerY + 4)
 
-            const gridStartY = headerY - 28
-            const gridHeight = gridStartY - BOTTOM_MARGIN
+            const gridStartY = headerY + 8
+            const gridHeight = A4_HEIGHT - gridStartY - BOTTOM_MARGIN
+            const cardH = (gridHeight - ROW_GAP) / 2
 
-            for (let col = 0; col < pageItems.length; col++) {
-                const { attachment, image, globalIdx } = pageItems[col]
+            for (let itemIndex = 0; itemIndex < pageItems.length; itemIndex++) {
+                const { attachment, dataUrl, width, height, format, globalIdx } = pageItems[itemIndex]
+                const col = itemIndex % 2
+                const row = Math.floor(itemIndex / 2)
                 const cardX = LEFT_MARGIN + col * (cardWidth + CARD_GAP)
-                const cardY = BOTTOM_MARGIN
-                const cardH = gridHeight
+                const cardY = gridStartY + row * (cardH + ROW_GAP)
 
-                // Card background
-                page.drawRectangle({
-                    x: cardX, y: cardY,
-                    width: cardWidth, height: cardH,
-                    color: rgb(248/255, 250/255, 252/255),
-                    borderColor: rgb(221/255, 230/255, 240/255),
-                    borderWidth: 1,
-                })
+                doc.setFillColor(248, 250, 252)
+                doc.setDrawColor(221, 230, 240)
+                doc.setLineWidth(0.3)
+                doc.rect(cardX, cardY, cardWidth, cardH, "FD")
 
-                // Blue header bar
-                const headerBarH = 18
-                page.drawRectangle({
-                    x: cardX, y: cardY + cardH - headerBarH,
-                    width: cardWidth, height: headerBarH,
-                    color: rgb(37/255, 99/255, 235/255),
-                })
+                const headerBarH = 7
+                doc.setFillColor(37, 99, 235)
+                doc.rect(cardX, cardY, cardWidth, headerBarH, "F")
 
-                // Circle badge number
-                const badgeR = 7
-                const badgeCX = cardX + 10
-                const badgeCY = cardY + cardH - headerBarH / 2
-                page.drawEllipse({
-                    x: badgeCX, y: badgeCY,
-                    xScale: badgeR, yScale: badgeR,
-                    color: rgb(100/255, 149/255, 237/255),
-                })
-                page.drawText(`${globalIdx + 1}`, {
-                    x: badgeCX - 2.5,
-                    y: badgeCY - 3,
-                    size: 7,
-                    font: helveticaBold,
-                    color: rgb(1, 1, 1),
-                })
+                doc.setFont("helvetica", "bold")
+                doc.setFontSize(7)
+                doc.setTextColor(255, 255, 255)
+                doc.text(String(globalIdx + 1), cardX + 3, cardY + 4.7)
 
-                // Title text (truncated to fit card width)
-                const maxTitleChars = Math.floor((cardWidth - 28) / 5.5)
+                const maxTitleChars = Math.floor((cardWidth - 14) / 2.2)
                 const rawTitle = (attachment.title || attachment.fileName).toUpperCase()
                 const titleText = rawTitle.length > maxTitleChars ? rawTitle.slice(0, maxTitleChars - 1) + "…" : rawTitle
-                page.drawText(titleText, {
-                    x: badgeCX + badgeR + 4,
-                    y: badgeCY - 3.5,
-                    size: 7.5,
-                    font: helveticaBold,
-                    color: rgb(1, 1, 1),
-                })
+                doc.text(titleText, cardX + 9, cardY + 4.7)
 
-                // Calculate description height
                 let descBoxH = 0
-                const descPad = 8.5
+                const descPad = 3
                 const descFontSize = 7.5
-                const descLineH = descFontSize * 1.45
-                const descMaxChars = Math.floor((cardWidth - descPad * 2) / 4.5)
+                const descLineH = 4
+                const descMaxChars = Math.floor((cardWidth - descPad * 2) / 1.9)
                 let descLines: string[] = []
                 if (attachment.description) {
-                    descLines = wrapText(attachment.description, descMaxChars)
-                    descBoxH = descPad + descFontSize + 3 + descLines.length * descLineH + descPad * 0.5
+                    descLines = wrapText(attachment.description, descMaxChars).slice(0, 3)
+                    descBoxH = 6 + descLines.length * descLineH
                 }
 
-                // Image area
-                const imgAreaY = cardY + descBoxH
-                const imgAreaH = cardH - headerBarH - descBoxH - 8
+                const imgAreaY = cardY + headerBarH + 3
+                const imgAreaH = cardH - headerBarH - descBoxH - 6
                 if (imgAreaH > 20) {
-                    const maxImgW = cardWidth - 16
-                    const maxImgH = imgAreaH - 16
-                    const imgScale = Math.min(maxImgW / image.width, maxImgH / image.height, 1)
-                    const imgW = image.width * imgScale
-                    const imgH = image.height * imgScale
-                    const imgX = cardX + 8 + (maxImgW - imgW) / 2
-                    const imgY = imgAreaY + 8 + (maxImgH - imgH) / 2
+                    const maxImgW = cardWidth - 6
+                    const maxImgH = imgAreaH
+                    const imgScale = Math.min(maxImgW / width, maxImgH / height)
+                    const imgW = width * imgScale
+                    const imgH = height * imgScale
+                    const imgX = cardX + 3 + (maxImgW - imgW) / 2
+                    const imgY = imgAreaY + (maxImgH - imgH) / 2
 
-                    page.drawImage(image, { x: imgX, y: imgY, width: imgW, height: imgH })
+                    doc.addImage(dataUrl, format, imgX, imgY, imgW, imgH)
                 }
 
-                // Description box at bottom
                 if (attachment.description && descBoxH > 0) {
-                    page.drawLine({
-                        start: { x: cardX, y: cardY + descBoxH },
-                        end: { x: cardX + cardWidth, y: cardY + descBoxH },
-                        thickness: 0.5,
-                        color: rgb(226/255, 232/255, 240/255),
-                    })
-                    // "Ket:" label
-                    page.drawText("Ket:", {
-                        x: cardX + descPad,
-                        y: cardY + descBoxH - descPad - descFontSize,
-                        size: descFontSize,
-                        font: helveticaBold,
-                        color: rgb(30/255, 41/255, 59/255),
-                    })
-                    // Description lines
-                    let textY = cardY + descBoxH - descPad - descFontSize - 3 - descLineH
-                    for (const line of descLines.slice(0, 3)) {
-                        page.drawText(line, {
-                            x: cardX + descPad,
-                            y: textY,
-                            size: descFontSize,
-                            font: helveticaFont,
-                            color: rgb(71/255, 85/255, 105/255),
-                        })
-                        textY -= descLineH
+                    const descY = cardY + cardH - descBoxH
+                    doc.setDrawColor(226, 232, 240)
+                    doc.line(cardX, descY, cardX + cardWidth, descY)
+                    doc.setFont("helvetica", "bold")
+                    doc.setFontSize(descFontSize)
+                    doc.setTextColor(30, 41, 59)
+                    doc.text("Ket:", cardX + descPad, descY + 4)
+
+                    doc.setFont("helvetica", "normal")
+                    doc.setTextColor(71, 85, 105)
+                    let textY = descY + 8
+                    for (const line of descLines) {
+                        doc.text(line, cardX + descPad, textY)
+                        textY += descLineH
                     }
                 }
             }
         }
 
-        const mergedBytes = await mergedPdf.save()
-        const mergedBuffer = mergedBytes.buffer.slice(
-            mergedBytes.byteOffset,
-            mergedBytes.byteOffset + mergedBytes.byteLength,
-        ) as ArrayBuffer
-        downloadBlob(new Blob([mergedBuffer], { type: "application/pdf" }), outputFilename)
+        downloadBlob(new Blob([doc.output("arraybuffer")], { type: "application/pdf" }), outputFilename)
 
         if (skippedAttachments.length > 0) {
             toast.warning(`PDF quotation berhasil digabung. ${skippedAttachments.slice(0, 3).join("; ")}${skippedAttachments.length > 3 ? `; +${skippedAttachments.length - 3} lainnya` : ""}`)

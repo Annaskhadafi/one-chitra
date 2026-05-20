@@ -109,6 +109,13 @@ function getItemLabel(item: QuotationPdfData["items"][number]) {
     return item.description || item.product?.materialDescription || item.product?.materialNumber || "Unnamed item"
 }
 
+function isImageAttachment(attachment: NonNullable<QuotationPdfData["attachments"]>[number]) {
+    const mimeType = attachment.mimeType?.toLowerCase() ?? ""
+    const extension = attachment.fileName.split(".").pop()?.toLowerCase() ?? ""
+
+    return mimeType.startsWith("image/") || ["png", "jpg", "jpeg", "webp"].includes(extension)
+}
+
 export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPreviewProps) {
     const viewportRef = useRef<HTMLDivElement>(null)
     const printRef = useRef<HTMLDivElement>(null)
@@ -143,7 +150,9 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
         quotation.customer.address2,
         quotation.customer.address3,
     ].filter(Boolean)
-    const visibleAttachments = quotation.attachments?.filter((attachment) => attachment.includeInPdf) ?? []
+    const visibleAttachments = quotation.attachments
+        ?.filter((attachment) => attachment.includeInPdf && isImageAttachment(attachment))
+        .slice(0, 4) ?? []
 
     // Helper to paginate items
     const paginateItems = () => {
@@ -277,7 +286,7 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
 
         try {
             const { generateQuotationPdf } = await import("./quotation-pdf-generator")
-            await generateQuotationPdf(buildQuotationPdfPayload(quotation), { mergeAttachments: false })
+            await generateQuotationPdf(buildQuotationPdfPayload(quotation), { mergeAttachments: true })
         } catch (error) {
             console.error("Failed to download quotation preview PDF:", error)
             toast.error(error instanceof Error ? error.message : "Download PDF A4 gagal")
@@ -553,12 +562,12 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                             )
                         })}
 
-                        {/* Rendering Lampiran sebagai Halaman A4 Tambahan dengan Grid 2-kolom */}
+                        {/* Rendering Lampiran sebagai Halaman A4 Tambahan dengan Grid 2x2 */}
                         {(() => {
-                            // Group attachments into pages of 2 per page
+                            // Group attachments into pages of 4 per page
                             const pages: typeof visibleAttachments[] = []
-                            for (let i = 0; i < visibleAttachments.length; i += 2) {
-                                pages.push(visibleAttachments.slice(i, i + 2))
+                            for (let i = 0; i < visibleAttachments.length; i += 4) {
+                                pages.push(visibleAttachments.slice(i, i + 4))
                             }
                             return pages.map((pageAttachments, pageIdx) => (
                                 <div
@@ -601,10 +610,10 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                                             </div>
                                         </div>
 
-                                        {/* Grid 2-kolom attachment */}
-                                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "5mm", flex: 1 }}>
+                                        {/* Grid 2-kolom x 2-baris attachment */}
+                                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gridTemplateRows: "1fr 1fr", gap: "4mm", flex: 1, minHeight: 0 }}>
                                             {pageAttachments.map((attachment, itemIdx) => {
-                                                const globalIdx = pageIdx * 2 + itemIdx
+                                                const globalIdx = pageIdx * 4 + itemIdx
                                                 const resolvedUrl = resolveUploadDocumentUrl(attachment.fileUrl)
                                                 return (
                                                     <div
@@ -616,6 +625,7 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                                                             border: "1px solid #dde6f0",
                                                             borderRadius: "2mm",
                                                             overflow: "hidden",
+                                                            minHeight: 0,
                                                         }}
                                                     >
                                                         {/* Card Header: Judul */}
@@ -650,10 +660,9 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                                                             display: "flex",
                                                             alignItems: "center",
                                                             justifyContent: "center",
-                                                            padding: "3mm",
+                                                            padding: "2mm",
                                                             background: "#fff",
-                                                            minHeight: "70mm",
-                                                            maxHeight: "90mm",
+                                                            minHeight: 0,
                                                             overflow: "hidden"
                                                         }}>
                                                             {resolvedUrl ? (
@@ -661,8 +670,8 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                                                                     src={resolvedUrl}
                                                                     alt={attachment.title}
                                                                     style={{
-                                                                        maxWidth: "100%",
-                                                                        maxHeight: "84mm",
+                                                                        width: "100%",
+                                                                        height: "100%",
                                                                         objectFit: "contain"
                                                                     }}
                                                                     onError={(e) => {
@@ -681,11 +690,11 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                                                         {/* Keterangan */}
                                                         {attachment.description && (
                                                             <div style={{
-                                                                padding: "2.5mm 3.5mm",
+                                                                padding: "2mm 3mm",
                                                                 borderTop: "1px solid #e2e8f0",
                                                                 fontSize: "7.5pt",
                                                                 color: "#475569",
-                                                                lineHeight: 1.4,
+                                                                lineHeight: 1.25,
                                                                 whiteSpace: "pre-line"
                                                             }}>
                                                                 <span style={{ fontWeight: 700, color: "#1e293b" }}>Ket: </span>
