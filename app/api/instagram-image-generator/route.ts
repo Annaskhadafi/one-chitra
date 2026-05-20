@@ -106,11 +106,34 @@ async function generateOneImage(input: {
   // Logo CP masuk ke image field hanya jika prompt ada kata wearpack/orang/karyawan
   const CP_LOGO_URL = "https://www.chitraparatama.co.id/wp-content/uploads/2025/11/cp_logo-removebg-preview-e1767678002905.png"
   const needsWearpackReference = /wearpack|orang|person|people|pekerja|karyawan|teknisi|operator|tim lapangan|team|mekanik|mechanic|worker|staff|employee/i.test(input.prompt)
-  const referenceUrls: string[] = []
-  if (needsWearpackReference) referenceUrls.push(CP_LOGO_URL)
-  input.referenceAssets.slice(0, 4).forEach((asset) => {
-    if (asset.url && asset.url.startsWith("http")) referenceUrls.push(asset.url)
-  })
+  const referenceImages: string[] = []
+  if (needsWearpackReference) {
+    // Fetch logo dari server kita, convert ke base64 agar provider bisa akses
+    try {
+      const logoRes = await fetch(CP_LOGO_URL)
+      if (logoRes.ok) {
+        const logoBuffer = Buffer.from(await logoRes.arrayBuffer())
+        const logoNormalized = await sharp(logoBuffer)
+          .resize({ width: 512, height: 512, fit: "inside", withoutEnlargement: true })
+          .png({ quality: 90 })
+          .toBuffer()
+        referenceImages.push(`data:image/png;base64,${logoNormalized.toString("base64")}`)
+      }
+    } catch { /* skip jika gagal */ }
+  }
+  // Upload user: fetch dari storage kita, convert ke base64
+  await Promise.all(input.referenceAssets.slice(0, 4).map(async (asset) => {
+    try {
+      const read = await readManagedUpload(asset.url)
+      if (read) {
+        const normalized = await sharp(read.buffer)
+          .resize({ width: 1536, height: 1536, fit: "inside", withoutEnlargement: true })
+          .png({ quality: 100 })
+          .toBuffer()
+        referenceImages.push(`data:image/png;base64,${normalized.toString("base64")}`)
+      }
+    } catch { /* skip */ }
+  }))
 
   const referenceSummaries = await resolveReferenceSummaries(input.referenceAssets)
   
@@ -139,11 +162,11 @@ async function generateOneImage(input: {
       background: "auto",
       image_detail: "high",
       output_format: "png",
-      ...(referenceUrls.length > 0 ? {
-        image: referenceUrls[0],
-        images: referenceUrls,
-        reference_images: referenceUrls,
-        input_images: referenceUrls,
+      ...(referenceImages.length > 0 ? {
+        image: referenceImages[0],
+        images: referenceImages,
+        reference_images: referenceImages,
+        input_images: referenceImages,
       } : {}),
     }),
   })
