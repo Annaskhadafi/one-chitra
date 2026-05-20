@@ -3,7 +3,7 @@
 import * as React from "react"
 import Image from "next/image"
 import Link from "next/link"
-import { Download, History as HistoryIcon, ImagePlus, Loader2, Sparkles, UploadCloud } from "lucide-react"
+import { Clipboard, Download, History as HistoryIcon, ImagePlus, Loader2, Sparkles, UploadCloud } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -59,6 +59,8 @@ const visualStyles: VisualStyle[] = [
   "Vectorize Minimalis",
   "Vector Kartun Simple",
 ]
+
+const wearpackStylePrompt = "Chitra Paratama official safety workwear: a single integrated TWO-TONE long sleeve work shirt (NOT a vest), FULL SLEEVES in DARK NAVY BLUE, upper chest/shoulders in NEON LIME GREEN, with SILVER REFLECTIVE STRIPES on left and right shoulders, one horizontal SILVER REFLECTIVE TAPE across the middle stomach (bordering green and navy), full button-down collar, two flap chest pockets on the neon green area, and a small Chitra Paratama logo patch on the left chest pocket integrated naturally into the design. Use the company logo reference from public/cp_logo.png for the left chest patch; keep it small, natural, and sewn/embroidered into the workwear."
 
 function formatDate(date: string) {
   return new Intl.DateTimeFormat("id-ID", { dateStyle: "long" }).format(new Date(`${date}T00:00:00+08:00`))
@@ -565,6 +567,16 @@ export function InstagramImageGeneratorClient() {
     setUploadedAssets((current) => current.filter((asset) => asset.url !== url))
   }
 
+  const copyWearpackStyle = async () => {
+    try {
+      await navigator.clipboard.writeText(wearpackStylePrompt)
+      toast.success("Style wearpack berhasil disalin")
+    } catch {
+      setPrompt((current) => `${current.trim()}\n\n${wearpackStylePrompt}`.trim())
+      toast.success("Clipboard tidak tersedia, style wearpack ditambahkan ke prompt")
+    }
+  }
+
   const downloadImage = (image = result?.image, suffix: string = format) => {
     if (!image) return
     const link = document.createElement("a")
@@ -676,10 +688,16 @@ export function InstagramImageGeneratorClient() {
             <div className="grid gap-2">
               <div className="flex items-center justify-between gap-3">
                 <Label>Prompt</Label>
-                <Button type="button" variant="outline" size="sm" onClick={enhancePrompt} disabled={isEnhancing || isGenerating || isUploading}>
-                  {isEnhancing ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-                  {isEnhancing ? "Enhancing..." : "Enhance Prompt"}
-                </Button>
+                <div className="flex flex-wrap justify-end gap-2">
+                  <Button type="button" variant="secondary" size="sm" onClick={copyWearpackStyle}>
+                    <Clipboard className="size-4" />
+                    Copy Style Wearpack
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={enhancePrompt} disabled={isEnhancing || isGenerating || isUploading}>
+                    {isEnhancing ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+                    {isEnhancing ? "Enhancing..." : "Enhance Prompt"}
+                  </Button>
+                </div>
               </div>
               <Textarea
                 value={prompt}

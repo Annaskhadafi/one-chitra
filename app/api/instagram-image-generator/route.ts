@@ -109,10 +109,8 @@ async function generateOneImage(input: {
   const referenceSummaries = ENABLE_PROVIDER_IMAGE_REFERENCES ? [] : await resolveReferenceSummaries(input.referenceAssets)
   
   if (needsWearpackReference && ENABLE_PROVIDER_IMAGE_REFERENCES) {
-    const wearpackImage = await loadWearpackReference()
-    if (wearpackImage) {
-      referenceImages = [wearpackImage, ...referenceImages]
-    }
+    const wearpackReferences = await loadWearpackReferences()
+    referenceImages = [...wearpackReferences, ...referenceImages]
   }
   
   const enhancedPrompt = buildEnhancedPrompt({
@@ -167,10 +165,10 @@ async function generateOneImage(input: {
   }
 }
 
-async function loadWearpackReference() {
+async function loadPublicImageReference(filename: string) {
   try {
-    const wearpackPath = path.join(process.cwd(), "public", "wearpack.png")
-    const buffer = await fs.readFile(wearpackPath)
+    const imagePath = path.join(process.cwd(), "public", filename)
+    const buffer = await fs.readFile(imagePath)
     const normalized = await sharp(buffer)
       .rotate()
       .resize({ width: 1536, height: 1536, fit: "inside", withoutEnlargement: true })
@@ -180,6 +178,14 @@ async function loadWearpackReference() {
   } catch {
     return null
   }
+}
+
+async function loadWearpackReferences() {
+  const references = await Promise.all([
+    loadPublicImageReference("wearpack.png"),
+    loadPublicImageReference("cp_logo.png"),
+  ])
+  return references.filter((reference): reference is string => Boolean(reference))
 }
 
 async function resolveReferenceImages(assets: UploadedAsset[]) {
@@ -303,7 +309,7 @@ function buildEnhancedPrompt(input: {
     vectorCartoonInstruction,
     `Tema: ${input.prompt}.`,
     "Desain sederhana, profesional, rapi, mudah dipahami, satu fokus utama, dan komposisi full-bleed yang mengisi seluruh kanvas tanpa border, margin, kartu putih, atau frame kosong.",
-    "WAJIB: Jika prompt SECARA EKSPLISIT meminta atau menampilkan sosok manusia (pekerja, mekanik, tim, operator, karyawan), mereka HARUS memakai wearpack safety resmi PT Chitra Paratama dengan spesifikasi PRESISI: kemeja kerja lengan panjang TWO-TONE (BUKAN rompi/vest terpisah), SELURUH LENGAN (atas dan bawah) berwarna BIRU NAVY GELAP (#002D56), area DADA dan BAHU berwarna HIJAU NEON TERANG/Lime Green (#8DC63F), ada STRIP REFLEKTIF SILVER di PUNDAK KANAN dan KIRI (horizontal di bahu), ada SATU GARIS REFLEKTIF HORIZONTAL di TENGAH PERUT tepat di batas antara area hijau atas dan biru navy bawah, kerah kancing penuh, dua saku dada di area hijau, logo kecil di dada kiri. Jika prompt TIDAK meminta orang, jangan paksa ada orang dalam gambar.",
+    "WAJIB: Jika prompt SECARA EKSPLISIT meminta atau menampilkan sosok manusia (pekerja, mekanik, tim, operator, karyawan), mereka HARUS memakai wearpack safety resmi PT Chitra Paratama dengan spesifikasi PRESISI: kemeja kerja lengan panjang TWO-TONE (BUKAN rompi/vest terpisah), SELURUH LENGAN (atas dan bawah) berwarna BIRU NAVY GELAP (#002D56), area DADA dan BAHU berwarna HIJAU NEON TERANG/Lime Green (#8DC63F), ada STRIP REFLEKTIF SILVER di PUNDAK KANAN dan KIRI (horizontal di bahu), ada SATU GARIS REFLEKTIF HORIZONTAL di TENGAH PERUT tepat di batas antara area hijau atas dan biru navy bawah, kerah kancing penuh, dua saku dada di area hijau, logo kecil Chitra Paratama di saku dada kiri. Gunakan referensi logo dari public/cp_logo.png sebagai patch dada kiri kecil yang natural seperti bordir/jahitan, bukan logo besar. Jika prompt TIDAK meminta orang, jangan paksa ada orang dalam gambar.",
     "PENTING: Hindari menempatkan teks, headline, atau elemen penting di pojok kiri atas (area 300x300px dari sudut kiri atas) karena area tersebut akan tertutup logo perusahaan. Hindari juga menempatkan teks atau elemen penting di bagian BAWAH gambar (area 150px dari tepi bawah) karena area tersebut akan tertutup footer overlay. Posisikan teks utama di tengah atau sepertiga atas gambar dengan ruang aman yang cukup.",
     "Jangan buat logo Chitra Paratama, logo perusahaan, logo brand apa pun, footer, watermark, ikon media sosial, atau teks kecil; semua elemen brand resmi hanya berasal dari overlay template feed.png atau Story.png setelah gambar dibuat.",
     references,
@@ -381,4 +387,3 @@ function collectCandidates(value: unknown, candidates: string[]) {
     collectCandidates(record[nestedKey], candidates)
   }
 }
-
