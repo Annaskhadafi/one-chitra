@@ -103,17 +103,9 @@ async function generateOneImage(input: {
   referenceAssets: UploadedAsset[]
   variationInstruction?: string
 }): Promise<GeneratedImageResult> {
-  const needsWearpackReference = /orang|person|people|pekerja|karyawan|teknisi|operator|tim lapangan|team|mekanik|mechanic|worker|staff|employee/i.test(input.prompt)
-  
   // Kirim URL langsung ke API (sesuai format curl: "image": "https://...")
+  // Hanya URL upload user — wearpack/logo sudah ada di deskripsi prompt teks
   const referenceUrls: string[] = []
-  if (needsWearpackReference) {
-    referenceUrls.push(
-      "https://www.chitraparatama.co.id/wp-content/uploads/2025/11/wearpack.png",
-      "https://www.chitraparatama.co.id/wp-content/uploads/2025/11/cp_logo-removebg-preview-e1767678002905.png"
-    )
-  }
-  // Tambah URL aset upload user
   input.referenceAssets.slice(0, 4).forEach((asset) => {
     if (asset.url && asset.url.startsWith("http")) referenceUrls.push(asset.url)
   })
