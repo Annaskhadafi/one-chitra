@@ -103,8 +103,9 @@ async function generateOneImage(input: {
   variationInstruction?: string
 }): Promise<GeneratedImageResult> {
   // Kirim URL langsung ke API (sesuai format curl: "image": "https://...")
-  // Hanya URL upload user — wearpack/logo sudah ada di deskripsi prompt teks
-  const referenceUrls: string[] = []
+  // Logo CP selalu masuk ke image field, upload user juga masuk
+  const CP_LOGO_URL = "https://www.chitraparatama.co.id/wp-content/uploads/2025/11/cp_logo-removebg-preview-e1767678002905.png"
+  const referenceUrls: string[] = [CP_LOGO_URL]
   input.referenceAssets.slice(0, 4).forEach((asset) => {
     if (asset.url && asset.url.startsWith("http")) referenceUrls.push(asset.url)
   })
@@ -286,7 +287,7 @@ function buildEnhancedPrompt(input: {
     vectorCartoonInstruction,
     `Tema: ${input.prompt}.`,
     "Desain sederhana, profesional, rapi, mudah dipahami, satu fokus utama, dan komposisi full-bleed yang mengisi seluruh kanvas tanpa border, margin, kartu putih, atau frame kosong.",
-    "WAJIB: Jika prompt SECARA EKSPLISIT meminta atau menampilkan sosok manusia (pekerja, mekanik, tim, operator, karyawan), mereka HARUS memakai wearpack safety resmi PT Chitra Paratama dengan spesifikasi PRESISI: kemeja kerja lengan panjang TWO-TONE (BUKAN rompi/vest terpisah), SELURUH LENGAN (atas dan bawah) berwarna BIRU NAVY GELAP (#002D56), area DADA dan BAHU berwarna HIJAU NEON TERANG/Lime Green (#8DC63F), ada STRIP REFLEKTIF SILVER di PUNDAK KANAN dan KIRI (horizontal di bahu), ada SATU GARIS REFLEKTIF HORIZONTAL di TENGAH PERUT tepat di batas antara area hijau atas dan biru navy bawah, kerah kancing penuh, dua saku dada di area hijau, logo kecil Chitra Paratama di saku dada kiri (logo: https://www.chitraparatama.co.id/wp-content/uploads/2025/11/cp_logo-removebg-preview-e1767678002905.png) sebagai patch bordir/jahitan kecil natural di dada kiri, bukan logo besar. Jika prompt TIDAK meminta orang, jangan paksa ada orang dalam gambar.",
+    "WAJIB: Jika prompt SECARA EKSPLISIT meminta atau menampilkan sosok manusia (pekerja, mekanik, tim, operator, karyawan), mereka HARUS memakai wearpack safety resmi PT Chitra Paratama dengan spesifikasi PRESISI: kemeja kerja lengan panjang TWO-TONE (BUKAN rompi/vest terpisah), SELURUH LENGAN (atas dan bawah) berwarna BIRU NAVY GELAP (#002D56), area DADA dan BAHU berwarna HIJAU NEON TERANG/Lime Green (#8DC63F), ada STRIP REFLEKTIF SILVER di PUNDAK KANAN dan KIRI (horizontal di bahu), ada SATU GARIS REFLEKTIF HORIZONTAL di TENGAH PERUT tepat di batas antara area hijau atas dan biru navy bawah, kerah kancing penuh, dua saku dada di area hijau, logo kecil Chitra Paratama di saku dada kiri sebagai patch bordir/jahitan kecil natural di dada kiri, bukan logo besar. Jika prompt TIDAK meminta orang, jangan paksa ada orang dalam gambar.",
     "PENTING: Hindari menempatkan teks, headline, atau elemen penting di pojok kiri atas (area 300x300px dari sudut kiri atas) karena area tersebut akan tertutup logo perusahaan. Hindari juga menempatkan teks atau elemen penting di bagian BAWAH gambar (area 150px dari tepi bawah) karena area tersebut akan tertutup footer overlay. Posisikan teks utama di tengah atau sepertiga atas gambar dengan ruang aman yang cukup.",
     "Jangan buat logo Chitra Paratama, logo perusahaan, logo brand apa pun, footer, watermark, ikon media sosial, atau teks kecil; semua elemen brand resmi hanya berasal dari overlay template feed.png atau Story.png setelah gambar dibuat.",
     references,
