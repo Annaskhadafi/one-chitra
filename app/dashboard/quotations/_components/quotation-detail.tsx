@@ -203,6 +203,8 @@ export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDet
         }
     }, [autoOpenPdf])
 
+    const hasPdfImages = quotation.attachments.some((attachment) => attachment.includeInPdf && isImageAttachment(attachment))
+
     const handleDownloadPdf = async () => {
         if (isDownloadingPdf) {
             return
@@ -213,7 +215,6 @@ export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDet
 
         try {
             const { generateQuotationPdf } = await import("./quotation-pdf-generator")
-            const hasPdfImages = quotation.attachments.some((attachment) => attachment.includeInPdf && isImageAttachment(attachment))
             await generateQuotationPdf(buildQuotationPdfPayload(quotation), { mergeAttachments: hasPdfImages })
         } catch (error) {
             console.error("Failed to download quotation PDF:", error)
@@ -385,10 +386,12 @@ export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDet
                         <FileText className="h-4 w-4" />
                         Preview
                     </Button>
-                    <Button onClick={handleDownloadPdf} disabled={isDownloadingPdf} variant="default" className="gap-2 bg-indigo-600 hover:bg-indigo-700">
-                        {isDownloadingPdf ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
-                        {isDownloadingPdf ? "Preparing PDF..." : "Download PDF"}
-                    </Button>
+                    {!hasPdfImages && (
+                        <Button onClick={handleDownloadPdf} disabled={isDownloadingPdf} variant="default" className="gap-2 bg-indigo-600 hover:bg-indigo-700">
+                            {isDownloadingPdf ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
+                            {isDownloadingPdf ? "Preparing PDF..." : "Download PDF"}
+                        </Button>
+                    )}
                     {canConvert && (
                         <AlertDialog>
                             <AlertDialogTrigger asChild>

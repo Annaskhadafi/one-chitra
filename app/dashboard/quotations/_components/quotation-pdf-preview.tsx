@@ -309,10 +309,16 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                                 <Printer className="h-3.5 w-3.5" />
                                 Browser Print
                             </Button>
-                            <Button size="sm" onClick={handleDownloadPdf} disabled={isDownloadingPdf} className="w-full gap-2 sm:w-auto" variant="outline">
-                                {isDownloadingPdf ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}
-                                {isDownloadingPdf ? "Preparing PDF..." : "Download PDF A4"}
-                            </Button>
+                            {visibleAttachments.length === 0 ? (
+                                <Button size="sm" onClick={handleDownloadPdf} disabled={isDownloadingPdf} className="w-full gap-2 sm:w-auto" variant="outline">
+                                    {isDownloadingPdf ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}
+                                    {isDownloadingPdf ? "Preparing PDF..." : "Download PDF A4"}
+                                </Button>
+                            ) : (
+                                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+                                    Ada attachment, gunakan Browser Print.
+                                </div>
+                            )}
                             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onClose}>
                                 <X className="h-4 w-4" />
                             </Button>

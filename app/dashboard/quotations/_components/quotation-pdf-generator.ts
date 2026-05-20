@@ -1,4 +1,4 @@
-import { toast } from "sonner"
+﻿import { toast } from "sonner"
 import type { Customer, Product } from "@/lib/types"
 import { normalizeQuotationText } from "@/lib/quotation-text"
 import { resolveUploadDocumentUrl } from "@/lib/upload-url"
@@ -35,7 +35,6 @@ interface QuotationPdfData {
         mimeType?: string | null
         kind: string
         includeInPdf: boolean
-        description?: string | null
     }[]
 }
 
@@ -71,7 +70,6 @@ type QuotationPdfPayloadSource = {
         mimeType?: string | null
         kind: string
         includeInPdf: boolean
-        description?: string | null
     }[]
 }
 
@@ -127,7 +125,6 @@ export function buildQuotationPdfPayload(source: QuotationPdfPayloadSource): Quo
             mimeType: attachment.mimeType,
             kind: attachment.kind,
             includeInPdf: attachment.includeInPdf,
-            description: (attachment as any).description ?? null,
         })),
     }
 }
@@ -149,13 +146,6 @@ function inferMimeType(fileName: string, mimeType?: string | null) {
         default:
             return ""
     }
-}
-
-function isImageAttachment(attachment: NonNullable<QuotationPdfData["attachments"]>[number]) {
-    const mimeType = attachment.mimeType?.toLowerCase() ?? ""
-    const extension = attachment.fileName.split(".").pop()?.toLowerCase() ?? ""
-
-    return mimeType.startsWith("image/") || ["png", "jpg", "jpeg", "webp"].includes(extension)
 }
 
 function downloadBlob(blob: Blob, filename: string) {
@@ -200,7 +190,7 @@ async function getLetterheadDataUrl() {
                     })
 
                     const canvas = document.createElement("canvas")
-                    canvas.width = Math.min(900, Math.max(700, Math.round(image.naturalWidth * 0.45)))
+                    canvas.width = Math.max(1240, Math.round(image.naturalWidth * 0.65))
                     canvas.height = Math.round((canvas.width / image.naturalWidth) * image.naturalHeight)
 
                     const context = canvas.getContext("2d")
@@ -209,7 +199,7 @@ async function getLetterheadDataUrl() {
                     }
 
                     context.drawImage(image, 0, 0, canvas.width, canvas.height)
-                    return canvas.toDataURL("image/jpeg", 0.5)
+                    return canvas.toDataURL("image/jpeg", 0.72)
                 } finally {
                     URL.revokeObjectURL(objectUrl)
                 }
@@ -221,87 +211,6 @@ async function getLetterheadDataUrl() {
     }
 
     return await cachedLetterheadDataUrlPromise
-}
-
-async function fetchArrayBufferWithTimeout(url: string, timeoutMs = 4_000) {
-    const controller = new AbortController()
-    const timeout = window.setTimeout(() => controller.abort(), timeoutMs)
-
-    try {
-        const response = await fetch(url, {
-            cache: "no-store",
-            signal: controller.signal,
-        })
-
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`)
-        }
-
-        const contentLength = Number(response.headers.get("content-length") || 0)
-        if (contentLength > 2_000_000) {
-            throw new Error("IMAGE_TOO_LARGE")
-        }
-
-        const bytes = await response.arrayBuffer()
-        if (bytes.byteLength > 2_000_000) {
-            throw new Error("IMAGE_TOO_LARGE")
-        }
-
-        return {
-            bytes,
-            contentType: response.headers.get("content-type"),
-        }
-    } finally {
-        window.clearTimeout(timeout)
-    }
-}
-
-async function resizeImageAttachmentForPdf(bytes: ArrayBuffer, mimeType: string) {
-    const blob = new Blob([bytes], { type: mimeType })
-    const objectUrl = URL.createObjectURL(blob)
-
-    try {
-        const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-            const nextImage = new Image()
-            nextImage.onload = () => resolve(nextImage)
-            nextImage.onerror = () => reject(new Error("Failed to decode attachment image"))
-            nextImage.src = objectUrl
-        })
-
-        const maxSide = 700
-        const scale = Math.min(maxSide / image.naturalWidth, maxSide / image.naturalHeight, 1)
-        const width = Math.max(1, Math.round(image.naturalWidth * scale))
-        const height = Math.max(1, Math.round(image.naturalHeight * scale))
-
-        const canvas = document.createElement("canvas")
-        canvas.width = width
-        canvas.height = height
-
-        const context = canvas.getContext("2d")
-        if (!context) {
-            return { dataUrl: await blobToDataUrl(blob), width: image.naturalWidth, height: image.naturalHeight, format: mimeType.includes("png") ? "PNG" : "JPEG" }
-        }
-
-        context.drawImage(image, 0, 0, width, height)
-
-        const outputMimeType = "image/jpeg"
-        const resizedBlob = await new Promise<Blob | null>((resolve) => {
-            canvas.toBlob(resolve, outputMimeType, 0.5)
-        })
-
-        if (!resizedBlob) {
-            return { dataUrl: canvas.toDataURL(outputMimeType, 0.5), width, height, format: "JPEG" }
-        }
-
-        return {
-            dataUrl: await blobToDataUrl(resizedBlob),
-            width,
-            height,
-            format: "JPEG",
-        }
-    } finally {
-        URL.revokeObjectURL(objectUrl)
-    }
 }
 
 export async function generateQuotationPdf(
@@ -330,23 +239,25 @@ export async function generateQuotationPdf(
             orientation: "portrait",
             unit: "mm",
             format: "a4",
-            compress: false,
+            compress: true,
             putOnlyUsedFonts: true,
         })
 
         const shouldMergeAttachments = options?.mergeAttachments === true
         const base64data = await getLetterheadDataUrl()
 
+        // Add background to first page
         if (base64data) {
-            doc.addImage(base64data, "JPEG", 0, 0, 210, 297)
+            doc.addImage(base64data, 'JPEG', 0, 0, 210, 297)
         }
 
+        // Override addPage to automatically add background to new pages
         const originalAddPage = doc.addPage.bind(doc)
         const mutableDoc = doc as typeof doc & { lastAutoTable?: { finalY: number } }
         doc.addPage = (...args: Parameters<typeof originalAddPage>) => {
             originalAddPage(...args)
             if (base64data) {
-                doc.addImage(base64data, "JPEG", 0, 0, 210, 297)
+                doc.addImage(base64data, 'JPEG', 0, 0, 210, 297)
             }
             return doc
         }
@@ -668,15 +579,13 @@ export async function generateQuotationPdf(
             doc.setFont("helvetica", "normal")
             doc.setTextColor(grayText[0], grayText[1], grayText[2])
             
-            const termsText = [normalizeQuotationText(quotation.clientNote), normalizeQuotationText(quotation.termsConditions)].filter(Boolean).join("\n\n")
+            const termsText = [normalizeQuotationText(quotation.termsConditions), normalizeQuotationText(quotation.clientNote)].filter(Boolean).join("\n\n")
             const formattedTerms = doc.splitTextToSize(termsText, 170)
             doc.text(formattedTerms, 20, termsY)
             finalY = termsY + (formattedTerms.length * 4) + 12
         }
 
-        const includedAttachments = quotation.attachments
-            ?.filter((attachment) => attachment.includeInPdf && isImageAttachment(attachment))
-            .slice(0, 4) ?? []
+        const includedAttachments = quotation.attachments?.filter((attachment) => attachment.includeInPdf) ?? []
         if (includedAttachments.length > 0) {
             let attachmentY = finalY
             if (attachmentY > 235) {
@@ -701,10 +610,11 @@ export async function generateQuotationPdf(
             })
         }
 
+        const basePdfBytes = doc.output("arraybuffer")
         const outputFilename = `Quotation_${sanitizeFilenamePart(quotation.quotationNumber)}.pdf`
 
         if (!shouldMergeAttachments || includedAttachments.length === 0 || includedAttachments.every((attachment) => !attachment.fileUrl)) {
-            downloadBlob(new Blob([doc.output("arraybuffer")], { type: "application/pdf" }), outputFilename)
+            downloadBlob(new Blob([basePdfBytes], { type: "application/pdf" }), outputFilename)
             toast.success(
                 shouldMergeAttachments
                     ? "PDF quotation berhasil didownload"
@@ -713,44 +623,13 @@ export async function generateQuotationPdf(
             return
         }
 
+        const { PDFDocument } = await import("pdf-lib")
+        const mergedPdf = await PDFDocument.load(basePdfBytes)
         const skippedAttachments: string[] = []
-
-        const wrapText = (text: string, maxCharsPerLine: number): string[] => {
-            const lines: string[] = []
-            const rawLines = text.split("\n")
-            for (const rawLine of rawLines) {
-                if (rawLine.trim() === "") {
-                    lines.push("")
-                    continue
-                }
-                let currentLine = ""
-                const words = rawLine.split(" ")
-                for (const word of words) {
-                    if ((currentLine + " " + word).trim().length <= maxCharsPerLine) {
-                        currentLine = (currentLine + " " + word).trim()
-                    } else {
-                        if (currentLine !== "") {
-                            lines.push(currentLine)
-                        }
-                        currentLine = word
-                    }
-                }
-                if (currentLine !== "") {
-                    lines.push(currentLine)
-                }
-            }
-            return lines
-        }
-
-        type ImageAttachment = {
-            attachment: typeof includedAttachments[number]
-            dataUrl: string
-            width: number
-            height: number
-            format: string
-            globalIdx: number
-        }
-        const imageAttachments: ImageAttachment[] = []
+        const A4_WIDTH = 595.28
+        const A4_HEIGHT = 841.89
+        const PAGE_MARGIN = 24
+        const TITLE_SPACE = 24
 
         for (const attachment of includedAttachments) {
             const attachmentUrl = resolveUploadDocumentUrl(attachment.fileUrl)
@@ -761,21 +640,49 @@ export async function generateQuotationPdf(
             }
 
             try {
-                const fetchedAttachment = await fetchArrayBufferWithTimeout(attachmentUrl)
+                const response = await fetch(attachmentUrl, { cache: "no-store" })
+                if (!response.ok) {
+                    skippedAttachments.push(`${attachment.title}: file tidak bisa diakses`)
+                    continue
+                }
+
+                const attachmentBytes = await response.arrayBuffer()
                 const detectedMimeType = inferMimeType(
                     attachment.fileName,
-                    fetchedAttachment.contentType || attachment.mimeType,
+                    response.headers.get("content-type") || attachment.mimeType,
                 )
 
+                if (detectedMimeType.includes("pdf")) {
+                    const attachmentPdf = await PDFDocument.load(attachmentBytes)
+                    const copiedPages = await mergedPdf.copyPages(attachmentPdf, attachmentPdf.getPageIndices())
+                    copiedPages.forEach((page) => mergedPdf.addPage(page))
+                    continue
+                }
+
                 if (detectedMimeType.includes("png") || detectedMimeType.includes("jpeg") || detectedMimeType.includes("jpg")) {
-                    const resizedAttachment = await resizeImageAttachmentForPdf(fetchedAttachment.bytes, detectedMimeType)
-                    imageAttachments.push({
-                        attachment,
-                        dataUrl: resizedAttachment.dataUrl,
-                        width: resizedAttachment.width,
-                        height: resizedAttachment.height,
-                        format: resizedAttachment.format,
-                        globalIdx: imageAttachments.length,
+                    const image = detectedMimeType.includes("png")
+                        ? await mergedPdf.embedPng(attachmentBytes)
+                        : await mergedPdf.embedJpg(attachmentBytes)
+
+                    const page = mergedPdf.addPage([A4_WIDTH, A4_HEIGHT])
+                    const availableWidth = A4_WIDTH - PAGE_MARGIN * 2
+                    const availableHeight = A4_HEIGHT - PAGE_MARGIN * 2 - TITLE_SPACE
+                    const scale = Math.min(availableWidth / image.width, availableHeight / image.height, 1)
+                    const imageWidth = image.width * scale
+                    const imageHeight = image.height * scale
+                    const x = (A4_WIDTH - imageWidth) / 2
+                    const y = PAGE_MARGIN + Math.max((availableHeight - imageHeight) / 2, 0)
+
+                    page.drawText(attachment.title || attachment.fileName, {
+                        x: PAGE_MARGIN,
+                        y: A4_HEIGHT - PAGE_MARGIN - 4,
+                        size: 12,
+                    })
+                    page.drawImage(image, {
+                        x,
+                        y,
+                        width: imageWidth,
+                        height: imageHeight,
                     })
                     continue
                 }
@@ -783,122 +690,16 @@ export async function generateQuotationPdf(
                 skippedAttachments.push(`${attachment.title}: format ${attachment.fileName.split(".").pop()?.toUpperCase() || "file"} belum didukung untuk merge`)
             } catch (attachmentError) {
                 console.error(`Failed to merge attachment ${attachment.fileName}:`, attachmentError)
-                const isTimeout = attachmentError instanceof DOMException && attachmentError.name === "AbortError"
-                const isTooLarge = attachmentError instanceof Error && attachmentError.message === "IMAGE_TOO_LARGE"
-                skippedAttachments.push(`${attachment.title}: ${isTimeout ? "timeout saat diambil" : isTooLarge ? "gambar terlalu besar" : "gagal digabung"}`)
+                skippedAttachments.push(`${attachment.title}: gagal digabung`)
             }
         }
 
-        const LEFT_MARGIN = 15
-        const RIGHT_MARGIN = 15
-        const TOP_MARGIN = 14
-        const BOTTOM_MARGIN = 18
-        const HEADER_SPACING = 32
-        const A4_WIDTH = 210
-        const A4_HEIGHT = 297
-        const contentWidth = A4_WIDTH - LEFT_MARGIN - RIGHT_MARGIN
-        const CARD_GAP = 5
-        const ROW_GAP = 5
-        const cardWidth = (contentWidth - CARD_GAP) / 2
-
-        for (let pageStart = 0; pageStart < imageAttachments.length; pageStart += 4) {
-            const pageItems = imageAttachments.slice(pageStart, pageStart + 4)
-            const pageNum = Math.floor(pageStart / 4)
-            const totalPages = Math.ceil(imageAttachments.length / 4)
-
-            doc.addPage()
-
-            const headerY = TOP_MARGIN + HEADER_SPACING
-            doc.setFont("helvetica", "bold")
-            doc.setFontSize(12)
-            doc.setTextColor(37, 99, 235)
-            doc.text("LAMPIRAN PENDUKUNG", LEFT_MARGIN, headerY)
-
-            const pageLabel = `Halaman ${pageNum + 1} dari ${totalPages}`
-            doc.setFont("helvetica", "normal")
-            doc.setFontSize(8)
-            doc.setTextColor(100, 116, 139)
-            doc.text(pageLabel, A4_WIDTH - RIGHT_MARGIN, headerY, { align: "right" })
-            doc.setDrawColor(37, 99, 235)
-            doc.setLineWidth(0.7)
-            doc.line(LEFT_MARGIN, headerY + 4, A4_WIDTH - RIGHT_MARGIN, headerY + 4)
-
-            const gridStartY = headerY + 8
-            const gridHeight = A4_HEIGHT - gridStartY - BOTTOM_MARGIN
-            const cardH = (gridHeight - ROW_GAP) / 2
-
-            for (let itemIndex = 0; itemIndex < pageItems.length; itemIndex++) {
-                const { attachment, dataUrl, width, height, format, globalIdx } = pageItems[itemIndex]
-                const col = itemIndex % 2
-                const row = Math.floor(itemIndex / 2)
-                const cardX = LEFT_MARGIN + col * (cardWidth + CARD_GAP)
-                const cardY = gridStartY + row * (cardH + ROW_GAP)
-
-                doc.setFillColor(248, 250, 252)
-                doc.setDrawColor(221, 230, 240)
-                doc.setLineWidth(0.3)
-                doc.rect(cardX, cardY, cardWidth, cardH, "FD")
-
-                const headerBarH = 7
-                doc.setFillColor(37, 99, 235)
-                doc.rect(cardX, cardY, cardWidth, headerBarH, "F")
-
-                doc.setFont("helvetica", "bold")
-                doc.setFontSize(7)
-                doc.setTextColor(255, 255, 255)
-                doc.text(String(globalIdx + 1), cardX + 3, cardY + 4.7)
-
-                const maxTitleChars = Math.floor((cardWidth - 14) / 2.2)
-                const rawTitle = (attachment.title || attachment.fileName).toUpperCase()
-                const titleText = rawTitle.length > maxTitleChars ? rawTitle.slice(0, maxTitleChars - 1) + "…" : rawTitle
-                doc.text(titleText, cardX + 9, cardY + 4.7)
-
-                let descBoxH = 0
-                const descPad = 3
-                const descFontSize = 7.5
-                const descLineH = 4
-                const descMaxChars = Math.floor((cardWidth - descPad * 2) / 1.9)
-                let descLines: string[] = []
-                if (attachment.description) {
-                    descLines = wrapText(attachment.description, descMaxChars).slice(0, 3)
-                    descBoxH = 6 + descLines.length * descLineH
-                }
-
-                const imgAreaY = cardY + headerBarH + 3
-                const imgAreaH = cardH - headerBarH - descBoxH - 6
-                if (imgAreaH > 20) {
-                    const maxImgW = cardWidth - 6
-                    const maxImgH = imgAreaH
-                    const imgScale = Math.min(maxImgW / width, maxImgH / height)
-                    const imgW = width * imgScale
-                    const imgH = height * imgScale
-                    const imgX = cardX + 3 + (maxImgW - imgW) / 2
-                    const imgY = imgAreaY + (maxImgH - imgH) / 2
-
-                    doc.addImage(dataUrl, format, imgX, imgY, imgW, imgH)
-                }
-
-                if (attachment.description && descBoxH > 0) {
-                    const descY = cardY + cardH - descBoxH
-                    doc.setDrawColor(226, 232, 240)
-                    doc.line(cardX, descY, cardX + cardWidth, descY)
-                    doc.setFont("helvetica", "bold")
-                    doc.setFontSize(descFontSize)
-                    doc.setTextColor(30, 41, 59)
-                    doc.text("Ket:", cardX + descPad, descY + 4)
-
-                    doc.setFont("helvetica", "normal")
-                    doc.setTextColor(71, 85, 105)
-                    let textY = descY + 8
-                    for (const line of descLines) {
-                        doc.text(line, cardX + descPad, textY)
-                        textY += descLineH
-                    }
-                }
-            }
-        }
-
-        downloadBlob(new Blob([doc.output("arraybuffer")], { type: "application/pdf" }), outputFilename)
+        const mergedBytes = await mergedPdf.save()
+        const mergedBuffer = mergedBytes.buffer.slice(
+            mergedBytes.byteOffset,
+            mergedBytes.byteOffset + mergedBytes.byteLength,
+        ) as ArrayBuffer
+        downloadBlob(new Blob([mergedBuffer], { type: "application/pdf" }), outputFilename)
 
         if (skippedAttachments.length > 0) {
             toast.warning(`PDF quotation berhasil digabung. ${skippedAttachments.slice(0, 3).join("; ")}${skippedAttachments.length > 3 ? `; +${skippedAttachments.length - 3} lainnya` : ""}`)
