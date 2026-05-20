@@ -200,7 +200,7 @@ async function getLetterheadDataUrl() {
                     })
 
                     const canvas = document.createElement("canvas")
-                    canvas.width = Math.max(1240, Math.round(image.naturalWidth * 0.65))
+                    canvas.width = Math.min(900, Math.max(700, Math.round(image.naturalWidth * 0.45)))
                     canvas.height = Math.round((canvas.width / image.naturalWidth) * image.naturalHeight)
 
                     const context = canvas.getContext("2d")
@@ -209,7 +209,7 @@ async function getLetterheadDataUrl() {
                     }
 
                     context.drawImage(image, 0, 0, canvas.width, canvas.height)
-                    return canvas.toDataURL("image/jpeg", 0.72)
+                    return canvas.toDataURL("image/jpeg", 0.5)
                 } finally {
                     URL.revokeObjectURL(objectUrl)
                 }
@@ -330,25 +330,23 @@ export async function generateQuotationPdf(
             orientation: "portrait",
             unit: "mm",
             format: "a4",
-            compress: true,
+            compress: false,
             putOnlyUsedFonts: true,
         })
 
         const shouldMergeAttachments = options?.mergeAttachments === true
         const base64data = await getLetterheadDataUrl()
 
-        // Add background to first page
         if (base64data) {
-            doc.addImage(base64data, 'JPEG', 0, 0, 210, 297)
+            doc.addImage(base64data, "JPEG", 0, 0, 210, 297)
         }
 
-        // Override addPage to automatically add background to new pages
         const originalAddPage = doc.addPage.bind(doc)
         const mutableDoc = doc as typeof doc & { lastAutoTable?: { finalY: number } }
         doc.addPage = (...args: Parameters<typeof originalAddPage>) => {
             originalAddPage(...args)
             if (base64data) {
-                doc.addImage(base64data, 'JPEG', 0, 0, 210, 297)
+                doc.addImage(base64data, "JPEG", 0, 0, 210, 297)
             }
             return doc
         }
@@ -809,10 +807,6 @@ export async function generateQuotationPdf(
             const totalPages = Math.ceil(imageAttachments.length / 4)
 
             doc.addPage()
-
-            if (base64data) {
-                doc.addImage(base64data, "JPEG", 0, 0, A4_WIDTH, A4_HEIGHT)
-            }
 
             const headerY = TOP_MARGIN + HEADER_SPACING
             doc.setFont("helvetica", "bold")

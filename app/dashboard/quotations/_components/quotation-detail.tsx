@@ -141,6 +141,13 @@ interface QuotationDetailProps {
     autoOpenPdf?: boolean
 }
 
+function isImageAttachment(attachment: QuotationDetailData["attachments"][number]) {
+    const mimeType = attachment.mimeType?.toLowerCase() ?? ""
+    const extension = attachment.fileName.split(".").pop()?.toLowerCase() ?? ""
+
+    return mimeType.startsWith("image/") || ["png", "jpg", "jpeg", "webp"].includes(extension)
+}
+
 const statusConfig: Record<string, { variant: "default" | "secondary" | "destructive" | "outline"; icon: React.ElementType; label: string; color: string }> = {
     draft: { variant: "secondary", icon: FileText, label: "Draft", color: "text-gray-500" },
     sent: { variant: "outline", icon: Send, label: "Sent", color: "text-blue-500" },
@@ -206,7 +213,8 @@ export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDet
 
         try {
             const { generateQuotationPdf } = await import("./quotation-pdf-generator")
-            await generateQuotationPdf(buildQuotationPdfPayload(quotation), { mergeAttachments: true })
+            const hasPdfImages = quotation.attachments.some((attachment) => attachment.includeInPdf && isImageAttachment(attachment))
+            await generateQuotationPdf(buildQuotationPdfPayload(quotation), { mergeAttachments: hasPdfImages })
         } catch (error) {
             console.error("Failed to download quotation PDF:", error)
             toast.error(error instanceof Error ? error.message : "Download PDF gagal")
