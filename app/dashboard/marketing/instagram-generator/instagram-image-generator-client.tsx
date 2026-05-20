@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import * as React from "react"
 import Image from "next/image"
@@ -60,7 +60,7 @@ const visualStyles: VisualStyle[] = [
   "Vector Kartun Simple",
 ]
 
-const wearpackStylePrompt = "Chitra Paratama official safety workwear: a single integrated TWO-TONE long sleeve work shirt (NOT a vest), FULL SLEEVES in DARK NAVY BLUE, upper chest/shoulders in NEON LIME GREEN, with SILVER REFLECTIVE STRIPES on left and right shoulders, one horizontal SILVER REFLECTIVE TAPE across the middle stomach (bordering green and navy), full button-down collar, two flap chest pockets on the neon green area, and a small Chitra Paratama logo patch on the left chest pocket integrated naturally into the design. Use the company logo reference from public/cp_logo.png for the left chest patch; keep it small, natural, and sewn/embroidered into the workwear."
+const wearpackStylePrompt = "Chitra Paratama official safety workwear: a single integrated TWO-TONE long sleeve work shirt (NOT a vest), FULL SLEEVES in DARK NAVY BLUE, upper chest/shoulders in NEON LIME GREEN, with SILVER REFLECTIVE STRIPES on left and right shoulders, one horizontal SILVER REFLECTIVE TAPE across the middle stomach (bordering green and navy), full button-down collar, two flap chest pockets on the neon green area, and a small Chitra Paratama logo patch on the left chest pocket integrated naturally into the design. Use the company logo reference from https://www.chitraparatama.co.id/wp-content/uploads/2025/11/cp_logo-removebg-preview-e1767678002905.png for the left chest patch; keep it small, natural, and sewn/embroidered into the workwear."
 
 function formatDate(date: string) {
   return new Intl.DateTimeFormat("id-ID", { dateStyle: "long" }).format(new Date(`${date}T00:00:00+08:00`))
@@ -306,6 +306,15 @@ export function InstagramImageGeneratorClient() {
   const [prompt, setPrompt] = React.useState(getPromptTemplate("Edukasi", defaultVisualStyleByContentType.Edukasi))
   const [format, setFormat] = React.useState<ImageFormat>("portrait")
   const [uploadedAssets, setUploadedAssets] = React.useState<UploadedAsset[]>([])
+  const [birthdayCustomerName, setBirthdayCustomerName] = React.useState("")
+  const [birthdayAge, setBirthdayAge] = React.useState("")
+  const [birthdayLogoAssets, setBirthdayLogoAssets] = React.useState<UploadedAsset[]>([])
+  const [birthdayCustomGreeting, setBirthdayCustomGreeting] = React.useState("")
+  const [achievementName, setAchievementName] = React.useState("")
+  const [achievementPhotoAssets, setAchievementPhotoAssets] = React.useState<UploadedAsset[]>([])
+  const [eventName, setEventName] = React.useState("")
+  const [eventLocationDate, setEventLocationDate] = React.useState("")
+  const [eventPhotoAssets, setEventPhotoAssets] = React.useState<UploadedAsset[]>([])
   const [nearestHoliday, setNearestHoliday] = React.useState<Holiday | null>(null)
   const [isLoadingHoliday, setIsLoadingHoliday] = React.useState(false)
   const [result, setResult] = React.useState<GeneratedImageResult | null>(null)
@@ -355,8 +364,50 @@ export function InstagramImageGeneratorClient() {
     }
   }, [contentType, visualStyle])
 
+  const getCategoryReferenceAssets = React.useCallback(() => {
+    if (contentType === "Ucapan ulang tahun customer") return birthdayLogoAssets
+    if (contentType === "Pencapaian perusahaan") return achievementPhotoAssets
+    if (contentType === "Event perusahaan") return eventPhotoAssets
+    return []
+  }, [achievementPhotoAssets, birthdayLogoAssets, contentType, eventPhotoAssets])
+
+  const buildRequestPrompt = React.useCallback((basePrompt: string) => {
+    const details: string[] = []
+    if (contentType === "Ucapan ulang tahun customer") {
+      details.push("Detail khusus Ucapan Ulang Tahun Customer:")
+      if (birthdayCustomerName.trim()) details.push(`Nama Customer: ${birthdayCustomerName.trim()}.`)
+      if (birthdayAge.trim()) details.push(`Ulang tahun ke: ${birthdayAge.trim()}.`)
+      if (birthdayLogoAssets.length > 0) details.push(`Logo Perusahaan: gunakan ${birthdayLogoAssets.map((asset) => asset.filename).join(", ")} sebagai logo customer/perusahaan dalam desain.`)
+      if (birthdayCustomGreeting.trim()) details.push(`Custom Ucapan: ${birthdayCustomGreeting.trim()}.`)
+    }
+    if (contentType === "Pencapaian perusahaan") {
+      details.push("Detail khusus Pencapaian Perusahaan:")
+      if (achievementName.trim()) details.push(`Nama Pencapaian: ${achievementName.trim()}.`)
+      if (achievementPhotoAssets.length > 0) details.push(`Foto Pencapaian: gunakan ${achievementPhotoAssets.map((asset) => asset.filename).join(", ")} sebagai referensi visual pencapaian yang harus terasa masuk ke gambar.`)
+    }
+    if (contentType === "Event perusahaan") {
+      details.push("Detail khusus Event Perusahaan:")
+      if (eventName.trim()) details.push(`Nama Event: ${eventName.trim()}.`)
+      if (eventLocationDate.trim()) details.push(`Lokasi dan tanggal: ${eventLocationDate.trim()}.`)
+      if (eventPhotoAssets.length > 0) details.push(`Foto Kegiatan: gunakan ${eventPhotoAssets.map((asset) => asset.filename).join(", ")} sebagai referensi visual kegiatan yang harus terasa masuk ke gambar.`)
+    }
+    if (details.length === 0) return basePrompt
+    return `${basePrompt.trim()}\n\n${details.join("\n")}`
+  }, [
+    achievementName,
+    achievementPhotoAssets,
+    birthdayAge,
+    birthdayCustomGreeting,
+    birthdayCustomerName,
+    birthdayLogoAssets,
+    contentType,
+    eventLocationDate,
+    eventName,
+    eventPhotoAssets,
+  ])
+
   const generateImage = async () => {
-    const trimmedPrompt = prompt.trim()
+    const trimmedPrompt = buildRequestPrompt(prompt).trim()
     if (!trimmedPrompt) {
       setError("Prompt wajib diisi sebelum generate gambar")
       return
@@ -379,7 +430,7 @@ export function InstagramImageGeneratorClient() {
           format,
           contentType,
           visualStyle,
-          referenceAssets: uploadedAssets,
+          referenceAssets: [...getCategoryReferenceAssets(), ...uploadedAssets],
         }),
         signal: controller.signal,
       })
@@ -400,7 +451,7 @@ export function InstagramImageGeneratorClient() {
   }
 
   const generateVariations = async () => {
-    const trimmedPrompt = prompt.trim()
+    const trimmedPrompt = buildRequestPrompt(prompt).trim()
     if (!trimmedPrompt) {
       setError("Prompt wajib diisi sebelum membuat variasi")
       return
@@ -423,7 +474,7 @@ export function InstagramImageGeneratorClient() {
           format,
           contentType,
           visualStyle,
-          referenceAssets: uploadedAssets,
+          referenceAssets: [...getCategoryReferenceAssets(), ...uploadedAssets],
           mode: "variations",
         }),
         signal: controller.signal,
@@ -445,7 +496,7 @@ export function InstagramImageGeneratorClient() {
   }
 
   const enhancePrompt = async () => {
-    const trimmedPrompt = prompt.trim()
+    const trimmedPrompt = buildRequestPrompt(prompt).trim()
     if (!trimmedPrompt) {
       setError("Prompt wajib diisi sebelum enhancement")
       return
@@ -466,7 +517,7 @@ export function InstagramImageGeneratorClient() {
           format,
           contentType,
           visualStyle,
-          referenceAssets: uploadedAssets,
+          referenceAssets: [...getCategoryReferenceAssets(), ...uploadedAssets],
         }),
         signal: controller.signal,
       })
@@ -486,9 +537,12 @@ export function InstagramImageGeneratorClient() {
     }
   }
 
-  const onFilesChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFiles = Array.from(event.target.files || [])
-    event.target.value = ""
+  const uploadSelectedFiles = async (
+    selectedFiles: File[],
+    availableSlots: number,
+    onUploaded: (assets: UploadedAsset[]) => void,
+    emptyErrorMessage = "Semua file gagal diunggah. Periksa format dan ukuran file.",
+  ) => {
     const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp"])
     const maxSize = 8 * 1024 * 1024
     const validFiles = selectedFiles.filter((file) => {
@@ -501,7 +555,7 @@ export function InstagramImageGeneratorClient() {
         return false
       }
       return true
-    }).slice(0, Math.max(0, 8 - uploadedAssets.length))
+    }).slice(0, Math.max(0, availableSlots))
 
     if (validFiles.length === 0) return
 
@@ -549,10 +603,10 @@ export function InstagramImageGeneratorClient() {
       }
 
       if (uploaded.length > 0) {
-        setUploadedAssets((current) => [...current, ...uploaded].slice(0, 8))
+        onUploaded(uploaded)
         toast.success(`${uploaded.length} gambar berhasil diunggah`)
       } else {
-        setError("Semua file gagal diunggah. Periksa format dan ukuran file.")
+        setError(emptyErrorMessage)
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Upload gambar gagal"
@@ -563,8 +617,41 @@ export function InstagramImageGeneratorClient() {
     }
   }
 
+  const onFilesChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = Array.from(event.target.files || [])
+    event.target.value = ""
+    await uploadSelectedFiles(
+      selectedFiles,
+      8 - uploadedAssets.length,
+      (assets) => setUploadedAssets((current) => [...current, ...assets].slice(0, 8)),
+    )
+  }
+
+  const onCategoryFilesChange = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+    currentAssets: UploadedAsset[],
+    setAssets: React.Dispatch<React.SetStateAction<UploadedAsset[]>>,
+    maxFiles: number,
+  ) => {
+    const selectedFiles = Array.from(event.target.files || [])
+    event.target.value = ""
+    await uploadSelectedFiles(
+      selectedFiles,
+      maxFiles - currentAssets.length,
+      (assets) => setAssets((current) => [...current, ...assets].slice(0, maxFiles)),
+      "File kategori gagal diunggah. Periksa format dan ukuran file.",
+    )
+  }
+
   const removeAsset = (url: string) => {
     setUploadedAssets((current) => current.filter((asset) => asset.url !== url))
+  }
+
+  const removeCategoryAsset = (
+    url: string,
+    setAssets: React.Dispatch<React.SetStateAction<UploadedAsset[]>>,
+  ) => {
+    setAssets((current) => current.filter((asset) => asset.url !== url))
   }
 
   const copyWearpackStyle = async () => {
@@ -646,6 +733,83 @@ export function InstagramImageGeneratorClient() {
                 </div>
               )}
             </div>
+
+            {contentType === "Ucapan ulang tahun customer" && (
+              <div className="grid gap-3 rounded-xl border bg-muted/20 p-4">
+                <div>
+                  <Label>Nama Customer</Label>
+                  <Input value={birthdayCustomerName} onChange={(event) => setBirthdayCustomerName(event.target.value)} placeholder="Contoh: PT Berkah Mining" />
+                </div>
+                <div>
+                  <Label>Ulang tahun ke</Label>
+                  <Input value={birthdayAge} onChange={(event) => setBirthdayAge(event.target.value)} placeholder="Contoh: 25" />
+                </div>
+                <div>
+                  <Label>Logo Perusahaan</Label>
+                  <Input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => onCategoryFilesChange(event, birthdayLogoAssets, setBirthdayLogoAssets, 1)} disabled={isUploading || birthdayLogoAssets.length >= 1} />
+                  {birthdayLogoAssets.map((asset) => (
+                    <div key={asset.url} className="mt-2 flex items-center justify-between rounded-lg border bg-background px-3 py-2 text-xs">
+                      <span className="truncate">{asset.filename}</span>
+                      <Button type="button" size="sm" variant="ghost" onClick={() => removeCategoryAsset(asset.url, setBirthdayLogoAssets)}>Hapus</Button>
+                    </div>
+                  ))}
+                </div>
+                <div>
+                  <Label>Custom Ucapan</Label>
+                  <Textarea value={birthdayCustomGreeting} onChange={(event) => setBirthdayCustomGreeting(event.target.value)} placeholder="Contoh: Semoga semakin sukses dan menjadi partner terpercaya..." className="min-h-24" />
+                </div>
+              </div>
+            )}
+
+            {contentType === "Pencapaian perusahaan" && (
+              <div className="grid gap-3 rounded-xl border bg-muted/20 p-4">
+                <div>
+                  <Label>Nama Pencapaian</Label>
+                  <Input value={achievementName} onChange={(event) => setAchievementName(event.target.value)} placeholder="Contoh: 1 Juta Jam Kerja Aman" />
+                </div>
+                <div>
+                  <Label>Foto Pencapaian</Label>
+                  <Input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(event) => onCategoryFilesChange(event, achievementPhotoAssets, setAchievementPhotoAssets, 8)} disabled={isUploading || achievementPhotoAssets.length >= 8} />
+                  {achievementPhotoAssets.length > 0 && (
+                    <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                      {achievementPhotoAssets.map((asset) => (
+                        <div key={asset.url} className="flex items-center justify-between rounded-lg border bg-background px-3 py-2 text-xs">
+                          <span className="truncate">{asset.filename}</span>
+                          <Button type="button" size="sm" variant="ghost" onClick={() => removeCategoryAsset(asset.url, setAchievementPhotoAssets)}>Hapus</Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {contentType === "Event perusahaan" && (
+              <div className="grid gap-3 rounded-xl border bg-muted/20 p-4">
+                <div>
+                  <Label>Nama Event</Label>
+                  <Input value={eventName} onChange={(event) => setEventName(event.target.value)} placeholder="Contoh: Customer Gathering 2026" />
+                </div>
+                <div>
+                  <Label>Lokasi dan tanggal</Label>
+                  <Input value={eventLocationDate} onChange={(event) => setEventLocationDate(event.target.value)} placeholder="Contoh: Balikpapan, 20 Mei 2026" />
+                </div>
+                <div>
+                  <Label>Foto Kegiatan</Label>
+                  <Input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(event) => onCategoryFilesChange(event, eventPhotoAssets, setEventPhotoAssets, 8)} disabled={isUploading || eventPhotoAssets.length >= 8} />
+                  {eventPhotoAssets.length > 0 && (
+                    <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                      {eventPhotoAssets.map((asset) => (
+                        <div key={asset.url} className="flex items-center justify-between rounded-lg border bg-background px-3 py-2 text-xs">
+                          <span className="truncate">{asset.filename}</span>
+                          <Button type="button" size="sm" variant="ghost" onClick={() => removeCategoryAsset(asset.url, setEventPhotoAssets)}>Hapus</Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             <div className="grid gap-2">
               <Label>Gaya Visual</Label>
