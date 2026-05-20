@@ -367,20 +367,20 @@ export function InstagramImageGeneratorClient() {
       const customerName = birthdayCustomerName.trim() || "[NAMA CUSTOMER/PERUSAHAAN]"
       const ageLine = birthdayAge.trim() ? "\nUlang tahun ke: " + birthdayAge.trim() + "." : ""
       const greetingLine = birthdayCustomGreeting.trim() ? "\nCustom Ucapan: " + birthdayCustomGreeting.trim() + "." : ""
-      const logoLine = birthdayLogoAssets.length > 0 ? "\nLogo Perusahaan: gunakan " + birthdayLogoAssets.map((a) => a.filename).join(", ") + " sebagai logo customer dalam desain." : ""
+      const logoLine = birthdayLogoAssets.length > 0 ? "\nLogo Perusahaan: gunakan " + birthdayLogoAssets.map((a) => `${a.filename} (${a.url})`).join(", ") + " sebagai logo customer dalam desain." : ""
       setPrompt(base.replace(/\[NAMA CUSTOMER\/PERUSAHAAN\]/g, customerName) + ageLine + greetingLine + logoLine)
       return
     }
     if (contentType === "Pencapaian perusahaan") {
       const nameLine = achievementName.trim() ? "\nNama Pencapaian: " + achievementName.trim() + "." : ""
-      const photosLine = achievementPhotoAssets.length > 0 ? "\nFoto Pencapaian: gunakan " + achievementPhotoAssets.map((a) => a.filename).join(", ") + " sebagai referensi visual pencapaian." : ""
+      const photosLine = achievementPhotoAssets.length > 0 ? "\nFoto Pencapaian: gunakan " + achievementPhotoAssets.map((a) => `${a.filename} (${a.url})`).join(", ") + " sebagai referensi visual pencapaian." : ""
       setPrompt(base + nameLine + photosLine)
       return
     }
     if (contentType === "Event perusahaan") {
       const nameLine = eventName.trim() ? "\nNama Event: " + eventName.trim() + "." : ""
       const locLine = eventLocationDate.trim() ? "\nLokasi & Tanggal: " + eventLocationDate.trim() + "." : ""
-      const photosLine = eventPhotoAssets.length > 0 ? "\nFoto Kegiatan: gunakan " + eventPhotoAssets.map((a) => a.filename).join(", ") + " sebagai referensi visual kegiatan." : ""
+      const photosLine = eventPhotoAssets.length > 0 ? "\nFoto Kegiatan: gunakan " + eventPhotoAssets.map((a) => `${a.filename} (${a.url})`).join(", ") + " sebagai referensi visual kegiatan." : ""
       setPrompt(base + nameLine + locLine + photosLine)
       return
     }
@@ -400,19 +400,19 @@ export function InstagramImageGeneratorClient() {
       details.push("Detail khusus Ucapan Ulang Tahun Customer:")
       if (birthdayCustomerName.trim()) details.push(`Nama Customer: ${birthdayCustomerName.trim()}.`)
       if (birthdayAge.trim()) details.push(`Ulang tahun ke: ${birthdayAge.trim()}.`)
-      if (birthdayLogoAssets.length > 0) details.push(`Logo Perusahaan: gunakan ${birthdayLogoAssets.map((asset) => asset.filename).join(", ")} sebagai logo customer/perusahaan dalam desain.`)
+      if (birthdayLogoAssets.length > 0) details.push(`Logo Perusahaan: gunakan ${birthdayLogoAssets.map((asset) => `${asset.filename} (${asset.url})`).join(", ")} sebagai logo customer/perusahaan dalam desain.`)
       if (birthdayCustomGreeting.trim()) details.push(`Custom Ucapan: ${birthdayCustomGreeting.trim()}.`)
     }
     if (contentType === "Pencapaian perusahaan") {
       details.push("Detail khusus Pencapaian Perusahaan:")
       if (achievementName.trim()) details.push(`Nama Pencapaian: ${achievementName.trim()}.`)
-      if (achievementPhotoAssets.length > 0) details.push(`Foto Pencapaian: gunakan ${achievementPhotoAssets.map((asset) => asset.filename).join(", ")} sebagai referensi visual pencapaian yang harus terasa masuk ke gambar.`)
+      if (achievementPhotoAssets.length > 0) details.push(`Foto Pencapaian: gunakan ${achievementPhotoAssets.map((asset) => `${asset.filename} (${asset.url})`).join(", ")} sebagai referensi visual pencapaian yang harus terasa masuk ke gambar.`)
     }
     if (contentType === "Event perusahaan") {
       details.push("Detail khusus Event Perusahaan:")
       if (eventName.trim()) details.push(`Nama Event: ${eventName.trim()}.`)
       if (eventLocationDate.trim()) details.push(`Lokasi dan tanggal: ${eventLocationDate.trim()}.`)
-      if (eventPhotoAssets.length > 0) details.push(`Foto Kegiatan: gunakan ${eventPhotoAssets.map((asset) => asset.filename).join(", ")} sebagai referensi visual kegiatan yang harus terasa masuk ke gambar.`)
+      if (eventPhotoAssets.length > 0) details.push(`Foto Kegiatan: gunakan ${eventPhotoAssets.map((asset) => `${asset.filename} (${asset.url})`).join(", ")} sebagai referensi visual kegiatan yang harus terasa masuk ke gambar.`)
     }
     if (details.length === 0) return basePrompt
     return `${basePrompt.trim()}\n\n${details.join("\n")}`

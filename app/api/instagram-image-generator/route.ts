@@ -232,7 +232,7 @@ async function resolveReferenceSummaries(assets: UploadedAsset[]) {
       .raw()
       .toBuffer()
     const color = `rgb(${stats[0]}, ${stats[1]}, ${stats[2]})`
-    return `${asset.filename}: gambar referensi ${metadata.width || 0}x${metadata.height || 0}px, warna dominan sekitar ${color}`
+    return `${asset.filename} (${asset.url}): gambar referensi ${metadata.width || 0}x${metadata.height || 0}px, warna dominan sekitar ${color}`
   }))
 }
 
@@ -312,7 +312,7 @@ function buildEnhancedPrompt(input: {
 }) {
   const ratio = input.format === "story" ? "Instagram Story 9:16 vertical" : input.format === "portrait" ? "Instagram feed portrait 4:5" : "Instagram feed square 1:1"
   const references = input.referenceAssets.length > 0
-    ? ` Gunakan aset upload sebagai referensi visual, bukan ditempel mentah: ${input.referenceSummaries.length > 0 ? input.referenceSummaries.join("; ") : input.referenceAssets.map((asset) => asset.filename).join(", ")}. Adaptasi warna, objek, dan identitas visualnya secara natural ke desain.`
+    ? ` Gunakan aset upload sebagai referensi visual, bukan ditempel mentah: ${input.referenceSummaries.length > 0 ? input.referenceSummaries.join("; ") : input.referenceAssets.map((asset) => `${asset.filename} (${asset.url})`).join(", ")}. Adaptasi warna, objek, dan identitas visualnya secara natural ke desain.`
     : ""
   const vectorCartoonInstruction = input.visualStyle === "Vector Kartun Simple"
     ? "Mode Vector Kartun Simple: hasil harus berupa ilustrasi flat vector cartoon sederhana, clean, ramah, outline tegas, bentuk objek/karakter sederhana, warna solid brand PT Chitra Paratama, tanpa photorealistic, tanpa 3D render, tanpa tekstur kompleks, tanpa detail kecil berlebihan. Cocok untuk konten Instagram edukatif dan mudah dibaca."
