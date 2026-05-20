@@ -103,9 +103,11 @@ async function generateOneImage(input: {
   variationInstruction?: string
 }): Promise<GeneratedImageResult> {
   // Kirim URL langsung ke API (sesuai format curl: "image": "https://...")
-  // Logo CP selalu masuk ke image field, upload user juga masuk
+  // Logo CP masuk ke image field hanya jika prompt ada kata wearpack/orang/karyawan
   const CP_LOGO_URL = "https://www.chitraparatama.co.id/wp-content/uploads/2025/11/cp_logo-removebg-preview-e1767678002905.png"
-  const referenceUrls: string[] = [CP_LOGO_URL]
+  const needsWearpackReference = /wearpack|orang|person|people|pekerja|karyawan|teknisi|operator|tim lapangan|team|mekanik|mechanic|worker|staff|employee/i.test(input.prompt)
+  const referenceUrls: string[] = []
+  if (needsWearpackReference) referenceUrls.push(CP_LOGO_URL)
   input.referenceAssets.slice(0, 4).forEach((asset) => {
     if (asset.url && asset.url.startsWith("http")) referenceUrls.push(asset.url)
   })
