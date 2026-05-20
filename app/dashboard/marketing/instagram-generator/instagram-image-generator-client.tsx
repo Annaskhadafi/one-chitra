@@ -39,7 +39,7 @@ type Holiday = {
   is_national_holiday: boolean
 }
 
-type VisualStyle = "Modern & Clean" | "Elegant & Luxury" | "Playful & Vibrant" | "Corporate & Professional" | "Minimalist"
+type VisualStyle = "Modern & Clean" | "Elegant & Luxury" | "Playful & Vibrant" | "Corporate & Professional" | "Minimalist" | "Vector Kartun Simple"
 
 const contentTypes = [
   "Ucapan ulang tahun customer",
@@ -56,6 +56,7 @@ const visualStyles: VisualStyle[] = [
   "Playful & Vibrant",
   "Corporate & Professional",
   "Minimalist",
+  "Vector Kartun Simple",
 ]
 
 function formatDate(date: string) {
@@ -71,7 +72,7 @@ const defaultVisualStyleByContentType: Record<(typeof contentTypes)[number], Vis
   "Hari Nasional": "Corporate & Professional",
 }
 
-const promptTemplates: Record<(typeof contentTypes)[number], Record<VisualStyle, string>> = {
+const promptTemplates: Record<(typeof contentTypes)[number], Partial<Record<VisualStyle, string>>> = {
   "Ucapan ulang tahun customer": {
     "Modern & Clean": `Content focus: Ucapan selamat ulang tahun untuk [NAMA CUSTOMER/PERUSAHAAN] dari PT Chitra Paratama.
 Headline text: "Selamat Ulang Tahun"
@@ -267,7 +268,33 @@ Variant note: Include a professional illustration or photo relevant to the holid
 }
 
 function getPromptTemplate(contentType: (typeof contentTypes)[number], visualStyle: VisualStyle) {
-  return promptTemplates[contentType][visualStyle]
+  return promptTemplates[contentType][visualStyle] || getVectorCartoonPromptTemplate(contentType)
+}
+
+function getVectorCartoonPromptTemplate(contentType: (typeof contentTypes)[number]) {
+  const focusByContentType: Record<(typeof contentTypes)[number], string> = {
+    "Ucapan ulang tahun customer": "Ucapan selamat ulang tahun untuk [NAMA CUSTOMER/PERUSAHAAN] dari PT Chitra Paratama.",
+    Edukasi: "Konten edukasi singkat tentang [TOPIK EDUKASI] untuk audience Instagram PT Chitra Paratama.",
+    "Pencapaian perusahaan": "Perayaan pencapaian perusahaan: [PENCAPAIAN] dari PT Chitra Paratama.",
+    "Event perusahaan": "Publikasi event perusahaan: [NAMA EVENT] dari PT Chitra Paratama.",
+    "Promosi produk": "Promosi produk atau layanan: [NAMA PRODUK/LAYANAN] dari PT Chitra Paratama.",
+    "Hari Nasional": "National holiday greeting for [NAMA HARI NASIONAL].",
+  }
+  const headlineByContentType: Record<(typeof contentTypes)[number], string> = {
+    "Ucapan ulang tahun customer": "Selamat Ulang Tahun",
+    Edukasi: "[HEADLINE EDUKASI]",
+    "Pencapaian perusahaan": "[HEADLINE PENCAPAIAN]",
+    "Event perusahaan": "[HEADLINE EVENT]",
+    "Promosi produk": "[HEADLINE PROMOSI]",
+    "Hari Nasional": "Selamat [NAMA HARI NASIONAL]",
+  }
+
+  return `Content focus: ${focusByContentType[contentType]}
+Headline text: "${headlineByContentType[contentType]}"
+Brand/Source: "PT Chitra Paratama"
+Visual style: vector kartun simple, flat vector illustration, clean cartoon shapes, bold outline, friendly corporate character or object illustration, minimal details, high readability, Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56). Avoid photorealistic rendering, 3D render, complex texture, clutter, and excessive small text.
+Additional elements: [ELEMEN TAMBAHAN YANG RELEVAN].
+Variant note: Create a simple cartoon vector composition with one clear focal illustration and readable headline.`
 }
 
 export function InstagramImageGeneratorClient() {

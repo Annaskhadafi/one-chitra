@@ -292,11 +292,15 @@ function buildEnhancedPrompt(input: {
   const references = input.referenceAssets.length > 0
     ? ` Gunakan aset upload sebagai referensi visual, bukan ditempel mentah: ${input.referenceSummaries.length > 0 ? input.referenceSummaries.join("; ") : input.referenceAssets.map((asset) => asset.filename).join(", ")}. Adaptasi warna, objek, dan identitas visualnya secara natural ke desain.`
     : ""
+  const vectorCartoonInstruction = input.visualStyle === "Vector Kartun Simple"
+    ? "Mode Vector Kartun Simple: hasil harus berupa ilustrasi flat vector cartoon sederhana, clean, ramah, outline tegas, bentuk objek/karakter sederhana, warna solid brand PT Chitra Paratama, tanpa photorealistic, tanpa 3D render, tanpa tekstur kompleks, tanpa detail kecil berlebihan. Cocok untuk konten Instagram edukatif dan mudah dibaca."
+    : ""
 
   return [
     `Buat visual Instagram PT Chitra Paratama format ${ratio}.`,
     `Kategori: ${input.contentType}.`,
     `Gaya visual: ${input.visualStyle}.`,
+    vectorCartoonInstruction,
     `Tema: ${input.prompt}.`,
     "Desain sederhana, profesional, rapi, mudah dipahami, satu fokus utama, dan komposisi full-bleed yang mengisi seluruh kanvas tanpa border, margin, kartu putih, atau frame kosong.",
     "WAJIB: Jika prompt SECARA EKSPLISIT meminta atau menampilkan sosok manusia (pekerja, mekanik, tim, operator, karyawan), mereka HARUS memakai wearpack safety resmi PT Chitra Paratama dengan spesifikasi PRESISI: kemeja kerja lengan panjang TWO-TONE (BUKAN rompi/vest terpisah), SELURUH LENGAN (atas dan bawah) berwarna BIRU NAVY GELAP (#002D56), area DADA dan BAHU berwarna HIJAU NEON TERANG/Lime Green (#8DC63F), ada STRIP REFLEKTIF SILVER di PUNDAK KANAN dan KIRI (horizontal di bahu), ada SATU GARIS REFLEKTIF HORIZONTAL di TENGAH PERUT tepat di batas antara area hijau atas dan biru navy bawah, kerah kancing penuh, dua saku dada di area hijau, logo kecil di dada kiri. Jika prompt TIDAK meminta orang, jangan paksa ada orang dalam gambar.",
@@ -377,5 +381,4 @@ function collectCandidates(value: unknown, candidates: string[]) {
     collectCandidates(record[nestedKey], candidates)
   }
 }
-
 

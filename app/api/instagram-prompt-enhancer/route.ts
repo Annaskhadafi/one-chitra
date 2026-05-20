@@ -127,11 +127,15 @@ function buildUserPrompt(input: Omit<Required<EnhancePromptBody>, "referenceAsse
   const references = input.referenceAssets.length > 0
     ? `Aset/referensi yang tersedia: ${input.referenceAssets.map((asset) => asset.filename).join(", ")}. Gunakan sebagai arahan visual bila relevan, tanpa mengarang detail isi gambar yang tidak terlihat.`
     : "Tidak ada aset referensi tambahan."
+  const styleInstruction = input.visualStyle === "Vector Kartun Simple"
+    ? "Instruksi gaya khusus: buat prompt untuk ilustrasi flat vector cartoon sederhana, clean, outline tegas, warna solid brand PT Chitra Paratama, satu fokus visual jelas, tanpa photorealistic, tanpa 3D render, tanpa tekstur kompleks, tanpa detail kecil berlebihan."
+    : ""
 
   return [
     `Format: ${ratio}.`,
     `Kategori: ${input.contentType}.`,
     `Gaya visual: ${input.visualStyle}.`,
+    styleInstruction,
     `Ide awal: ${input.prompt}.`,
     references,
     "Kembangkan input singkat di atas menjadi prompt komprehensif mengikuti format struktur (Content focus, Headline text, Brand/Source, Visual style, Additional elements, Variant note).",
