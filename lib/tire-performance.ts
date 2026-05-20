@@ -282,3 +282,15 @@ export function normalizeManufacture(
     const trimmed = (raw ?? "").trim()
     return map.get(trimmed) ?? toTitleCase(trimmed) || "Unknown"
 }
+
+// ─── Tire Size Extraction ───────────────────────────────────────────────────
+
+/**
+ * Extracts tire size from the specification string.
+ * Often specifications are like "27.00R49 XDR3" where the first word is the size.
+ */
+export function extractTireSize(specification: string | null | undefined): string {
+    if (!specification) return "Unknown"
+    const parts = specification.trim().split(" ")
+    return parts[0] || "Unknown"
+}

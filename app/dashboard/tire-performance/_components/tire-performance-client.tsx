@@ -17,6 +17,7 @@ import {
 import {
     aggregateTirePerformanceRows,
     buildManufactureNormalizationMap,
+    extractTireSize,
     normalizeManufacture,
     normalizeTirePerformanceImportRow,
     type TirePerformanceRow,
@@ -110,6 +111,10 @@ function uniqueManufactureOptions(rows: TirePerformanceRow[]): string[] {
         if (raw) canonicals.add(normMap.get(raw) ?? raw)
     })
     return Array.from(canonicals).sort((a, b) => a.localeCompare(b))
+}
+
+function uniqueTireSizeOptions(rows: TirePerformanceRow[]): string[] {
+    return Array.from(new Set(rows.map((row) => extractTireSize(row.specification)).filter(Boolean))).sort((a, b) => a.localeCompare(b))
 }
 
 function TirePerformanceDialog({
@@ -426,6 +431,7 @@ function PerformanceTab({
         mineSite: "",
         manufacture: "",
         specification: "",
+        tireSize: "",
     })
     const [viewMode, setViewMode] = React.useState<"dashboard" | "summary" | "detail">("dashboard")
     const [deletingId, setDeletingId] = React.useState<number | null>(null)
@@ -440,11 +446,14 @@ function PerformanceTab({
                 if (key === "manufacture") {
                     return normalizeManufacture(row.manufacture, normMap) === value
                 }
+                if (key === "tireSize") {
+                    return extractTireSize(row.specification) === value
+                }
                 return String(row[key as keyof typeof filters]) === value
             })
             if (!matchesFilters) return false
             if (!keyword) return true
-            return [row.performanceDate, row.endUser, row.mineSite, row.manufacture, row.specification, row.avgHours, row.recordCount, row.remarks]
+            return [row.performanceDate, row.endUser, row.mineSite, row.manufacture, row.specification, extractTireSize(row.specification), row.avgHours, row.recordCount, row.remarks]
                 .filter(Boolean)
                 .join(" ")
                 .toLowerCase()
@@ -510,6 +519,7 @@ function PerformanceTab({
                             <FilterSelect label="End User" value={filters.endUser} onChange={(value) => setFilters((current) => ({ ...current, endUser: value }))} options={uniqueOptions(rows, "endUser")} />
                             <FilterSelect label="Mine Site" value={filters.mineSite} onChange={(value) => setFilters((current) => ({ ...current, mineSite: value }))} options={uniqueOptions(rows, "mineSite")} />
                             <FilterSelect label="Manufacture" value={filters.manufacture} onChange={(value) => setFilters((current) => ({ ...current, manufacture: value }))} options={uniqueManufactureOptions(rows)} />
+                            <FilterSelect label="Tire Size" value={filters.tireSize} onChange={(value) => setFilters((current) => ({ ...current, tireSize: value }))} options={uniqueTireSizeOptions(rows)} />
                             <FilterSelect label="Specification" value={filters.specification} onChange={(value) => setFilters((current) => ({ ...current, specification: value }))} options={uniqueOptions(rows, "specification")} />
                         </div>
                     </div>

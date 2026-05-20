@@ -33,6 +33,7 @@ import {
 
 import {
     buildManufactureNormalizationMap,
+    extractTireSize,
     normalizeManufacture,
     type TirePerformanceRow,
     type TirePerformanceType,
@@ -181,6 +182,35 @@ function useSpecByManufacture(rows: TirePerformanceRow[], normMap: Map<string, s
         })
 
         return { data, manufactures }
+    }, [rows, normMap])
+}
+
+function useSizeStats(rows: TirePerformanceRow[], normMap: Map<string, string>) {
+    return React.useMemo(() => {
+        const map = new Map<string, { wh: number; rc: number; manufactures: Set<string> }>()
+        rows.forEach((r) => {
+            const size = extractTireSize(r.specification)
+            const cur = map.get(size) ?? { wh: 0, rc: 0, manufactures: new Set() }
+            const h = Number(r.avgHours) || 0
+            const c = Number(r.recordCount) || 0
+            cur.wh += h * c
+            cur.rc += c
+            cur.manufactures.add(normalizeManufacture(r.manufacture, normMap))
+            map.set(size, cur)
+        })
+        return Array.from(map.entries())
+            .map(([size, d]) => {
+                const manufactures = Array.from(d.manufactures)
+                return {
+                    size,
+                    sizeShort: truncate(size, 20),
+                    avgHours: d.rc > 0 ? Math.round(d.wh / d.rc) : 0,
+                    totalTires: d.rc,
+                    isMich: manufactures.some(isMichelin),
+                    primaryManufacture: manufactures[0] ?? "Unknown",
+                }
+            })
+            .sort((a, b) => b.avgHours - a.avgHours)
     }, [rows, normMap])
 }
 
@@ -492,6 +522,49 @@ function RunningDashboard({ rows }: { rows: TirePerformanceRow[] }) {
                 </div>
             </ChartCard>
 
+            {/* Main: Avg Hours per Tire Size */}
+            <ChartCard
+                title="📏 Avg. Hours per Tire Size"
+                subtitle="Dikelompokkan berdasarkan ukuran ban (Tire Size). Warna kuning = Michelin beroperasi di ukuran ini."
+            >
+                <ResponsiveContainer width="100%" height={260}>
+                    <BarChart data={sizeStats.slice(0, 10)} layout="vertical" margin={{ left: 10, right: 60, top: 4, bottom: 4 }}>
+                        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F3F4F6" />
+                        <XAxis
+                            type="number"
+                            tick={{ fontSize: 11, fill: "#9CA3AF" }}
+                            tickFormatter={(v) => fmtHours(Number(v))}
+                            tickLine={false}
+                            axisLine={false}
+                        />
+                        <YAxis
+                            type="category"
+                            dataKey="sizeShort"
+                            tick={{ fontSize: 10, fill: "#6B7280" }}
+                            width={160}
+                            tickLine={false}
+                            axisLine={false}
+                        />
+                        <Tooltip content={<HoursTooltip />} />
+                        <Bar dataKey="avgHours" name="Avg Hours" radius={[0, 8, 8, 0]} maxBarSize={28}>
+                            <LabelList
+                                dataKey="avgHours"
+                                position="right"
+                                style={{ fontSize: 10, fontWeight: "700", fill: "#374151" }}
+                                formatter={(v: number) => `${fmtHours(v)} h`}
+                            />
+                            {sizeStats.slice(0, 10).map((entry, i) => (
+                                <Cell
+                                    key={i}
+                                    fill={entry.isMich ? MICHELIN_YELLOW : getBrandColor(entry.primaryManufacture, i)}
+                                    fillOpacity={entry.isMich ? 1 : 0.75}
+                                />
+                            ))}
+                        </Bar>
+                    </BarChart>
+                </ResponsiveContainer>
+            </ChartCard>
+
             {/* Row: Manufacture Avg Hours + Donut */}
             <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
                 <ChartCard
@@ -710,6 +783,7 @@ function ScrapDashboard({ rows }: { rows: TirePerformanceRow[] }) {
     const normMap = useManufactureNormMap(rows)
     const manufactureStats = useManufactureStats(rows, normMap)
     const specStats = useSpecStats(rows, normMap)
+    const sizeStats = useSizeStats(rows, normMap)
     const { data: specByManuf, manufactures } = useSpecByManufacture(rows, normMap)
 
     const totalScrapped = rows.reduce((acc, r) => acc + (Number(r.recordCount) || 0), 0)
@@ -852,6 +926,49 @@ function ScrapDashboard({ rows }: { rows: TirePerformanceRow[] }) {
                                 formatter={(v: number) => `${fmtHours(v)} h`}
                             />
                             {topSpecsScrap.map((entry, i) => (
+                                <Cell
+                                    key={i}
+                                    fill={entry.isMich ? MICHELIN_YELLOW : getBrandColor(entry.primaryManufacture, i)}
+                                    fillOpacity={entry.isMich ? 1 : 0.75}
+                                />
+                            ))}
+                        </Bar>
+                    </BarChart>
+                </ResponsiveContainer>
+            </ChartCard>
+
+            {/* Avg Hours Before Scrap per Tire Size */}
+            <ChartCard
+                title="📏 Avg. Hours Before Scrap per Tire Size"
+                subtitle="Ketahanan sebelum scrap berdasarkan ukuran ban (Tire Size). Warna kuning = Michelin beroperasi di ukuran ini."
+            >
+                <ResponsiveContainer width="100%" height={260}>
+                    <BarChart data={sizeStats.slice(0, 10)} layout="vertical" margin={{ left: 10, right: 60, top: 4, bottom: 4 }}>
+                        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F3F4F6" />
+                        <XAxis
+                            type="number"
+                            tick={{ fontSize: 11, fill: "#9CA3AF" }}
+                            tickFormatter={(v) => fmtHours(Number(v))}
+                            tickLine={false}
+                            axisLine={false}
+                        />
+                        <YAxis
+                            type="category"
+                            dataKey="sizeShort"
+                            tick={{ fontSize: 10, fill: "#6B7280" }}
+                            width={160}
+                            tickLine={false}
+                            axisLine={false}
+                        />
+                        <Tooltip content={<HoursTooltip />} />
+                        <Bar dataKey="avgHours" name="Avg Hours at Scrap" radius={[0, 8, 8, 0]} maxBarSize={28}>
+                            <LabelList
+                                dataKey="avgHours"
+                                position="right"
+                                style={{ fontSize: 10, fontWeight: "700", fill: "#374151" }}
+                                formatter={(v: number) => `${fmtHours(v)} h`}
+                            />
+                            {sizeStats.slice(0, 10).map((entry, i) => (
                                 <Cell
                                     key={i}
                                     fill={entry.isMich ? MICHELIN_YELLOW : getBrandColor(entry.primaryManufacture, i)}
