@@ -3,7 +3,9 @@
 import * as React from "react"
 import * as XLSX from "xlsx"
 import { toast } from "sonner"
-import { Edit2, FileUp, Filter, Loader2, Plus, Search, Trash2, Upload } from "lucide-react"
+import { Edit2, FileUp, Filter, LayoutDashboard, Loader2, Plus, Search, Trash2, Upload } from "lucide-react"
+
+import { TirePerformanceDashboard } from "./tire-performance-dashboard"
 
 import {
     createTirePerformanceRecord,
@@ -409,7 +411,7 @@ function PerformanceTab({
         manufacture: "",
         specification: "",
     })
-    const [viewMode, setViewMode] = React.useState<"summary" | "detail">("summary")
+    const [viewMode, setViewMode] = React.useState<"dashboard" | "summary" | "detail">("dashboard")
     const [deletingId, setDeletingId] = React.useState<number | null>(null)
 
     const filteredRows = React.useMemo(() => {
@@ -451,14 +453,18 @@ function PerformanceTab({
                         <h1 className="text-xl font-black tracking-tight text-cyan-700 md:text-2xl">{config.title}</h1>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                        <Button variant={viewMode === "summary" ? "default" : "outline"} onClick={() => setViewMode("summary")}>Summary</Button>
-                        <Button variant={viewMode === "detail" ? "default" : "outline"} onClick={() => setViewMode("detail")}>Detail CRUD</Button>
+                        <Button variant={viewMode === "dashboard" ? "default" : "outline"} size="sm" className="gap-1.5" onClick={() => setViewMode("dashboard")}>
+                            <LayoutDashboard className="h-4 w-4" />
+                            Dashboard
+                        </Button>
+                        <Button variant={viewMode === "summary" ? "default" : "outline"} size="sm" onClick={() => setViewMode("summary")}>Summary</Button>
+                        <Button variant={viewMode === "detail" ? "default" : "outline"} size="sm" onClick={() => setViewMode("detail")}>Detail CRUD</Button>
                         <TirePerformanceImportDialog type={type} onImported={onImported} />
                         <TirePerformanceDialog
                             type={type}
                             onSaved={onSaved}
                             trigger={
-                                <Button className="gap-2">
+                                <Button size="sm" className="gap-2">
                                     <Plus className="h-4 w-4" />
                                     Tambah
                                 </Button>
@@ -485,11 +491,21 @@ function PerformanceTab({
                     </div>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <Filter className="h-3.5 w-3.5" />
-                        {filteredRows.length} detail row, {aggregates.length} summary group
+                        {viewMode === "dashboard"
+                            ? <>{filteredRows.length} rows · {new Set(filteredRows.map(r => r.specification)).size} spec · {new Set(filteredRows.map(r => r.manufacture)).size} manufacture</>
+                            : <>{filteredRows.length} detail row, {aggregates.length} summary group</>
+                        }
                     </div>
                 </div>
             </div>
 
+            {/* ── Dashboard View ─────────────────────────────────────── */}
+            {viewMode === "dashboard" && (
+                <TirePerformanceDashboard rows={filteredRows} type={type} />
+            )}
+
+            {/* ── Table View (Summary / Detail) ──────────────────────── */}
+            {viewMode !== "dashboard" && (
             <div className="overflow-hidden rounded-md border bg-card">
                 <div className="overflow-x-auto">
                     <Table className="min-w-[1180px]">
@@ -571,6 +587,7 @@ function PerformanceTab({
                     </Table>
                 </div>
             </div>
+            )}
         </div>
     )
 }
