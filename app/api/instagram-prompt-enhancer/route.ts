@@ -125,7 +125,7 @@ function normalizeReferenceAssets(value: EnhancePromptBody["referenceAssets"]): 
 function buildUserPrompt(input: Omit<Required<EnhancePromptBody>, "referenceAssets"> & { referenceAssets: UploadedAsset[] }) {
   const ratio = input.format === "story" ? "Story Instagram 9:16" : input.format === "portrait" ? "Feed portrait Instagram 4:5" : "Feed Instagram 1:1"
   const references = input.referenceAssets.length > 0
-    ? `Aset/referensi yang tersedia: ${input.referenceAssets.map((asset) => `${asset.filename} (${asset.url})`).join(", ")}. Gunakan sebagai arahan visual bila relevan, tanpa mengarang detail isi gambar yang tidak terlihat.`
+    ? `Aset/referensi yang tersedia: ${input.referenceAssets.map((asset) => `${asset.filename}`).join(", ")}. Gunakan sebagai arahan visual bila relevan, tanpa mengarang detail isi gambar yang tidak terlihat.`
     : "Tidak ada aset referensi tambahan."
   const styleInstruction = input.visualStyle === "Vector Kartun Simple"
     ? "Instruksi gaya khusus: buat prompt untuk ilustrasi flat vector cartoon sederhana, clean, outline tegas, warna solid brand PT Chitra Paratama, satu fokus visual jelas, tanpa photorealistic, tanpa 3D render, tanpa tekstur kompleks, tanpa detail kecil berlebihan."
