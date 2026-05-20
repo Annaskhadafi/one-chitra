@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import * as React from "react"
 import Link from "next/link"
@@ -257,19 +257,20 @@ export default function InstagramHistoryPage() {
       )}
 
       <Dialog open={!!previewImage} onOpenChange={() => setPreviewImage(null)}>
-        <DialogContent className="max-w-4xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Preview Gambar</DialogTitle>
           </DialogHeader>
           {previewImage && (
             <div className="space-y-4">
-              <div className="relative w-full aspect-square bg-muted rounded-lg overflow-hidden">
+              <div className="relative w-full bg-muted rounded-lg overflow-hidden">
                 <Image
                   src={previewImage.imageUrl}
                   alt={previewImage.prompt}
-                  fill
-                  className="object-contain"
-                  sizes="(max-width: 1200px) 100vw, 1200px"
+                  width={previewImage.width}
+                  height={previewImage.height}
+                  className="w-full h-auto object-contain rounded-lg"
+                  unoptimized
                 />
               </div>
               <div className="space-y-2">
