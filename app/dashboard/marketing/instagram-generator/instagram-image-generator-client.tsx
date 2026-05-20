@@ -364,6 +364,34 @@ export function InstagramImageGeneratorClient() {
     }
   }, [contentType, visualStyle])
 
+  // Sync prompt with category detail fields
+  React.useEffect(() => {
+    if (contentType === "Hari Nasional") return
+    const base = getPromptTemplate(contentType, visualStyle)
+    if (contentType === "Ucapan ulang tahun customer") {
+      const customerName = birthdayCustomerName.trim() || "[NAMA CUSTOMER/PERUSAHAAN]"
+      const ageLine = birthdayAge.trim() ? "\nUlang tahun ke: " + birthdayAge.trim() + "." : ""
+      const greetingLine = birthdayCustomGreeting.trim() ? "\nCustom Ucapan: " + birthdayCustomGreeting.trim() + "." : ""
+      const logoLine = birthdayLogoAssets.length > 0 ? "\nLogo Perusahaan: gunakan " + birthdayLogoAssets.map((a) => a.filename).join(", ") + " sebagai logo customer dalam desain." : ""
+      setPrompt(base.replace(/\[NAMA CUSTOMER\/PERUSAHAAN\]/g, customerName) + ageLine + greetingLine + logoLine)
+      return
+    }
+    if (contentType === "Pencapaian perusahaan") {
+      const nameLine = achievementName.trim() ? "\nNama Pencapaian: " + achievementName.trim() + "." : ""
+      const photosLine = achievementPhotoAssets.length > 0 ? "\nFoto Pencapaian: gunakan " + achievementPhotoAssets.map((a) => a.filename).join(", ") + " sebagai referensi visual pencapaian." : ""
+      setPrompt(base + nameLine + photosLine)
+      return
+    }
+    if (contentType === "Event perusahaan") {
+      const nameLine = eventName.trim() ? "\nNama Event: " + eventName.trim() + "." : ""
+      const locLine = eventLocationDate.trim() ? "\nLokasi & Tanggal: " + eventLocationDate.trim() + "." : ""
+      const photosLine = eventPhotoAssets.length > 0 ? "\nFoto Kegiatan: gunakan " + eventPhotoAssets.map((a) => a.filename).join(", ") + " sebagai referensi visual kegiatan." : ""
+      setPrompt(base + nameLine + locLine + photosLine)
+      return
+    }
+    setPrompt(base)
+  }, [contentType, visualStyle, birthdayCustomerName, birthdayAge, birthdayCustomGreeting, birthdayLogoAssets, achievementName, achievementPhotoAssets, eventName, eventLocationDate, eventPhotoAssets])
+
   const getCategoryReferenceAssets = React.useCallback(() => {
     if (contentType === "Ucapan ulang tahun customer") return birthdayLogoAssets
     if (contentType === "Pencapaian perusahaan") return achievementPhotoAssets
