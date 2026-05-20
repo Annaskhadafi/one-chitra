@@ -106,31 +106,26 @@ Variant note: Include a professional illustration or photo integrated naturally 
   Edukasi: {
     "Modern & Clean": `Content focus: Educational post about [TOPIK EDUKASI] for [TARGET AUDIENCE].
 Headline text: "[HEADLINE EDUKASI]"
-Brand/Source: "PT Chitra Paratama"
 Visual style: modern, clean layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use clean iconography, data visualization elements, and structured information hierarchy.
 Additional elements: [ELEMEN TAMBAHAN].
 Variant note: Include a professional photo of a person wearing Chitra Paratama official safety workwear: a single integrated TWO-TONE long sleeve work shirt (NOT a vest), FULL SLEEVES in DARK NAVY BLUE, upper chest/shoulders in NEON LIME GREEN, with SILVER REFLECTIVE STRIPES on left and right shoulders, one horizontal SILVER REFLECTIVE TAPE across the middle stomach (bordering green and navy), full button-down collar, two flap chest pockets on the neon green area, and a small Chitra Paratama logo patch on the left chest pocket integrated naturally into the design.`,
     "Elegant & Luxury": `Content focus: Educational post about [TOPIK EDUKASI] for [TARGET AUDIENCE].
 Headline text: "[HEADLINE EDUKASI]"
-Brand/Source: "PT Chitra Paratama"
 Visual style: elegant, luxury, and sophisticated layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use premium textures, data visualization elements, and structured information hierarchy. Include subtle background patterns.
 Additional elements: [ELEMEN TAMBAHAN].
 Variant note: Include a professional photo of a person wearing Chitra Paratama official safety workwear: a single integrated TWO-TONE long sleeve work shirt (NOT a vest), FULL SLEEVES in DARK NAVY BLUE, upper chest/shoulders in NEON LIME GREEN, with SILVER REFLECTIVE STRIPES on left and right shoulders, one horizontal SILVER REFLECTIVE TAPE across the middle stomach (bordering green and navy), full button-down collar, two flap chest pockets on the neon green area, and a small Chitra Paratama logo patch on the left chest pocket integrated naturally into the design.`,
     "Playful & Vibrant": `Content focus: Educational post about [TOPIK EDUKASI] for [TARGET AUDIENCE].
 Headline text: "[HEADLINE EDUKASI]"
-Brand/Source: "PT Chitra Paratama"
 Visual style: playful, vibrant, and engaging layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use bold typography, dynamic data visualization, and structured information hierarchy.
 Additional elements: [ELEMEN TAMBAHAN].
 Variant note: Include a professional photo of a person wearing Chitra Paratama official safety workwear: a single integrated TWO-TONE long sleeve work shirt (NOT a vest), FULL SLEEVES in DARK NAVY BLUE, upper chest/shoulders in NEON LIME GREEN, with SILVER REFLECTIVE STRIPES on left and right shoulders, one horizontal SILVER REFLECTIVE TAPE across the middle stomach (bordering green and navy), full button-down collar, two flap chest pockets on the neon green area, and a small Chitra Paratama logo patch on the left chest pocket integrated naturally into the design.`,
     "Corporate & Professional": `Content focus: Educational post about [TOPIK EDUKASI] for [TARGET AUDIENCE].
 Headline text: "[HEADLINE EDUKASI]"
-Brand/Source: "PT Chitra Paratama"
 Visual style: corporate, professional, and authoritative layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use business iconography, formal data visualization, and strict information hierarchy.
 Additional elements: [ELEMEN TAMBAHAN].
 Variant note: Include a professional photo of a person wearing Chitra Paratama official safety workwear: a single integrated TWO-TONE long sleeve work shirt (NOT a vest), FULL SLEEVES in DARK NAVY BLUE, upper chest/shoulders in NEON LIME GREEN, with SILVER REFLECTIVE STRIPES on left and right shoulders, one horizontal SILVER REFLECTIVE TAPE across the middle stomach (bordering green and navy), full button-down collar, two flap chest pockets on the neon green area, and a small Chitra Paratama logo patch on the left chest pocket integrated naturally into the design.`,
     Minimalist: `Content focus: Educational post about [TOPIK EDUKASI] for [TARGET AUDIENCE].
 Headline text: "[HEADLINE EDUKASI]"
-Brand/Source: "PT Chitra Paratama"
 Visual style: minimalist, highly focused layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use simple data visualization elements, abundant whitespace, and strict information hierarchy.
 Additional elements: [ELEMEN TAMBAHAN].
 Variant note: Include a professional photo of a person wearing Chitra Paratama official safety workwear: a single integrated TWO-TONE long sleeve work shirt (NOT a vest), FULL SLEEVES in DARK NAVY BLUE, upper chest/shoulders in NEON LIME GREEN, with SILVER REFLECTIVE STRIPES on left and right shoulders, one horizontal SILVER REFLECTIVE TAPE across the middle stomach (bordering green and navy), full button-down collar, two flap chest pockets on the neon green area, and a small Chitra Paratama logo patch on the left chest pocket integrated naturally into the design.`,
@@ -138,31 +133,26 @@ Variant note: Include a professional photo of a person wearing Chitra Paratama o
   "Pencapaian perusahaan": {
     "Modern & Clean": `Content focus: Company milestone or achievement about [DETAIL PENCAPAIAN] for [TARGET AUDIENCE].
 Headline text: "[HEADLINE PENCAPAIAN]"
-Brand/Source: "PT Chitra Paratama"
 Visual style: modern, clean layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use bold numbers, clean iconography, and a structured layout that highlights the milestone.
 Additional elements: [ELEMEN TAMBAHAN MISAL: TROFI, GRAFIK NAIK, GEDUNG KANTOR].
 Variant note: Include a professional photo of a team wearing Chitra Paratama official safety workwear: a single integrated TWO-TONE long sleeve work shirt (NOT a vest), FULL SLEEVES in DARK NAVY BLUE, upper chest/shoulders in NEON LIME GREEN, with SILVER REFLECTIVE STRIPES on left and right shoulders, one horizontal SILVER REFLECTIVE TAPE across the middle stomach (bordering green and navy), full button-down collar, two flap chest pockets on the neon green area, and a small Chitra Paratama logo patch on the left chest pocket integrated naturally into the design.`,
     "Elegant & Luxury": `Content focus: Company milestone or achievement about [DETAIL PENCAPAIAN] for [TARGET AUDIENCE].
 Headline text: "[HEADLINE PENCAPAIAN]"
-Brand/Source: "PT Chitra Paratama"
 Visual style: elegant, luxury, and sophisticated layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use premium typography, gold/silver accents if applicable, and a prestigious composition.
 Additional elements: [ELEMEN TAMBAHAN MISAL: TROFI, GRAFIK NAIK, GEDUNG KANTOR].
 Variant note: Include a professional photo of a team wearing Chitra Paratama official safety workwear: a single integrated TWO-TONE long sleeve work shirt (NOT a vest), FULL SLEEVES in DARK NAVY BLUE, upper chest/shoulders in NEON LIME GREEN, with SILVER REFLECTIVE STRIPES on left and right shoulders, one horizontal SILVER REFLECTIVE TAPE across the middle stomach (bordering green and navy), full button-down collar, two flap chest pockets on the neon green area, and a small Chitra Paratama logo patch on the left chest pocket integrated naturally into the design.`,
     "Playful & Vibrant": `Content focus: Company milestone or achievement about [DETAIL PENCAPAIAN] for [TARGET AUDIENCE].
 Headline text: "[HEADLINE PENCAPAIAN]"
-Brand/Source: "PT Chitra Paratama"
 Visual style: playful, vibrant, and celebratory layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use dynamic shapes, energetic composition, and a festive mood.
 Additional elements: [ELEMEN TAMBAHAN MISAL: TROFI, GRAFIK NAIK, GEDUNG KANTOR].
 Variant note: Include a professional photo of a team wearing Chitra Paratama official safety workwear: a single integrated TWO-TONE long sleeve work shirt (NOT a vest), FULL SLEEVES in DARK NAVY BLUE, upper chest/shoulders in NEON LIME GREEN, with SILVER REFLECTIVE STRIPES on left and right shoulders, one horizontal SILVER REFLECTIVE TAPE across the middle stomach (bordering green and navy), full button-down collar, two flap chest pockets on the neon green area, and a small Chitra Paratama logo patch on the left chest pocket integrated naturally into the design.`,
     "Corporate & Professional": `Content focus: Company milestone or achievement about [DETAIL PENCAPAIAN] for [TARGET AUDIENCE].
 Headline text: "[HEADLINE PENCAPAIAN]"
-Brand/Source: "PT Chitra Paratama"
 Visual style: corporate, professional, and prestigious layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use formal typography, solid business aesthetics, and strict grids.
 Additional elements: [ELEMEN TAMBAHAN MISAL: TROFI, GRAFIK NAIK, GEDUNG KANTOR].
 Variant note: Include a professional photo of a team wearing Chitra Paratama official safety workwear: a single integrated TWO-TONE long sleeve work shirt (NOT a vest), FULL SLEEVES in DARK NAVY BLUE, upper chest/shoulders in NEON LIME GREEN, with SILVER REFLECTIVE STRIPES on left and right shoulders, one horizontal SILVER REFLECTIVE TAPE across the middle stomach (bordering green and navy), full button-down collar, two flap chest pockets on the neon green area, and a small Chitra Paratama logo patch on the left chest pocket integrated naturally into the design.`,
     Minimalist: `Content focus: Company milestone or achievement about [DETAIL PENCAPAIAN] for [TARGET AUDIENCE].
 Headline text: "[HEADLINE PENCAPAIAN]"
-Brand/Source: "PT Chitra Paratama"
 Visual style: minimalist, clean layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Focus entirely on the milestone number/text with ample whitespace.
 Additional elements: [ELEMEN TAMBAHAN MISAL: TROFI, GRAFIK NAIK, GEDUNG KANTOR].
 Variant note: Include a professional photo of a team wearing Chitra Paratama official safety workwear: a single integrated TWO-TONE long sleeve work shirt (NOT a vest), FULL SLEEVES in DARK NAVY BLUE, upper chest/shoulders in NEON LIME GREEN, with SILVER REFLECTIVE STRIPES on left and right shoulders, one horizontal SILVER REFLECTIVE TAPE across the middle stomach (bordering green and navy), full button-down collar, two flap chest pockets on the neon green area, and a small Chitra Paratama logo patch on the left chest pocket integrated naturally into the design.`,
@@ -170,31 +160,26 @@ Variant note: Include a professional photo of a team wearing Chitra Paratama off
   "Event perusahaan": {
     "Modern & Clean": `Content focus: Company event announcement or coverage about [NAMA EVENT] for [TARGET AUDIENCE].
 Headline text: "[HEADLINE EVENT]"
-Brand/Source: "PT Chitra Paratama"
 Visual style: modern, clean layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use dynamic angles, clear date/time layout, and structured event information.
 Additional elements: [ELEMEN TAMBAHAN MISAL: MIC, PANGGUNG, TIKET].
 Variant note: Include a professional photo of the event with people wearing Chitra Paratama official safety workwear: a single integrated TWO-TONE long sleeve work shirt (NOT a vest), FULL SLEEVES in DARK NAVY BLUE, upper chest/shoulders in NEON LIME GREEN, with SILVER REFLECTIVE STRIPES on left and right shoulders, one horizontal SILVER REFLECTIVE TAPE across the middle stomach (bordering green and navy), full button-down collar, two flap chest pockets on the neon green area, and a small Chitra Paratama logo patch on the left chest pocket integrated naturally into the design.`,
     "Elegant & Luxury": `Content focus: Company event announcement or coverage about [NAMA EVENT] for [TARGET AUDIENCE].
 Headline text: "[HEADLINE EVENT]"
-Brand/Source: "PT Chitra Paratama"
 Visual style: elegant, luxury, and exclusive layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use premium textures, sophisticated typography, and a VIP atmosphere.
 Additional elements: [ELEMEN TAMBAHAN MISAL: MIC, PANGGUNG, TIKET].
 Variant note: Include a professional photo of the event with people wearing Chitra Paratama official safety workwear: a single integrated TWO-TONE long sleeve work shirt (NOT a vest), FULL SLEEVES in DARK NAVY BLUE, upper chest/shoulders in NEON LIME GREEN, with SILVER REFLECTIVE STRIPES on left and right shoulders, one horizontal SILVER REFLECTIVE TAPE across the middle stomach (bordering green and navy), full button-down collar, two flap chest pockets on the neon green area, and a small Chitra Paratama logo patch on the left chest pocket integrated naturally into the design.`,
     "Playful & Vibrant": `Content focus: Company event announcement or coverage about [NAMA EVENT] for [TARGET AUDIENCE].
 Headline text: "[HEADLINE EVENT]"
-Brand/Source: "PT Chitra Paratama"
 Visual style: playful, vibrant, and exciting layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use bold graphics, high energy, and inviting composition.
 Additional elements: [ELEMEN TAMBAHAN MISAL: MIC, PANGGUNG, TIKET].
 Variant note: Include a professional photo of the event with people wearing Chitra Paratama official safety workwear: a single integrated TWO-TONE long sleeve work shirt (NOT a vest), FULL SLEEVES in DARK NAVY BLUE, upper chest/shoulders in NEON LIME GREEN, with SILVER REFLECTIVE STRIPES on left and right shoulders, one horizontal SILVER REFLECTIVE TAPE across the middle stomach (bordering green and navy), full button-down collar, two flap chest pockets on the neon green area, and a small Chitra Paratama logo patch on the left chest pocket integrated naturally into the design.`,
     "Corporate & Professional": `Content focus: Company event announcement or coverage about [NAMA EVENT] for [TARGET AUDIENCE].
 Headline text: "[HEADLINE EVENT]"
-Brand/Source: "PT Chitra Paratama"
 Visual style: corporate, professional, and formal layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use clean business graphics, structured agenda layout, and authoritative tone.
 Additional elements: [ELEMEN TAMBAHAN MISAL: MIC, PANGGUNG, TIKET].
 Variant note: Include a professional photo of the event with people wearing Chitra Paratama official safety workwear: a single integrated TWO-TONE long sleeve work shirt (NOT a vest), FULL SLEEVES in DARK NAVY BLUE, upper chest/shoulders in NEON LIME GREEN, with SILVER REFLECTIVE STRIPES on left and right shoulders, one horizontal SILVER REFLECTIVE TAPE across the middle stomach (bordering green and navy), full button-down collar, two flap chest pockets on the neon green area, and a small Chitra Paratama logo patch on the left chest pocket integrated naturally into the design.`,
     Minimalist: `Content focus: Company event announcement or coverage about [NAMA EVENT] for [TARGET AUDIENCE].
 Headline text: "[HEADLINE EVENT]"
-Brand/Source: "PT Chitra Paratama"
 Visual style: minimalist, modern layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Focus purely on the event title and essential details with a clean background.
 Additional elements: [ELEMEN TAMBAHAN MISAL: MIC, PANGGUNG, TIKET].
 Variant note: Include a professional photo of the event with people wearing Chitra Paratama official safety workwear: a single integrated TWO-TONE long sleeve work shirt (NOT a vest), FULL SLEEVES in DARK NAVY BLUE, upper chest/shoulders in NEON LIME GREEN, with SILVER REFLECTIVE STRIPES on left and right shoulders, one horizontal SILVER REFLECTIVE TAPE across the middle stomach (bordering green and navy), full button-down collar, two flap chest pockets on the neon green area, and a small Chitra Paratama logo patch on the left chest pocket integrated naturally into the design.`,
@@ -202,31 +187,26 @@ Variant note: Include a professional photo of the event with people wearing Chit
   "Promosi produk": {
     "Modern & Clean": `Content focus: Product promotion for [NAMA PRODUK/LAYANAN] aimed at [TARGET AUDIENCE].
 Headline text: "[HEADLINE PROMOSI]"
-Brand/Source: "PT Chitra Paratama"
 Visual style: modern, clean layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use sharp product focus, clear features hierarchy, and sleek typography.
 Additional elements: [ELEMEN TAMBAHAN MISAL: BAN, ALAT BERAT, SERVIS].
 Variant note: Include a professional photo of the product or service in action with personnel wearing Chitra Paratama official safety workwear: a single integrated TWO-TONE long sleeve work shirt (NOT a vest), FULL SLEEVES in DARK NAVY BLUE, upper chest/shoulders in NEON LIME GREEN, with SILVER REFLECTIVE STRIPES on left and right shoulders, one horizontal SILVER REFLECTIVE TAPE across the middle stomach (bordering green and navy), full button-down collar, two flap chest pockets on the neon green area, and a small Chitra Paratama logo patch on the left chest pocket integrated naturally into the design.`,
     "Elegant & Luxury": `Content focus: Product promotion for [NAMA PRODUK/LAYANAN] aimed at [TARGET AUDIENCE].
 Headline text: "[HEADLINE PROMOSI]"
-Brand/Source: "PT Chitra Paratama"
 Visual style: elegant, luxury, and premium layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use high-end aesthetics, dramatic lighting, and sophisticated composition.
 Additional elements: [ELEMEN TAMBAHAN MISAL: BAN, ALAT BERAT, SERVIS].
 Variant note: Include a professional photo of the product or service in action with personnel wearing Chitra Paratama official safety workwear: a single integrated TWO-TONE long sleeve work shirt (NOT a vest), FULL SLEEVES in DARK NAVY BLUE, upper chest/shoulders in NEON LIME GREEN, with SILVER REFLECTIVE STRIPES on left and right shoulders, one horizontal SILVER REFLECTIVE TAPE across the middle stomach (bordering green and navy), full button-down collar, two flap chest pockets on the neon green area, and a small Chitra Paratama logo patch on the left chest pocket integrated naturally into the design.`,
     "Playful & Vibrant": `Content focus: Product promotion for [NAMA PRODUK/LAYANAN] aimed at [TARGET AUDIENCE].
 Headline text: "[HEADLINE PROMOSI]"
-Brand/Source: "PT Chitra Paratama"
 Visual style: playful, vibrant, and eye-catching layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use dynamic bursts, strong contrast, and an inviting promotional feel.
 Additional elements: [ELEMEN TAMBAHAN MISAL: BAN, ALAT BERAT, SERVIS].
 Variant note: Include a professional photo of the product or service in action with personnel wearing Chitra Paratama official safety workwear: a single integrated TWO-TONE long sleeve work shirt (NOT a vest), FULL SLEEVES in DARK NAVY BLUE, upper chest/shoulders in NEON LIME GREEN, with SILVER REFLECTIVE STRIPES on left and right shoulders, one horizontal SILVER REFLECTIVE TAPE across the middle stomach (bordering green and navy), full button-down collar, two flap chest pockets on the neon green area, and a small Chitra Paratama logo patch on the left chest pocket integrated naturally into the design.`,
     "Corporate & Professional": `Content focus: Product promotion for [NAMA PRODUK/LAYANAN] aimed at [TARGET AUDIENCE].
 Headline text: "[HEADLINE PROMOSI]"
-Brand/Source: "PT Chitra Paratama"
 Visual style: corporate, professional, and reliable layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use industrial/business aesthetics, clear benefits list, and a trustworthy tone.
 Additional elements: [ELEMEN TAMBAHAN MISAL: BAN, ALAT BERAT, SERVIS].
 Variant note: Include a professional photo of the product or service in action with personnel wearing Chitra Paratama official safety workwear: a single integrated TWO-TONE long sleeve work shirt (NOT a vest), FULL SLEEVES in DARK NAVY BLUE, upper chest/shoulders in NEON LIME GREEN, with SILVER REFLECTIVE STRIPES on left and right shoulders, one horizontal SILVER REFLECTIVE TAPE across the middle stomach (bordering green and navy), full button-down collar, two flap chest pockets on the neon green area, and a small Chitra Paratama logo patch on the left chest pocket integrated naturally into the design.`,
     Minimalist: `Content focus: Product promotion for [NAMA PRODUK/LAYANAN] aimed at [TARGET AUDIENCE].
 Headline text: "[HEADLINE PROMOSI]"
-Brand/Source: "PT Chitra Paratama"
 Visual style: minimalist, ultra-clean layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use negative space to make the product the sole hero of the visual.
 Additional elements: [ELEMEN TAMBAHAN MISAL: BAN, ALAT BERAT, SERVIS].
 Variant note: Include a professional photo of the product or service in action with personnel wearing Chitra Paratama official safety workwear: a single integrated TWO-TONE long sleeve work shirt (NOT a vest), FULL SLEEVES in DARK NAVY BLUE, upper chest/shoulders in NEON LIME GREEN, with SILVER REFLECTIVE STRIPES on left and right shoulders, one horizontal SILVER REFLECTIVE TAPE across the middle stomach (bordering green and navy), full button-down collar, two flap chest pockets on the neon green area, and a small Chitra Paratama logo patch on the left chest pocket integrated naturally into the design.`,
@@ -234,31 +214,26 @@ Variant note: Include a professional photo of the product or service in action w
   "Hari Nasional": {
     "Modern & Clean": `Content focus: National holiday greeting for [NAMA HARI NASIONAL].
 Headline text: "Selamat [NAMA HARI NASIONAL]"
-Brand/Source: "PT Chitra Paratama"
 Visual style: modern, clean layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use relevant national/cultural symbols with a contemporary design approach.
 Additional elements: [ELEMEN TAMBAHAN SESUAI HARI RAYA].
 Variant note: Include a professional illustration or photo relevant to the holiday integrated naturally into the design.`,
     "Elegant & Luxury": `Content focus: National holiday greeting for [NAMA HARI NASIONAL].
 Headline text: "Selamat [NAMA HARI NASIONAL]"
-Brand/Source: "PT Chitra Paratama"
 Visual style: elegant, luxury, and respectful layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use premium textures, sophisticated cultural motifs, and a distinguished atmosphere.
 Additional elements: [ELEMEN TAMBAHAN SESUAI HARI RAYA].
 Variant note: Include a professional illustration or photo relevant to the holiday integrated naturally into the design.`,
     "Playful & Vibrant": `Content focus: National holiday greeting for [NAMA HARI NASIONAL].
 Headline text: "Selamat [NAMA HARI NASIONAL]"
-Brand/Source: "PT Chitra Paratama"
 Visual style: playful, vibrant, and festive layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use bright cultural graphics, joyful energy, and celebratory composition.
 Additional elements: [ELEMEN TAMBAHAN SESUAI HARI RAYA].
 Variant note: Include a professional illustration or photo relevant to the holiday integrated naturally into the design.`,
     "Corporate & Professional": `Content focus: National holiday greeting for [NAMA HARI NASIONAL].
 Headline text: "Selamat [NAMA HARI NASIONAL]"
-Brand/Source: "PT Chitra Paratama"
 Visual style: corporate, professional, and formal layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use official business greetings, clean cultural accents, and a respectful tone.
 Additional elements: [ELEMEN TAMBAHAN SESUAI HARI RAYA].
 Variant note: Include a professional illustration or photo relevant to the holiday integrated naturally into the design.`,
     Minimalist: `Content focus: National holiday greeting for [NAMA HARI NASIONAL].
 Headline text: "Selamat [NAMA HARI NASIONAL]"
-Brand/Source: "PT Chitra Paratama"
 Visual style: minimalist, modern layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Focus purely on a single strong cultural icon and the greeting text with ample whitespace.
 Additional elements: [ELEMEN TAMBAHAN SESUAI HARI RAYA].
 Variant note: Include a professional illustration or photo relevant to the holiday integrated naturally into the design.`,
@@ -289,7 +264,6 @@ function getVectorCartoonPromptTemplate(contentType: (typeof contentTypes)[numbe
 
   return `Content focus: ${focusByContentType[contentType]}
 Headline text: "${headlineByContentType[contentType]}"
-Brand/Source: "PT Chitra Paratama"
 Visual style: vectorize minimalis, flat vector illustration, clean semi-cartoon corporate artwork, neat bold outlines, simplified realistic proportions, soft gradient background, minimal details, high readability, Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56). If people are shown, render them like polished vector characters with friendly faces and neat Chitra safety workwear. Avoid photorealistic rendering, 3D render, complex texture, clutter, and excessive small text.
 Additional elements: [ELEMEN TAMBAHAN YANG RELEVAN].
 Variant note: Create a clean minimalist vectorized composition like a professional corporate poster illustration: one clear focal scene, readable headline, balanced whitespace, and polished flat-vector character style.`
@@ -384,7 +358,7 @@ export function InstagramImageGeneratorClient() {
       setPrompt(base + nameLine + locLine + photosLine)
       return
     }
-    setPrompt(base)
+    setPrompt(base.replace(/\[TARGET AUDIENCE\]/g, "pelanggan dan mitra PT Chitra Paratama"))
   }, [contentType, visualStyle, birthdayCustomerName, birthdayAge, birthdayCustomGreeting, birthdayLogoAssets, achievementName, achievementPhotoAssets, eventName, eventLocationDate, eventPhotoAssets])
 
   const getCategoryReferenceAssets = React.useCallback(() => {
