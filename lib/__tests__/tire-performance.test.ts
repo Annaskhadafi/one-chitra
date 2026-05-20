@@ -32,6 +32,51 @@ describe("tire performance helpers", () => {
         })
     })
 
+    it("groups scrap Date Removed by month", () => {
+        expect(
+            normalizeTirePerformanceImportRow(
+                {
+                    "Date Removed": "2024-08-15",
+                    "End User": "KPC",
+                    "Mine site": "Bengalon",
+                    Manufacture: "BRIDGESTONE",
+                    Specification: "37.00R57 VZTS",
+                    "Avg. Hours": "5,620.3",
+                    "Record Count": "2",
+                },
+                "scrap",
+            ),
+        ).toEqual({
+            type: "scrap",
+            performanceDate: "Aug 2024",
+            endUser: "KPC",
+            mineSite: "Bengalon",
+            manufacture: "BRIDGESTONE",
+            specification: "37.00R57 VZTS",
+            avgHours: "5620.3",
+            recordCount: 2,
+            remarks: "",
+        })
+    })
+
+    it("prefers full Specification over tire size aliases on scrap imports", () => {
+        expect(
+            normalizeTirePerformanceImportRow(
+                {
+                    "Date Removed": "2024-08-15",
+                    "End User": "KPC",
+                    "Mine site": "Bengalon",
+                    Manufacture: "BRIDGESTONE",
+                    Size: "37.00R57",
+                    Specification: "BRIDGESTONE, 37.00R57, VZTS, E3A, **",
+                    "Avg. Hours": "5,620.3",
+                    "Record Count": "2",
+                },
+                "scrap",
+            ).specification,
+        ).toBe("BRIDGESTONE, 37.00R57, VZTS, E3A, **")
+    })
+
     it("rolls rows into weighted average and record count groups", () => {
         expect(
             aggregateTirePerformanceRows([

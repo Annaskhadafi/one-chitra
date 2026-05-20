@@ -62,10 +62,6 @@ export function stringifyImportCell(value: unknown) {
     return String(value).trim()
 }
 
-/**
- * Convert a date value to "Mon YYYY" format (e.g. "Mar 2024").
- * Handles Excel serial dates, Date objects, and date strings.
- */
 function toMonthYear(value: unknown): string {
     if (value === null || value === undefined) return ""
 
@@ -92,7 +88,7 @@ function toMonthYear(value: unknown): string {
         }
     }
 
-    if (!date || isNaN(date.getTime())) return String(value).trim()
+    if (!date || isNaN(date.getTime())) return stringifyImportCell(value)
 
     const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
     return `${months[date.getMonth()]} ${date.getFullYear()}`
@@ -109,7 +105,9 @@ export function parseImportNumber(value: unknown) {
 
 function pickImportValue(row: Record<string, unknown>, aliases: string[]) {
     const normalizedAliases = new Set(aliases)
-    const entry = Object.entries(row).find(([key]) => normalizedAliases.has(normalizeImportHeader(key)))
+    const entries = Object.entries(row)
+    const exactEntry = entries.find(([key]) => aliases[0] && normalizeImportHeader(key) === aliases[0])
+    const entry = exactEntry ?? entries.find(([key]) => normalizedAliases.has(normalizeImportHeader(key)))
     return entry ? stringifyImportCell(entry[1]) : ""
 }
 
@@ -119,7 +117,6 @@ export function normalizeTirePerformanceImportRow(
 ): TirePerformanceInput {
     const rawRecordCount = Math.max(0, Math.round(parseImportNumber(pickImportValue(row, HEADER_ALIASES.recordCount))))
 
-    // For scrap type, convert Date Removed to month-year format
     let performanceDate: string
     if (type === "scrap") {
         const dateAliases = HEADER_ALIASES.performanceDate
