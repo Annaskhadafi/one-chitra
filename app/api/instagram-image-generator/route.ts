@@ -105,13 +105,20 @@ async function generateOneImage(input: {
 }): Promise<GeneratedImageResult> {
   const needsWearpackReference = /orang|person|people|pekerja|karyawan|teknisi|operator|tim lapangan|team|mekanik|mechanic|worker|staff|employee/i.test(input.prompt)
   
-  let referenceImages = ENABLE_PROVIDER_IMAGE_REFERENCES ? await resolveReferenceImages(input.referenceAssets) : []
-  const referenceSummaries = ENABLE_PROVIDER_IMAGE_REFERENCES ? [] : await resolveReferenceSummaries(input.referenceAssets)
-  
-  if (needsWearpackReference && ENABLE_PROVIDER_IMAGE_REFERENCES) {
-    const wearpackReferences = await loadWearpackReferences()
-    referenceImages = [...wearpackReferences, ...referenceImages]
+  // Kirim URL langsung ke API (sesuai format curl: "image": "https://...")
+  const referenceUrls: string[] = []
+  if (needsWearpackReference) {
+    referenceUrls.push(
+      "https://www.chitraparatama.co.id/wp-content/uploads/2025/11/wearpack.png",
+      "https://www.chitraparatama.co.id/wp-content/uploads/2025/11/cp_logo-removebg-preview-e1767678002905.png"
+    )
   }
+  // Tambah URL aset upload user
+  input.referenceAssets.slice(0, 4).forEach((asset) => {
+    if (asset.url && asset.url.startsWith("http")) referenceUrls.push(asset.url)
+  })
+
+  const referenceSummaries = await resolveReferenceSummaries(input.referenceAssets)
   
   const enhancedPrompt = buildEnhancedPrompt({
     prompt: input.variationInstruction ? `${input.prompt}. ${input.variationInstruction}` : input.prompt,
@@ -138,11 +145,11 @@ async function generateOneImage(input: {
       background: "auto",
       image_detail: "high",
       output_format: "png",
-      ...(referenceImages.length > 0 ? {
-        image: referenceImages[0],
-        images: referenceImages,
-        reference_images: referenceImages,
-        input_images: referenceImages,
+      ...(referenceUrls.length > 0 ? {
+        image: referenceUrls[0],
+        images: referenceUrls,
+        reference_images: referenceUrls,
+        input_images: referenceUrls,
       } : {}),
     }),
   })
