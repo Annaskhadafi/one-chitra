@@ -39,7 +39,6 @@ type GeneratedImageResult = {
 
 const API_URL = process.env.INSTAGRAM_IMAGE_API_URL || "https://9router.chitraparatama.com/v1/images/generations"
 const API_MODEL = process.env.INSTAGRAM_IMAGE_MODEL || "cx/gpt-5.4-image"
-const ENABLE_PROVIDER_IMAGE_REFERENCES = process.env.INSTAGRAM_ENABLE_PROVIDER_IMAGE_REFERENCES === "true"
 
 export async function POST(req: NextRequest) {
   try {
@@ -164,44 +163,7 @@ async function generateOneImage(input: {
   }
 }
 
-async function loadPublicImageReference(filename: string) {
-  try {
-    const imagePath = path.join(process.cwd(), "public", filename)
-    const buffer = await fs.readFile(imagePath)
-    const normalized = await sharp(buffer)
-      .rotate()
-      .resize({ width: 1536, height: 1536, fit: "inside", withoutEnlargement: true })
-      .png({ quality: 100, compressionLevel: 9 })
-      .toBuffer()
-    return `data:image/png;base64,${normalized.toString("base64")}`
-  } catch {
-    return null
-  }
-}
 
-
-async function loadUrlImageReference(url: string) {
-  try {
-    const response = await fetch(url)
-    if (!response.ok) return null
-    const arrayBuffer = await response.arrayBuffer()
-    const buffer = Buffer.from(arrayBuffer)
-    const normalized = await sharp(buffer)
-      .rotate()
-      .resize({ width: 1536, height: 1536, fit: "inside", withoutEnlargement: true })
-      .png({ quality: 100, compressionLevel: 9 })
-      .toBuffer()
-    return `data:image/png;base64,${normalized.toString("base64")}`
-  } catch {
-    return null
-  }
-}async function loadWearpackReferences() {
-  const references = await Promise.all([
-    loadPublicImageReference("wearpack.png"),
-    loadUrlImageReference("https://www.chitraparatama.co.id/wp-content/uploads/2025/11/cp_logo-removebg-preview-e1767678002905.png"),
-  ])
-  return references.filter((reference): reference is string => Boolean(reference))
-}
 
 async function resolveReferenceImages(assets: UploadedAsset[]) {
   const images = await Promise.all(assets.slice(0, 4).map(async (asset) => {
@@ -324,7 +286,7 @@ function buildEnhancedPrompt(input: {
     vectorCartoonInstruction,
     `Tema: ${input.prompt}.`,
     "Desain sederhana, profesional, rapi, mudah dipahami, satu fokus utama, dan komposisi full-bleed yang mengisi seluruh kanvas tanpa border, margin, kartu putih, atau frame kosong.",
-    "WAJIB: Jika prompt SECARA EKSPLISIT meminta atau menampilkan sosok manusia (pekerja, mekanik, tim, operator, karyawan), mereka HARUS memakai wearpack safety resmi PT Chitra Paratama dengan spesifikasi PRESISI: kemeja kerja lengan panjang TWO-TONE (BUKAN rompi/vest terpisah), SELURUH LENGAN (atas dan bawah) berwarna BIRU NAVY GELAP (#002D56), area DADA dan BAHU berwarna HIJAU NEON TERANG/Lime Green (#8DC63F), ada STRIP REFLEKTIF SILVER di PUNDAK KANAN dan KIRI (horizontal di bahu), ada SATU GARIS REFLEKTIF HORIZONTAL di TENGAH PERUT tepat di batas antara area hijau atas dan biru navy bawah, kerah kancing penuh, dua saku dada di area hijau, logo kecil Chitra Paratama di saku dada kiri. Gunakan referensi logo dari https://www.chitraparatama.co.id/wp-content/uploads/2025/11/cp_logo-removebg-preview-e1767678002905.png sebagai patch dada kiri kecil yang natural seperti bordir/jahitan, bukan logo besar. Jika prompt TIDAK meminta orang, jangan paksa ada orang dalam gambar.",
+    "WAJIB: Jika prompt SECARA EKSPLISIT meminta atau menampilkan sosok manusia (pekerja, mekanik, tim, operator, karyawan), mereka HARUS memakai wearpack safety resmi PT Chitra Paratama dengan spesifikasi PRESISI: kemeja kerja lengan panjang TWO-TONE (BUKAN rompi/vest terpisah), SELURUH LENGAN (atas dan bawah) berwarna BIRU NAVY GELAP (#002D56), area DADA dan BAHU berwarna HIJAU NEON TERANG/Lime Green (#8DC63F), ada STRIP REFLEKTIF SILVER di PUNDAK KANAN dan KIRI (horizontal di bahu), ada SATU GARIS REFLEKTIF HORIZONTAL di TENGAH PERUT tepat di batas antara area hijau atas dan biru navy bawah, kerah kancing penuh, dua saku dada di area hijau, logo kecil Chitra Paratama di saku dada kiri (logo: https://www.chitraparatama.co.id/wp-content/uploads/2025/11/cp_logo-removebg-preview-e1767678002905.png) sebagai patch bordir/jahitan kecil natural di dada kiri, bukan logo besar. Jika prompt TIDAK meminta orang, jangan paksa ada orang dalam gambar.",
     "PENTING: Hindari menempatkan teks, headline, atau elemen penting di pojok kiri atas (area 300x300px dari sudut kiri atas) karena area tersebut akan tertutup logo perusahaan. Hindari juga menempatkan teks atau elemen penting di bagian BAWAH gambar (area 150px dari tepi bawah) karena area tersebut akan tertutup footer overlay. Posisikan teks utama di tengah atau sepertiga atas gambar dengan ruang aman yang cukup.",
     "Jangan buat logo Chitra Paratama, logo perusahaan, logo brand apa pun, footer, watermark, ikon media sosial, atau teks kecil; semua elemen brand resmi hanya berasal dari overlay template feed.png atau Story.png setelah gambar dibuat.",
     references,
