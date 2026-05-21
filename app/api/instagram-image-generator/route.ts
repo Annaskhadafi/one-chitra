@@ -1,4 +1,4 @@
-﻿import { NextRequest } from "next/server"
+import { NextRequest } from "next/server"
 import sharp from "sharp"
 import fs from "fs/promises"
 import path from "path"
@@ -305,11 +305,16 @@ function buildEnhancedPrompt(input: {
     ? "Mode Vector Kartun Simple: hasil harus berupa ilustrasi flat vector cartoon sederhana, clean, ramah, outline tegas, bentuk objek/karakter sederhana, warna solid brand PT Chitra Paratama, tanpa photorealistic, tanpa 3D render, tanpa tekstur kompleks, tanpa detail kecil berlebihan. Cocok untuk konten Instagram edukatif dan mudah dibaca."
     : ""
 
+  const vectorDetailInstruction = input.visualStyle === "Vector Detail"
+    ? "Mode Vector Detail - Inked Comic Cartoon: hasil WAJIB berupa ilustrasi vektor detail bergaya komik bertinta (inked comic cartoon). Gunakan outline tebal dan tegas seperti tinta, cross-hatching dan line-work untuk shading, karakter ekspresif bergaya komik buku, komposisi dinamis dengan kedalaman dan energi, warna cel-shaded solid menggunakan palet brand PT Chitra Paratama (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56). Jika ada karakter manusia, mereka WAJIB memakai wearpack safety Chitra Paratama dengan detail jahitan, strip reflektif, dan patch logo CP di saku dada kiri yang terlihat jelas dalam gaya komik. DILARANG: photorealistic, 3D render, flat minimalis tanpa detail. Gaya ini harus terasa seperti ilustrasi komik premium dengan linework kaya dan detail tinggi."
+    : ""
+
   return [
     `Buat visual Instagram PT Chitra Paratama format ${ratio}.`,
     `Kategori: ${input.contentType}.`,
     `Gaya visual: ${input.visualStyle}.`,
     vectorCartoonInstruction,
+    vectorDetailInstruction,
     `Tema: ${input.prompt}.`,
     "Desain sederhana, profesional, rapi, mudah dipahami, satu fokus utama, dan komposisi full-bleed yang mengisi seluruh kanvas tanpa border, margin, kartu putih, atau frame kosong.",
     "WAJIB: Jika prompt SECARA EKSPLISIT meminta atau menampilkan sosok manusia (pekerja, mekanik, tim, operator, karyawan), mereka HARUS memakai wearpack safety resmi PT Chitra Paratama dengan spesifikasi PRESISI: kemeja kerja lengan panjang TWO-TONE (BUKAN rompi/vest terpisah), SELURUH LENGAN (atas dan bawah) berwarna BIRU NAVY GELAP (#002D56), area DADA dan BAHU berwarna HIJAU NEON TERANG/Lime Green (#8DC63F), ada STRIP REFLEKTIF SILVER di PUNDAK KANAN dan KIRI (horizontal di bahu), ada SATU GARIS REFLEKTIF HORIZONTAL di TENGAH PERUT tepat di batas antara area hijau atas dan biru navy bawah, kerah kancing penuh, dua saku dada di area hijau, logo kecil Chitra Paratama di saku dada kiri sebagai patch bordir/jahitan kecil natural di dada kiri, bukan logo besar. Jika prompt TIDAK meminta orang, jangan paksa ada orang dalam gambar.",

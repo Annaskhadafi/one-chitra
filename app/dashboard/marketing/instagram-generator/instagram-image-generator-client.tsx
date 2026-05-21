@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import * as React from "react"
 import Image from "next/image"
@@ -39,7 +39,7 @@ type Holiday = {
   is_national_holiday: boolean
 }
 
-type VisualStyle = "Modern & Clean" | "Elegant & Luxury" | "Playful & Vibrant" | "Corporate & Professional" | "Minimalist" | "Vectorize Minimalis" | "Vector Kartun Simple"
+type VisualStyle = "Modern & Clean" | "Elegant & Luxury" | "Playful & Vibrant" | "Corporate & Professional" | "Minimalist" | "Vectorize Minimalis" | "Vector Kartun Simple" | "Vector Detail"
 
 const contentTypes = [
   "Ucapan ulang tahun customer",
@@ -58,9 +58,12 @@ const visualStyles: VisualStyle[] = [
   "Minimalist",
   "Vectorize Minimalis",
   "Vector Kartun Simple",
+  "Vector Detail",
 ]
 
 const wearpackStylePrompt = "Chitra Paratama official safety workwear: a single integrated TWO-TONE long sleeve work shirt (NOT a vest), FULL SLEEVES in DARK NAVY BLUE, upper chest/shoulders in NEON LIME GREEN, with SILVER REFLECTIVE STRIPES on left and right shoulders, one horizontal SILVER REFLECTIVE TAPE across the middle stomach (bordering green and navy), full button-down collar, two flap chest pockets on the neon green area, and a small Chitra Paratama logo patch on the left chest pocket integrated naturally into the design. Use the company logo reference from https://www.chitraparatama.co.id/wp-content/uploads/2025/11/cp_logo-removebg-preview-e1767678002905.png for the left chest patch; keep it small, natural, and sewn/embroidered into the workwear."
+
+const galleryLogoPrompt = "Gallery & Logo Chitra: Tampilkan galeri produk atau suasana kerja PT Chitra Paratama. Jika ada sosok pekerja atau karyawan yang memakai wearpack, tempatkan logo CP (cp_logo.png) sebagai patch bordir kecil di atas saku dada kiri wearpack secara natural dan proporsional, dengan background CP berwarna Michelin Blue (#004C98) atau Navy (#002D56) di belakang logo agar kontras dan terbaca jelas. Logo harus terlihat seperti bagian dari seragam, bukan stiker atau overlay terpisah. Gunakan warna brand PT Chitra Paratama: Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56."
 
 function formatDate(date: string) {
   return new Intl.DateTimeFormat("id-ID", { dateStyle: "long" }).format(new Date(`${date}T00:00:00+08:00`))
@@ -269,6 +272,31 @@ Additional elements: [ELEMEN TAMBAHAN YANG RELEVAN].
 Variant note: Create a clean minimalist vectorized composition like a professional corporate poster illustration: one clear focal scene, readable headline, balanced whitespace, and polished flat-vector character style.`
 }
 
+
+function getVectorDetailPromptTemplate(contentType: (typeof contentTypes)[number]) {
+  const focusByContentType: Record<(typeof contentTypes)[number], string> = {
+    "Ucapan ulang tahun customer": "Ucapan selamat ulang tahun untuk [NAMA CUSTOMER/PERUSAHAAN] dari PT Chitra Paratama.",
+    Edukasi: "Konten edukasi singkat tentang [TOPIK EDUKASI] untuk audience Instagram PT Chitra Paratama.",
+    "Pencapaian perusahaan": "Perayaan pencapaian perusahaan: [PENCAPAIAN] dari PT Chitra Paratama.",
+    "Event perusahaan": "Publikasi event perusahaan: [NAMA EVENT] dari PT Chitra Paratama.",
+    "Promosi produk": "Promosi produk atau layanan: [NAMA PRODUK/LAYANAN] dari PT Chitra Paratama.",
+    "Hari Nasional": "National holiday greeting for [NAMA HARI NASIONAL].",
+  }
+  const headlineByContentType: Record<(typeof contentTypes)[number], string> = {
+    "Ucapan ulang tahun customer": "Selamat Ulang Tahun",
+    Edukasi: "[HEADLINE EDUKASI]",
+    "Pencapaian perusahaan": "[HEADLINE PENCAPAIAN]",
+    "Event perusahaan": "[HEADLINE EVENT]",
+    "Promosi produk": "[HEADLINE PROMOSI]",
+    "Hari Nasional": "Selamat [NAMA HARI NASIONAL]",
+  }
+
+  return `Content focus: ${focusByContentType[contentType]}
+Headline text: "${headlineByContentType[contentType]}"
+Visual style: Vector Detail - Inked Comic Cartoon. Fully vectorized illustration with bold ink outlines, detailed cross-hatching and line-work shading, expressive comic-book style characters, dynamic panel-like composition, high-contrast ink aesthetic, cel-shaded color fills using Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56). Characters wear detailed Chitra Paratama safety workwear rendered in comic-book style with visible stitch lines, reflective stripe details, and logo patch on left chest pocket. Avoid photorealistic rendering, avoid 3D render, avoid flat minimalism - this style must feel like a premium inked comic illustration with rich detail and strong linework.
+Additional elements: [ELEMEN TAMBAHAN YANG RELEVAN].
+Variant note: Create a bold inked comic cartoon composition: one clear focal scene with detailed vector linework, expressive characters in Chitra safety workwear, readable headline in comic-style lettering, and dynamic composition with depth and energy.`
+}
 export function InstagramImageGeneratorClient() {
   const [contentType, setContentType] = React.useState<(typeof contentTypes)[number]>("Edukasi")
   const [visualStyle, setVisualStyle] = React.useState<VisualStyle>(defaultVisualStyleByContentType.Edukasi)
@@ -651,6 +679,7 @@ export function InstagramImageGeneratorClient() {
     setAssets((current) => current.filter((asset) => asset.url !== url))
   }
 
+
   const copyWearpackStyle = async () => {
     try {
       await navigator.clipboard.writeText(wearpackStylePrompt)
@@ -658,6 +687,16 @@ export function InstagramImageGeneratorClient() {
     } catch {
       setPrompt((current) => `${current.trim()}\n\n${wearpackStylePrompt}`.trim())
       toast.success("Clipboard tidak tersedia, style wearpack ditambahkan ke prompt")
+    }
+  }
+
+  const copyGalleryLogoStyle = async () => {
+    try {
+      await navigator.clipboard.writeText(galleryLogoPrompt)
+      toast.success("Style Gallery & Logo CP berhasil disalin")
+    } catch {
+      setPrompt((current) => `${current.trim()}\n\n${galleryLogoPrompt}`.trim())
+      toast.success("Clipboard tidak tersedia, style Gallery & Logo CP ditambahkan ke prompt")
     }
   }
 
@@ -850,9 +889,13 @@ export function InstagramImageGeneratorClient() {
               <div className="flex items-center justify-between gap-3">
                 <Label>Prompt</Label>
                 <div className="flex flex-wrap justify-end gap-2">
-                  <Button type="button" variant="secondary" size="sm" onClick={copyWearpackStyle}>
+                                    <Button type="button" variant="secondary" size="sm" onClick={copyWearpackStyle}>
                     <Clipboard className="size-4" />
                     Copy Style Wearpack
+                  </Button>
+                  <Button type="button" variant="secondary" size="sm" onClick={copyGalleryLogoStyle}>
+                    <Clipboard className="size-4" />
+                    Copy Gallery &amp; Logo CP
                   </Button>
                   <Button type="button" variant="outline" size="sm" onClick={enhancePrompt} disabled={isEnhancing || isGenerating || isUploading}>
                     {isEnhancing ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
