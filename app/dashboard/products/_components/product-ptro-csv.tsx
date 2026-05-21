@@ -1,0 +1,300 @@
+"use client"
+
+import * as React from "react"
+import { useState } from "react"
+import { Button } from "@/components/ui/button"
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+    DialogFooter,
+} from "@/components/ui/dialog"
+import { Upload, FileUp, X, ArrowRight, Download, FileSpreadsheet, AlertTriangle } from "lucide-react"
+import { toast } from "sonner"
+import Papa from "papaparse"
+import { importMaterialPtro } from "@/app/actions/product"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+
+type Mapping = {
+    materialNumber: string
+    materialNumberPtro: string
+}
+
+type Step = "upload" | "mapping" | "preview"
+
+export function ProductPtroCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
+    const [file, setFile] = useState<File | null>(null)
+    const [isUploading, setIsUploading] = useState(false)
+    const [preview, setPreview] = useState<{ materialNumber: string; materialNumberPtro: string }[]>([])
+    const [isOpen, setIsOpen] = useState(false)
+
+    const [step, setStep] = useState<Step>("upload")
+    const [csvHeaders, setCsvHeaders] = useState<string[]>([])
+    const [mapping, setMapping] = useState<Mapping>({
+        materialNumber: "",
+        materialNumberPtro: "",
+    })
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const selectedFile = e.target.files?.[0]
+        if (selectedFile) {
+            setFile(selectedFile)
+            setStep("upload")
+            parseHeaders(selectedFile)
+        }
+    }
+
+    const parseHeaders = (file: File) => {
+        Papa.parse(file, {
+            header: true,
+            preview: 1,
+            skipEmptyLines: true,
+            complete: (results) => {
+                if (results.meta.fields) {
+                    const headers = results.meta.fields
+                    setCsvHeaders(headers)
+
+                    const detectMapped = (regex: RegExp) =>
+                        headers.find((h) => regex.test(h.toLowerCase().replace(/[^a-z0-9]/g, ""))) || ""
+
+                    setMapping({
+                        materialNumber: detectMapped(/materialnumber|materialno|partnumber|partno/i),
+                        materialNumberPtro: detectMapped(/materialnumberptro|ptro|mmptro/i),
+                    })
+                    setStep("mapping")
+                }
+            },
+            error: (error) => {
+                toast.error("Failed to parse CSV headers: " + error.message)
+            },
+        })
+    }
+
+    const parseFullFile = () => {
+        if (!file) return
+        setIsUploading(true)
+        Papa.parse(file, {
+            header: true,
+            skipEmptyLines: true,
+            complete: (results) => {
+                const data = results.data as Record<string, string>[]
+                const normalized = data
+                    .map((item) => ({
+                        materialNumber: mapping.materialNumber ? item[mapping.materialNumber]?.toString().trim() : "",
+                        materialNumberPtro: mapping.materialNumberPtro ? item[mapping.materialNumberPtro]?.toString().trim() : "",
+                    }))
+                    .filter((item) => item.materialNumber && item.materialNumberPtro)
+                setPreview(normalized)
+                setStep("preview")
+                setIsUploading(false)
+            },
+            error: (error) => {
+                setIsUploading(false)
+                toast.error("Failed to parse CSV: " + error.message)
+            },
+        })
+    }
+
+    const handleUpload = async () => {
+        if (preview.length === 0) return
+        setIsUploading(true)
+        try {
+            const result = await importMaterialPtro(preview)
+            if (result.success) {
+                toast.success(`Successfully imported ${result.count} PTRO mappings`)
+                setIsOpen(false)
+                reset()
+                onSuccess?.()
+            } else {
+                toast.error(result.error || "Gagal mengimpor mapping PTRO")
+            }
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : "Unknown error"
+            toast.error(`Gagal mengimpor: ${msg}`)
+        } finally {
+            setIsUploading(false)
+        }
+    }
+
+    const reset = () => {
+        setFile(null)
+        setPreview([])
+        setStep("upload")
+        setCsvHeaders([])
+        setMapping({ materialNumber: "", materialNumberPtro: "" })
+    }
+
+    const downloadTemplate = () => {
+        const headers = "Material Number,Material Number PTRO\n"
+        const example = "MAT001,PTRO_MAT001"
+        const csvContent = "data:text/csv;charset=utf-8," + headers + example
+        const encodedUri = encodeURI(csvContent)
+        const link = document.createElement("a")
+        link.setAttribute("href", encodedUri)
+        link.setAttribute("download", "template_material_ptro.csv")
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+    }
+
+    return (
+        <Dialog
+            open={isOpen}
+            onOpenChange={(open) => {
+                setIsOpen(open)
+                if (!open) reset()
+            }}
+        >
+            <DialogTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-2">
+                    <Upload className="h-4 w-4" />
+                    Import Material PTRO
+                </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                        <FileSpreadsheet className="h-5 w-5 text-orange-500" />
+                        Import Material PTRO
+                    </DialogTitle>
+                    <DialogDescription>
+                        Upload CSV untuk mapping Material Number dengan Material Number PTRO (PT. PETROSEA Tbk)
+                    </DialogDescription>
+                </DialogHeader>
+
+                <div className="space-y-4">
+                    {/* Step indicator */}
+                    <div className="flex items-center gap-2 text-sm">
+                        {(["upload", "mapping", "preview"] as Step[]).map((s, i) => (
+                            <React.Fragment key={s}>
+                                <div className={`flex items-center gap-1 font-medium ${step === s ? "text-primary" : "text-muted-foreground"}`}>
+                                    <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs ${step === s ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
+                                        {i + 1}
+                                    </span>
+                                    <span className="capitalize">{s}</span>
+                                </div>
+                                {i < 2 && <ArrowRight className="h-3 w-3 text-muted-foreground" />}
+                            </React.Fragment>
+                        ))}
+                    </div>
+
+                    {step === "upload" && (
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between">
+                                <p className="text-sm text-muted-foreground">
+                                    Upload file CSV dengan kolom Material Number dan Material Number PTRO
+                                </p>
+                                <Button variant="ghost" size="sm" onClick={downloadTemplate} className="gap-2 text-xs">
+                                    <Download className="h-3 w-3" />
+                                    Download Template
+                                </Button>
+                            </div>
+                            <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer hover:bg-muted/50 transition-colors">
+                                <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                                    <FileUp className="h-8 w-8 text-muted-foreground mb-2" />
+                                    <p className="text-sm text-muted-foreground">
+                                        {file ? file.name : "Click to upload or drag & drop CSV"}
+                                    </p>
+                                </div>
+                                <input type="file" accept=".csv" className="hidden" onChange={handleFileChange} />
+                            </label>
+                            {file && (
+                                <div className="flex items-center gap-2 text-sm bg-muted/50 p-2 rounded">
+                                    <FileSpreadsheet className="h-4 w-4 text-green-500" />
+                                    <span>{file.name}</span>
+                                    <Button variant="ghost" size="icon" className="h-5 w-5 ml-auto" onClick={() => { setFile(null); setStep("upload") }}>
+                                        <X className="h-3 w-3" />
+                                    </Button>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {step === "mapping" && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {[
+                                { id: "materialNumber", label: "Material Number CF/CP", required: true },
+                                { id: "materialNumberPtro", label: "Material Number PTRO", required: true },
+                            ].map((field) => (
+                                <div key={field.id} className="space-y-2">
+                                    <Label className="text-sm font-medium">
+                                        {field.label} {field.required && <span className="text-red-500">*</span>}
+                                    </Label>
+                                    <Select
+                                        value={mapping[field.id as keyof Mapping]}
+                                        onValueChange={(val) => setMapping((prev) => ({ ...prev, [field.id]: val }))}
+                                    >
+                                        <SelectTrigger className="h-9">
+                                            <SelectValue placeholder="Select Column" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {csvHeaders.map((header) => (
+                                                <SelectItem key={header} value={header}>{header}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {step === "preview" && (
+                        <div className="space-y-4">
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 p-2 rounded">
+                                <AlertTriangle className="h-4 w-4 text-amber-500" />
+                                <span>Previewing first 10 of {preview.length} mappings.</span>
+                            </div>
+                            <div className="border rounded-md overflow-hidden">
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-xs text-left">
+                                        <thead className="bg-muted sticky top-0">
+                                            <tr>
+                                                <th className="p-2 border-b">Material #</th>
+                                                <th className="p-2 border-b">Material # PTRO</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {preview.slice(0, 10).map((item, i) => (
+                                                <tr key={i} className="hover:bg-muted/30">
+                                                    <td className="p-2 border-b font-medium">{item.materialNumber}</td>
+                                                    <td className="p-2 border-b text-orange-600 font-medium">{item.materialNumberPtro}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                <DialogFooter className="border-t pt-4">
+                    {step === "mapping" && (
+                        <>
+                            <Button variant="outline" onClick={() => setStep("upload")}>Back</Button>
+                            <Button
+                                onClick={parseFullFile}
+                                disabled={!mapping.materialNumber || !mapping.materialNumberPtro || isUploading}
+                            >
+                                {isUploading ? "Processing..." : "Next: Preview"}
+                                <ArrowRight className="ml-2 h-4 w-4" />
+                            </Button>
+                        </>
+                    )}
+                    {step === "preview" && (
+                        <>
+                            <Button variant="outline" onClick={() => setStep("mapping")}>Back</Button>
+                            <Button onClick={handleUpload} disabled={isUploading || preview.length === 0}>
+                                {isUploading ? "Importing..." : `Import ${preview.length} Mappings`}
+                            </Button>
+                        </>
+                    )}
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    )
+}

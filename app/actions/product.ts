@@ -551,3 +551,44 @@ export async function syncProductCostSapFromStockSapNew() {
         return { success: false as const, error: "Failed to sync Cost SAP from Stock SAP New" }
     }
 }
+
+export async function importMaterialPtro(data: { materialNumber: string, materialNumberPtro: string }[]) {
+    try {
+        if (data.length === 0) return { success: true }
+
+        console.log(`[importMaterialPtro] Received ${data.length} mappings`)
+
+        const uniqueData = new Map<string, string>()
+        for (const item of data) {
+            const matNum = (item.materialNumber || "").trim().toUpperCase()
+            const ptroNum = (item.materialNumberPtro || "").trim().toUpperCase()
+            if (matNum && ptroNum) {
+                uniqueData.set(matNum, ptroNum)
+            }
+        }
+
+        console.log(`[importMaterialPtro] Processing ${uniqueData.size} unique mappings`)
+
+        let updatedCount = 0
+        const entries = Array.from(uniqueData.entries())
+        const chunkSize = 50
+
+        for (let i = 0; i < entries.length; i += chunkSize) {
+            const chunk = entries.slice(i, i + chunkSize)
+            await Promise.all(chunk.map(([matNum, ptroNum]) =>
+                db.update(products)
+                    .set({ materialNumberPtro: ptroNum, updatedAt: new Date() })
+                    .where(ilike(products.materialNumber, matNum))
+            ))
+            updatedCount += chunk.length
+        }
+
+        console.log(`[importMaterialPtro] Import complete. Processed chunks for ${updatedCount} products.`)
+        revalidatePath("/dashboard/products")
+        return { success: true, count: updatedCount }
+    } catch (_error) {
+        console.error("Import PTRO error:", _error)
+        const msg = (_error as { message?: string })?.message || "Unknown error"
+        return { success: false, error: `Failed to import PTRO mappings: ${msg}` }
+    }
+}

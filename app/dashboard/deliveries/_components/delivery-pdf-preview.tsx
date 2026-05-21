@@ -210,6 +210,7 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
         .join(" ")
     const address = delivery.shippingAddress || customerAddress
     const isCiptaKridatama = customer?.name?.toUpperCase()?.includes("CIPTA KRIDATAMA")
+    const isPetrosea = customer?.name?.toUpperCase()?.includes("PETROSEA")
     const printableItems = delivery.items.filter((item) => Number(item.deliveredQuantity) > 0)
     const isExternalJne = delivery.isExternal && delivery.vendorName?.toUpperCase().includes("JNE")
 
@@ -450,6 +451,20 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                                                 <th style={{ textAlign: "center", width: "100px" }}>CK</th>
                                             </tr>
                                         </>
+                                    ) : isPetrosea ? (
+                                        <>
+                                            <tr>
+                                                <th className="col-item" rowSpan={2} style={{ verticalAlign: "middle" }}>Item</th>
+                                                <th rowSpan={2} style={{ verticalAlign: "middle" }}>Description</th>
+                                                <th colSpan={2} style={{ textAlign: "center" }}>MATERIAL NUMBER</th>
+                                                <th className="col-qty" rowSpan={2} style={{ verticalAlign: "middle", textAlign: "center" }}>Qty</th>
+                                                <th rowSpan={2} style={{ verticalAlign: "middle", textAlign: "center" }}>Serial Number</th>
+                                            </tr>
+                                            <tr>
+                                                <th style={{ textAlign: "center", width: "100px" }}>CP</th>
+                                                <th style={{ textAlign: "center", width: "100px" }}>PTRO</th>
+                                            </tr>
+                                        </>
                                     ) : (
                                         <tr>
                                             <th className="col-item">Item</th>
@@ -462,7 +477,7 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                                 <tbody>
                                     {printableItems.length === 0 && (
                                         <tr>
-                                            <td colSpan={isCiptaKridatama ? 6 : 4} style={{ textAlign: "center", padding: "16px 8px", fontWeight: 600 }}>
+                                            <td colSpan={isCiptaKridatama || isPetrosea ? 6 : 4} style={{ textAlign: "center", padding: "16px 8px", fontWeight: 600 }}>
                                                 Tidak ada item terkirim (Qty 0 tidak ditampilkan)
                                             </td>
                                         </tr>
@@ -470,6 +485,62 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
 
                                     {printableItems.map((item, idx) => {
                                         const isTyre = item.product.category?.toUpperCase() === "TYRE"
+
+                                        if (isPetrosea) {
+                                            return (
+                                                <React.Fragment key={idx}>
+                                                    <tr>
+                                                        <td>{(idx + 1).toString().padStart(2, '0')}</td>
+                                                        <td>
+                                                            <div style={{ textTransform: "uppercase" }}>
+                                                                {item.product.materialDescription}
+                                                            </div>
+                                                        </td>
+                                                        <td style={{ textAlign: "center" }}>
+                                                            {item.product.materialNumber}
+                                                        </td>
+                                                        <td style={{ textAlign: "center" }}>
+                                                            {item.product.materialNumberPtro || "-"}
+                                                        </td>
+                                                        <td className="col-qty">
+                                                            {item.deliveredQuantity}
+                                                        </td>
+                                                        <td style={{ textAlign: "center" }}>
+                                                            {item.product.oldMaterialNo || "-"}
+                                                        </td>
+                                                    </tr>
+                                                    {isTyre && (
+                                                        <tr>
+                                                            <td colSpan={6} style={{ padding: "0 5px 15px 45px" }}>
+                                                                <table className="serial-grid">
+                                                                    <thead>
+                                                                        <tr>
+                                                                            <th colSpan={5}>SERIAL NUMBER</th>
+                                                                        </tr>
+                                                                    </thead>
+                                                                    <tbody>
+                                                                        {Array.from({ length: Math.ceil(item.deliveredQuantity / 5) }).map((_, rowIdx) => (
+                                                                            <tr key={rowIdx}>
+                                                                                {Array.from({ length: 5 }).map((_, colIdx) => {
+                                                                                    const snIdx = rowIdx * 5 + colIdx
+                                                                                    const sn = item.serialNumbers?.[snIdx]
+                                                                                    const isVisible = snIdx < item.deliveredQuantity
+                                                                                    return (
+                                                                                        <td key={colIdx} style={{ border: isVisible ? "1px solid #000" : "none" }}>
+                                                                                            {isVisible ? (sn || item.product.materialNumber) : ""}
+                                                                                        </td>
+                                                                                    )
+                                                                                })}
+                                                                            </tr>
+                                                                        ))}
+                                                                    </tbody>
+                                                                </table>
+                                                            </td>
+                                                        </tr>
+                                                    )}
+                                                </React.Fragment>
+                                            )
+                                        }
 
                                         if (isCiptaKridatama) {
                                             return (

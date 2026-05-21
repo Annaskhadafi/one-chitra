@@ -18,6 +18,7 @@ import { ProductDialog } from "./product-dialog"
 import { ProductDetail } from "./product-detail"
 import { ProductCSVUpload } from "./product-table-csv"
 import { ProductCkCSVUpload } from "./product-ck-csv"
+import { ProductPtroCSVUpload } from "./product-ptro-csv"
 import { Search, Trash2, Pencil, Package, Layers, Tag, ChevronUp, ChevronDown, RefreshCcw } from "lucide-react"
 import { toast } from "sonner"
 import { usePermissions } from "@/hooks/use-permissions"
@@ -416,6 +417,7 @@ export function ProductTable({ data: initialData }: ProductTableProps) {
             const matchesSearch = !!(
                 item.materialNumber.toLowerCase().includes(term) ||
                 (item.materialNumberCk && item.materialNumberCk.toLowerCase().includes(term)) ||
+                (item.materialNumberPtro && item.materialNumberPtro.toLowerCase().includes(term)) ||
                 (item.materialDescription && item.materialDescription.toLowerCase().includes(term)) ||
                 item.category.toLowerCase().includes(term) ||
                 (item.oldMaterialNo && item.oldMaterialNo.toLowerCase().includes(term)) ||
@@ -566,6 +568,7 @@ export function ProductTable({ data: initialData }: ProductTableProps) {
                     {canCreate && (
                         <>
                             <ProductCkCSVUpload onSuccess={() => queryClient.invalidateQueries({ queryKey: ["products"] })} />
+                            <ProductPtroCSVUpload onSuccess={() => queryClient.invalidateQueries({ queryKey: ["products"] })} />
                             <ProductCSVUpload />
                             <ProductDialog onSuccess={() => queryClient.invalidateQueries({ queryKey: ["products"] })} />
                         </>
