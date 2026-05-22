@@ -33,6 +33,7 @@ export async function upsertCustomer(id: number | undefined, data: z.infer<typeo
             await db.update(customers)
                 .set({
                     ...data,
+                    businessCategory: data.businessCategory ?? null,
                     updatedAt: new Date()
                 })
                 .where(eq(customers.id, id))
@@ -41,7 +42,10 @@ export async function upsertCustomer(id: number | undefined, data: z.infer<typeo
             if (existing.length > 0) {
                 return { success: false, error: "Customer with this code already exists" }
             }
-            await db.insert(customers).values(data)
+            await db.insert(customers).values({
+                    ...data,
+                    businessCategory: data.businessCategory ?? null,
+                })
         }
 
         revalidatePath("/dashboard/customers")

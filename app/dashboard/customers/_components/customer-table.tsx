@@ -14,7 +14,9 @@ import { Button } from "@/components/ui/button"
 import { deleteCustomer, bulkDeleteCustomers, getCustomers } from "@/app/actions/customer"
 import { CustomerDialog } from "./customer-dialog"
 import { CustomerCSVUpload } from "./customer-table-csv"
+import { CustomerSAPImportDialog } from "./customer-sap-import-dialog"
 import { Search, Pencil, Trash2, Users, UserPlus, ChevronUp, ChevronDown } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ScoreCard } from "@/components/score-card"
 import { BulkActions } from "@/components/bulk-actions"
@@ -152,6 +154,29 @@ export function CustomerTable({ customers: initialCustomers }: { customers: Cust
             accessorKey: "email",
             header: "Email",
             cell: ({ row }) => <span className="text-sm">{row.original.email || "-"}</span>,
+        },
+        {
+            accessorKey: "businessCategory",
+            header: "Kategori Bisnis",
+            cell: ({ row }) => {
+                const cat = row.original.businessCategory
+                if (!cat) return <span className="text-muted-foreground text-xs italic">-</span>
+                const COLORS: Record<string, string> = {
+                    "Mining Contractor": "#f59e0b", "Mining Owner": "#d97706",
+                    "Perkebunan": "#10b981", "Konstruksi": "#3b82f6",
+                    "Minyak dan Gas": "#8b5cf6", "Kehutanan": "#059669",
+                    "Transportasi dan Logistik": "#06b6d4", "Pemerintah": "#ec4899",
+                    "Manufaktur": "#f97316", "Perdagangan": "#64748b",
+                    "Quarry": "#a16207", "Agribisnis": "#16a34a", "Lainnya": "#94a3b8",
+                }
+                const color = COLORS[cat] || "#94a3b8"
+                return (
+                    <Badge variant="outline" className="text-xs font-medium whitespace-nowrap"
+                        style={{ backgroundColor: color + "22", color, borderColor: color + "66" }}>
+                        {cat}
+                    </Badge>
+                )
+            },
         },
         {
             accessorKey: "address1",
@@ -310,6 +335,7 @@ export function CustomerTable({ customers: initialCustomers }: { customers: Cust
                 <div className="flex gap-2 w-full sm:w-auto">
                     {canCreate && (
                         <>
+                            <CustomerSAPImportDialog />
                             <CustomerCSVUpload />
                             <CustomerDialog onSuccess={() => queryClient.invalidateQueries({ queryKey: ["customers"] })} />
                         </>

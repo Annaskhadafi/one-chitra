@@ -23,6 +23,7 @@ import {
     FormMessage,
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from "sonner"
 import { upsertCustomer } from "@/app/actions/customer"
 import { Plus } from "lucide-react"
@@ -54,6 +55,7 @@ export function CustomerDialog({ customer, trigger, onSuccess }: CustomerDialogP
             address3: customer?.address3 || "",
             address4: customer?.address4 || "",
             address5: customer?.address5 || "",
+            businessCategory: customer?.businessCategory || "",
         },
     })
 
@@ -153,7 +155,40 @@ export function CustomerDialog({ customer, trigger, onSuccess }: CustomerDialogP
                         </div>
 
                         <div className="space-y-4">
-                            <h3 className="font-medium">Address Information</h3>
+                            <h3 className="font-medium">Kategori Bisnis</h3>
+                            <FormField
+                                control={form.control}
+                                name="businessCategory"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Kategori Bisnis</FormLabel>
+                                        <Select onValueChange={field.onChange} value={field.value || ""}>
+                                            <FormControl>
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Pilih kategori bisnis..." />
+                                                </SelectTrigger>
+                                            </FormControl>
+                                            <SelectContent>
+                                                <SelectItem value="Mining Contractor">Mining Contractor</SelectItem>
+                                                <SelectItem value="Mining Owner">Mining Owner</SelectItem>
+                                                <SelectItem value="Perkebunan">Perkebunan</SelectItem>
+                                                <SelectItem value="Konstruksi">Konstruksi</SelectItem>
+                                                <SelectItem value="Minyak dan Gas">Minyak dan Gas</SelectItem>
+                                                <SelectItem value="Kehutanan">Kehutanan</SelectItem>
+                                                <SelectItem value="Transportasi dan Logistik">Transportasi dan Logistik</SelectItem>
+                                                <SelectItem value="Pemerintah">Pemerintah</SelectItem>
+                                                <SelectItem value="Manufaktur">Manufaktur</SelectItem>
+                                                <SelectItem value="Perdagangan">Perdagangan</SelectItem>
+                                                <SelectItem value="Quarry">Quarry</SelectItem>
+                                                <SelectItem value="Agribisnis">Agribisnis</SelectItem>
+                                                <SelectItem value="Lainnya">Lainnya</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                        <h3 className="font-medium mt-2">Address Information</h3>
                             <div className="grid grid-cols-1 gap-4">
                                 <FormField
                                     control={form.control}

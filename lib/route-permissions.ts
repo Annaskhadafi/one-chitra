@@ -23,6 +23,7 @@ export const dashboardRoutePermissionRules: DashboardRoutePermissionRule[] = [
     { prefix: "/dashboard/cost-fuel", resource: "delivery-cost-request" },
     { prefix: "/dashboard/cover-letter", resource: "cover-letter" },
     { prefix: "/dashboard/customer-segmentation", resource: "customer-segmentation" },
+    { prefix: "/dashboard/customer-industry", resource: "customer-segmentation" },
     { prefix: "/dashboard/customer-360", resource: "customers" },
     { prefix: "/dashboard/customers", resource: "customers" },
     { prefix: "/dashboard/debug-session", resource: "admin" },
@@ -101,3 +102,4 @@ export function collectDashboardPermissionResources() {
         )
     )
 }
+

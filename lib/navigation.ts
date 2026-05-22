@@ -264,6 +264,11 @@ export const navigationConfig: NavSection[] = [
                 resource: "marketing",
                 items: [
                     {
+                        title: "Customer History Tire",
+                        url: "/dashboard/marketing/customer-tire-history",
+                        resource: "marketing",
+                    },
+                    {
                         title: "Campaign Manager",
                         url: "/dashboard/marketing/campaigns",
                         resource: "marketing",
@@ -364,6 +369,11 @@ export const navigationConfig: NavSection[] = [
                     {
                         title: "Customer Segmentasi",
                         url: "/dashboard/customer-segmentation",
+                        resource: "customer-segmentation",
+                    },
+                    {
+                        title: "Customer Industry Mapping",
+                        url: "/dashboard/customer-industry",
                         resource: "customer-segmentation",
                     },
                     {
@@ -544,3 +554,4 @@ export const navigationConfig: NavSection[] = [
         ],
     },
 ]
+

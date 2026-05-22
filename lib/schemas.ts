@@ -10,6 +10,7 @@ export const customerSchema = z.object({
     address3: z.string().optional(),
     address4: z.string().optional(),
     address5: z.string().optional(),
+    businessCategory: z.string().optional().nullable(),
 })
 
 export const productSchema = z.object({

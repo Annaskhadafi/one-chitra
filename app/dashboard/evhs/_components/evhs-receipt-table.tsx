@@ -126,6 +126,9 @@ const createFallbackCustomer = (): Customer => ({
     address3: null,
     address4: null,
     address5: null,
+    businessCategory: null,
+    businessCategorySource: null,
+    businessCategoryEnrichedAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),
 })
