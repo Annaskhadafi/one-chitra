@@ -315,6 +315,20 @@ export function ProductTable({ data: initialData }: ProductTableProps) {
             cell: ({ row }) => <span className="font-medium text-orange-600 dark:text-orange-400">{row.original.materialNumberCk || "-"}</span>,
         },
         {
+            accessorKey: "materialNumberPtro",
+            header: ({ column }) => (
+                <Button
+                    variant="ghost"
+                    onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+                    className="-ml-4 h-8"
+                >
+                    Material PTRO
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                </Button>
+            ),
+            cell: ({ row }) => <span className="font-medium text-purple-600 dark:text-purple-400">{row.original.materialNumberPtro || "-"}</span>,
+        },
+        {
             accessorKey: "oldMaterialNo",
             header: "Old Material No.",
             cell: ({ row }) => <span className="text-muted-foreground">{row.original.oldMaterialNo || "-"}</span>,
