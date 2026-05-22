@@ -119,7 +119,7 @@ export function ProductPtroCSVUpload({ onSuccess }: { onSuccess?: () => void }) 
                 headers.find((h) => regex.test(h.toLowerCase().replace(/[^a-z0-9]/g, ""))) || ""
             setMapping({
                 materialNumber: detectMapped(/materialnumber|materialno|partnumber|partno/i),
-                materialNumberPtro: detectMapped(/materialnumberptro|ptro|mmptro/i),
+                materialNumberPtro: detectMapped(/materialnumberptro|materialptr|ptro|mmptro/i),
             })
             setStep("mapping")
         } catch {

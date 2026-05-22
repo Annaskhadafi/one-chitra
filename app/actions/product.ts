@@ -569,21 +569,37 @@ export async function importMaterialPtro(data: { materialNumber: string, materia
 
         console.log(`[importMaterialPtro] Processing ${uniqueData.size} unique mappings`)
 
-        let updatedCount = 0
-        const entries = Array.from(uniqueData.entries())
-        const chunkSize = 50
+        // Load all products to match by normalised material number
+        const allProducts = await db.select({
+            id: products.id,
+            materialNumber: products.materialNumber,
+        }).from(products)
 
-        for (let i = 0; i < entries.length; i += chunkSize) {
-            const chunk = entries.slice(i, i + chunkSize)
-            await Promise.all(chunk.map(([matNum, ptroNum]) =>
-                db.update(products)
-                    .set({ materialNumberPtro: ptroNum, updatedAt: new Date() })
-                    .where(ilike(products.materialNumber, matNum))
-            ))
-            updatedCount += chunk.length
+        // Build map: UPPER(materialNumber) -> [ids]
+        const productMap = new Map<string, number[]>()
+        for (const p of allProducts) {
+            const key = (p.materialNumber || "").trim().toUpperCase()
+            if (!productMap.has(key)) productMap.set(key, [])
+            productMap.get(key)!.push(p.id)
         }
 
-        console.log(`[importMaterialPtro] Import complete. Processed chunks for ${updatedCount} products.`)
+        let updatedCount = 0
+        let skippedCount = 0
+
+        for (const [matNum, ptroNum] of uniqueData.entries()) {
+            const ids = productMap.get(matNum)
+            if (!ids || ids.length === 0) {
+                console.log(`[importMaterialPtro] No product found for: ${matNum}`)
+                skippedCount++
+                continue
+            }
+            await db.update(products)
+                .set({ materialNumberPtro: ptroNum, updatedAt: new Date() })
+                .where(inArray(products.id, ids))
+            updatedCount += ids.length
+        }
+
+        console.log(`[importMaterialPtro] Import complete. Updated ${updatedCount} products, skipped ${skippedCount} mappings.`)
         revalidatePath("/dashboard/products")
         return { success: true, count: updatedCount }
     } catch (_error) {
