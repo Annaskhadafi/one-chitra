@@ -515,14 +515,14 @@ export function SlowMovingClient({
                                 <TableHead className="h-10 text-right">366&gt;</TableHead>
                                 <TableHead className="h-10 text-right">Unit Price</TableHead>
                                 <TableHead className="h-10 text-right">Total Value</TableHead>
-                                <TableHead className="h-10 text-right text-emerald-700">Total Terjual</TableHead>
-                                <TableHead className="h-10 text-right text-emerald-700">Revenue Terjual</TableHead>
-                                <TableHead className="h-10 text-right text-orange-700">% Sell Out</TableHead>
                                 {allMonths.map((month) => (
                                     <TableHead key={month} className="h-10 text-right text-blue-700">
                                         {formatMonthLabel(month)}
                                     </TableHead>
                                 ))}
+                                <TableHead className="h-10 text-right text-emerald-700">Total Terjual</TableHead>
+                                <TableHead className="h-10 text-right text-emerald-700">Revenue Terjual</TableHead>
+                                <TableHead className="h-10 text-right text-orange-700">% Sell Out</TableHead>
                                 <TableHead className="h-10 text-right">Aksi</TableHead>
                             </TableRow>
                         </TableHeader>
@@ -550,16 +550,16 @@ export function SlowMovingClient({
                                             <TableCell className="text-right font-mono">{formatQty(row.moreThan366Qty)}</TableCell>
                                             <TableCell className="text-right font-mono">{formatCurrency(row.unitPrice)}</TableCell>
                                             <TableCell className="text-right font-mono">{formatCurrency(row.totalValue)}</TableCell>
-                                            <TableCell className="text-right font-mono text-emerald-700">{formatQty(totalQtySold)}</TableCell>
-                                            <TableCell className="text-right font-mono text-emerald-700">{formatCurrency(totalRevenue)}</TableCell>
-                                            <TableCell className="text-right font-mono text-orange-700 font-semibold">
-                                                {sellOutPct > 0 ? sellOutPct.toFixed(1) + "%" : "-"}
-                                            </TableCell>
                                             {allMonths.map((month) => (
                                                 <TableCell key={month} className="text-right font-mono text-blue-800">
                                                     {formatQty(monthlyQty[month] ?? 0)}
                                                 </TableCell>
                                             ))}
+                                            <TableCell className="text-right font-mono text-emerald-700">{formatQty(totalQtySold)}</TableCell>
+                                            <TableCell className="text-right font-mono text-emerald-700">{formatCurrency(totalRevenue)}</TableCell>
+                                            <TableCell className="text-right font-mono text-orange-700 font-semibold">
+                                                {sellOutPct > 0 ? sellOutPct.toFixed(1) + "%" : "-"}
+                                            </TableCell>
                                             <TableCell className="text-right">
                                                 <Button
                                                     variant="ghost"
@@ -590,16 +590,16 @@ export function SlowMovingClient({
                                     <td className="px-4 text-right font-mono text-sm">{formatQty(stats.moreThan366Qty)}</td>
                                     <td className="px-4 text-right font-mono text-sm"></td>
                                     <td className="px-4 text-right font-mono text-sm">{formatCurrency(stats.totalValue)}</td>
-                                    <td className="px-4 text-right font-mono text-sm text-emerald-700">{formatQty(stats.totalQtySold)}</td>
-                                    <td className="px-4 text-right font-mono text-sm text-emerald-700">{formatCurrency(stats.totalRevenue)}</td>
-                                    <td className="px-4 text-right font-mono text-sm text-orange-700 font-semibold">
-                                        {stats.totalQty > 0 ? ((stats.totalQtySold / (stats.totalQty + stats.totalQtySold)) * 100).toFixed(1) + "%" : "-"}
-                                    </td>
                                     {allMonths.map((month) => (
                                         <td key={month} className="px-4 text-right font-mono text-sm text-blue-800">
                                             {formatQty(stats.monthlyTotals[month] ?? 0)}
                                         </td>
                                     ))}
+                                    <td className="px-4 text-right font-mono text-sm text-emerald-700">{formatQty(stats.totalQtySold)}</td>
+                                    <td className="px-4 text-right font-mono text-sm text-emerald-700">{formatCurrency(stats.totalRevenue)}</td>
+                                    <td className="px-4 text-right font-mono text-sm text-orange-700 font-semibold">
+                                        {stats.totalQty > 0 ? ((stats.totalQtySold / (stats.totalQty + stats.totalQtySold)) * 100).toFixed(1) + "%" : "-"}
+                                    </td>
                                     <td />
                                 </tr>
                             </tfoot>
