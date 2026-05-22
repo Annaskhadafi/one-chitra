@@ -107,6 +107,7 @@ export async function getProducts(): Promise<ProductDisplayRow[]> {
         category: products.category,
         materialNumber: products.materialNumber,
         materialNumberCk: products.materialNumberCk,
+        materialNumberPtro: products.materialNumberPtro,
         oldMaterialNo: products.oldMaterialNo,
         materialDescription: products.materialDescription,
         brand: products.brand,
