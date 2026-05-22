@@ -147,7 +147,7 @@ export async function getSellingOutByMonth(materialKeys: string[]): Promise<Mont
         ),
         db.execute(
             sql.raw(
-                "SELECT UPPER(TRIM(material_no)) AS material_key, SUM(qty) AS total_qty_sold, SUM(revenue_in_loc_curr) AS total_revenue FROM sales_revenue_sap WHERE (cancelled IS NULL OR cancelled = '') AND UPPER(TRIM(material_no)) = ANY(ARRAY[" + safeList + "]) GROUP BY UPPER(TRIM(material_no))"
+                "SELECT UPPER(TRIM(material_no)) AS material_key, SUM(qty) AS total_qty_sold, SUM(revenue_in_loc_curr) AS total_revenue FROM sales_revenue_sap WHERE billing_date IS NOT NULL AND EXTRACT(YEAR FROM billing_date) = EXTRACT(YEAR FROM CURRENT_DATE) AND (cancelled IS NULL OR cancelled = '') AND UPPER(TRIM(material_no)) = ANY(ARRAY[" + safeList + "]) GROUP BY UPPER(TRIM(material_no))"
             )
         ),
     ])
