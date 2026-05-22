@@ -1,4 +1,4 @@
-import { NextRequest } from "next/server"
+﻿import { NextRequest } from "next/server"
 import sharp from "sharp"
 import fs from "fs/promises"
 import path from "path"
@@ -102,41 +102,12 @@ async function generateOneImage(input: {
   referenceAssets: UploadedAsset[]
   variationInstruction?: string
 }): Promise<GeneratedImageResult> {
-  // Kirim URL langsung ke API (sesuai format curl: "image": "https://...")
-  // Logo CP masuk ke image field hanya jika prompt ada kata wearpack/orang/karyawan
-  const CP_LOGO_URL = "https://www.chitraparatama.co.id/wp-content/uploads/2025/11/cp_logo-removebg-preview-e1767678002905.png"
-  const needsWearpackReference = /wearpack|orang|person|people|pekerja|karyawan|teknisi|operator|tim lapangan|team|mekanik|mechanic|worker|staff|employee/i.test(input.prompt)
-  const referenceImages: string[] = []
-  if (needsWearpackReference) {
-    // Fetch logo dari server kita, convert ke base64 agar provider bisa akses
-    try {
-      const logoRes = await fetch(CP_LOGO_URL)
-      if (logoRes.ok) {
-        const logoBuffer = Buffer.from(await logoRes.arrayBuffer())
-        const logoNormalized = await sharp(logoBuffer)
-          .resize({ width: 512, height: 512, fit: "inside", withoutEnlargement: true })
-          .png({ quality: 90 })
-          .toBuffer()
-        referenceImages.push(`data:image/png;base64,${logoNormalized.toString("base64")}`)
-      }
-    } catch { /* skip jika gagal */ }
-  }
-  // Upload user: fetch dari storage kita, convert ke base64
-  await Promise.all(input.referenceAssets.slice(0, 4).map(async (asset) => {
-    try {
-      const read = await readManagedUpload(asset.url)
-      if (read) {
-        const normalized = await sharp(read.buffer)
-          .resize({ width: 1536, height: 1536, fit: "inside", withoutEnlargement: true })
-          .png({ quality: 100 })
-          .toBuffer()
-        referenceImages.push(`data:image/png;base64,${normalized.toString("base64")}`)
-      }
-    } catch { /* skip */ }
-  }))
+  // Reference images: only user-uploaded assets (base64)
+  // Logo CP is composited server-side by composeInstagramImage — no need to inject via API
+  const referenceImages = await resolveReferenceImages(input.referenceAssets)
 
   const referenceSummaries = await resolveReferenceSummaries(input.referenceAssets)
-  
+
   const enhancedPrompt = buildEnhancedPrompt({
     prompt: input.variationInstruction ? `${input.prompt}. ${input.variationInstruction}` : input.prompt,
     format: input.format,
@@ -146,6 +117,24 @@ async function generateOneImage(input: {
     referenceSummaries,
   })
 
+  const body: Record<string, unknown> = {
+    model: API_MODEL,
+    prompt: enhancedPrompt,
+    n: 1,
+    size: "auto",
+    quality: "auto",
+    background: "auto",
+    image_detail: "high",
+    output_format: "png",
+  }
+
+  if (referenceImages.length > 0) {
+    body.image = referenceImages[0]
+    body.images = referenceImages
+    body.reference_images = referenceImages
+    body.input_images = referenceImages
+  }
+
   const response = await fetch(API_URL, {
     method: "POST",
     headers: {
@@ -153,22 +142,7 @@ async function generateOneImage(input: {
       Authorization: `Bearer ${input.apiKey}`,
       Accept: "text/event-stream",
     },
-    body: JSON.stringify({
-      model: API_MODEL,
-      prompt: enhancedPrompt,
-      n: 1,
-      size: "auto",
-      quality: "auto",
-      background: "auto",
-      image_detail: "high",
-      output_format: "png",
-      ...(referenceImages.length > 0 ? {
-        image: referenceImages[0],
-        images: referenceImages,
-        reference_images: referenceImages,
-        input_images: referenceImages,
-      } : {}),
-    }),
+    body: JSON.stringify(body),
   })
 
   const rawText = await response.text()
@@ -188,8 +162,6 @@ async function generateOneImage(input: {
     enhancedPrompt,
   }
 }
-
-
 
 async function resolveReferenceImages(assets: UploadedAsset[]) {
   const images = await Promise.all(assets.slice(0, 4).map(async (asset) => {
@@ -317,8 +289,8 @@ function buildEnhancedPrompt(input: {
     vectorDetailInstruction,
     `Tema: ${input.prompt}.`,
     "Desain sederhana, profesional, rapi, mudah dipahami, satu fokus utama, dan komposisi full-bleed yang mengisi seluruh kanvas tanpa border, margin, kartu putih, atau frame kosong.",
-    "WAJIB: Jika prompt SECARA EKSPLISIT meminta atau menampilkan sosok manusia (pekerja, mekanik, tim, operator, karyawan), mereka HARUS memakai wearpack safety resmi PT Chitra Paratama dengan spesifikasi PRESISI: kemeja kerja lengan panjang TWO-TONE (BUKAN rompi/vest terpisah), SELURUH LENGAN (atas dan bawah) berwarna BIRU NAVY GELAP (#002D56), area DADA dan BAHU berwarna HIJAU NEON TERANG/Lime Green (#8DC63F), ada STRIP REFLEKTIF SILVER di PUNDAK KANAN dan KIRI (horizontal di bahu), ada SATU GARIS REFLEKTIF HORIZONTAL di TENGAH PERUT tepat di batas antara area hijau atas dan biru navy bawah, kerah kancing penuh, dua saku dada di area hijau, logo kecil Chitra Paratama di saku dada kiri sebagai patch bordir/jahitan kecil natural di dada kiri, bukan logo besar. Jika prompt TIDAK meminta orang, jangan paksa ada orang dalam gambar.",
-    "PENTING: Hindari menempatkan teks, headline, atau elemen penting di pojok kiri atas (area 300x300px dari sudut kiri atas) karena area tersebut akan tertutup logo perusahaan. Hindari juga menempatkan teks atau elemen penting di bagian BAWAH gambar (area 150px dari tepi bawah) karena area tersebut akan tertutup footer overlay. Posisikan teks utama di tengah atau sepertiga atas gambar dengan ruang aman yang cukup.",
+    "WAJIB: Jika prompt SECARA EKSPLISIT meminta atau menampilkan sosok manusia (pekerja, mekanik, tim, operator, karyawan), mereka HARUS memakai wearpack safety resmi PT Chitra Paratama dengan spesifikasi PRESISI: seragam kerja resmi PT Chitra Paratama yang terdiri dari DUA LAPIS: (1) KEMEJA LENGAN PANJANG berwarna BIRU NAVY GELAP SOLID (#002D56) di bagian dalam, lengan panjang penuh hingga pergelangan; (2) ROMPI/VEST tanpa lengan berwarna HIJAU NEON TERANG (#8DC63F) di bagian luar, dipakai di atas kemeja. STRIP REFLEKTIF SILVER pada rompi: DUA garis horizontal PENUH melingkari seluruh badan rompi — satu di bagian DADA (sekitar 10cm dari tepi bawah rompi bagian atas) dan satu di bagian PERUT BAWAH rompi, kedua strip harus FULL WIDTH dari sisi kiri ke sisi kanan tanpa putus atau terpotong. Di atas saku dada kiri rompi: patch logo CP menggunakan cp_logo.png — persegi panjang kecil dengan BACKGROUND PUTIH SOLID, logo Chitra Paratama full color di atas putih, dijahit natural ke kain rompi, kontras jelas di atas hijau neon. Jika prompt TIDAK meminta orang, jangan paksa ada orang dalam gambar.",
+    "SAFE ZONE WAJIB: (1) ATAS — berikan margin minimal 200px dari tepi atas kanvas, karena area pojok kiri atas (sekitar 320x180px) tertutup logo overlay perusahaan. (2) BAWAH — berikan margin minimal 180px dari tepi bawah kanvas karena area bawah tertutup footer overlay. (3) Posisikan semua teks headline, subheadline, dan elemen penting di zona tengah kanvas (antara 200px dari atas hingga 180px dari bawah). Jangan letakkan teks apapun mepet tepi atas atau tepi bawah.",
     "Jangan buat logo Chitra Paratama, logo perusahaan, logo brand apa pun, footer, watermark, ikon media sosial, atau teks kecil; semua elemen brand resmi hanya berasal dari overlay template feed.png atau Story.png setelah gambar dibuat.",
     references,
   ].join(" ").trim()

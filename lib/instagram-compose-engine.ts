@@ -1,4 +1,4 @@
-import path from "path"
+﻿import path from "path"
 import { promises as fs } from "fs"
 import sharp from "sharp"
 
@@ -107,4 +107,61 @@ async function resolveTemplatePath(candidates: string[]) {
         }
     }
     throw new Error(`Template branding tidak ditemukan: ${candidates.join(" atau ")}`)
+}
+
+async function resolveLogoPath(candidates: string[]): Promise<string | null> {
+    for (const candidate of candidates) {
+        const logoPath = path.join(process.cwd(), "public", candidate)
+        try {
+            await fs.access(logoPath)
+            return logoPath
+        } catch {
+            continue
+        }
+    }
+    return null
+}
+
+async function makeLogoOverlay(
+    canvasWidth: number,
+    canvasHeight: number,
+    format: InstagramComposeFormat
+): Promise<sharp.OverlayOptions | null> {
+    const logoPath = await resolveLogoPath(["cp_logo_alpha.png", "cp_logo.png"])
+    if (!logoPath) return null
+
+    try {
+        const targetLogoWidth = Math.round(canvasWidth * (format === "story" ? 0.18 : 0.22))
+        const logoMeta = await sharp(logoPath).metadata()
+        const srcW = logoMeta.width ?? 600
+        const srcH = logoMeta.height ?? 253
+        const targetLogoHeight = Math.round(targetLogoWidth * (srcH / srcW))
+
+        let logoBuffer: Buffer
+
+        if (logoMeta.hasAlpha) {
+            logoBuffer = await sharp(logoPath)
+                .resize(targetLogoWidth, targetLogoHeight, { fit: "inside", withoutEnlargement: false })
+                .png()
+                .toBuffer()
+        } else {
+            const { data, info } = await sharp(logoPath)
+                .resize(targetLogoWidth, targetLogoHeight, { fit: "inside", withoutEnlargement: false })
+                .ensureAlpha()
+                .raw()
+                .toBuffer({ resolveWithObject: true })
+            for (let i = 0; i < data.length; i += 4) {
+                const r = data[i], g = data[i + 1], b = data[i + 2]
+                if (r > 230 && g > 230 && b > 230) data[i + 3] = 0
+            }
+            logoBuffer = await sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } })
+                .png()
+                .toBuffer()
+        }
+
+        const padding = Math.round(canvasWidth * 0.03)
+        return { input: logoBuffer, top: padding, left: padding, blend: "over" }
+    } catch {
+        return null
+    }
 }

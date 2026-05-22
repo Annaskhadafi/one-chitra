@@ -1,0 +1,10 @@
+﻿{
+  "status": "completed",
+  "title": "Instagram Generator Enhancement",
+  "created_at": "2026-05-22T01:48:28.063Z",
+  "id": "TASK-003",
+  "description": "Fix logo compositing, prompt templates, copy prompt constants, logo injection, dan tambah field per kategori dengan live sync ke prompt",
+  "completion_notes": "Phase 1: Fixed logo compositing (makeLogoOverlay in compose-engine), all prompt templates rewritten with WEARPACK/BRAND_COLORS/SAFE_ZONE helpers, copy prompt constants fixed in Bahasa Indonesia, route cleaned up (removed unreliable CP_LOGO_URL base64 injection). Phase 2: Added per-category fields with live prompt sync — Edukasi (topik, poin utama, foto referensi), Pencapaian (nama, angka/statistik, deskripsi, foto), Event (nama, lokasi/tanggal, deskripsi, foto), Promosi Produk (nama produk, keunggulan, CTA, foto produk), Hari Nasional (pesan khusus), Ucapan HUT (nama, usia, logo customer, ucapan). All fields sync live to prompt textarea via unified useEffect.",
+  "priority": "P1",
+  "updated_at": "2026-05-22T01:56:52.622Z"
+}

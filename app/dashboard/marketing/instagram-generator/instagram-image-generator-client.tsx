@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import * as React from "react"
 import Image from "next/image"
@@ -61,9 +61,9 @@ const visualStyles: VisualStyle[] = [
   "Vector Detail",
 ]
 
-const wearpackStylePrompt = "Chitra Paratama official safety workwear: a single integrated TWO-TONE long sleeve work shirt (NOT a vest), FULL SLEEVES in DARK NAVY BLUE, upper chest/shoulders in NEON LIME GREEN, with SILVER REFLECTIVE STRIPES on left and right shoulders, one horizontal SILVER REFLECTIVE TAPE across the middle stomach (bordering green and navy), full button-down collar, two flap chest pockets on the neon green area, and a small Chitra Paratama logo patch on the left chest pocket integrated naturally into the design. Use the company logo reference from https://www.chitraparatama.co.id/wp-content/uploads/2025/11/cp_logo-removebg-preview-e1767678002905.png for the left chest patch; keep it small, natural, and sewn/embroidered into the workwear."
+const wearpackStylePrompt = "Tampilkan pekerja/karyawan memakai seragam kerja resmi PT Chitra Paratama: seragam kerja resmi PT Chitra Paratama: KEMEJA LENGAN PANJANG BIRU NAVY GELAP (#002D56) di bagian dalam + ROMPI/VEST HIJAU NEON (#8DC63F) tanpa lengan di bagian luar. STRIP REFLEKTIF SILVER pada rompi: DUA garis horizontal PENUH melingkari seluruh badan rompi (satu di dada, satu di perut bawah rompi) — FULL WIDTH dari kiri ke kanan tanpa putus. Patch logo CP di saku dada kiri rompi: persegi panjang kecil BACKGROUND PUTIH SOLID, logo Chitra Paratama full color di atas putih, dijahit natural ke kain."
 
-const galleryLogoPrompt = "Gallery & Logo Chitra: Tampilkan galeri produk atau suasana kerja PT Chitra Paratama. Jika ada sosok pekerja atau karyawan yang memakai wearpack, tempatkan logo CP (cp_logo.png) sebagai patch bordir kecil di atas saku dada kiri wearpack secara natural dan proporsional, dengan background CP berwarna Michelin Blue (#004C98) atau Navy (#002D56) di belakang logo agar kontras dan terbaca jelas. Logo harus terlihat seperti bagian dari seragam, bukan stiker atau overlay terpisah. Gunakan warna brand PT Chitra Paratama: Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56."
+const galleryLogoPrompt = "Tampilkan galeri produk ban atau suasana kerja lapangan PT Chitra Paratama dengan pekerja memakai wearpack safety TWO-TONE resmi: lengan BIRU NAVY GELAP (#002D56), dada/bahu HIJAU NEON (#8DC63F), strip reflektif silver di pundak dan perut. WAJIB: di atas saku dada kiri wearpack, tempel patch logo Chitra Paratama berbentuk persegi panjang kecil dengan BACKGROUND PUTIH SOLID di belakang logo — logo CP berwarna asli di atas kotak putih, dijahit/bordir natural ke kain wearpack, terlihat jelas dan kontras. Patch ini harus tampak seperti name tag atau label bordir resmi yang menempel di atas saku, bukan stiker mengambang. Gunakan warna brand: Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56. Komposisi profesional, pencahayaan natural."
 
 function formatDate(date: string) {
   return new Intl.DateTimeFormat("id-ID", { dateStyle: "long" }).format(new Date(`${date}T00:00:00+08:00`))
@@ -78,242 +78,347 @@ const defaultVisualStyleByContentType: Record<(typeof contentTypes)[number], Vis
   "Hari Nasional": "Corporate & Professional",
 }
 
+const WEARPACK = "person wearing official PT Chitra Paratama work uniform: seragam kerja resmi PT Chitra Paratama: KEMEJA LENGAN PANJANG BIRU NAVY GELAP (#002D56) di bagian dalam + ROMPI/VEST HIJAU NEON (#8DC63F) tanpa lengan di bagian luar. STRIP REFLEKTIF SILVER pada rompi: DUA garis horizontal PENUH melingkari seluruh badan rompi (satu di dada, satu di perut bawah rompi) — FULL WIDTH dari kiri ke kanan tanpa putus. Patch logo CP di saku dada kiri rompi: persegi panjang kecil BACKGROUND PUTIH SOLID, logo Chitra Paratama full color di atas putih, dijahit natural ke kain."
+const BRAND_COLORS = "Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56)"
+const SAFE_ZONE = "SAFE ZONE: keep minimum 200px margin from the TOP edge (top-left ~320x180px area is covered by logo overlay) and minimum 180px margin from the BOTTOM edge (covered by footer overlay). Place ALL headlines and key elements in the center zone only — never flush against top or bottom edges."
+
 const promptTemplates: Record<(typeof contentTypes)[number], Partial<Record<VisualStyle, string>>> = {
   "Ucapan ulang tahun customer": {
-    "Modern & Clean": `Content focus: Ucapan selamat ulang tahun untuk [NAMA CUSTOMER/PERUSAHAAN] dari PT Chitra Paratama.
-Headline text: "Happy Anniversary"
-Visual style: modern, clean layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use clean iconography and structured information hierarchy.
-Additional elements: [ELEMEN TAMBAHAN MISAL: KUE, PITA, BACKGROUND KANTOR].
-Variant note: Include a professional illustration or photo integrated naturally into the design.`,
-    "Elegant & Luxury": `Content focus: Ucapan selamat ulang tahun untuk [NAMA CUSTOMER/PERUSAHAAN] dari PT Chitra Paratama.
-Headline text: "Happy Anniversary"
-Visual style: elegant, luxury, and sophisticated layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use premium textures, subtle background patterns, and balanced composition.
-Additional elements: [ELEMEN TAMBAHAN MISAL: KUE, PITA, BACKGROUND KANTOR].
-Variant note: Include a professional illustration or photo integrated naturally into the design.`,
-    "Playful & Vibrant": `Content focus: Ucapan selamat ulang tahun untuk [NAMA CUSTOMER/PERUSAHAAN] dari PT Chitra Paratama.
-Headline text: "Happy Anniversary"
-Visual style: playful, vibrant, and energetic layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use friendly shapes, bright accents, and dynamic composition.
-Additional elements: [ELEMEN TAMBAHAN MISAL: KUE, PITA, BACKGROUND KANTOR].
-Variant note: Include a professional illustration or photo integrated naturally into the design.`,
-    "Corporate & Professional": `Content focus: Ucapan selamat ulang tahun untuk [NAMA CUSTOMER/PERUSAHAAN] dari PT Chitra Paratama.
-Headline text: "Happy Anniversary"
-Visual style: corporate, professional, and trustworthy layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use structured grids, clean lines, and business-appropriate composition.
-Additional elements: [ELEMEN TAMBAHAN MISAL: KUE, PITA, BACKGROUND KANTOR].
-Variant note: Include a professional illustration or photo integrated naturally into the design.`,
-    Minimalist: `Content focus: Ucapan selamat ulang tahun untuk [NAMA CUSTOMER/PERUSAHAAN] dari PT Chitra Paratama.
-Headline text: "Happy Anniversary"
-Visual style: minimalist, simple, and clean layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use plenty of whitespace, simple geometry, and high contrast.
-Additional elements: [ELEMEN TAMBAHAN MISAL: KUE, PITA, BACKGROUND KANTOR].
-Variant note: Include a professional illustration or photo integrated naturally into the design.`,
+    "Modern & Clean": `Content focus: Birthday greeting for a valued customer or partner company of PT Chitra Paratama. Celebrate their special day with a warm, professional message.
+Headline text: "Selamat Ulang Tahun! Semoga sukses selalu bersama PT Chitra Paratama."
+Brand/Source: "PT Chitra Paratama"
+Visual style: modern, clean layout with ${BRAND_COLORS} color scheme. Use clean iconography, celebratory accents (confetti, ribbons, stars), and structured composition.
+Additional elements: birthday cake, ribbon, balloons, subtle bokeh background in brand colors.
+Variant note: Include a warm celebratory illustration integrated naturally. ${SAFE_ZONE}`,
+    "Elegant & Luxury": `Content focus: Birthday greeting for a valued customer or partner company of PT Chitra Paratama. Celebrate their special day with an elegant, premium message.
+Headline text: "Selamat Ulang Tahun! Semoga sukses selalu bersama PT Chitra Paratama."
+Brand/Source: "PT Chitra Paratama"
+Visual style: elegant, luxury, and sophisticated layout with ${BRAND_COLORS} color scheme. Use gold accents, premium textures, subtle floral or geometric patterns, and balanced composition.
+Additional elements: gold ribbon, elegant floral motif, soft bokeh, premium background texture.
+Variant note: Include a premium celebratory illustration integrated naturally. ${SAFE_ZONE}`,
+    "Playful & Vibrant": `Content focus: Birthday greeting for a valued customer or partner company of PT Chitra Paratama. Celebrate their special day with a fun, energetic message.
+Headline text: "Selamat Ulang Tahun! Semoga sukses selalu bersama PT Chitra Paratama."
+Brand/Source: "PT Chitra Paratama"
+Visual style: playful, vibrant, and energetic layout with ${BRAND_COLORS} color scheme. Use bold shapes, confetti bursts, bright accents, and dynamic composition.
+Additional elements: colorful balloons, confetti, party hat, bright celebratory background.
+Variant note: Include a fun celebratory illustration integrated naturally. ${SAFE_ZONE}`,
+    "Corporate & Professional": `Content focus: Birthday greeting for a valued customer or partner company of PT Chitra Paratama. Celebrate their special day with a professional, respectful message.
+Headline text: "Selamat Ulang Tahun! Semoga sukses selalu bersama PT Chitra Paratama."
+Brand/Source: "PT Chitra Paratama"
+Visual style: corporate, professional, and trustworthy layout with ${BRAND_COLORS} color scheme. Use structured grids, clean lines, subtle celebratory accents, and business-appropriate composition.
+Additional elements: subtle ribbon accent, clean geometric shapes, professional background.
+Variant note: Include a professional celebratory illustration integrated naturally. ${SAFE_ZONE}`,
+    Minimalist: `Content focus: Birthday greeting for a valued customer or partner company of PT Chitra Paratama. Celebrate their special day with a clean, minimal message.
+Headline text: "Selamat Ulang Tahun! Semoga sukses selalu bersama PT Chitra Paratama."
+Brand/Source: "PT Chitra Paratama"
+Visual style: minimalist, simple, and clean layout with ${BRAND_COLORS} color scheme. Use plenty of whitespace, a single focal element, and high contrast typography.
+Additional elements: single ribbon or star accent, clean solid background in brand color.
+Variant note: Include a minimal celebratory illustration integrated naturally. ${SAFE_ZONE}`,
   },
   Edukasi: {
-    "Modern & Clean": `Content focus: Educational post about [TOPIK EDUKASI] for [TARGET AUDIENCE].
-Headline text: "[HEADLINE EDUKASI]"
-Visual style: modern, clean layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use clean iconography, data visualization elements, and structured information hierarchy.
-Additional elements: [ELEMEN TAMBAHAN].
-Variant note: Include a professional photo of a person wearing Chitra Paratama official safety workwear: a single integrated TWO-TONE long sleeve work shirt (NOT a vest), FULL SLEEVES in DARK NAVY BLUE, upper chest/shoulders in NEON LIME GREEN, with SILVER REFLECTIVE STRIPES on left and right shoulders, one horizontal SILVER REFLECTIVE TAPE across the middle stomach (bordering green and navy), full button-down collar, two flap chest pockets on the neon green area, and a small Chitra Paratama logo patch on the left chest pocket integrated naturally into the design.`,
-    "Elegant & Luxury": `Content focus: Educational post about [TOPIK EDUKASI] for [TARGET AUDIENCE].
-Headline text: "[HEADLINE EDUKASI]"
-Visual style: elegant, luxury, and sophisticated layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use premium textures, data visualization elements, and structured information hierarchy. Include subtle background patterns.
-Additional elements: [ELEMEN TAMBAHAN].
-Variant note: Include a professional photo of a person wearing Chitra Paratama official safety workwear: a single integrated TWO-TONE long sleeve work shirt (NOT a vest), FULL SLEEVES in DARK NAVY BLUE, upper chest/shoulders in NEON LIME GREEN, with SILVER REFLECTIVE STRIPES on left and right shoulders, one horizontal SILVER REFLECTIVE TAPE across the middle stomach (bordering green and navy), full button-down collar, two flap chest pockets on the neon green area, and a small Chitra Paratama logo patch on the left chest pocket integrated naturally into the design.`,
-    "Playful & Vibrant": `Content focus: Educational post about [TOPIK EDUKASI] for [TARGET AUDIENCE].
-Headline text: "[HEADLINE EDUKASI]"
-Visual style: playful, vibrant, and engaging layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use bold typography, dynamic data visualization, and structured information hierarchy.
-Additional elements: [ELEMEN TAMBAHAN].
-Variant note: Include a professional photo of a person wearing Chitra Paratama official safety workwear: a single integrated TWO-TONE long sleeve work shirt (NOT a vest), FULL SLEEVES in DARK NAVY BLUE, upper chest/shoulders in NEON LIME GREEN, with SILVER REFLECTIVE STRIPES on left and right shoulders, one horizontal SILVER REFLECTIVE TAPE across the middle stomach (bordering green and navy), full button-down collar, two flap chest pockets on the neon green area, and a small Chitra Paratama logo patch on the left chest pocket integrated naturally into the design.`,
-    "Corporate & Professional": `Content focus: Educational post about [TOPIK EDUKASI] for [TARGET AUDIENCE].
-Headline text: "[HEADLINE EDUKASI]"
-Visual style: corporate, professional, and authoritative layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use business iconography, formal data visualization, and strict information hierarchy.
-Additional elements: [ELEMEN TAMBAHAN].
-Variant note: Include a professional photo of a person wearing Chitra Paratama official safety workwear: a single integrated TWO-TONE long sleeve work shirt (NOT a vest), FULL SLEEVES in DARK NAVY BLUE, upper chest/shoulders in NEON LIME GREEN, with SILVER REFLECTIVE STRIPES on left and right shoulders, one horizontal SILVER REFLECTIVE TAPE across the middle stomach (bordering green and navy), full button-down collar, two flap chest pockets on the neon green area, and a small Chitra Paratama logo patch on the left chest pocket integrated naturally into the design.`,
-    Minimalist: `Content focus: Educational post about [TOPIK EDUKASI] for [TARGET AUDIENCE].
-Headline text: "[HEADLINE EDUKASI]"
-Visual style: minimalist, highly focused layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use simple data visualization elements, abundant whitespace, and strict information hierarchy.
-Additional elements: [ELEMEN TAMBAHAN].
-Variant note: Include a professional photo of a person wearing Chitra Paratama official safety workwear: a single integrated TWO-TONE long sleeve work shirt (NOT a vest), FULL SLEEVES in DARK NAVY BLUE, upper chest/shoulders in NEON LIME GREEN, with SILVER REFLECTIVE STRIPES on left and right shoulders, one horizontal SILVER REFLECTIVE TAPE across the middle stomach (bordering green and navy), full button-down collar, two flap chest pockets on the neon green area, and a small Chitra Paratama logo patch on the left chest pocket integrated naturally into the design.`,
+    "Modern & Clean": `Content focus: Educational post about tire safety, maintenance tips, or industry knowledge for fleet managers and procurement teams in Indonesia.
+Headline text: "Tips Perawatan Ban yang Benar untuk Armada Anda"
+Brand/Source: "PT Chitra Paratama — Total Tire Solution"
+Visual style: modern, clean layout with ${BRAND_COLORS} color scheme. Use clean iconography, infographic-style data visualization, numbered steps, and structured information hierarchy.
+Additional elements: tire cross-section diagram, checklist icons, maintenance tools illustration.
+Variant note: Include a ${WEARPACK} demonstrating the tip. ${SAFE_ZONE}`,
+    "Elegant & Luxury": `Content focus: Educational post about premium tire technology or advanced fleet management for high-value clients in Indonesia.
+Headline text: "Teknologi Ban Premium untuk Performa Armada Terbaik"
+Brand/Source: "PT Chitra Paratama — Total Tire Solution"
+Visual style: elegant, luxury, and sophisticated layout with ${BRAND_COLORS} color scheme. Use premium textures, refined typography, subtle data visualization, and balanced composition.
+Additional elements: premium tire close-up, technical diagram, sophisticated background texture.
+Variant note: Include a ${WEARPACK} in a professional setting. ${SAFE_ZONE}`,
+    "Playful & Vibrant": `Content focus: Educational post about tire safety facts or fun industry trivia for a broad audience on Instagram.
+Headline text: "Tahukah Kamu? Fakta Menarik Seputar Ban Kendaraan"
+Brand/Source: "PT Chitra Paratama — Total Tire Solution"
+Visual style: playful, vibrant, and engaging layout with ${BRAND_COLORS} color scheme. Use bold typography, dynamic icons, bright accent colors, and energetic composition.
+Additional elements: fun tire illustration, bold fact callouts, dynamic background shapes.
+Variant note: Include a ${WEARPACK} in an engaging pose. ${SAFE_ZONE}`,
+    "Corporate & Professional": `Content focus: Educational post about fleet tire management best practices for corporate procurement and logistics managers.
+Headline text: "Optimalkan Biaya Armada dengan Manajemen Ban yang Tepat"
+Brand/Source: "PT Chitra Paratama — Total Tire Solution"
+Visual style: corporate, professional, and authoritative layout with ${BRAND_COLORS} color scheme. Use business iconography, formal data visualization, structured grid layout, and strict information hierarchy.
+Additional elements: fleet vehicle silhouette, cost-saving chart, professional icons.
+Variant note: Include a ${WEARPACK} in a corporate environment. ${SAFE_ZONE}`,
+    Minimalist: `Content focus: Educational post with a single focused tire tip or safety fact for Instagram.
+Headline text: "Satu Tips Ban Hari Ini: Cek Tekanan Ban Setiap Minggu"
+Brand/Source: "PT Chitra Paratama — Total Tire Solution"
+Visual style: minimalist, highly focused layout with ${BRAND_COLORS} color scheme. Use abundant whitespace, a single bold headline, and one key visual element.
+Additional elements: single tire icon or pressure gauge illustration, clean solid background.
+Variant note: Include a minimal ${WEARPACK} illustration. ${SAFE_ZONE}`,
+    "Vectorize Minimalis": `Content focus: Educational post about tire safety or maintenance presented as a clean vector infographic.
+Headline text: "Panduan Singkat Perawatan Ban Armada"
+Brand/Source: "PT Chitra Paratama — Total Tire Solution"
+Visual style: flat vector minimalist style with ${BRAND_COLORS} color scheme. Use simple geometric shapes, flat icons, clean lines, and minimal detail.
+Additional elements: flat vector tire, wrench, checklist icons in brand colors.
+Variant note: Include a flat vector ${WEARPACK} illustration. ${SAFE_ZONE}`,
+    "Vector Kartun Simple": `Content focus: Educational post about tire safety presented as a friendly cartoon for broad Instagram audience.
+Headline text: "Yuk, Rawat Ban Kendaraanmu Bersama Chitra Paratama!"
+Brand/Source: "PT Chitra Paratama — Total Tire Solution"
+Visual style: simple cartoon vector style with ${BRAND_COLORS} color scheme. Use friendly character, bold outlines, solid colors, and approachable composition.
+Additional elements: cartoon tire character, simple tools, cheerful background.
+Variant note: Include a cartoon ${WEARPACK} character. ${SAFE_ZONE}`,
+    "Vector Detail": `Content focus: Educational post about tire technology presented as a detailed technical vector illustration.
+Headline text: "Teknologi Ban Michelin: Dirancang untuk Performa Maksimal"
+Brand/Source: "PT Chitra Paratama — Total Tire Solution"
+Visual style: detailed vector illustration style with ${BRAND_COLORS} color scheme. Use rich linework, cross-hatching, technical detail, and premium composition.
+Additional elements: detailed tire cross-section, technical callouts, brand color accents.
+Variant note: Include a detailed vector ${WEARPACK} technician. ${SAFE_ZONE}`,
   },
   "Pencapaian perusahaan": {
-    "Modern & Clean": `Content focus: Company milestone or achievement about [DETAIL PENCAPAIAN] for [TARGET AUDIENCE].
-Headline text: "[HEADLINE PENCAPAIAN]"
-Visual style: modern, clean layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use bold numbers, clean iconography, and a structured layout that highlights the milestone.
-Additional elements: [ELEMEN TAMBAHAN MISAL: TROFI, GRAFIK NAIK, GEDUNG KANTOR].
-Variant note: Include a professional photo of a team wearing Chitra Paratama official safety workwear: a single integrated TWO-TONE long sleeve work shirt (NOT a vest), FULL SLEEVES in DARK NAVY BLUE, upper chest/shoulders in NEON LIME GREEN, with SILVER REFLECTIVE STRIPES on left and right shoulders, one horizontal SILVER REFLECTIVE TAPE across the middle stomach (bordering green and navy), full button-down collar, two flap chest pockets on the neon green area, and a small Chitra Paratama logo patch on the left chest pocket integrated naturally into the design.`,
-    "Elegant & Luxury": `Content focus: Company milestone or achievement about [DETAIL PENCAPAIAN] for [TARGET AUDIENCE].
-Headline text: "[HEADLINE PENCAPAIAN]"
-Visual style: elegant, luxury, and sophisticated layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use premium typography, gold/silver accents if applicable, and a prestigious composition.
-Additional elements: [ELEMEN TAMBAHAN MISAL: TROFI, GRAFIK NAIK, GEDUNG KANTOR].
-Variant note: Include a professional photo of a team wearing Chitra Paratama official safety workwear: a single integrated TWO-TONE long sleeve work shirt (NOT a vest), FULL SLEEVES in DARK NAVY BLUE, upper chest/shoulders in NEON LIME GREEN, with SILVER REFLECTIVE STRIPES on left and right shoulders, one horizontal SILVER REFLECTIVE TAPE across the middle stomach (bordering green and navy), full button-down collar, two flap chest pockets on the neon green area, and a small Chitra Paratama logo patch on the left chest pocket integrated naturally into the design.`,
-    "Playful & Vibrant": `Content focus: Company milestone or achievement about [DETAIL PENCAPAIAN] for [TARGET AUDIENCE].
-Headline text: "[HEADLINE PENCAPAIAN]"
-Visual style: playful, vibrant, and celebratory layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use dynamic shapes, energetic composition, and a festive mood.
-Additional elements: [ELEMEN TAMBAHAN MISAL: TROFI, GRAFIK NAIK, GEDUNG KANTOR].
-Variant note: Include a professional photo of a team wearing Chitra Paratama official safety workwear: a single integrated TWO-TONE long sleeve work shirt (NOT a vest), FULL SLEEVES in DARK NAVY BLUE, upper chest/shoulders in NEON LIME GREEN, with SILVER REFLECTIVE STRIPES on left and right shoulders, one horizontal SILVER REFLECTIVE TAPE across the middle stomach (bordering green and navy), full button-down collar, two flap chest pockets on the neon green area, and a small Chitra Paratama logo patch on the left chest pocket integrated naturally into the design.`,
-    "Corporate & Professional": `Content focus: Company milestone or achievement about [DETAIL PENCAPAIAN] for [TARGET AUDIENCE].
-Headline text: "[HEADLINE PENCAPAIAN]"
-Visual style: corporate, professional, and prestigious layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use formal typography, solid business aesthetics, and strict grids.
-Additional elements: [ELEMEN TAMBAHAN MISAL: TROFI, GRAFIK NAIK, GEDUNG KANTOR].
-Variant note: Include a professional photo of a team wearing Chitra Paratama official safety workwear: a single integrated TWO-TONE long sleeve work shirt (NOT a vest), FULL SLEEVES in DARK NAVY BLUE, upper chest/shoulders in NEON LIME GREEN, with SILVER REFLECTIVE STRIPES on left and right shoulders, one horizontal SILVER REFLECTIVE TAPE across the middle stomach (bordering green and navy), full button-down collar, two flap chest pockets on the neon green area, and a small Chitra Paratama logo patch on the left chest pocket integrated naturally into the design.`,
-    Minimalist: `Content focus: Company milestone or achievement about [DETAIL PENCAPAIAN] for [TARGET AUDIENCE].
-Headline text: "[HEADLINE PENCAPAIAN]"
-Visual style: minimalist, clean layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Focus entirely on the milestone number/text with ample whitespace.
-Additional elements: [ELEMEN TAMBAHAN MISAL: TROFI, GRAFIK NAIK, GEDUNG KANTOR].
-Variant note: Include a professional photo of a team wearing Chitra Paratama official safety workwear: a single integrated TWO-TONE long sleeve work shirt (NOT a vest), FULL SLEEVES in DARK NAVY BLUE, upper chest/shoulders in NEON LIME GREEN, with SILVER REFLECTIVE STRIPES on left and right shoulders, one horizontal SILVER REFLECTIVE TAPE across the middle stomach (bordering green and navy), full button-down collar, two flap chest pockets on the neon green area, and a small Chitra Paratama logo patch on the left chest pocket integrated naturally into the design.`,
+    "Modern & Clean": `Content focus: Company achievement announcement — milestone, award, or business growth of PT Chitra Paratama.
+Headline text: "PT Chitra Paratama Mencapai Milestone Baru — Terima Kasih atas Kepercayaan Anda!"
+Brand/Source: "PT Chitra Paratama — Total Tire Solution"
+Visual style: modern, clean layout with ${BRAND_COLORS} color scheme. Use achievement iconography, bold numbers/stats, trophy or medal motif, and structured composition.
+Additional elements: trophy, medal, growth chart, milestone number callout, celebratory confetti.
+Variant note: Include a ${WEARPACK} team celebrating the achievement. ${SAFE_ZONE}`,
+    "Elegant & Luxury": `Content focus: Prestigious company achievement or award received by PT Chitra Paratama.
+Headline text: "Penghargaan Bergengsi untuk PT Chitra Paratama — Bukti Komitmen Kami"
+Brand/Source: "PT Chitra Paratama — Total Tire Solution"
+Visual style: elegant, luxury, and prestigious layout with ${BRAND_COLORS} color scheme. Use gold accents, premium textures, award motif, and sophisticated composition.
+Additional elements: gold trophy, award plaque, premium background texture, subtle sparkle.
+Variant note: Include a ${WEARPACK} executive receiving the award. ${SAFE_ZONE}`,
+    "Playful & Vibrant": `Content focus: Exciting company milestone or growth achievement of PT Chitra Paratama shared with enthusiasm.
+Headline text: "Kami Terus Tumbuh! Terima Kasih Telah Bersama PT Chitra Paratama"
+Brand/Source: "PT Chitra Paratama — Total Tire Solution"
+Visual style: playful, vibrant, and celebratory layout with ${BRAND_COLORS} color scheme. Use bold graphics, confetti, energetic typography, and dynamic composition.
+Additional elements: confetti burst, star shapes, bold milestone number, celebratory background.
+Variant note: Include a ${WEARPACK} team in a celebratory pose. ${SAFE_ZONE}`,
+    "Corporate & Professional": `Content focus: Formal company achievement or business milestone announcement of PT Chitra Paratama.
+Headline text: "PT Chitra Paratama: Komitmen Nyata dalam Total Tire Solution"
+Brand/Source: "PT Chitra Paratama — Total Tire Solution"
+Visual style: corporate, professional, and authoritative layout with ${BRAND_COLORS} color scheme. Use structured layout, formal achievement iconography, clean data presentation, and business-appropriate composition.
+Additional elements: achievement badge, clean chart, professional background, milestone callout.
+Variant note: Include a ${WEARPACK} team in a professional group photo. ${SAFE_ZONE}`,
+    Minimalist: `Content focus: Clean, focused company achievement announcement of PT Chitra Paratama.
+Headline text: "Milestone Baru. Terima Kasih atas Kepercayaan Anda."
+Brand/Source: "PT Chitra Paratama"
+Visual style: minimalist, impactful layout with ${BRAND_COLORS} color scheme. Use a single bold number or achievement stat, abundant whitespace, and high contrast.
+Additional elements: single trophy or star icon, clean solid background in brand color.
+Variant note: Include a minimal achievement illustration. ${SAFE_ZONE}`,
   },
   "Event perusahaan": {
-    "Modern & Clean": `Content focus: Company event announcement or coverage about [NAMA EVENT] for [TARGET AUDIENCE].
-Headline text: "[HEADLINE EVENT]"
-Visual style: modern, clean layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use dynamic angles, clear date/time layout, and structured event information.
-Additional elements: [ELEMEN TAMBAHAN MISAL: MIC, PANGGUNG, TIKET].
-Variant note: Include a professional photo of the event with people wearing Chitra Paratama official safety workwear: a single integrated TWO-TONE long sleeve work shirt (NOT a vest), FULL SLEEVES in DARK NAVY BLUE, upper chest/shoulders in NEON LIME GREEN, with SILVER REFLECTIVE STRIPES on left and right shoulders, one horizontal SILVER REFLECTIVE TAPE across the middle stomach (bordering green and navy), full button-down collar, two flap chest pockets on the neon green area, and a small Chitra Paratama logo patch on the left chest pocket integrated naturally into the design.`,
-    "Elegant & Luxury": `Content focus: Company event announcement or coverage about [NAMA EVENT] for [TARGET AUDIENCE].
-Headline text: "[HEADLINE EVENT]"
-Visual style: elegant, luxury, and exclusive layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use premium textures, sophisticated typography, and a VIP atmosphere.
-Additional elements: [ELEMEN TAMBAHAN MISAL: MIC, PANGGUNG, TIKET].
-Variant note: Include a professional photo of the event with people wearing Chitra Paratama official safety workwear: a single integrated TWO-TONE long sleeve work shirt (NOT a vest), FULL SLEEVES in DARK NAVY BLUE, upper chest/shoulders in NEON LIME GREEN, with SILVER REFLECTIVE STRIPES on left and right shoulders, one horizontal SILVER REFLECTIVE TAPE across the middle stomach (bordering green and navy), full button-down collar, two flap chest pockets on the neon green area, and a small Chitra Paratama logo patch on the left chest pocket integrated naturally into the design.`,
-    "Playful & Vibrant": `Content focus: Company event announcement or coverage about [NAMA EVENT] for [TARGET AUDIENCE].
-Headline text: "[HEADLINE EVENT]"
-Visual style: playful, vibrant, and exciting layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use bold graphics, high energy, and inviting composition.
-Additional elements: [ELEMEN TAMBAHAN MISAL: MIC, PANGGUNG, TIKET].
-Variant note: Include a professional photo of the event with people wearing Chitra Paratama official safety workwear: a single integrated TWO-TONE long sleeve work shirt (NOT a vest), FULL SLEEVES in DARK NAVY BLUE, upper chest/shoulders in NEON LIME GREEN, with SILVER REFLECTIVE STRIPES on left and right shoulders, one horizontal SILVER REFLECTIVE TAPE across the middle stomach (bordering green and navy), full button-down collar, two flap chest pockets on the neon green area, and a small Chitra Paratama logo patch on the left chest pocket integrated naturally into the design.`,
-    "Corporate & Professional": `Content focus: Company event announcement or coverage about [NAMA EVENT] for [TARGET AUDIENCE].
-Headline text: "[HEADLINE EVENT]"
-Visual style: corporate, professional, and formal layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use clean business graphics, structured agenda layout, and authoritative tone.
-Additional elements: [ELEMEN TAMBAHAN MISAL: MIC, PANGGUNG, TIKET].
-Variant note: Include a professional photo of the event with people wearing Chitra Paratama official safety workwear: a single integrated TWO-TONE long sleeve work shirt (NOT a vest), FULL SLEEVES in DARK NAVY BLUE, upper chest/shoulders in NEON LIME GREEN, with SILVER REFLECTIVE STRIPES on left and right shoulders, one horizontal SILVER REFLECTIVE TAPE across the middle stomach (bordering green and navy), full button-down collar, two flap chest pockets on the neon green area, and a small Chitra Paratama logo patch on the left chest pocket integrated naturally into the design.`,
-    Minimalist: `Content focus: Company event announcement or coverage about [NAMA EVENT] for [TARGET AUDIENCE].
-Headline text: "[HEADLINE EVENT]"
-Visual style: minimalist, modern layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Focus purely on the event title and essential details with a clean background.
-Additional elements: [ELEMEN TAMBAHAN MISAL: MIC, PANGGUNG, TIKET].
-Variant note: Include a professional photo of the event with people wearing Chitra Paratama official safety workwear: a single integrated TWO-TONE long sleeve work shirt (NOT a vest), FULL SLEEVES in DARK NAVY BLUE, upper chest/shoulders in NEON LIME GREEN, with SILVER REFLECTIVE STRIPES on left and right shoulders, one horizontal SILVER REFLECTIVE TAPE across the middle stomach (bordering green and navy), full button-down collar, two flap chest pockets on the neon green area, and a small Chitra Paratama logo patch on the left chest pocket integrated naturally into the design.`,
+    "Modern & Clean": `Content focus: Company event announcement or recap for PT Chitra Paratama — training, seminar, gathering, or field activity.
+Headline text: "PT Chitra Paratama Mengundang Anda — [Nama Event] Segera Hadir!"
+Brand/Source: "PT Chitra Paratama — Total Tire Solution"
+Visual style: modern, clean layout with ${BRAND_COLORS} color scheme. Use event iconography, date/location callout, clean agenda layout, and structured composition.
+Additional elements: microphone, stage, calendar icon, location pin, event banner.
+Variant note: Include a ${WEARPACK} presenter or attendee at the event. ${SAFE_ZONE}`,
+    "Elegant & Luxury": `Content focus: Exclusive company event or VIP gathering announcement for PT Chitra Paratama.
+Headline text: "Undangan Eksklusif: Event Spesial PT Chitra Paratama"
+Brand/Source: "PT Chitra Paratama — Total Tire Solution"
+Visual style: elegant, luxury, and exclusive layout with ${BRAND_COLORS} color scheme. Use premium textures, sophisticated typography, VIP atmosphere, and refined composition.
+Additional elements: elegant invitation card motif, gold accent, premium venue illustration.
+Variant note: Include a ${WEARPACK} executive at the event. ${SAFE_ZONE}`,
+    "Playful & Vibrant": `Content focus: Fun and exciting company event or team gathering announcement for PT Chitra Paratama.
+Headline text: "Yuk Ikut! Event Seru PT Chitra Paratama Sudah Menanti"
+Brand/Source: "PT Chitra Paratama — Total Tire Solution"
+Visual style: playful, vibrant, and exciting layout with ${BRAND_COLORS} color scheme. Use bold graphics, high energy typography, inviting composition, and dynamic shapes.
+Additional elements: confetti, microphone, crowd silhouette, bold event date callout.
+Variant note: Include a ${WEARPACK} team in an energetic group pose. ${SAFE_ZONE}`,
+    "Corporate & Professional": `Content focus: Formal company event or business seminar announcement for PT Chitra Paratama.
+Headline text: "Seminar & Workshop PT Chitra Paratama — Daftarkan Diri Anda Sekarang"
+Brand/Source: "PT Chitra Paratama — Total Tire Solution"
+Visual style: corporate, professional, and formal layout with ${BRAND_COLORS} color scheme. Use clean business graphics, structured agenda layout, authoritative tone, and professional composition.
+Additional elements: podium, business audience silhouette, agenda list, date/location badge.
+Variant note: Include a ${WEARPACK} speaker at the podium. ${SAFE_ZONE}`,
+    Minimalist: `Content focus: Clean, focused event announcement for PT Chitra Paratama.
+Headline text: "Save the Date — Event PT Chitra Paratama"
+Brand/Source: "PT Chitra Paratama"
+Visual style: minimalist, modern layout with ${BRAND_COLORS} color scheme. Focus purely on the event title, date, and one key visual element with a clean background.
+Additional elements: single calendar icon, clean date typography, solid brand color background.
+Variant note: Include a minimal event illustration. ${SAFE_ZONE}`,
   },
   "Promosi produk": {
-    "Modern & Clean": `Content focus: Product promotion for [NAMA PRODUK/LAYANAN] aimed at [TARGET AUDIENCE].
-Headline text: "[HEADLINE PROMOSI]"
-Visual style: modern, clean layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use sharp product focus, clear features hierarchy, and sleek typography.
-Additional elements: [ELEMEN TAMBAHAN MISAL: BAN, ALAT BERAT, SERVIS].
-Variant note: Include a professional photo of the product or service in action with personnel wearing Chitra Paratama official safety workwear: a single integrated TWO-TONE long sleeve work shirt (NOT a vest), FULL SLEEVES in DARK NAVY BLUE, upper chest/shoulders in NEON LIME GREEN, with SILVER REFLECTIVE STRIPES on left and right shoulders, one horizontal SILVER REFLECTIVE TAPE across the middle stomach (bordering green and navy), full button-down collar, two flap chest pockets on the neon green area, and a small Chitra Paratama logo patch on the left chest pocket integrated naturally into the design.`,
-    "Elegant & Luxury": `Content focus: Product promotion for [NAMA PRODUK/LAYANAN] aimed at [TARGET AUDIENCE].
-Headline text: "[HEADLINE PROMOSI]"
-Visual style: elegant, luxury, and premium layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use high-end aesthetics, dramatic lighting, and sophisticated composition.
-Additional elements: [ELEMEN TAMBAHAN MISAL: BAN, ALAT BERAT, SERVIS].
-Variant note: Include a professional photo of the product or service in action with personnel wearing Chitra Paratama official safety workwear: a single integrated TWO-TONE long sleeve work shirt (NOT a vest), FULL SLEEVES in DARK NAVY BLUE, upper chest/shoulders in NEON LIME GREEN, with SILVER REFLECTIVE STRIPES on left and right shoulders, one horizontal SILVER REFLECTIVE TAPE across the middle stomach (bordering green and navy), full button-down collar, two flap chest pockets on the neon green area, and a small Chitra Paratama logo patch on the left chest pocket integrated naturally into the design.`,
-    "Playful & Vibrant": `Content focus: Product promotion for [NAMA PRODUK/LAYANAN] aimed at [TARGET AUDIENCE].
-Headline text: "[HEADLINE PROMOSI]"
-Visual style: playful, vibrant, and eye-catching layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use dynamic bursts, strong contrast, and an inviting promotional feel.
-Additional elements: [ELEMEN TAMBAHAN MISAL: BAN, ALAT BERAT, SERVIS].
-Variant note: Include a professional photo of the product or service in action with personnel wearing Chitra Paratama official safety workwear: a single integrated TWO-TONE long sleeve work shirt (NOT a vest), FULL SLEEVES in DARK NAVY BLUE, upper chest/shoulders in NEON LIME GREEN, with SILVER REFLECTIVE STRIPES on left and right shoulders, one horizontal SILVER REFLECTIVE TAPE across the middle stomach (bordering green and navy), full button-down collar, two flap chest pockets on the neon green area, and a small Chitra Paratama logo patch on the left chest pocket integrated naturally into the design.`,
-    "Corporate & Professional": `Content focus: Product promotion for [NAMA PRODUK/LAYANAN] aimed at [TARGET AUDIENCE].
-Headline text: "[HEADLINE PROMOSI]"
-Visual style: corporate, professional, and reliable layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use industrial/business aesthetics, clear benefits list, and a trustworthy tone.
-Additional elements: [ELEMEN TAMBAHAN MISAL: BAN, ALAT BERAT, SERVIS].
-Variant note: Include a professional photo of the product or service in action with personnel wearing Chitra Paratama official safety workwear: a single integrated TWO-TONE long sleeve work shirt (NOT a vest), FULL SLEEVES in DARK NAVY BLUE, upper chest/shoulders in NEON LIME GREEN, with SILVER REFLECTIVE STRIPES on left and right shoulders, one horizontal SILVER REFLECTIVE TAPE across the middle stomach (bordering green and navy), full button-down collar, two flap chest pockets on the neon green area, and a small Chitra Paratama logo patch on the left chest pocket integrated naturally into the design.`,
-    Minimalist: `Content focus: Product promotion for [NAMA PRODUK/LAYANAN] aimed at [TARGET AUDIENCE].
-Headline text: "[HEADLINE PROMOSI]"
-Visual style: minimalist, ultra-clean layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use negative space to make the product the sole hero of the visual.
-Additional elements: [ELEMEN TAMBAHAN MISAL: BAN, ALAT BERAT, SERVIS].
-Variant note: Include a professional photo of the product or service in action with personnel wearing Chitra Paratama official safety workwear: a single integrated TWO-TONE long sleeve work shirt (NOT a vest), FULL SLEEVES in DARK NAVY BLUE, upper chest/shoulders in NEON LIME GREEN, with SILVER REFLECTIVE STRIPES on left and right shoulders, one horizontal SILVER REFLECTIVE TAPE across the middle stomach (bordering green and navy), full button-down collar, two flap chest pockets on the neon green area, and a small Chitra Paratama logo patch on the left chest pocket integrated naturally into the design.`,
+    "Modern & Clean": `Content focus: Product or service promotion for PT Chitra Paratama — Michelin tires, tire services, or fleet solutions.
+Headline text: "Solusi Ban Terbaik untuk Armada Anda — PT Chitra Paratama"
+Brand/Source: "PT Chitra Paratama — Total Tire Solution"
+Visual style: modern, clean layout with ${BRAND_COLORS} color scheme. Use sharp product focus, clear feature hierarchy, sleek typography, and product-forward composition.
+Additional elements: Michelin tire product shot, feature callout badges, clean product background.
+Variant note: Include a ${WEARPACK} technician presenting the product. ${SAFE_ZONE}`,
+    "Elegant & Luxury": `Content focus: Premium product promotion for PT Chitra Paratama — highlighting quality, reliability, and premium service.
+Headline text: "Kualitas Premium, Performa Tak Tertandingi — Michelin x Chitra Paratama"
+Brand/Source: "PT Chitra Paratama — Total Tire Solution"
+Visual style: elegant, luxury, and premium layout with ${BRAND_COLORS} color scheme. Use premium product photography style, gold accents, sophisticated typography, and high-end composition.
+Additional elements: premium tire close-up, gold feature badges, luxury background texture.
+Variant note: Include a ${WEARPACK} specialist in a premium setting. ${SAFE_ZONE}`,
+    "Playful & Vibrant": `Content focus: Exciting product promotion or special offer from PT Chitra Paratama for a broad audience.
+Headline text: "Promo Spesial Ban Michelin — Hanya di PT Chitra Paratama!"
+Brand/Source: "PT Chitra Paratama — Total Tire Solution"
+Visual style: playful, vibrant, and attention-grabbing layout with ${BRAND_COLORS} color scheme. Use bold product highlight, dynamic shapes, bright promo callout, and energetic composition.
+Additional elements: promo badge, bold discount callout, dynamic tire illustration, confetti.
+Variant note: Include a ${WEARPACK} team member with an enthusiastic pose. ${SAFE_ZONE}`,
+    "Corporate & Professional": `Content focus: B2B product promotion for PT Chitra Paratama targeting fleet managers and procurement teams.
+Headline text: "Tingkatkan Efisiensi Armada Anda dengan Solusi Ban PT Chitra Paratama"
+Brand/Source: "PT Chitra Paratama — Total Tire Solution"
+Visual style: corporate, professional, and trustworthy layout with ${BRAND_COLORS} color scheme. Use structured product presentation, ROI/benefit callouts, business iconography, and authoritative composition.
+Additional elements: fleet vehicle, tire product, benefit checklist, professional background.
+Variant note: Include a ${WEARPACK} account manager in a professional setting. ${SAFE_ZONE}`,
+    Minimalist: `Content focus: Clean, focused product promotion for PT Chitra Paratama.
+Headline text: "Ban Terbaik. Servis Terpercaya. PT Chitra Paratama."
+Brand/Source: "PT Chitra Paratama"
+Visual style: minimalist, product-focused layout with ${BRAND_COLORS} color scheme. Use a single product hero shot, bold headline, and clean background.
+Additional elements: single tire product, minimal feature callout, solid brand color background.
+Variant note: Include a minimal product illustration. ${SAFE_ZONE}`,
+    "Vectorize Minimalis": `Content focus: Flat vector product promotion for PT Chitra Paratama tire services.
+Headline text: "Layanan Ban Lengkap — PT Chitra Paratama"
+Brand/Source: "PT Chitra Paratama — Total Tire Solution"
+Visual style: flat vector minimalist style with ${BRAND_COLORS} color scheme. Use simple geometric product shapes, flat service icons, and clean layout.
+Additional elements: flat vector tire, service icons (wrench, checkmark, truck), brand color background.
+Variant note: Include a flat vector ${WEARPACK} technician. ${SAFE_ZONE}`,
+    "Vector Kartun Simple": `Content focus: Friendly cartoon product promotion for PT Chitra Paratama targeting a broad social media audience.
+Headline text: "Butuh Ban Baru? Chitra Paratama Siap Bantu!"
+Brand/Source: "PT Chitra Paratama — Total Tire Solution"
+Visual style: simple cartoon vector style with ${BRAND_COLORS} color scheme. Use friendly characters, bold outlines, solid colors, and approachable composition.
+Additional elements: cartoon tire character, friendly ${WEARPACK} cartoon, cheerful background.
+Variant note: Include a cartoon ${WEARPACK} character holding a tire. ${SAFE_ZONE}`,
+    "Vector Detail": `Content focus: Detailed vector product showcase for PT Chitra Paratama premium tire range.
+Headline text: "Presisi Tinggi, Kualitas Terjamin — Ban Michelin dari Chitra Paratama"
+Brand/Source: "PT Chitra Paratama — Total Tire Solution"
+Visual style: detailed vector illustration style with ${BRAND_COLORS} color scheme. Use rich linework, technical tire detail, cross-section callouts, and premium composition.
+Additional elements: detailed tire cross-section, technical feature callouts, brand color accents.
+Variant note: Include a detailed vector ${WEARPACK} technician inspecting the tire. ${SAFE_ZONE}`,
   },
   "Hari Nasional": {
-    "Modern & Clean": `Content focus: National holiday greeting for [NAMA HARI NASIONAL].
-Headline text: "Selamat [NAMA HARI NASIONAL]"
-Visual style: modern, clean layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use relevant national/cultural symbols with a contemporary design approach.
-Additional elements: [ELEMEN TAMBAHAN SESUAI HARI RAYA].
-Variant note: Include a professional illustration or photo relevant to the holiday integrated naturally into the design.`,
-    "Elegant & Luxury": `Content focus: National holiday greeting for [NAMA HARI NASIONAL].
-Headline text: "Selamat [NAMA HARI NASIONAL]"
-Visual style: elegant, luxury, and respectful layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use premium textures, sophisticated cultural motifs, and a distinguished atmosphere.
-Additional elements: [ELEMEN TAMBAHAN SESUAI HARI RAYA].
-Variant note: Include a professional illustration or photo relevant to the holiday integrated naturally into the design.`,
-    "Playful & Vibrant": `Content focus: National holiday greeting for [NAMA HARI NASIONAL].
-Headline text: "Selamat [NAMA HARI NASIONAL]"
-Visual style: playful, vibrant, and festive layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use bright cultural graphics, joyful energy, and celebratory composition.
-Additional elements: [ELEMEN TAMBAHAN SESUAI HARI RAYA].
-Variant note: Include a professional illustration or photo relevant to the holiday integrated naturally into the design.`,
-    "Corporate & Professional": `Content focus: National holiday greeting for [NAMA HARI NASIONAL].
-Headline text: "Selamat [NAMA HARI NASIONAL]"
-Visual style: corporate, professional, and formal layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Use official business greetings, clean cultural accents, and a respectful tone.
-Additional elements: [ELEMEN TAMBAHAN SESUAI HARI RAYA].
-Variant note: Include a professional illustration or photo relevant to the holiday integrated naturally into the design.`,
-    Minimalist: `Content focus: National holiday greeting for [NAMA HARI NASIONAL].
-Headline text: "Selamat [NAMA HARI NASIONAL]"
-Visual style: minimalist, modern layout with Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56) color scheme. Focus purely on a single strong cultural icon and the greeting text with ample whitespace.
-Additional elements: [ELEMEN TAMBAHAN SESUAI HARI RAYA].
-Variant note: Include a professional illustration or photo relevant to the holiday integrated naturally into the design.`,
+    "Modern & Clean": `Content focus: National day greeting from PT Chitra Paratama — Independence Day, National Work Safety Day, or other Indonesian national holidays.
+Headline text: "Selamat Hari Nasional dari PT Chitra Paratama — Bersama Membangun Indonesia"
+Brand/Source: "PT Chitra Paratama — Total Tire Solution"
+Visual style: modern, clean layout with ${BRAND_COLORS} color scheme combined with national day motifs (red-white for Independence Day, etc.). Use patriotic iconography, clean composition, and structured layout.
+Additional elements: Indonesian flag motif, national day symbol, patriotic color accents.
+Variant note: Include a ${WEARPACK} team in a patriotic group pose. ${SAFE_ZONE}`,
+    "Elegant & Luxury": `Content focus: Elegant national day greeting from PT Chitra Paratama with a premium, respectful tone.
+Headline text: "Dengan Bangga, PT Chitra Paratama Mengucapkan Selamat Hari Nasional"
+Brand/Source: "PT Chitra Paratama — Total Tire Solution"
+Visual style: elegant, sophisticated layout with ${BRAND_COLORS} color scheme and subtle national day motifs. Use premium textures, refined typography, and balanced composition.
+Additional elements: elegant national symbol, gold accent, premium background texture.
+Variant note: Include a ${WEARPACK} executive in a respectful pose. ${SAFE_ZONE}`,
+    "Playful & Vibrant": `Content focus: Energetic national day celebration post from PT Chitra Paratama for broad Instagram audience.
+Headline text: "Semangat Hari Nasional! PT Chitra Paratama Bangga Jadi Bagian Indonesia"
+Brand/Source: "PT Chitra Paratama — Total Tire Solution"
+Visual style: playful, vibrant, and celebratory layout with ${BRAND_COLORS} color scheme and national day energy. Use bold graphics, confetti, patriotic colors, and dynamic composition.
+Additional elements: confetti in national colors, bold national day callout, energetic background.
+Variant note: Include a ${WEARPACK} team in a celebratory patriotic pose. ${SAFE_ZONE}`,
+    "Corporate & Professional": `Content focus: Formal national day greeting from PT Chitra Paratama with a corporate, respectful tone.
+Headline text: "PT Chitra Paratama Mengucapkan Selamat Hari Nasional Indonesia"
+Brand/Source: "PT Chitra Paratama — Total Tire Solution"
+Visual style: corporate, professional, and formal layout with ${BRAND_COLORS} color scheme and national day motifs. Use structured layout, formal patriotic iconography, and authoritative composition.
+Additional elements: Indonesian national symbol, formal flag motif, professional background.
+Variant note: Include a ${WEARPACK} team in a formal group photo. ${SAFE_ZONE}`,
+    Minimalist: `Content focus: Clean, focused national day greeting from PT Chitra Paratama.
+Headline text: "Selamat Hari Nasional. Dari Kami, untuk Indonesia."
+Brand/Source: "PT Chitra Paratama"
+Visual style: minimalist, impactful layout with ${BRAND_COLORS} color scheme and a single national day motif. Use abundant whitespace, bold headline, and high contrast.
+Additional elements: single national symbol or flag icon, clean solid background.
+Variant note: Include a minimal national day illustration. ${SAFE_ZONE}`,
   },
 }
-
 function getPromptTemplate(contentType: (typeof contentTypes)[number], visualStyle: VisualStyle) {
   return promptTemplates[contentType][visualStyle] || getVectorCartoonPromptTemplate(contentType)
 }
 
 function getVectorCartoonPromptTemplate(contentType: (typeof contentTypes)[number]) {
   const focusByContentType: Record<(typeof contentTypes)[number], string> = {
-    "Ucapan ulang tahun customer": "Ucapan selamat ulang tahun untuk [NAMA CUSTOMER/PERUSAHAAN] dari PT Chitra Paratama.",
-    Edukasi: "Konten edukasi singkat tentang [TOPIK EDUKASI] untuk audience Instagram PT Chitra Paratama.",
-    "Pencapaian perusahaan": "Perayaan pencapaian perusahaan: [PENCAPAIAN] dari PT Chitra Paratama.",
-    "Event perusahaan": "Publikasi event perusahaan: [NAMA EVENT] dari PT Chitra Paratama.",
-    "Promosi produk": "Promosi produk atau layanan: [NAMA PRODUK/LAYANAN] dari PT Chitra Paratama.",
-    "Hari Nasional": "National holiday greeting for [NAMA HARI NASIONAL].",
+    "Ucapan ulang tahun customer": "Birthday greeting for a valued customer or partner of PT Chitra Paratama — warm, friendly, and celebratory.",
+    Edukasi: "Educational post about tire safety, maintenance tips, or fleet management knowledge for Indonesian businesses.",
+    "Pencapaian perusahaan": "Company achievement or milestone celebration for PT Chitra Paratama — proud and energetic.",
+    "Event perusahaan": "Company event announcement or recap for PT Chitra Paratama — fun and inviting.",
+    "Promosi produk": "Product or service promotion for PT Chitra Paratama Michelin tire solutions — friendly and approachable.",
+    "Hari Nasional": "National holiday greeting from PT Chitra Paratama — patriotic and celebratory.",
   }
   const headlineByContentType: Record<(typeof contentTypes)[number], string> = {
-    "Ucapan ulang tahun customer": "Selamat Ulang Tahun",
-    Edukasi: "[HEADLINE EDUKASI]",
-    "Pencapaian perusahaan": "[HEADLINE PENCAPAIAN]",
-    "Event perusahaan": "[HEADLINE EVENT]",
-    "Promosi produk": "[HEADLINE PROMOSI]",
-    "Hari Nasional": "Selamat [NAMA HARI NASIONAL]",
+    "Ucapan ulang tahun customer": "Selamat Ulang Tahun! Semoga Sukses Selalu",
+    Edukasi: "Tips Ban Hari Ini dari Chitra Paratama",
+    "Pencapaian perusahaan": "Kami Terus Tumbuh — Terima Kasih!",
+    "Event perusahaan": "Yuk Ikut! Event Seru PT Chitra Paratama",
+    "Promosi produk": "Butuh Ban Terbaik? Chitra Paratama Siap Bantu!",
+    "Hari Nasional": "Selamat Hari Nasional dari PT Chitra Paratama",
   }
 
   return `Content focus: ${focusByContentType[contentType]}
 Headline text: "${headlineByContentType[contentType]}"
-Visual style: vectorize minimalis, flat vector illustration, clean semi-cartoon corporate artwork, neat bold outlines, simplified realistic proportions, soft gradient background, minimal details, high readability, Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56). If people are shown, render them like polished vector characters with friendly faces and neat Chitra safety workwear. Avoid photorealistic rendering, 3D render, complex texture, clutter, and excessive small text.
-Additional elements: [ELEMEN TAMBAHAN YANG RELEVAN].
-Variant note: Create a clean minimalist vectorized composition like a professional corporate poster illustration: one clear focal scene, readable headline, balanced whitespace, and polished flat-vector character style.`
+Brand/Source: "PT Chitra Paratama — Total Tire Solution"
+Visual style: Vector Kartun Simple — flat vector cartoon, clean and friendly, bold outlines, solid brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56), simplified character shapes, approachable composition. Avoid photorealistic, 3D render, complex textures, or excessive detail.
+Additional elements: relevant cartoon tire, tools, or celebratory elements in brand colors.
+Variant note: One clear focal scene, readable headline, balanced whitespace, friendly flat-vector character in Chitra safety workwear (dark navy blue long sleeve shirt underneath + neon lime green vest/rompi on top, TWO full-width silver reflective stripes on the vest (one across chest, one across lower vest) — stripes go fully around, CP logo patch with solid white background on left chest pocket of vest). Do not place text or key elements in the top-left 300x300px area or bottom 150px of the canvas.`
 }
-
 
 function getVectorDetailPromptTemplate(contentType: (typeof contentTypes)[number]) {
   const focusByContentType: Record<(typeof contentTypes)[number], string> = {
-    "Ucapan ulang tahun customer": "Ucapan selamat ulang tahun untuk [NAMA CUSTOMER/PERUSAHAAN] dari PT Chitra Paratama.",
-    Edukasi: "Konten edukasi singkat tentang [TOPIK EDUKASI] untuk audience Instagram PT Chitra Paratama.",
-    "Pencapaian perusahaan": "Perayaan pencapaian perusahaan: [PENCAPAIAN] dari PT Chitra Paratama.",
-    "Event perusahaan": "Publikasi event perusahaan: [NAMA EVENT] dari PT Chitra Paratama.",
-    "Promosi produk": "Promosi produk atau layanan: [NAMA PRODUK/LAYANAN] dari PT Chitra Paratama.",
-    "Hari Nasional": "National holiday greeting for [NAMA HARI NASIONAL].",
+    "Ucapan ulang tahun customer": "Birthday greeting for a valued customer or partner of PT Chitra Paratama — premium and detailed.",
+    Edukasi: "Educational post about tire technology or fleet management presented as a detailed technical illustration.",
+    "Pencapaian perusahaan": "Company achievement or milestone celebration for PT Chitra Paratama — bold and prestigious.",
+    "Event perusahaan": "Company event announcement or recap for PT Chitra Paratama — dynamic and detailed.",
+    "Promosi produk": "Premium product showcase for PT Chitra Paratama Michelin tire range — technical and impressive.",
+    "Hari Nasional": "National holiday greeting from PT Chitra Paratama — patriotic and richly illustrated.",
   }
   const headlineByContentType: Record<(typeof contentTypes)[number], string> = {
-    "Ucapan ulang tahun customer": "Selamat Ulang Tahun",
-    Edukasi: "[HEADLINE EDUKASI]",
-    "Pencapaian perusahaan": "[HEADLINE PENCAPAIAN]",
-    "Event perusahaan": "[HEADLINE EVENT]",
-    "Promosi produk": "[HEADLINE PROMOSI]",
-    "Hari Nasional": "Selamat [NAMA HARI NASIONAL]",
+    "Ucapan ulang tahun customer": "Selamat Ulang Tahun — Dari PT Chitra Paratama",
+    Edukasi: "Teknologi Ban Michelin: Presisi untuk Performa Terbaik",
+    "Pencapaian perusahaan": "Milestone Baru PT Chitra Paratama — Komitmen Nyata",
+    "Event perusahaan": "Event PT Chitra Paratama — Hadir dan Rasakan Perbedaannya",
+    "Promosi produk": "Presisi Tinggi, Kualitas Terjamin — Michelin x Chitra Paratama",
+    "Hari Nasional": "Dengan Bangga, PT Chitra Paratama Merayakan Hari Nasional",
   }
 
   return `Content focus: ${focusByContentType[contentType]}
 Headline text: "${headlineByContentType[contentType]}"
-Visual style: Vector Detail - Inked Comic Cartoon. Fully vectorized illustration with bold ink outlines, detailed cross-hatching and line-work shading, expressive comic-book style characters, dynamic panel-like composition, high-contrast ink aesthetic, cel-shaded color fills using Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56). Characters wear detailed Chitra Paratama safety workwear rendered in comic-book style with visible stitch lines, reflective stripe details, and logo patch on left chest pocket. Avoid photorealistic rendering, avoid 3D render, avoid flat minimalism - this style must feel like a premium inked comic illustration with rich detail and strong linework.
-Additional elements: [ELEMEN TAMBAHAN YANG RELEVAN].
-Variant note: Create a bold inked comic cartoon composition: one clear focal scene with detailed vector linework, expressive characters in Chitra safety workwear, readable headline in comic-style lettering, and dynamic composition with depth and energy.`
+Brand/Source: "PT Chitra Paratama — Total Tire Solution"
+Visual style: Vector Detail — Inked Comic Cartoon. Bold ink outlines, detailed cross-hatching and line-work shading, expressive comic-book style characters, dynamic composition with depth and energy, cel-shaded color fills using Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56). Characters wear detailed Chitra safety workwear (dark navy blue long sleeve shirt underneath + neon lime green vest/rompi on top, TWO full-width silver reflective stripes on the vest (one across chest, one across lower vest) — stripes go fully around without cutting off, CP logo patch with solid white background on left chest pocket of vest) rendered in comic-book style with visible stitch lines. Avoid photorealistic, 3D render, flat minimalism.
+Additional elements: detailed tire cross-section, technical callouts, or relevant industry elements in brand colors.
+Variant note: Bold inked comic composition — one clear focal scene with rich vector linework, expressive characters, readable headline in comic-style lettering, and dynamic depth. Do not place text or key elements in the top-left 300x300px area or bottom 150px of the canvas.`
 }
+
 export function InstagramImageGeneratorClient() {
   const [contentType, setContentType] = React.useState<(typeof contentTypes)[number]>("Edukasi")
   const [visualStyle, setVisualStyle] = React.useState<VisualStyle>(defaultVisualStyleByContentType.Edukasi)
   const [prompt, setPrompt] = React.useState(getPromptTemplate("Edukasi", defaultVisualStyleByContentType.Edukasi))
   const [format, setFormat] = React.useState<ImageFormat>("portrait")
   const [uploadedAssets, setUploadedAssets] = React.useState<UploadedAsset[]>([])
+
+  // --- Ucapan Ulang Tahun Customer ---
+  const [birthdayHeadline, setBirthdayHeadline] = React.useState("")
   const [birthdayCustomerName, setBirthdayCustomerName] = React.useState("")
   const [birthdayAge, setBirthdayAge] = React.useState("")
   const [birthdayLogoAssets, setBirthdayLogoAssets] = React.useState<UploadedAsset[]>([])
   const [birthdayCustomGreeting, setBirthdayCustomGreeting] = React.useState("")
+
+  // --- Edukasi ---
+  const [eduHeadline, setEduHeadline] = React.useState("")
+  const [eduTopic, setEduTopic] = React.useState("")
+  const [eduKeyPoints, setEduKeyPoints] = React.useState("")
+  const [eduPhotoAssets, setEduPhotoAssets] = React.useState<UploadedAsset[]>([])
+
+  // --- Pencapaian Perusahaan ---
+  const [achievementHeadline, setAchievementHeadline] = React.useState("")
   const [achievementName, setAchievementName] = React.useState("")
+  const [achievementStat, setAchievementStat] = React.useState("")
+  const [achievementDesc, setAchievementDesc] = React.useState("")
   const [achievementPhotoAssets, setAchievementPhotoAssets] = React.useState<UploadedAsset[]>([])
+
+  // --- Event Perusahaan ---
+  const [eventHeadline, setEventHeadline] = React.useState("")
   const [eventName, setEventName] = React.useState("")
   const [eventLocationDate, setEventLocationDate] = React.useState("")
+  const [eventDesc, setEventDesc] = React.useState("")
   const [eventPhotoAssets, setEventPhotoAssets] = React.useState<UploadedAsset[]>([])
+
+  // --- Promosi Produk ---
+  const [promoHeadline, setPromoHeadline] = React.useState("")
+  const [promoProductName, setPromoProductName] = React.useState("")
+  const [promoHighlights, setPromoHighlights] = React.useState("")
+  const [promoCta, setPromoCta] = React.useState("")
+  const [promoPhotoAssets, setPromoPhotoAssets] = React.useState<UploadedAsset[]>([])
+
+  // --- Hari Nasional ---
+  const [holidayHeadline, setHolidayHeadline] = React.useState("")
   const [nearestHoliday, setNearestHoliday] = React.useState<Holiday | null>(null)
   const [isLoadingHoliday, setIsLoadingHoliday] = React.useState(false)
+  const [holidayCustomMessage, setHolidayCustomMessage] = React.useState("")
+
+  // --- Person / Wearpack toggle (per category) ---
+  const [showPerson, setShowPerson] = React.useState(false)
+  const [personActivity, setPersonActivity] = React.useState("")
+
   const [result, setResult] = React.useState<GeneratedImageResult | null>(null)
   const [variationResults, setVariationResults] = React.useState<GeneratedImageResult[]>([])
   const [isGenerating, setIsGenerating] = React.useState(false)
@@ -321,116 +426,211 @@ export function InstagramImageGeneratorClient() {
   const [isUploading, setIsUploading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
 
+  // Fetch nearest holiday when Hari Nasional is selected
   React.useEffect(() => {
     if (contentType !== "Hari Nasional") return
     let mounted = true
     const controller = new AbortController()
-    
-    queueMicrotask(() => {
-      if (mounted) setIsLoadingHoliday(true)
-    })
-    
+    queueMicrotask(() => { if (mounted) setIsLoadingHoliday(true) })
     fetch("/api/national-holidays", { signal: controller.signal })
-      .then((response) => response.json())
+      .then((res) => res.json())
       .then((data: { nearestHoliday?: Holiday; error?: string }) => {
         if (!mounted) return
         if (!data.nearestHoliday) throw new Error(data.error || "Data Hari Nasional tidak tersedia")
         setNearestHoliday(data.nearestHoliday)
-        
-        // Use the current visual style template for Hari Nasional and replace the placeholders
-        const baseTemplate = getPromptTemplate("Hari Nasional", visualStyle)
-        const updatedPrompt = baseTemplate
-          .replace(/\[NAMA HARI NASIONAL\]/g, data.nearestHoliday.name)
-          .replace(/\[ELEMEN TAMBAHAN SESUAI HARI RAYA\]/g, "Elemen relevan untuk " + data.nearestHoliday.name)
-        
-        setPrompt(updatedPrompt)
       })
       .catch((err) => {
-        if (err.name === 'AbortError') return
+        if (err.name === "AbortError") return
         const message = err instanceof Error ? err.message : "Gagal mengambil Hari Nasional terdekat"
         setError(message)
         toast.error(message)
       })
-      .finally(() => {
-        if (mounted) setIsLoadingHoliday(false)
-      })
-      
-    return () => {
-      mounted = false
-      controller.abort()
-    }
-  }, [contentType, visualStyle])
+      .finally(() => { if (mounted) setIsLoadingHoliday(false) })
+    return () => { mounted = false; controller.abort() }
+  }, [contentType])
 
-  // Sync prompt with category detail fields
+  // Wearpack instruction injected when showPerson is true
+  const WEARPACK_INSTRUCTION = "Tampilkan pekerja/karyawan memakai seragam kerja resmi PT Chitra Paratama: seragam kerja resmi PT Chitra Paratama: KEMEJA LENGAN PANJANG BIRU NAVY GELAP (#002D56) di bagian dalam + ROMPI/VEST HIJAU NEON (#8DC63F) tanpa lengan di bagian luar. STRIP REFLEKTIF SILVER pada rompi: DUA garis horizontal PENUH melingkari seluruh badan rompi (satu di dada, satu di perut bawah rompi) — FULL WIDTH dari kiri ke kanan tanpa putus. Patch logo CP di saku dada kiri rompi: persegi panjang kecil BACKGROUND PUTIH SOLID, logo Chitra Paratama full color di atas putih, dijahit natural ke kain."
+
+  // Sync prompt whenever any field changes
   React.useEffect(() => {
-    if (contentType === "Hari Nasional") return
     const base = getPromptTemplate(contentType, visualStyle)
-    if (contentType === "Ucapan ulang tahun customer") {
-      const customerName = birthdayCustomerName.trim() || "[NAMA CUSTOMER/PERUSAHAAN]"
-      const ageLine = birthdayAge.trim() ? "\nUlang tahun ke: " + birthdayAge.trim() + "." : ""
-      const greetingLine = birthdayCustomGreeting.trim() ? "\nCustom Ucapan: " + birthdayCustomGreeting.trim() + "." : ""
-      const logoLine = birthdayLogoAssets.length > 0 ? "\nLogo Perusahaan: gunakan " + birthdayLogoAssets.map((a) => `${a.filename}`).join(", ") + " sebagai logo customer dalam desain." : ""
-      setPrompt(base.replace(/\[NAMA CUSTOMER\/PERUSAHAAN\]/g, customerName) + ageLine + greetingLine + logoLine)
-      return
-    }
-    if (contentType === "Pencapaian perusahaan") {
-      const nameLine = achievementName.trim() ? "\nNama Pencapaian: " + achievementName.trim() + "." : ""
-      const photosLine = achievementPhotoAssets.length > 0 ? "\nFoto Pencapaian: gunakan " + achievementPhotoAssets.map((a) => `${a.filename}`).join(", ") + " sebagai referensi visual pencapaian." : ""
-      setPrompt(base + nameLine + photosLine)
-      return
-    }
-    if (contentType === "Event perusahaan") {
-      const nameLine = eventName.trim() ? "\nNama Event: " + eventName.trim() + "." : ""
-      const locLine = eventLocationDate.trim() ? "\nLokasi & Tanggal: " + eventLocationDate.trim() + "." : ""
-      const photosLine = eventPhotoAssets.length > 0 ? "\nFoto Kegiatan: gunakan " + eventPhotoAssets.map((a) => `${a.filename}`).join(", ") + " sebagai referensi visual kegiatan." : ""
-      setPrompt(base + nameLine + locLine + photosLine)
-      return
-    }
-    setPrompt(base.replace(/\[TARGET AUDIENCE\]/g, "pelanggan dan mitra PT Chitra Paratama"))
-  }, [contentType, visualStyle, birthdayCustomerName, birthdayAge, birthdayCustomGreeting, birthdayLogoAssets, achievementName, achievementPhotoAssets, eventName, eventLocationDate, eventPhotoAssets])
 
+    // Strip any existing wearpack/orang instruction from base template
+    const noPersonBase = base
+      // Strip ALL Variant note lines (they contain person/wearpack instructions)
+      .replace(/\n?Variant note:[^\n]*/gi, "")
+      // Strip any line containing wearpack/seragam/uniform/person instructions
+      .replace(/\n?[^\n]*(wearpack|seragam kerja|work uniform|WAJIB.*orang|Include a person|wearing official)[^\n]*/gi, "")
+      // Strip headline so field controls it
+      .replace(/\nHeadline text: "[^"]*"/g, "")
+      .replace(/^Headline text: "[^"]*"\n?/m, "")
+
+    // Check if reference photos uploaded — preserve people in those photos
+    const categoryPhotos = contentType === "Edukasi" ? eduPhotoAssets
+      : contentType === "Pencapaian perusahaan" ? achievementPhotoAssets
+      : contentType === "Event perusahaan" ? eventPhotoAssets
+      : contentType === "Promosi produk" ? promoPhotoAssets
+      : []
+    const hasReferencePhotos = categoryPhotos.length > 0 || uploadedAssets.length > 0
+
+    const personLine = showPerson
+      ? `\n${WEARPACK_INSTRUCTION}${personActivity.trim() ? ` Kegiatan yang dilakukan: ${personActivity.trim()}.` : ""}`
+      : hasReferencePhotos
+        ? "\nJika ada orang dalam foto referensi yang diupload, pertahankan keberadaan mereka namun pastikan memakai wearpack safety resmi PT Chitra Paratama. Jika tidak ada orang dalam foto referensi, jangan tambahkan orang — fokus pada objek dan produk."
+        : "\nJangan tampilkan orang atau manusia dalam gambar — fokus pada objek, produk, atau elemen grafis saja."
+
+    if (contentType === "Ucapan ulang tahun customer") {
+      const namePart = birthdayCustomerName.trim() ? `untuk ${birthdayCustomerName.trim()}` : "untuk [Nama Customer/Perusahaan]"
+      const agePart = birthdayAge.trim() ? ` (ulang tahun ke-${birthdayAge.trim()})` : ""
+      const greetingPart = birthdayCustomGreeting.trim() ? `\nCustom Ucapan: ${birthdayCustomGreeting.trim()}.` : ""
+      const logoPart = birthdayLogoAssets.length > 0 ? `\nLogo Customer: gunakan ${birthdayLogoAssets.map((a) => a.filename).join(", ")} sebagai logo perusahaan customer dalam desain, tampilkan secara natural dan proporsional.` : ""
+      const bdBase = noPersonBase.replace(/untuk \[Nama Customer\/Perusahaan\]|untuk \[NAMA CUSTOMER\/PERUSAHAAN\]/gi, namePart + agePart)
+      const bdFinal = birthdayHeadline.trim() ? bdBase.replace(/Content focus:/, `Headline text: "${birthdayHeadline.trim()}"\nContent focus:`) : bdBase
+      setPrompt(bdFinal + greetingPart + logoPart + personLine)
+      return
+    }
+
+    if (contentType === "Edukasi") {
+      const topicPart = eduTopic.trim() ? `\nTopik: ${eduTopic.trim()}.` : ""
+      const keyPart = eduKeyPoints.trim() ? `\nPoin Utama: ${eduKeyPoints.trim()}.` : ""
+      const photoPart = eduPhotoAssets.length > 0 ? `\nReferensi Visual: gunakan ${eduPhotoAssets.map((a) => a.filename).join(", ")} sebagai referensi visual.` : ""
+      const eduFinal = eduHeadline.trim() ? noPersonBase.replace(/Content focus:/, `Headline text: "${eduHeadline.trim()}"\nContent focus:`) : noPersonBase
+      setPrompt(eduFinal + topicPart + keyPart + photoPart + personLine)
+      return
+    }
+
+    if (contentType === "Pencapaian perusahaan") {
+      const namePart = achievementName.trim() ? `\nNama Pencapaian: ${achievementName.trim()}.` : ""
+      const statPart = achievementStat.trim() ? `\nAngka/Statistik: ${achievementStat.trim()}.` : ""
+      const descPart = achievementDesc.trim() ? `\nDeskripsi: ${achievementDesc.trim()}.` : ""
+      const photoPart = achievementPhotoAssets.length > 0 ? `\nFoto Pencapaian: gunakan ${achievementPhotoAssets.map((a) => a.filename).join(", ")} sebagai referensi visual.` : ""
+      const achFinal = achievementHeadline.trim() ? noPersonBase.replace(/Content focus:/, `Headline text: "${achievementHeadline.trim()}"\nContent focus:`) : noPersonBase
+      setPrompt(achFinal + namePart + statPart + descPart + photoPart + personLine)
+      return
+    }
+
+    if (contentType === "Event perusahaan") {
+      const namePart = eventName.trim() ? `\nNama Event: ${eventName.trim()}.` : ""
+      const locPart = eventLocationDate.trim() ? `\nLokasi & Tanggal: ${eventLocationDate.trim()}.` : ""
+      const descPart = eventDesc.trim() ? `\nDeskripsi: ${eventDesc.trim()}.` : ""
+      const photoPart = eventPhotoAssets.length > 0 ? `\nFoto Kegiatan: gunakan ${eventPhotoAssets.map((a) => a.filename).join(", ")} sebagai referensi visual.` : ""
+      const evFinal = eventHeadline.trim() ? noPersonBase.replace(/Content focus:/, `Headline text: "${eventHeadline.trim()}"\nContent focus:`) : noPersonBase
+      setPrompt(evFinal + namePart + locPart + descPart + photoPart + personLine)
+      return
+    }
+
+    if (contentType === "Promosi produk") {
+      const prodPart = promoProductName.trim() ? `\nProduk/Layanan: ${promoProductName.trim()}.` : ""
+      const hlPart = promoHighlights.trim() ? `\nKeunggulan: ${promoHighlights.trim()}.` : ""
+      const ctaPart = promoCta.trim() ? `\nCall to Action: ${promoCta.trim()}.` : ""
+      const photoPart = promoPhotoAssets.length > 0 ? `\nFoto Produk: gunakan ${promoPhotoAssets.map((a) => a.filename).join(", ")} sebagai referensi visual produk.` : ""
+      const proFinal = promoHeadline.trim() ? noPersonBase.replace(/Content focus:/, `Headline text: "${promoHeadline.trim()}"\nContent focus:`) : noPersonBase
+      setPrompt(proFinal + prodPart + hlPart + ctaPart + photoPart + personLine)
+      return
+    }
+
+    if (contentType === "Hari Nasional") {
+      if (!nearestHoliday) return
+      const msgPart = holidayCustomMessage.trim() ? `\nPesan Khusus: ${holidayCustomMessage.trim()}.` : ""
+      const hnBase2 = noPersonBase
+        .replace(/\[NAMA HARI NASIONAL\]/g, nearestHoliday.name)
+        .replace(/\[ELEMEN TAMBAHAN SESUAI HARI RAYA\]/g, `elemen relevan untuk ${nearestHoliday.name}`)
+      const hnFinal = holidayHeadline.trim() ? hnBase2.replace(/Content focus:/, `Headline text: "${holidayHeadline.trim()}"\nContent focus:`) : hnBase2
+      setPrompt(hnFinal + msgPart + personLine)
+      return
+    }
+
+    setPrompt(noPersonBase + personLine)
+  }, [
+    contentType, visualStyle,
+    showPerson, personActivity,
+    birthdayHeadline, eduHeadline, achievementHeadline, eventHeadline, promoHeadline, holidayHeadline,
+    birthdayCustomerName, birthdayAge, birthdayCustomGreeting, birthdayLogoAssets,
+    eduTopic, eduKeyPoints, eduPhotoAssets,
+    achievementName, achievementStat, achievementDesc, achievementPhotoAssets,
+    eventName, eventLocationDate, eventDesc, eventPhotoAssets,
+    promoProductName, promoHighlights, promoCta, promoPhotoAssets,
+    nearestHoliday, holidayCustomMessage,
+  ])
   const getCategoryReferenceAssets = React.useCallback(() => {
     if (contentType === "Ucapan ulang tahun customer") return birthdayLogoAssets
+    if (contentType === "Edukasi") return eduPhotoAssets
     if (contentType === "Pencapaian perusahaan") return achievementPhotoAssets
     if (contentType === "Event perusahaan") return eventPhotoAssets
+    if (contentType === "Promosi produk") return promoPhotoAssets
     return []
-  }, [achievementPhotoAssets, birthdayLogoAssets, contentType, eventPhotoAssets])
+  }, [contentType, birthdayLogoAssets, eduPhotoAssets, achievementPhotoAssets, eventPhotoAssets, promoPhotoAssets])
 
   const buildRequestPrompt = React.useCallback((basePrompt: string) => {
     const details: string[] = []
+
     if (contentType === "Ucapan ulang tahun customer") {
-      details.push("Detail khusus Ucapan Ulang Tahun Customer:")
+      details.push("Detail Ucapan Ulang Tahun Customer:")
+      if (birthdayHeadline.trim()) details.push(`Headline: ${birthdayHeadline.trim()}.`)
       if (birthdayCustomerName.trim()) details.push(`Nama Customer: ${birthdayCustomerName.trim()}.`)
       if (birthdayAge.trim()) details.push(`Ulang tahun ke: ${birthdayAge.trim()}.`)
-      if (birthdayLogoAssets.length > 0) details.push(`Logo Perusahaan: gunakan ${birthdayLogoAssets.map((asset) => `${asset.filename}`).join(", ")} sebagai logo customer/perusahaan dalam desain.`)
       if (birthdayCustomGreeting.trim()) details.push(`Custom Ucapan: ${birthdayCustomGreeting.trim()}.`)
+      if (birthdayLogoAssets.length > 0) details.push(`Logo Customer: gunakan ${birthdayLogoAssets.map((a) => a.filename).join(", ")} sebagai logo perusahaan customer, tampilkan natural dan proporsional dalam desain.`)
+    }
+    if (contentType === "Edukasi") {
+      details.push("Detail Konten Edukasi:")
+      if (eduHeadline.trim()) details.push(`Headline: ${eduHeadline.trim()}.`)
+      if (eduTopic.trim()) details.push(`Topik: ${eduTopic.trim()}.`)
+      if (eduKeyPoints.trim()) details.push(`Poin Utama: ${eduKeyPoints.trim()}.`)
+      if (eduPhotoAssets.length > 0) details.push(`Referensi Visual: gunakan ${eduPhotoAssets.map((a) => a.filename).join(", ")} sebagai referensi visual.`)
     }
     if (contentType === "Pencapaian perusahaan") {
-      details.push("Detail khusus Pencapaian Perusahaan:")
+      details.push("Detail Pencapaian Perusahaan:")
+      if (achievementHeadline.trim()) details.push(`Headline: ${achievementHeadline.trim()}.`)
       if (achievementName.trim()) details.push(`Nama Pencapaian: ${achievementName.trim()}.`)
-      if (achievementPhotoAssets.length > 0) details.push(`Foto Pencapaian: gunakan ${achievementPhotoAssets.map((asset) => `${asset.filename}`).join(", ")} sebagai referensi visual pencapaian yang harus terasa masuk ke gambar.`)
+      if (achievementStat.trim()) details.push(`Angka/Statistik: ${achievementStat.trim()}.`)
+      if (achievementDesc.trim()) details.push(`Deskripsi: ${achievementDesc.trim()}.`)
+      if (achievementPhotoAssets.length > 0) details.push(`Foto Pencapaian: gunakan ${achievementPhotoAssets.map((a) => a.filename).join(", ")} sebagai referensi visual.`)
     }
     if (contentType === "Event perusahaan") {
-      details.push("Detail khusus Event Perusahaan:")
+      details.push("Detail Event Perusahaan:")
+      if (eventHeadline.trim()) details.push(`Headline: ${eventHeadline.trim()}.`)
       if (eventName.trim()) details.push(`Nama Event: ${eventName.trim()}.`)
-      if (eventLocationDate.trim()) details.push(`Lokasi dan tanggal: ${eventLocationDate.trim()}.`)
-      if (eventPhotoAssets.length > 0) details.push(`Foto Kegiatan: gunakan ${eventPhotoAssets.map((asset) => `${asset.filename}`).join(", ")} sebagai referensi visual kegiatan yang harus terasa masuk ke gambar.`)
+      if (eventLocationDate.trim()) details.push(`Lokasi & Tanggal: ${eventLocationDate.trim()}.`)
+      if (eventDesc.trim()) details.push(`Deskripsi: ${eventDesc.trim()}.`)
+      if (eventPhotoAssets.length > 0) details.push(`Foto Kegiatan: gunakan ${eventPhotoAssets.map((a) => a.filename).join(", ")} sebagai referensi visual.`)
     }
+    if (contentType === "Promosi produk") {
+      details.push("Detail Promosi Produk:")
+      if (promoHeadline.trim()) details.push(`Headline: ${promoHeadline.trim()}.`)
+      if (promoProductName.trim()) details.push(`Produk/Layanan: ${promoProductName.trim()}.`)
+      if (promoHighlights.trim()) details.push(`Keunggulan: ${promoHighlights.trim()}.`)
+      if (promoCta.trim()) details.push(`Call to Action: ${promoCta.trim()}.`)
+      if (promoPhotoAssets.length > 0) details.push(`Foto Produk: gunakan ${promoPhotoAssets.map((a) => a.filename).join(", ")} sebagai referensi visual produk.`)
+    }
+    if (contentType === "Hari Nasional") {
+      details.push("Detail Hari Nasional:")
+      if (holidayHeadline.trim()) details.push(`Headline: ${holidayHeadline.trim()}.`)
+      if (nearestHoliday) details.push(`Hari Nasional: ${nearestHoliday.name} (${nearestHoliday.date}).`)
+      if (holidayCustomMessage.trim()) details.push(`Pesan Khusus: ${holidayCustomMessage.trim()}.`)
+    }
+
+    if (showPerson) {
+      details.push("Tampilkan Orang/Pekerja: YA — wajib memakai wearpack safety resmi PT Chitra Paratama (lengan atas DAN bawah BIRU NAVY GELAP penuh, dada/bahu HIJAU NEON, strip reflektif silver di lengan atas, patch logo CP background putih di saku dada kiri).")
+      if (personActivity.trim()) details.push(`Kegiatan yang dilakukan: ${personActivity.trim()}.`)
+    } else {
+      details.push("Tampilkan Orang/Pekerja: TIDAK — jangan tampilkan orang atau manusia, fokus pada objek, produk, atau elemen grafis saja.")
+    }
+
     if (details.length === 0) return basePrompt
     return `${basePrompt.trim()}\n\n${details.join("\n")}`
   }, [
-    achievementName,
-    achievementPhotoAssets,
-    birthdayAge,
-    birthdayCustomGreeting,
-    birthdayCustomerName,
-    birthdayLogoAssets,
     contentType,
-    eventLocationDate,
-    eventName,
-    eventPhotoAssets,
+    showPerson, personActivity,
+    birthdayHeadline, eduHeadline, achievementHeadline, eventHeadline, promoHeadline, holidayHeadline,
+    birthdayCustomerName, birthdayAge, birthdayCustomGreeting, birthdayLogoAssets,
+    eduTopic, eduKeyPoints, eduPhotoAssets,
+    achievementName, achievementStat, achievementDesc, achievementPhotoAssets,
+    eventName, eventLocationDate, eventDesc, eventPhotoAssets,
+    promoProductName, promoHighlights, promoCta, promoPhotoAssets,
+    nearestHoliday, holidayCustomMessage,
   ])
-
   const generateImage = async () => {
     const trimmedPrompt = buildRequestPrompt(prompt).trim()
     if (!trimmedPrompt) {
@@ -770,83 +970,235 @@ export function InstagramImageGeneratorClient() {
               )}
             </div>
 
-            {contentType === "Ucapan ulang tahun customer" && (
-              <div className="grid gap-3 rounded-xl border bg-muted/20 p-4">
-                <div>
-                  <Label>Nama Customer</Label>
-                  <Input value={birthdayCustomerName} onChange={(event) => setBirthdayCustomerName(event.target.value)} placeholder="Contoh: PT Berkah Mining" />
-                </div>
-                <div>
-                  <Label>Ulang tahun ke</Label>
-                  <Input value={birthdayAge} onChange={(event) => setBirthdayAge(event.target.value)} placeholder="Contoh: 25" />
-                </div>
-                <div>
-                  <Label>Logo Perusahaan</Label>
-                  <Input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => onCategoryFilesChange(event, birthdayLogoAssets, setBirthdayLogoAssets, 1)} disabled={isUploading || birthdayLogoAssets.length >= 1} />
-                  {birthdayLogoAssets.map((asset) => (
-                    <div key={asset.url} className="mt-2 flex items-center justify-between rounded-lg border bg-background px-3 py-2 text-xs">
-                      <span className="truncate">{asset.filename}</span>
-                      <Button type="button" size="sm" variant="ghost" onClick={() => removeCategoryAsset(asset.url, setBirthdayLogoAssets)}>Hapus</Button>
-                    </div>
-                  ))}
-                </div>
-                <div>
-                  <Label>Custom Ucapan</Label>
-                  <Textarea value={birthdayCustomGreeting} onChange={(event) => setBirthdayCustomGreeting(event.target.value)} placeholder="Contoh: Semoga semakin sukses dan menjadi partner terpercaya..." className="min-h-24" />
-                </div>
+            {/* ── Ucapan Ulang Tahun Customer ── */}
+          {contentType === "Ucapan ulang tahun customer" && (
+            <div className="grid gap-3 rounded-xl border bg-muted/20 p-4">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Detail Ucapan Ulang Tahun</p>
+              <div className="grid gap-1.5">
+                <Label>Headline <span className="text-muted-foreground font-normal">(opsional — kosongkan untuk auto)</span></Label>
+                <Input value={birthdayHeadline} onChange={(e) => setBirthdayHeadline(e.target.value)} placeholder="Contoh: Selamat Ulang Tahun ke-25, PT Berkah Mining!" />
+              </div>
+              <div className="grid gap-1.5">
+                <Label>Nama Customer / Perusahaan</Label>
+                <Input value={birthdayCustomerName} onChange={(e) => setBirthdayCustomerName(e.target.value)} placeholder="Contoh: PT Berkah Mining" />
+              </div>
+              <div className="grid gap-1.5">
+                <Label>Ulang Tahun Ke</Label>
+                <Input value={birthdayAge} onChange={(e) => setBirthdayAge(e.target.value)} placeholder="Contoh: 25" type="number" min="1" />
+              </div>
+              <div className="grid gap-1.5">
+                <Label>Custom Ucapan <span className="text-muted-foreground font-normal">(opsional)</span></Label>
+                <Textarea value={birthdayCustomGreeting} onChange={(e) => setBirthdayCustomGreeting(e.target.value)} placeholder="Contoh: Semoga semakin sukses dan menjadi partner terpercaya..." className="min-h-20" />
+              </div>
+              <div className="grid gap-1.5">
+                <Label>Logo Perusahaan Customer <span className="text-muted-foreground font-normal">(opsional)</span></Label>
+                <Input type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => onCategoryFilesChange(e, birthdayLogoAssets, setBirthdayLogoAssets, 1)} disabled={isUploading || birthdayLogoAssets.length >= 1} />
+                <p className="text-xs text-muted-foreground">Upload logo customer agar muncul dalam desain ucapan.</p>
+                {birthdayLogoAssets.map((asset) => (
+                  <div key={asset.url} className="flex items-center justify-between rounded-lg border bg-background px-3 py-2 text-xs">
+                    <span className="truncate">{asset.filename}</span>
+                    <Button type="button" size="sm" variant="ghost" onClick={() => removeCategoryAsset(asset.url, setBirthdayLogoAssets)}>Hapus</Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── Edukasi ── */}
+          {contentType === "Edukasi" && (
+            <div className="grid gap-3 rounded-xl border bg-muted/20 p-4">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Detail Konten Edukasi</p>
+              <div className="grid gap-1.5">
+                <Label>Headline <span className="text-muted-foreground font-normal">(opsional — kosongkan untuk auto)</span></Label>
+                <Input value={eduHeadline} onChange={(e) => setEduHeadline(e.target.value)} placeholder="Contoh: 5 Tips Merawat Ban Truk Tambang" />
+              </div>
+              <div className="grid gap-1.5">
+                <Label>Topik Edukasi</Label>
+                <Input value={eduTopic} onChange={(e) => setEduTopic(e.target.value)} placeholder="Contoh: Cara cek tekanan ban yang benar" />
+              </div>
+              <div className="grid gap-1.5">
+                <Label>Poin Utama <span className="text-muted-foreground font-normal">(opsional)</span></Label>
+                <Textarea value={eduKeyPoints} onChange={(e) => setEduKeyPoints(e.target.value)} placeholder="Contoh: 1. Cek setiap minggu, 2. Tekanan ideal 32-35 PSI, 3. Cek saat ban dingin" className="min-h-20" />
+              </div>
+              <div className="grid gap-1.5">
+                <Label>Foto Referensi <span className="text-muted-foreground font-normal">(opsional)</span></Label>
+                <Input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(e) => onCategoryFilesChange(e, eduPhotoAssets, setEduPhotoAssets, 4)} disabled={isUploading || eduPhotoAssets.length >= 4} />
+                <p className="text-xs text-muted-foreground">Foto produk atau situasi kerja sebagai referensi visual.</p>
+                {eduPhotoAssets.length > 0 && (
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {eduPhotoAssets.map((asset) => (
+                      <div key={asset.url} className="flex items-center justify-between rounded-lg border bg-background px-3 py-2 text-xs">
+                        <span className="truncate">{asset.filename}</span>
+                        <Button type="button" size="sm" variant="ghost" onClick={() => removeCategoryAsset(asset.url, setEduPhotoAssets)}>Hapus</Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ── Pencapaian Perusahaan ── */}
+          {contentType === "Pencapaian perusahaan" && (
+            <div className="grid gap-3 rounded-xl border bg-muted/20 p-4">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Detail Pencapaian Perusahaan</p>
+              <div className="grid gap-1.5">
+                <Label>Headline <span className="text-muted-foreground font-normal">(opsional — kosongkan untuk auto)</span></Label>
+                <Input value={achievementHeadline} onChange={(e) => setAchievementHeadline(e.target.value)} placeholder="Contoh: 1 Juta Jam Kerja Aman — Terima Kasih!" />
+              </div>
+              <div className="grid gap-1.5">
+                <Label>Nama Pencapaian</Label>
+                <Input value={achievementName} onChange={(e) => setAchievementName(e.target.value)} placeholder="Contoh: 1 Juta Jam Kerja Aman" />
+              </div>
+              <div className="grid gap-1.5">
+                <Label>Angka / Statistik <span className="text-muted-foreground font-normal">(opsional)</span></Label>
+                <Input value={achievementStat} onChange={(e) => setAchievementStat(e.target.value)} placeholder="Contoh: 1.000.000 jam, 500 pelanggan, 10 tahun" />
+              </div>
+              <div className="grid gap-1.5">
+                <Label>Deskripsi Singkat <span className="text-muted-foreground font-normal">(opsional)</span></Label>
+                <Textarea value={achievementDesc} onChange={(e) => setAchievementDesc(e.target.value)} placeholder="Contoh: Pencapaian ini merupakan bukti komitmen kami dalam keselamatan kerja..." className="min-h-20" />
+              </div>
+              <div className="grid gap-1.5">
+                <Label>Foto Pencapaian <span className="text-muted-foreground font-normal">(opsional)</span></Label>
+                <Input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(e) => onCategoryFilesChange(e, achievementPhotoAssets, setAchievementPhotoAssets, 4)} disabled={isUploading || achievementPhotoAssets.length >= 4} />
+                {achievementPhotoAssets.length > 0 && (
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {achievementPhotoAssets.map((asset) => (
+                      <div key={asset.url} className="flex items-center justify-between rounded-lg border bg-background px-3 py-2 text-xs">
+                        <span className="truncate">{asset.filename}</span>
+                        <Button type="button" size="sm" variant="ghost" onClick={() => removeCategoryAsset(asset.url, setAchievementPhotoAssets)}>Hapus</Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ── Event Perusahaan ── */}
+          {contentType === "Event perusahaan" && (
+            <div className="grid gap-3 rounded-xl border bg-muted/20 p-4">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Detail Event Perusahaan</p>
+              <div className="grid gap-1.5">
+                <Label>Headline <span className="text-muted-foreground font-normal">(opsional — kosongkan untuk auto)</span></Label>
+                <Input value={eventHeadline} onChange={(e) => setEventHeadline(e.target.value)} placeholder="Contoh: Customer Gathering 2026 — Bersama Lebih Kuat" />
+              </div>
+              <div className="grid gap-1.5">
+                <Label>Nama Event</Label>
+                <Input value={eventName} onChange={(e) => setEventName(e.target.value)} placeholder="Contoh: Customer Gathering 2026" />
+              </div>
+              <div className="grid gap-1.5">
+                <Label>Lokasi & Tanggal</Label>
+                <Input value={eventLocationDate} onChange={(e) => setEventLocationDate(e.target.value)} placeholder="Contoh: Balikpapan, 20 Mei 2026" />
+              </div>
+              <div className="grid gap-1.5">
+                <Label>Deskripsi Event <span className="text-muted-foreground font-normal">(opsional)</span></Label>
+                <Textarea value={eventDesc} onChange={(e) => setEventDesc(e.target.value)} placeholder="Contoh: Acara gathering tahunan bersama pelanggan setia PT Chitra Paratama..." className="min-h-20" />
+              </div>
+              <div className="grid gap-1.5">
+                <Label>Foto Kegiatan <span className="text-muted-foreground font-normal">(opsional)</span></Label>
+                <Input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(e) => onCategoryFilesChange(e, eventPhotoAssets, setEventPhotoAssets, 4)} disabled={isUploading || eventPhotoAssets.length >= 4} />
+                {eventPhotoAssets.length > 0 && (
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {eventPhotoAssets.map((asset) => (
+                      <div key={asset.url} className="flex items-center justify-between rounded-lg border bg-background px-3 py-2 text-xs">
+                        <span className="truncate">{asset.filename}</span>
+                        <Button type="button" size="sm" variant="ghost" onClick={() => removeCategoryAsset(asset.url, setEventPhotoAssets)}>Hapus</Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ── Promosi Produk ── */}
+          {contentType === "Promosi produk" && (
+            <div className="grid gap-3 rounded-xl border bg-muted/20 p-4">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Detail Promosi Produk</p>
+              <div className="grid gap-1.5">
+                <Label>Headline <span className="text-muted-foreground font-normal">(opsional — kosongkan untuk auto)</span></Label>
+                <Input value={promoHeadline} onChange={(e) => setPromoHeadline(e.target.value)} placeholder="Contoh: Ban Michelin Terbaik untuk Armada Anda" />
+              </div>
+              <div className="grid gap-1.5">
+                <Label>Nama Produk / Layanan</Label>
+                <Input value={promoProductName} onChange={(e) => setPromoProductName(e.target.value)} placeholder="Contoh: Ban Michelin XZE2+, Layanan Fleet Check" />
+              </div>
+              <div className="grid gap-1.5">
+                <Label>Keunggulan Produk <span className="text-muted-foreground font-normal">(opsional)</span></Label>
+                <Textarea value={promoHighlights} onChange={(e) => setPromoHighlights(e.target.value)} placeholder="Contoh: Tahan lama, hemat BBM, cocok untuk truk tambang, garansi resmi Michelin" className="min-h-20" />
+              </div>
+              <div className="grid gap-1.5">
+                <Label>Call to Action <span className="text-muted-foreground font-normal">(opsional)</span></Label>
+                <Input value={promoCta} onChange={(e) => setPromoCta(e.target.value)} placeholder="Contoh: Hubungi kami sekarang, Dapatkan penawaran terbaik" />
+              </div>
+              <div className="grid gap-1.5">
+                <Label>Foto Produk <span className="text-muted-foreground font-normal">(opsional)</span></Label>
+                <Input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(e) => onCategoryFilesChange(e, promoPhotoAssets, setPromoPhotoAssets, 4)} disabled={isUploading || promoPhotoAssets.length >= 4} />
+                <p className="text-xs text-muted-foreground">Foto produk atau katalog sebagai referensi visual.</p>
+                {promoPhotoAssets.length > 0 && (
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {promoPhotoAssets.map((asset) => (
+                      <div key={asset.url} className="flex items-center justify-between rounded-lg border bg-background px-3 py-2 text-xs">
+                        <span className="truncate">{asset.filename}</span>
+                        <Button type="button" size="sm" variant="ghost" onClick={() => removeCategoryAsset(asset.url, setPromoPhotoAssets)}>Hapus</Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ── Hari Nasional ── */}
+          {contentType === "Hari Nasional" && (
+            <div className="grid gap-3 rounded-xl border bg-muted/20 p-4">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Detail Hari Nasional</p>
+              <div className="grid gap-1.5">
+                <Label>Headline <span className="text-muted-foreground font-normal">(opsional — kosongkan untuk auto)</span></Label>
+                <Input value={holidayHeadline} onChange={(e) => setHolidayHeadline(e.target.value)} placeholder="Contoh: Selamat Hari Kemerdekaan RI ke-80" />
+              </div>
+              <div className="rounded-lg border bg-background p-3 text-xs text-muted-foreground">
+                {isLoadingHoliday ? "Mengambil Hari Nasional terdekat..." : nearestHoliday ? `Hari Nasional terdekat: ${nearestHoliday.name} (${formatDate(nearestHoliday.date)})` : "Hari Nasional belum tersedia"}
+              </div>
+              <div className="grid gap-1.5">
+                <Label>Pesan Khusus <span className="text-muted-foreground font-normal">(opsional)</span></Label>
+                <Textarea value={holidayCustomMessage} onChange={(e) => setHolidayCustomMessage(e.target.value)} placeholder="Contoh: Semoga semangat kemerdekaan terus menginspirasi kita semua..." className="min-h-20" />
+              </div>
+            </div>
+          )}
+          {/* ── Tampilkan Orang / Wearpack Toggle ── */}
+          <div className="rounded-xl border bg-muted/20 p-4">
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                id="show-person-toggle"
+                checked={showPerson}
+                onChange={(e) => {
+                  setShowPerson(e.target.checked)
+                  if (!e.target.checked) setPersonActivity("")
+                }}
+                className="size-4 rounded border-input accent-primary cursor-pointer"
+              />
+              <label htmlFor="show-person-toggle" className="cursor-pointer text-sm font-medium leading-none">
+                Tampilkan orang / pekerja dalam gambar
+              </label>
+            </div>
+            {showPerson && (
+              <div className="mt-3 grid gap-1.5">
+                <Label className="text-xs text-muted-foreground">Kegiatan yang dilakukan <span className="font-normal">(opsional)</span></Label>
+                <Input
+                  value={personActivity}
+                  onChange={(e) => setPersonActivity(e.target.value)}
+                  placeholder="Contoh: memeriksa ban truk, berdiri di depan armada, melakukan servis"
+                />
+                <p className="text-xs text-muted-foreground">Pekerja akan memakai wearpack safety resmi PT Chitra Paratama secara otomatis.</p>
               </div>
             )}
-
-            {contentType === "Pencapaian perusahaan" && (
-              <div className="grid gap-3 rounded-xl border bg-muted/20 p-4">
-                <div>
-                  <Label>Nama Pencapaian</Label>
-                  <Input value={achievementName} onChange={(event) => setAchievementName(event.target.value)} placeholder="Contoh: 1 Juta Jam Kerja Aman" />
-                </div>
-                <div>
-                  <Label>Foto Pencapaian</Label>
-                  <Input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(event) => onCategoryFilesChange(event, achievementPhotoAssets, setAchievementPhotoAssets, 8)} disabled={isUploading || achievementPhotoAssets.length >= 8} />
-                  {achievementPhotoAssets.length > 0 && (
-                    <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                      {achievementPhotoAssets.map((asset) => (
-                        <div key={asset.url} className="flex items-center justify-between rounded-lg border bg-background px-3 py-2 text-xs">
-                          <span className="truncate">{asset.filename}</span>
-                          <Button type="button" size="sm" variant="ghost" onClick={() => removeCategoryAsset(asset.url, setAchievementPhotoAssets)}>Hapus</Button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
+            {!showPerson && (
+              <p className="mt-2 text-xs text-muted-foreground">Gambar akan fokus pada objek, produk, atau elemen grafis tanpa orang.</p>
             )}
-
-            {contentType === "Event perusahaan" && (
-              <div className="grid gap-3 rounded-xl border bg-muted/20 p-4">
-                <div>
-                  <Label>Nama Event</Label>
-                  <Input value={eventName} onChange={(event) => setEventName(event.target.value)} placeholder="Contoh: Customer Gathering 2026" />
-                </div>
-                <div>
-                  <Label>Lokasi dan tanggal</Label>
-                  <Input value={eventLocationDate} onChange={(event) => setEventLocationDate(event.target.value)} placeholder="Contoh: Balikpapan, 20 Mei 2026" />
-                </div>
-                <div>
-                  <Label>Foto Kegiatan</Label>
-                  <Input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(event) => onCategoryFilesChange(event, eventPhotoAssets, setEventPhotoAssets, 8)} disabled={isUploading || eventPhotoAssets.length >= 8} />
-                  {eventPhotoAssets.length > 0 && (
-                    <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                      {eventPhotoAssets.map((asset) => (
-                        <div key={asset.url} className="flex items-center justify-between rounded-lg border bg-background px-3 py-2 text-xs">
-                          <span className="truncate">{asset.filename}</span>
-                          <Button type="button" size="sm" variant="ghost" onClick={() => removeCategoryAsset(asset.url, setEventPhotoAssets)}>Hapus</Button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
+          </div>
             <div className="grid gap-2">
               <Label>Gaya Visual</Label>
               <Select
