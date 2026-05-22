@@ -15,6 +15,7 @@ import {
 import { Upload, FileUp, X, ArrowRight, Download, FileSpreadsheet, AlertTriangle } from "lucide-react"
 import { toast } from "sonner"
 import Papa from "papaparse"
+import * as XLSX from "xlsx"
 import { importMaterialPtro } from "@/app/actions/product"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -25,6 +26,47 @@ type Mapping = {
 }
 
 type Step = "upload" | "mapping" | "preview"
+
+function parseExcel(file: File): Promise<Record<string, string>[]> {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = (e) => {
+            try {
+                const data = new Uint8Array(e.target?.result as ArrayBuffer)
+                const workbook = XLSX.read(data, { type: "array" })
+                const sheetName = workbook.SheetNames[0]
+                const worksheet = workbook.Sheets[sheetName]
+                const json = XLSX.utils.sheet_to_json<Record<string, string>>(worksheet, { defval: "" })
+                resolve(json)
+            } catch (err) {
+                reject(err)
+            }
+        }
+        reader.onerror = () => reject(new Error("Failed to read file"))
+        reader.readAsArrayBuffer(file)
+    })
+}
+
+function getHeadersFromExcel(file: File): Promise<string[]> {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = (e) => {
+            try {
+                const data = new Uint8Array(e.target?.result as ArrayBuffer)
+                const workbook = XLSX.read(data, { type: "array" })
+                const sheetName = workbook.SheetNames[0]
+                const worksheet = workbook.Sheets[sheetName]
+                const json = XLSX.utils.sheet_to_json<Record<string, string>>(worksheet, { header: 1 })
+                const headers = (json[0] as string[]) || []
+                resolve(headers.map(String))
+            } catch (err) {
+                reject(err)
+            }
+        }
+        reader.onerror = () => reject(new Error("Failed to read file"))
+        reader.readAsArrayBuffer(file)
+    })
+}
 
 export function ProductPtroCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
     const [file, setFile] = useState<File | null>(null)
@@ -39,6 +81,11 @@ export function ProductPtroCSVUpload({ onSuccess }: { onSuccess?: () => void }) 
         materialNumberPtro: "",
     })
 
+    const isExcel = (f: File) =>
+        f.name.endsWith(".xlsx") || f.name.endsWith(".xls") ||
+        f.type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+        f.type === "application/vnd.ms-excel"
+
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const selectedFile = e.target.files?.[0]
         if (selectedFile) {
@@ -48,55 +95,71 @@ export function ProductPtroCSVUpload({ onSuccess }: { onSuccess?: () => void }) 
         }
     }
 
-    const parseHeaders = (file: File) => {
-        Papa.parse(file, {
-            header: true,
-            preview: 1,
-            skipEmptyLines: true,
-            complete: (results) => {
-                if (results.meta.fields) {
-                    const headers = results.meta.fields
-                    setCsvHeaders(headers)
-
-                    const detectMapped = (regex: RegExp) =>
-                        headers.find((h) => regex.test(h.toLowerCase().replace(/[^a-z0-9]/g, ""))) || ""
-
-                    setMapping({
-                        materialNumber: detectMapped(/materialnumber|materialno|partnumber|partno/i),
-                        materialNumberPtro: detectMapped(/materialnumberptro|ptro|mmptro/i),
+    const parseHeaders = async (f: File) => {
+        try {
+            let headers: string[] = []
+            if (isExcel(f)) {
+                headers = await getHeadersFromExcel(f)
+            } else {
+                await new Promise<void>((resolve) => {
+                    Papa.parse(f, {
+                        header: true,
+                        preview: 1,
+                        skipEmptyLines: true,
+                        complete: (results) => {
+                            headers = results.meta.fields || []
+                            resolve()
+                        },
+                        error: () => resolve(),
                     })
-                    setStep("mapping")
-                }
-            },
-            error: (error) => {
-                toast.error("Failed to parse CSV headers: " + error.message)
-            },
-        })
+                })
+            }
+            setCsvHeaders(headers)
+            const detectMapped = (regex: RegExp) =>
+                headers.find((h) => regex.test(h.toLowerCase().replace(/[^a-z0-9]/g, ""))) || ""
+            setMapping({
+                materialNumber: detectMapped(/materialnumber|materialno|partnumber|partno/i),
+                materialNumberPtro: detectMapped(/materialnumberptro|ptro|mmptro/i),
+            })
+            setStep("mapping")
+        } catch {
+            toast.error("Failed to parse file headers")
+        }
     }
 
-    const parseFullFile = () => {
+    const parseFullFile = async () => {
         if (!file) return
         setIsUploading(true)
-        Papa.parse(file, {
-            header: true,
-            skipEmptyLines: true,
-            complete: (results) => {
-                const data = results.data as Record<string, string>[]
-                const normalized = data
-                    .map((item) => ({
-                        materialNumber: mapping.materialNumber ? item[mapping.materialNumber]?.toString().trim() : "",
-                        materialNumberPtro: mapping.materialNumberPtro ? item[mapping.materialNumberPtro]?.toString().trim() : "",
-                    }))
-                    .filter((item) => item.materialNumber && item.materialNumberPtro)
-                setPreview(normalized)
-                setStep("preview")
-                setIsUploading(false)
-            },
-            error: (error) => {
-                setIsUploading(false)
-                toast.error("Failed to parse CSV: " + error.message)
-            },
-        })
+        try {
+            let rows: Record<string, string>[] = []
+            if (isExcel(file)) {
+                rows = await parseExcel(file)
+            } else {
+                await new Promise<void>((resolve) => {
+                    Papa.parse(file, {
+                        header: true,
+                        skipEmptyLines: true,
+                        complete: (results) => {
+                            rows = results.data as Record<string, string>[]
+                            resolve()
+                        },
+                        error: () => resolve(),
+                    })
+                })
+            }
+            const normalized = rows
+                .map((item) => ({
+                    materialNumber: mapping.materialNumber ? item[mapping.materialNumber]?.toString().trim() : "",
+                    materialNumberPtro: mapping.materialNumberPtro ? item[mapping.materialNumberPtro]?.toString().trim() : "",
+                }))
+                .filter((item) => item.materialNumber && item.materialNumberPtro)
+            setPreview(normalized)
+            setStep("preview")
+        } catch {
+            toast.error("Failed to parse file")
+        } finally {
+            setIsUploading(false)
+        }
     }
 
     const handleUpload = async () => {
@@ -129,26 +192,17 @@ export function ProductPtroCSVUpload({ onSuccess }: { onSuccess?: () => void }) 
     }
 
     const downloadTemplate = () => {
-        const headers = "Material Number,Material Number PTRO\n"
-        const example = "MAT001,PTRO_MAT001"
-        const csvContent = "data:text/csv;charset=utf-8," + headers + example
-        const encodedUri = encodeURI(csvContent)
-        const link = document.createElement("a")
-        link.setAttribute("href", encodedUri)
-        link.setAttribute("download", "template_material_ptro.csv")
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
+        const ws = XLSX.utils.aoa_to_sheet([
+            ["Material Number", "Material Number PTRO"],
+            ["MAT001", "PTRO_MAT001"],
+        ])
+        const wb = XLSX.utils.book_new()
+        XLSX.utils.book_append_sheet(wb, ws, "Template")
+        XLSX.writeFile(wb, "template_material_ptro.xlsx")
     }
 
     return (
-        <Dialog
-            open={isOpen}
-            onOpenChange={(open) => {
-                setIsOpen(open)
-                if (!open) reset()
-            }}
-        >
+        <Dialog open={isOpen} onOpenChange={(open) => { setIsOpen(open); if (!open) reset() }}>
             <DialogTrigger asChild>
                 <Button variant="outline" size="sm" className="gap-2">
                     <Upload className="h-4 w-4" />
@@ -162,12 +216,11 @@ export function ProductPtroCSVUpload({ onSuccess }: { onSuccess?: () => void }) 
                         Import Material PTRO
                     </DialogTitle>
                     <DialogDescription>
-                        Upload CSV untuk mapping Material Number dengan Material Number PTRO (PT. PETROSEA Tbk)
+                        Upload CSV atau Excel (.xlsx) untuk mapping Material Number dengan Material Number PTRO (PT. PETROSEA Tbk)
                     </DialogDescription>
                 </DialogHeader>
 
                 <div className="space-y-4">
-                    {/* Step indicator */}
                     <div className="flex items-center gap-2 text-sm">
                         {(["upload", "mapping", "preview"] as Step[]).map((s, i) => (
                             <React.Fragment key={s}>
@@ -186,7 +239,7 @@ export function ProductPtroCSVUpload({ onSuccess }: { onSuccess?: () => void }) 
                         <div className="space-y-4">
                             <div className="flex items-center justify-between">
                                 <p className="text-sm text-muted-foreground">
-                                    Upload file CSV dengan kolom Material Number dan Material Number PTRO
+                                    Upload file CSV atau Excel (.xlsx/.xls)
                                 </p>
                                 <Button variant="ghost" size="sm" onClick={downloadTemplate} className="gap-2 text-xs">
                                     <Download className="h-3 w-3" />
@@ -197,10 +250,10 @@ export function ProductPtroCSVUpload({ onSuccess }: { onSuccess?: () => void }) 
                                 <div className="flex flex-col items-center justify-center pt-5 pb-6">
                                     <FileUp className="h-8 w-8 text-muted-foreground mb-2" />
                                     <p className="text-sm text-muted-foreground">
-                                        {file ? file.name : "Click to upload or drag & drop CSV"}
+                                        {file ? file.name : "Click to upload CSV atau Excel (.xlsx/.xls)"}
                                     </p>
                                 </div>
-                                <input type="file" accept=".csv" className="hidden" onChange={handleFileChange} />
+                                <input type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={handleFileChange} />
                             </label>
                             {file && (
                                 <div className="flex items-center gap-2 text-sm bg-muted/50 p-2 rounded">
@@ -276,10 +329,7 @@ export function ProductPtroCSVUpload({ onSuccess }: { onSuccess?: () => void }) 
                     {step === "mapping" && (
                         <>
                             <Button variant="outline" onClick={() => setStep("upload")}>Back</Button>
-                            <Button
-                                onClick={parseFullFile}
-                                disabled={!mapping.materialNumber || !mapping.materialNumberPtro || isUploading}
-                            >
+                            <Button onClick={parseFullFile} disabled={!mapping.materialNumber || !mapping.materialNumberPtro || isUploading}>
                                 {isUploading ? "Processing..." : "Next: Preview"}
                                 <ArrowRight className="ml-2 h-4 w-4" />
                             </Button>
