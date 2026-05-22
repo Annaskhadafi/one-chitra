@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import * as React from "react"
 import { updateSetting } from "@/app/actions/settings"
@@ -6,6 +6,7 @@ import {
     deleteSlowMovingProduct,
     importSlowMovingProducts,
 } from "@/app/actions/slow-moving-products"
+import type { MonthlySellingQty } from "@/app/actions/slow-moving-products"
 import type { getStocks } from "@/app/actions/stock"
 import { Box, Download, Loader2, PackageSearch, RotateCcw, Search, Trash2, Upload } from "lucide-react"
 import * as XLSX from "xlsx"
@@ -49,11 +50,7 @@ function parseNumber(value: string | number | null | undefined) {
     if (typeof value === "number") {
         return Number.isFinite(value) ? value : 0
     }
-
-    if (!value) {
-        return 0
-    }
-
+    if (!value) return 0
     const normalized = String(value).replace(/,/g, "").trim()
     const parsed = Number(normalized)
     return Number.isFinite(parsed) ? parsed : 0
@@ -70,17 +67,12 @@ function getMaterialNumber(stock: StockRow) {
 
 function getStockAgeDays(stock: StockRow) {
     const createdAt = stock.createdAt ? new Date(stock.createdAt) : null
-    if (!createdAt || Number.isNaN(createdAt.getTime())) {
-        return 0
-    }
-
+    if (!createdAt || Number.isNaN(createdAt.getTime())) return 0
     return Math.max(Math.floor((Date.now() - createdAt.getTime()) / DAY_IN_MS), 0)
 }
 
 function formatQty(value: number) {
-    return new Intl.NumberFormat("id-ID", {
-        maximumFractionDigits: 0,
-    }).format(value)
+    return new Intl.NumberFormat("id-ID", { maximumFractionDigits: 0 }).format(value)
 }
 
 function formatCurrency(value: number) {
@@ -92,20 +84,23 @@ function formatCurrency(value: number) {
     }).format(value)
 }
 
+function formatMonthLabel(yyyyMM: string) {
+    const [year, month] = yyyyMM.split("-")
+    const date = new Date(Number(year), Number(month) - 1, 1)
+    return date.toLocaleDateString("id-ID", { month: "short", year: "2-digit" })
+}
+
 function buildProductOptions(stocks: StockRow[]) {
     const grouped = new Map<string, ProductOption>()
-
     for (const stock of stocks) {
         const key = getMaterialKey(stock)
         const current = grouped.get(key)
         const totalQty = Number(stock.totalStock || 0)
-
         if (current) {
             current.totalQty += totalQty
             current.stockCount += 1
             continue
         }
-
         grouped.set(key, {
             key,
             materialNumber: getMaterialNumber(stock),
@@ -114,7 +109,6 @@ function buildProductOptions(stocks: StockRow[]) {
             stockCount: 1,
         })
     }
-
     return Array.from(grouped.values()).sort((left, right) =>
         left.materialNumber.localeCompare(right.materialNumber)
     )
@@ -130,18 +124,15 @@ function buildSlowMovingRow(stocks: StockRow[], option: ProductOption, manualRat
     for (const stock of relatedStocks) {
         const qty = Number(stock.totalStock || 0)
         const costSap = parseNumber(stock.product?.costSap)
-
         if (getStockAgeDays(stock) < 366) {
             lessThan366Qty += qty
         } else {
             moreThan366Qty += qty
         }
-
         totalValue += qty * costSap * rate
     }
 
     const allQty = lessThan366Qty + moreThan366Qty
-
     return {
         ...option,
         totalQty: allQty,
@@ -152,16 +143,31 @@ function buildSlowMovingRow(stocks: StockRow[], option: ProductOption, manualRat
     }
 }
 
+function getAllMonths(sellingOutByMonth: MonthlySellingQty[]): string[] {
+    const currentYear = new Date().getFullYear().toString()
+    const monthSet = new Set<string>()
+    for (const item of sellingOutByMonth) {
+        for (const month of Object.keys(item.monthlyQty)) {
+            if (month.startsWith(currentYear)) {
+                monthSet.add(month)
+            }
+        }
+    }
+    return Array.from(monthSet).sort()
+}
+
 export function SlowMovingClient({
     stocks,
     defaultRate = "1",
     savedProducts = [],
     showHeader = true,
+    sellingOutByMonth = [],
 }: {
     stocks: StockRow[]
     defaultRate?: string
     savedProducts?: SavedSlowMovingProduct[]
     showHeader?: boolean
+    sellingOutByMonth?: MonthlySellingQty[]
 }) {
     const [search, setSearch] = React.useState("")
     const [selectedKeys, setSelectedKeys] = React.useState<string[]>([])
@@ -176,10 +182,7 @@ export function SlowMovingClient({
 
     const filteredOptions = React.useMemo(() => {
         const keyword = search.trim().toLowerCase()
-        if (!keyword) {
-            return productOptions
-        }
-
+        if (!keyword) return productOptions
         return productOptions.filter((option) =>
             `${option.materialNumber} ${option.description}`.toLowerCase().includes(keyword)
         )
@@ -192,27 +195,48 @@ export function SlowMovingClient({
             .map((option) => buildSlowMovingRow(stocks, option, manualRate))
     }, [importedKeys, manualRate, productOptions, stocks])
 
+    const allMonths = React.useMemo(() => getAllMonths(sellingOutByMonth), [sellingOutByMonth])
+
+    const sellingMap = React.useMemo(() => {
+        const map = new Map<string, { monthlyQty: Record<string, number>; totalQtySold: number; totalRevenue: number }>()
+        for (const item of sellingOutByMonth) {
+            map.set(item.materialKey, {
+                monthlyQty: item.monthlyQty,
+                totalQtySold: item.totalQtySold,
+                totalRevenue: item.totalRevenue,
+            })
+        }
+        return map
+    }, [sellingOutByMonth])
+
     const stats = React.useMemo(() => {
-        return reportRows.reduce(
+        const monthlyTotals: Record<string, number> = {}
+        const base = reportRows.reduce(
             (acc, row) => {
                 acc.totalQty += row.totalQty
+                acc.lessThan366Qty += row.lessThan366Qty
                 acc.moreThan366Qty += row.moreThan366Qty
                 acc.totalValue += row.totalValue
+                const entry = sellingMap.get(row.key)
+                acc.totalQtySold += entry?.totalQtySold ?? 0
+                acc.totalRevenue += entry?.totalRevenue ?? 0
+                const monthlyQty = entry?.monthlyQty ?? {}
+                for (const [month, qty] of Object.entries(monthlyQty)) {
+                    monthlyTotals[month] = (monthlyTotals[month] ?? 0) + qty
+                }
                 return acc
             },
-            { totalQty: 0, moreThan366Qty: 0, totalValue: 0 }
+            { totalQty: 0, lessThan366Qty: 0, moreThan366Qty: 0, totalValue: 0, totalQtySold: 0, totalRevenue: 0 }
         )
-    }, [reportRows])
+        return { ...base, monthlyTotals }
+    }, [reportRows, sellingMap])
 
     const selectedKeySet = React.useMemo(() => new Set(selectedKeys), [selectedKeys])
     const importedKeySet = React.useMemo(() => new Set(importedKeys), [importedKeys])
 
     const toggleProductSelection = (key: string, checked: boolean) => {
         setSelectedKeys((current) => {
-            if (checked) {
-                return current.includes(key) ? current : [...current, key]
-            }
-
+            if (checked) return current.includes(key) ? current : [...current, key]
             return current.filter((item) => item !== key)
         })
     }
@@ -222,14 +246,11 @@ export function SlowMovingClient({
             toast.error("Pilih minimal satu product terlebih dahulu")
             return
         }
-
         const keysToImport = selectedKeys.filter((key) => !importedKeySet.has(key))
-
         if (keysToImport.length === 0) {
             toast.info("Semua product terpilih sudah ada di tabel")
             return
         }
-
         const itemsToImport = keysToImport
             .map((key) => productOptions.find((option) => option.key === key))
             .filter((option): option is ProductOption => Boolean(option))
@@ -272,12 +293,10 @@ export function SlowMovingClient({
         const visibleKeys = filteredOptions
             .map((option) => option.key)
             .filter((key) => !importedKeySet.has(key))
-
         if (visibleKeys.length === 0) {
             toast.info("Tidak ada product baru yang bisa dipilih")
             return
         }
-
         setSelectedKeys((current) => Array.from(new Set([...current, ...visibleKeys])))
     }
 
@@ -287,21 +306,40 @@ export function SlowMovingClient({
             return
         }
 
-        const worksheet = XLSX.utils.json_to_sheet(reportRows.map((row, index) => ({
-            No: index + 1,
-            "Material Number": row.materialNumber,
-            Desc: row.description,
-            "All Qty": row.totalQty,
-            "<366": row.lessThan366Qty,
-            "366>": row.moreThan366Qty,
-            "Unit Price": Math.round(row.unitPrice),
-            "Total Value": Math.round(row.totalValue),
-        })))
+        const rows = reportRows.map((row, index) => {
+            const sellingEntry = sellingMap.get(row.key)
+            const totalQtySold = sellingEntry?.totalQtySold ?? 0
+            const totalRevenue = sellingEntry?.totalRevenue ?? 0
+            const monthlyQty = sellingEntry?.monthlyQty ?? {}
+            const sellOutPct = row.totalQty > 0 ? ((totalQtySold / (row.totalQty + totalQtySold)) * 100).toFixed(1) + "%" : "-"
+            const base: Record<string, unknown> = {
+                No: index + 1,
+                "Material Number": row.materialNumber,
+                Desc: row.description,
+                "All Qty": row.totalQty,
+                "<366": row.lessThan366Qty,
+                "366>": row.moreThan366Qty,
+                "Unit Price": Math.round(row.unitPrice),
+                "Total Value": Math.round(row.totalValue),
+                "Total Terjual": totalQtySold,
+                "Revenue Terjual": Math.round(totalRevenue),
+                "% Sell Out": sellOutPct,
+            }
+            for (const month of allMonths) {
+                base[formatMonthLabel(month)] = monthlyQty[month] ?? 0
+            }
+            return base
+        })
+
+        const worksheet = XLSX.utils.json_to_sheet(rows)
         const workbook = XLSX.utils.book_new()
         XLSX.utils.book_append_sheet(workbook, worksheet, "Slow Moving")
         XLSX.writeFile(workbook, `slow-moving-${new Date().toISOString().slice(0, 10)}.xlsx`)
         toast.success("Export Excel berhasil")
     }
+
+    const totalMonthCols = allMonths.length
+    const totalCols = 12 + totalMonthCols
 
     return (
         <div className={showHeader ? "flex min-h-screen flex-1 flex-col gap-6 bg-white p-4 text-zinc-950 md:p-8 lg:p-10" : "flex flex-col gap-6"}>
@@ -385,9 +423,10 @@ export function SlowMovingClient({
                     </div>
                     <div className="flex flex-wrap gap-2">
                         <Button variant="outline" onClick={handleSelectVisible} className="gap-2">
-                            Pilih Yang Tampil
+                            <Search className="h-4 w-4" />
+                            Pilih Semua Visible
                         </Button>
-                        <Button onClick={handleImportSelected} disabled={isImporting} className="gap-2">
+                        <Button onClick={handleImportSelected} disabled={isImporting || selectedKeys.length === 0} className="gap-2">
                             {isImporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
                             {isImporting ? "Menyimpan..." : "Import Product Terpilih"}
                         </Button>
@@ -431,7 +470,6 @@ export function SlowMovingClient({
                             filteredOptions.map((option) => {
                                 const isImported = importedKeySet.has(option.key)
                                 const isSelected = selectedKeySet.has(option.key)
-
                                 return (
                                     <label
                                         key={option.key}
@@ -441,9 +479,10 @@ export function SlowMovingClient({
                                     >
                                         <Checkbox
                                             checked={isSelected}
+                                            onCheckedChange={(checked) =>
+                                                toggleProductSelection(option.key, Boolean(checked))
+                                            }
                                             disabled={isImported}
-                                            onCheckedChange={(checked) => toggleProductSelection(option.key, checked === true)}
-                                            aria-label={`Pilih ${option.materialNumber}`}
                                         />
                                         <div className="min-w-0 flex-1">
                                             <div className="flex flex-wrap items-center gap-2">
@@ -465,7 +504,7 @@ export function SlowMovingClient({
 
             <div className="overflow-hidden rounded-md border bg-card">
                 <div className="overflow-x-auto">
-                    <Table className="min-w-[980px] border-collapse">
+                    <Table className="border-collapse" style={{ minWidth: `${980 + totalMonthCols * 100}px` }}>
                         <TableHeader>
                             <TableRow className="bg-muted/50">
                                 <TableHead className="h-10 w-16 text-center">No</TableHead>
@@ -476,47 +515,95 @@ export function SlowMovingClient({
                                 <TableHead className="h-10 text-right">366&gt;</TableHead>
                                 <TableHead className="h-10 text-right">Unit Price</TableHead>
                                 <TableHead className="h-10 text-right">Total Value</TableHead>
+                                <TableHead className="h-10 text-right text-emerald-700">Total Terjual</TableHead>
+                                <TableHead className="h-10 text-right text-emerald-700">Revenue Terjual</TableHead>
+                                <TableHead className="h-10 text-right text-orange-700">% Sell Out</TableHead>
+                                {allMonths.map((month) => (
+                                    <TableHead key={month} className="h-10 text-right text-blue-700">
+                                        {formatMonthLabel(month)}
+                                    </TableHead>
+                                ))}
                                 <TableHead className="h-10 text-right">Aksi</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {reportRows.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={9} className="h-40 text-center text-sm text-muted-foreground">
+                                    <TableCell colSpan={totalCols} className="h-40 text-center text-sm text-muted-foreground">
                                         Belum ada product yang diimport.
                                     </TableCell>
                                 </TableRow>
                             ) : (
-                                reportRows.map((row, index) => (
-                                    <TableRow key={row.key}>
-                                        <TableCell className="text-center font-mono">{index + 1}</TableCell>
-                                        <TableCell className="font-medium text-blue-600">{row.materialNumber}</TableCell>
-                                        <TableCell className="whitespace-normal">{row.description}</TableCell>
-                                        <TableCell className="text-right font-mono">{formatQty(row.totalQty)}</TableCell>
-                                        <TableCell className="text-right font-mono">{formatQty(row.lessThan366Qty)}</TableCell>
-                                        <TableCell className="text-right font-mono">{formatQty(row.moreThan366Qty)}</TableCell>
-                                        <TableCell className="text-right font-mono">{formatCurrency(row.unitPrice)}</TableCell>
-                                        <TableCell className="text-right font-mono">{formatCurrency(row.totalValue)}</TableCell>
-                                        <TableCell className="text-right">
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="h-8 w-8 text-destructive"
-                                                onClick={() => handleRemoveImported(row.key)}
-                                                disabled={deletingKey === row.key}
-                                                aria-label={`Hapus ${row.materialNumber}`}
-                                            >
-                                                {deletingKey === row.key ? (
-                                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                                ) : (
-                                                    <Trash2 className="h-4 w-4" />
-                                                )}
-                                            </Button>
-                                        </TableCell>
-                                    </TableRow>
-                                ))
+                                reportRows.map((row, index) => {
+                                    const sellingEntry = sellingMap.get(row.key)
+                                    const monthlyQty = sellingEntry?.monthlyQty ?? {}
+                                    const totalQtySold = sellingEntry?.totalQtySold ?? 0
+                                    const totalRevenue = sellingEntry?.totalRevenue ?? 0
+                                    const sellOutPct = row.totalQty > 0 ? (totalQtySold / (row.totalQty + totalQtySold)) * 100 : 0
+                                    return (
+                                        <TableRow key={row.key}>
+                                            <TableCell className="text-center font-mono">{index + 1}</TableCell>
+                                            <TableCell className="font-medium text-blue-600">{row.materialNumber}</TableCell>
+                                            <TableCell className="whitespace-normal">{row.description}</TableCell>
+                                            <TableCell className="text-right font-mono">{formatQty(row.totalQty)}</TableCell>
+                                            <TableCell className="text-right font-mono">{formatQty(row.lessThan366Qty)}</TableCell>
+                                            <TableCell className="text-right font-mono">{formatQty(row.moreThan366Qty)}</TableCell>
+                                            <TableCell className="text-right font-mono">{formatCurrency(row.unitPrice)}</TableCell>
+                                            <TableCell className="text-right font-mono">{formatCurrency(row.totalValue)}</TableCell>
+                                            <TableCell className="text-right font-mono text-emerald-700">{formatQty(totalQtySold)}</TableCell>
+                                            <TableCell className="text-right font-mono text-emerald-700">{formatCurrency(totalRevenue)}</TableCell>
+                                            <TableCell className="text-right font-mono text-orange-700 font-semibold">
+                                                {sellOutPct > 0 ? sellOutPct.toFixed(1) + "%" : "-"}
+                                            </TableCell>
+                                            {allMonths.map((month) => (
+                                                <TableCell key={month} className="text-right font-mono text-blue-800">
+                                                    {formatQty(monthlyQty[month] ?? 0)}
+                                                </TableCell>
+                                            ))}
+                                            <TableCell className="text-right">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-8 w-8 text-destructive"
+                                                    onClick={() => handleRemoveImported(row.key)}
+                                                    disabled={deletingKey === row.key}
+                                                    aria-label={`Hapus ${row.materialNumber}`}
+                                                >
+                                                    {deletingKey === row.key ? (
+                                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                                    ) : (
+                                                        <Trash2 className="h-4 w-4" />
+                                                    )}
+                                                </Button>
+                                            </TableCell>
+                                        </TableRow>
+                                    )
+                                })
                             )}
                         </TableBody>
+                        {reportRows.length > 0 && (
+                            <tfoot>
+                                <tr className="border-t bg-muted/70 font-semibold">
+                                    <td colSpan={3} className="h-10 px-4 text-sm">Total</td>
+                                    <td className="px-4 text-right font-mono text-sm">{formatQty(stats.totalQty)}</td>
+                                    <td className="px-4 text-right font-mono text-sm">{formatQty(stats.lessThan366Qty)}</td>
+                                    <td className="px-4 text-right font-mono text-sm">{formatQty(stats.moreThan366Qty)}</td>
+                                    <td className="px-4 text-right font-mono text-sm"></td>
+                                    <td className="px-4 text-right font-mono text-sm">{formatCurrency(stats.totalValue)}</td>
+                                    <td className="px-4 text-right font-mono text-sm text-emerald-700">{formatQty(stats.totalQtySold)}</td>
+                                    <td className="px-4 text-right font-mono text-sm text-emerald-700">{formatCurrency(stats.totalRevenue)}</td>
+                                    <td className="px-4 text-right font-mono text-sm text-orange-700 font-semibold">
+                                        {stats.totalQty > 0 ? ((stats.totalQtySold / (stats.totalQty + stats.totalQtySold)) * 100).toFixed(1) + "%" : "-"}
+                                    </td>
+                                    {allMonths.map((month) => (
+                                        <td key={month} className="px-4 text-right font-mono text-sm text-blue-800">
+                                            {formatQty(stats.monthlyTotals[month] ?? 0)}
+                                        </td>
+                                    ))}
+                                    <td />
+                                </tr>
+                            </tfoot>
+                        )}
                     </Table>
                 </div>
             </div>

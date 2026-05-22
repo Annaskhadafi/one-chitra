@@ -1,8 +1,9 @@
-"use client"
+﻿"use client"
 
 import type { getCosmeticTires } from "@/app/actions/cosmetic-tires"
 import type { getProducts } from "@/app/actions/product"
 import type { getSlowMovingProducts } from "@/app/actions/slow-moving-products"
+import type { MonthlySellingQty } from "@/app/actions/slow-moving-products"
 import type { getStocks } from "@/app/actions/stock"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -20,12 +21,14 @@ export function SlowMovingTabs({
     savedProducts,
     cosmeticTires,
     products,
+    sellingOutByMonth,
 }: {
     stocks: StockRow[]
     defaultRate: string
     savedProducts: SavedSlowMovingProduct[]
     cosmeticTires: CosmeticTireRow[]
     products: ProductRow[]
+    sellingOutByMonth: MonthlySellingQty[]
 }) {
     return (
         <div className="flex min-h-screen flex-1 flex-col gap-6 bg-white p-4 text-zinc-950 md:p-8 lg:p-10">
@@ -47,6 +50,7 @@ export function SlowMovingTabs({
                             defaultRate={defaultRate}
                             savedProducts={savedProducts}
                             showHeader={false}
+                            sellingOutByMonth={sellingOutByMonth}
                         />
                     </TabsContent>
                     <TabsContent value="cosmetic-tire" className="mt-0">

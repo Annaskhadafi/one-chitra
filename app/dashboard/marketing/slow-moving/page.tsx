@@ -1,7 +1,7 @@
-import { getCosmeticTires } from "@/app/actions/cosmetic-tires"
+﻿import { getCosmeticTires } from "@/app/actions/cosmetic-tires"
 import { getProducts } from "@/app/actions/product"
 import { getSetting } from "@/app/actions/settings"
-import { getSlowMovingProducts } from "@/app/actions/slow-moving-products"
+import { getSellingOutByMonth, getSlowMovingProducts } from "@/app/actions/slow-moving-products"
 import { getStocks } from "@/app/actions/stock"
 import { SlowMovingTabs } from "./_components/slow-moving-tabs"
 
@@ -18,6 +18,9 @@ export default async function SlowMovingPage() {
         getProducts(),
     ])
 
+    const materialKeys = savedProducts.map((p) => p.materialKey)
+    const sellingOutByMonth = await getSellingOutByMonth(materialKeys)
+
     return (
         <SlowMovingTabs
             stocks={stocks}
@@ -25,6 +28,7 @@ export default async function SlowMovingPage() {
             savedProducts={savedProducts}
             cosmeticTires={cosmeticTires}
             products={products}
+            sellingOutByMonth={sellingOutByMonth}
         />
     )
 }
