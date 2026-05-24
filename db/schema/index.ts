@@ -202,6 +202,7 @@ export {
     helpdeskKnowledgeChunksRelations,
     helpdeskTrainingLogsRelations,
 } from "./helpdesk-ai";
+export { businessCards } from "./business-cards";
 
 // Core Auth Table Relations
 import { salesDocuments } from "./sales-documents";

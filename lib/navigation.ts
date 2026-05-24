@@ -11,6 +11,7 @@ import {
     ClipboardList,
     Lock,
     Wrench,
+    IdCard,
     type LucideIcon
 } from "lucide-react"
 
@@ -306,7 +307,7 @@ export const navigationConfig: NavSection[] = [
                 ],
             },
             {
-                title: "Sales Preview",
+                title: "Sales",
                 url: "#",
                 icon: ShoppingCart,
                 resource: "sales",
@@ -380,6 +381,11 @@ export const navigationConfig: NavSection[] = [
                         title: "Harga Acuan Minerba",
                         url: "/dashboard/harga-acuan-minerba",
                         resource: "sales-documents",
+                    },
+                    {
+                        title: "Business Card Scanner",
+                        url: "/dashboard/business-cards",
+                        resource: "business-cards",
                     },
                 ],
             },

@@ -1,4 +1,4 @@
-﻿import { NextRequest } from "next/server"
+﻿﻿﻿﻿﻿﻿import { NextRequest } from "next/server"
 import sharp from "sharp"
 import fs from "fs/promises"
 import path from "path"
