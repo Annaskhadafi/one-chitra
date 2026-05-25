@@ -85,6 +85,14 @@ function getWarehouseLabel(warehouse: Warehouse | null | undefined) {
     return warehouse.description || warehouse.sloc || "-"
 }
 
+function getShipmentParty(delivery: Pick<Delivery, "isExternal" | "vendorName" | "driverName">) {
+    return delivery.isExternal ? delivery.vendorName || "-" : delivery.driverName || "-"
+}
+
+function getShipmentPartyType(delivery: Pick<Delivery, "isExternal">) {
+    return delivery.isExternal ? "Forwarder" : "Driver"
+}
+
 function calculateGrandTotal(salesOrder: SalesOrder & { items: SalesOrderItem[] } | null) {
     if (!salesOrder || !salesOrder.items) return 0
     const subtotal = salesOrder.items.reduce((sum, item) => {
@@ -94,6 +102,10 @@ function calculateGrandTotal(salesOrder: SalesOrder & { items: SalesOrderItem[] 
     return subtotal - Number(salesOrder.discount) + Number(salesOrder.shipping)
 }
 
+function isNormalPo(salesOrder: Pick<SalesOrder, "categoryPo"> | null | undefined) {
+    const categoryPo = (salesOrder?.categoryPo ?? "").trim().toLowerCase()
+    return !categoryPo.includes("evhs") && !categoryPo.includes("vhs") && !categoryPo.includes("consignment")
+}
 function formatCurrency(value: number) {
     return new Intl.NumberFormat("id-ID", {
         style: "currency",
@@ -604,6 +616,30 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
             },
         },
         {
+            id: "shipmentParty",
+            accessorFn: (row) => getShipmentParty(row),
+            header: "Driver / Forwarder",
+            cell: ({ row }) => {
+                const party = getShipmentParty(row.original)
+                const partyType = getShipmentPartyType(row.original)
+                const vehicleNumber = row.original.vehicleNumber || "-"
+
+                return (
+                    <div className="min-w-[140px]">
+                        <div className="font-medium text-sm truncate" title={party}>
+                            {party}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                            {partyType}
+                        </div>
+                        <div className="text-xs text-muted-foreground truncate" title={vehicleNumber}>
+                            Plat: {vehicleNumber}
+                        </div>
+                    </div>
+                )
+            },
+        },
+        {
             id: "customerName",
             accessorFn: (row) => row.salesOrder?.customer?.name,
             header: "Customer",
@@ -718,6 +754,9 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
                 (d.deliveryNumber?.toLowerCase().includes(term)) ||
                 (d.doSap?.toLowerCase().includes(term)) ||
                 (d.salesOrder?.customer?.name?.toLowerCase().includes(term)) ||
+                (d.driverName?.toLowerCase().includes(term)) ||
+                (d.vendorName?.toLowerCase().includes(term)) ||
+                (d.vehicleNumber?.toLowerCase().includes(term)) ||
                 (d.invoiceNumber?.toLowerCase().includes(term)) ||
                 (d.salesOrder?.customerPo?.toLowerCase().includes(term)) ||
                 matchedItems.length > 0
@@ -789,6 +828,8 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
         let grandTotalUninvoiced = 0
 
         for (const delivery of filteredData) {
+            if (!isNormalPo(delivery.salesOrder)) continue
+
             const deliveryValue = (visibleItemsByDeliveryId.get(delivery.id) ?? []).reduce(
                 (sum, item) => sum + getDeliveryItemValue(delivery, item),
                 0,
@@ -873,6 +914,9 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
             "Invoice No",
             "Invoice Date",
             "Warehouse",
+            "Driver / Forwarder",
+            "Shipment Type",
+            "Plat Kendaraan",
             "Customer",
             "Material Number",
             "Material Description",
@@ -894,6 +938,9 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
                 d.invoiceNumber || "",
                 d.invoiceDate ? new Date(d.invoiceDate).toLocaleDateString("id-ID") : "",
                 getWarehouseLabel(d.warehouse),
+                getShipmentParty(d),
+                getShipmentPartyType(d),
+                d.vehicleNumber || "",
                 d.salesOrder?.customer?.name || "",
             ]
 
@@ -1010,7 +1057,7 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
                     title="Grand Total Invoiced"
                     value={formatCurrency(summaryCards.grandTotalInvoiced)}
                     icon={DollarSign}
-                    description="Value item terlihat yang sudah invoice"
+                    description="PO normal saja, sudah invoice"
                     gradient="from-emerald-500/10 via-emerald-400/5 to-teal-500/10 border-emerald-200/50"
                     iconColor="text-emerald-600 dark:text-emerald-400"
                     textColor="text-emerald-900 dark:text-emerald-100"
@@ -1019,7 +1066,7 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
                     title="Grand Total Un-invoice"
                     value={formatCurrency(summaryCards.grandTotalUninvoiced)}
                     icon={FileX}
-                    description="Value item terlihat yang belum invoice"
+                    description="PO normal saja, belum invoice"
                     gradient="from-red-500/10 via-red-400/5 to-rose-500/10 border-red-200/50"
                     iconColor="text-red-600 dark:text-red-400"
                     textColor="text-red-900 dark:text-red-100"
