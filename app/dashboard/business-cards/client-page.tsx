@@ -186,12 +186,11 @@ export function ClientBusinessCardDashboard({ initialCards }: { initialCards: Bu
 
             {/* FAB Scanner Button */}
             <ScannerDrawer>
-                <Button 
-                    size="icon" 
-                    className="fixed bottom-6 left-1/2 -translate-x-1/2 w-16 h-16 rounded-full shadow-[0_8px_30px_rgb(0,0,0,0.2)] shadow-primary/40 hover:scale-105 transition-transform z-50"
+                <div 
+                    className="fixed bottom-6 left-1/2 -translate-x-1/2 w-16 h-16 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-[0_8px_30px_rgb(0,0,0,0.2)] shadow-primary/40 hover:scale-105 transition-transform z-[100]"
                 >
                     <ScanLine className="w-7 h-7" />
-                </Button>
+                </div>
             </ScannerDrawer>
 
             {/* Detail Dialog */}

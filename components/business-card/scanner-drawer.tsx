@@ -74,6 +74,7 @@ export function ScannerDrawer({ children, onSuccess }: { children: React.ReactEl
     return (
         <>
             <input 
+                id="camera-upload"
                 type="file" 
                 accept="image/*" 
                 capture="environment" 
@@ -81,13 +82,9 @@ export function ScannerDrawer({ children, onSuccess }: { children: React.ReactEl
                 ref={fileInputRef}
                 onChange={handleFileChange}
             />
-            {React.cloneElement(children, {
-                onClick: (e: any) => {
-                    e.preventDefault()
-                    e.stopPropagation()
-                    fileInputRef.current?.click()
-                }
-            })}
+            <label htmlFor="camera-upload" className="cursor-pointer">
+                {children}
+            </label>
 
             <Drawer open={open} onOpenChange={handleOpenChange}>
                 <DrawerContent className="h-[90vh] flex flex-col bg-background border-t z-[100]">
