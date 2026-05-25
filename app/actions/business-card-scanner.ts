@@ -5,7 +5,7 @@ import { businessCards } from "@/db/schema/business-cards"
 import { uploadFile } from "@/app/actions/upload"
 import { extractBusinessCardViaOllama } from "@/lib/ollama-business-card"
 import { revalidatePath } from "next/cache"
-import { desc } from "drizzle-orm"
+import { desc, eq } from "drizzle-orm"
 
 export async function scanAndSaveBusinessCard(formData: FormData) {
     try {
@@ -65,3 +65,29 @@ export async function getBusinessCards() {
         return { success: false, error: "Failed to fetch business cards" }
     }
 }
+
+export async function updateBusinessCard(id: number, data: Partial<typeof businessCards.$inferInsert>) {
+    try {
+        await db.update(businessCards)
+            .set(data)
+            .where(eq(businessCards.id, id))
+            
+        revalidatePath("/dashboard/business-cards")
+        return { success: true }
+    } catch (error) {
+        console.error("Failed to update business card:", error)
+        return { success: false, error: "Gagal memperbarui data kartu nama" }
+    }
+}
+
+export async function deleteBusinessCard(id: number) {
+    try {
+        await db.delete(businessCards).where(eq(businessCards.id, id))
+        revalidatePath("/dashboard/business-cards")
+        return { success: true }
+    } catch (error) {
+        console.error("Failed to delete business card:", error)
+        return { success: false, error: "Gagal menghapus kartu nama" }
+    }
+}
+

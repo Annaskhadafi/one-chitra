@@ -4,10 +4,14 @@ import * as React from "react"
 import { ScannerDrawer } from "@/components/business-card/scanner-drawer"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Building2, Mail, Phone, MapPin, ScanLine, UserSquare2, ChevronRight, Briefcase } from "lucide-react"
+import { Building2, Mail, Phone, MapPin, ScanLine, UserSquare2, ChevronRight, Edit2, Trash2, Save, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import Image from "next/image"
+import { updateBusinessCard, deleteBusinessCard } from "@/app/actions/business-card-scanner"
+import { toast } from "sonner"
 
 type BusinessCard = {
     id: number
@@ -25,6 +29,62 @@ type BusinessCard = {
 export function ClientBusinessCardDashboard({ initialCards }: { initialCards: BusinessCard[] }) {
     const [selectedCategory, setSelectedCategory] = React.useState<string>("All")
     const [selectedCard, setSelectedCard] = React.useState<BusinessCard | null>(null)
+    const [isEditing, setIsEditing] = React.useState(false)
+    const [editForm, setEditForm] = React.useState<Partial<BusinessCard>>({})
+    const [isSaving, setIsSaving] = React.useState(false)
+
+    const handleEdit = () => {
+        setEditForm({ ...selectedCard })
+        setIsEditing(true)
+    }
+
+    const handleSave = async () => {
+        if (!selectedCard) return
+        setIsSaving(true)
+        try {
+            const res = await updateBusinessCard(selectedCard.id, {
+                name: editForm.name || "Unknown",
+                company: editForm.company,
+                jobTitle: editForm.jobTitle,
+                phone: editForm.phone,
+                email: editForm.email,
+                address: editForm.address,
+                businessCategory: editForm.businessCategory,
+            })
+            if (res.success) {
+                toast.success("Kartu nama berhasil diperbarui")
+                setIsEditing(false)
+                setSelectedCard(prev => prev ? { ...prev, ...editForm } as BusinessCard : null)
+                // Note: The parent page will revalidate and update initialCards in background
+            } else {
+                toast.error(res.error || "Gagal menyimpan")
+            }
+        } catch (e) {
+            toast.error("Terjadi kesalahan sistem")
+        } finally {
+            setIsSaving(false)
+        }
+    }
+
+    const handleDelete = async () => {
+        if (!selectedCard) return
+        if (!confirm("Anda yakin ingin menghapus kartu nama ini?")) return
+        setIsSaving(true)
+        try {
+            const res = await deleteBusinessCard(selectedCard.id)
+            if (res.success) {
+                toast.success("Kartu nama berhasil dihapus")
+                setSelectedCard(null)
+                // Note: Will revalidate from server action
+            } else {
+                toast.error(res.error || "Gagal menghapus")
+            }
+        } catch (e) {
+            toast.error("Terjadi kesalahan sistem")
+        } finally {
+            setIsSaving(false)
+        }
+    }
 
     // Extract unique categories, ignoring nulls
     const categories = React.useMemo(() => {
@@ -128,18 +188,23 @@ export function ClientBusinessCardDashboard({ initialCards }: { initialCards: Bu
             <ScannerDrawer>
                 <Button 
                     size="icon" 
-                    className="fixed bottom-6 right-6 w-16 h-16 rounded-full shadow-[0_8px_30px_rgb(0,0,0,0.2)] shadow-primary/40 hover:scale-105 transition-transform z-50 sm:right-10 sm:bottom-10"
+                    className="fixed bottom-6 left-1/2 -translate-x-1/2 w-16 h-16 rounded-full shadow-[0_8px_30px_rgb(0,0,0,0.2)] shadow-primary/40 hover:scale-105 transition-transform z-50"
                 >
                     <ScanLine className="w-7 h-7" />
                 </Button>
             </ScannerDrawer>
 
             {/* Detail Dialog */}
-            <Dialog open={!!selectedCard} onOpenChange={(open) => !open && setSelectedCard(null)}>
-                <DialogContent className="sm:max-w-md p-0 overflow-hidden rounded-3xl bg-background">
+            <Dialog open={!!selectedCard} onOpenChange={(open) => {
+                if (!open) {
+                    setSelectedCard(null)
+                    setIsEditing(false)
+                }
+            }}>
+                <DialogContent className="sm:max-w-md p-0 overflow-hidden rounded-3xl bg-background max-h-[90vh] flex flex-col">
                     {selectedCard && (
-                        <div className="flex flex-col max-h-[85vh]">
-                            <div className="w-full aspect-video bg-muted relative">
+                        <>
+                            <div className="w-full aspect-video bg-muted relative shrink-0">
                                 {selectedCard.imageUrl ? (
                                     <Image src={selectedCard.imageUrl} alt={selectedCard.name} fill className="object-cover" />
                                 ) : (
@@ -147,64 +212,142 @@ export function ClientBusinessCardDashboard({ initialCards }: { initialCards: Bu
                                         <UserSquare2 className="w-16 h-16 text-primary/20" />
                                     </div>
                                 )}
-                                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex flex-col justify-end p-6 text-white">
-                                    <Badge className="w-fit mb-2 bg-primary hover:bg-primary/90 text-primary-foreground border-none">
-                                        {selectedCard.businessCategory || "General"}
-                                    </Badge>
-                                    <h2 className="text-2xl font-bold">{selectedCard.name}</h2>
-                                    <p className="text-white/80 font-medium">{selectedCard.jobTitle}</p>
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent flex flex-col justify-end p-6 text-white">
+                                    {isEditing ? (
+                                        <div className="space-y-2">
+                                            <Input 
+                                                value={editForm.businessCategory || ""} 
+                                                onChange={e => setEditForm(prev => ({ ...prev, businessCategory: e.target.value }))}
+                                                className="h-7 text-xs bg-black/50 border-white/20 text-white placeholder:text-white/50 w-full mb-2"
+                                                placeholder="Kategori Bisnis"
+                                            />
+                                            <Input 
+                                                value={editForm.name || ""} 
+                                                onChange={e => setEditForm(prev => ({ ...prev, name: e.target.value }))}
+                                                className="h-10 text-xl font-bold bg-black/50 border-white/20 text-white placeholder:text-white/50 w-full"
+                                                placeholder="Nama"
+                                            />
+                                            <Input 
+                                                value={editForm.jobTitle || ""} 
+                                                onChange={e => setEditForm(prev => ({ ...prev, jobTitle: e.target.value }))}
+                                                className="h-8 text-sm bg-black/50 border-white/20 text-white placeholder:text-white/50 w-full"
+                                                placeholder="Jabatan"
+                                            />
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <Badge className="w-fit mb-2 bg-primary hover:bg-primary/90 text-primary-foreground border-none">
+                                                {selectedCard.businessCategory || "General"}
+                                            </Badge>
+                                            <h2 className="text-2xl font-bold">{selectedCard.name}</h2>
+                                            <p className="text-white/80 font-medium">{selectedCard.jobTitle}</p>
+                                        </>
+                                    )}
                                 </div>
                             </div>
                             
-                            <div className="p-6 space-y-6 overflow-y-auto">
+                            <div className="p-6 space-y-6 overflow-y-auto flex-1">
                                 <div className="space-y-4">
-                                    {selectedCard.company && (
-                                        <div className="flex gap-4 items-start">
-                                            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                                                <Building2 className="w-5 h-5 text-primary" />
-                                            </div>
-                                            <div>
-                                                <p className="text-sm font-semibold text-muted-foreground">Perusahaan</p>
-                                                <p className="text-base">{selectedCard.company}</p>
-                                            </div>
+                                    {/* Company */}
+                                    <div className="flex gap-4 items-start">
+                                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-1">
+                                            <Building2 className="w-5 h-5 text-primary" />
                                         </div>
-                                    )}
-                                    {selectedCard.phone && (
-                                        <div className="flex gap-4 items-start">
-                                            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                                                <Phone className="w-5 h-5 text-primary" />
-                                            </div>
-                                            <div>
-                                                <p className="text-sm font-semibold text-muted-foreground">Telepon</p>
-                                                <p className="text-base">{selectedCard.phone}</p>
-                                            </div>
+                                        <div className="flex-1">
+                                            <Label className="text-xs text-muted-foreground">Perusahaan</Label>
+                                            {isEditing ? (
+                                                <Input 
+                                                    value={editForm.company || ""} 
+                                                    onChange={e => setEditForm(prev => ({ ...prev, company: e.target.value }))}
+                                                    className="mt-1"
+                                                />
+                                            ) : (
+                                                <p className="text-base">{selectedCard.company || "-"}</p>
+                                            )}
                                         </div>
-                                    )}
-                                    {selectedCard.email && (
-                                        <div className="flex gap-4 items-start">
-                                            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                                                <Mail className="w-5 h-5 text-primary" />
-                                            </div>
-                                            <div>
-                                                <p className="text-sm font-semibold text-muted-foreground">Email</p>
-                                                <p className="text-base break-all">{selectedCard.email}</p>
-                                            </div>
+                                    </div>
+                                    
+                                    {/* Phone */}
+                                    <div className="flex gap-4 items-start">
+                                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-1">
+                                            <Phone className="w-5 h-5 text-primary" />
                                         </div>
-                                    )}
-                                    {selectedCard.address && (
-                                        <div className="flex gap-4 items-start">
-                                            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                                                <MapPin className="w-5 h-5 text-primary" />
-                                            </div>
-                                            <div>
-                                                <p className="text-sm font-semibold text-muted-foreground">Alamat</p>
-                                                <p className="text-base leading-snug">{selectedCard.address}</p>
-                                            </div>
+                                        <div className="flex-1">
+                                            <Label className="text-xs text-muted-foreground">Telepon</Label>
+                                            {isEditing ? (
+                                                <Input 
+                                                    value={editForm.phone || ""} 
+                                                    onChange={e => setEditForm(prev => ({ ...prev, phone: e.target.value }))}
+                                                    className="mt-1"
+                                                />
+                                            ) : (
+                                                <p className="text-base">{selectedCard.phone || "-"}</p>
+                                            )}
                                         </div>
-                                    )}
+                                    </div>
+
+                                    {/* Email */}
+                                    <div className="flex gap-4 items-start">
+                                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-1">
+                                            <Mail className="w-5 h-5 text-primary" />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <Label className="text-xs text-muted-foreground">Email</Label>
+                                            {isEditing ? (
+                                                <Input 
+                                                    value={editForm.email || ""} 
+                                                    onChange={e => setEditForm(prev => ({ ...prev, email: e.target.value }))}
+                                                    className="mt-1"
+                                                />
+                                            ) : (
+                                                <p className="text-base break-all">{selectedCard.email || "-"}</p>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Address */}
+                                    <div className="flex gap-4 items-start">
+                                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-1">
+                                            <MapPin className="w-5 h-5 text-primary" />
+                                        </div>
+                                        <div className="flex-1">
+                                            <Label className="text-xs text-muted-foreground">Alamat</Label>
+                                            {isEditing ? (
+                                                <Input 
+                                                    value={editForm.address || ""} 
+                                                    onChange={e => setEditForm(prev => ({ ...prev, address: e.target.value }))}
+                                                    className="mt-1"
+                                                />
+                                            ) : (
+                                                <p className="text-base leading-snug">{selectedCard.address || "-"}</p>
+                                            )}
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
+                            
+                            <div className="p-4 border-t bg-muted/10 shrink-0">
+                                {isEditing ? (
+                                    <div className="flex gap-2">
+                                        <Button variant="outline" className="flex-1" onClick={() => setIsEditing(false)} disabled={isSaving}>
+                                            <X className="w-4 h-4 mr-2" /> Batal
+                                        </Button>
+                                        <Button className="flex-1" onClick={handleSave} disabled={isSaving}>
+                                            <Save className="w-4 h-4 mr-2" /> Simpan
+                                        </Button>
+                                    </div>
+                                ) : (
+                                    <div className="flex gap-2">
+                                        <Button variant="outline" className="flex-1 text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/20" onClick={handleDelete} disabled={isSaving}>
+                                            <Trash2 className="w-4 h-4 mr-2" /> Hapus
+                                        </Button>
+                                        <Button className="flex-1" onClick={handleEdit}>
+                                            <Edit2 className="w-4 h-4 mr-2" /> Edit Data
+                                        </Button>
+                                    </div>
+                                )}
+                            </div>
+                        </>
                     )}
                 </DialogContent>
             </Dialog>
