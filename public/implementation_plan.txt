@@ -1,0 +1,82 @@
+# Perancangan Dashboard Monitoring GP vs Incentive (Campaign Based)
+
+Dashboard ini bertujuan untuk memonitor profitability penjualan untuk *Campaign* tertentu (seperti Michelin Tires), efektivitas program insentif sales, serta memberikan visibilitas kepada manajemen terhadap transaksi dengan GP negatif atau insentif yang melebihi gross profit. 
+
+Sistem dirancang dinamis sehingga *Campaign* tidak terpaku hanya pada produk Michelin. User dapat meng-custom dan memilih produk mana saja yang masuk ke dalam sebuah campaign beserta variabel insentifnya.
+
+## User Review Required
+
+> [!IMPORTANT]
+> Harap tinjau ulang struktur database (schema) yang diusulkan. Karena produk dikustomisasi berdasarkan *Campaign*, sistem akan memiliki halaman **Campaign Management** terpisah di mana user bisa membuat Campaign (misal: "Michelin Q3 Promo") lalu memasukkan daftar produk beserta insentifnya.
+
+## Open Questions
+
+> [!WARNING]
+> 1. **Forecast Qty**: Untuk tab Customer Contract, apakah data "Forecast Qty per Bulan" cukup diinput secara manual melalui UI form, atau harus ditarik dari sistem/modul lain? (Asumsi saat ini: Input manual via UI).
+
+## Proposed Changes
+
+### 1. Sumber Data Utama (Menggunakan Data SAP)
+
+Kalkulasi dasar yang akan digunakan di sistem menggunakan tabel `sales_revenue_sap`:
+- **Revenue**: `SUM(revenue_in_doc_curr)`
+- **Gross Profit (GP)**: `SUM(revenue_in_doc_curr - cost_of_sales)`
+- **GP Margin %**: `(GP / Revenue) * 100`
+
+### 2. Database Schema (`db/schema/campaigns.ts`)
+
+Pembuatan skema dinamis untuk menampung *Campaign* dan kustomisasi produk/kontrak di dalamnya.
+
+#### [NEW] Master Campaign & Produk
+- `campaigns`: Menyimpan master data campaign (`id`, `name`, `start_date`, `end_date`, `status`).
+- `campaign_products`: Menyimpan produk apa saja yang ikut dalam campaign tertentu beserta nilai insentifnya (`campaign_id`, `material_no`, `material_group`, `incentive_amount`, `is_percentage`).
+
+#### [NEW] Skema Customer Contract
+- `campaign_contracts`: Menyimpan daftar customer yang memiliki kontrak khusus untuk suatu campaign (`campaign_id`, `customer_id`, `customer_name`, `contract_number`).
+- `campaign_contract_details`: Menyimpan detail item dari kontrak tersebut (`contract_id`, `material_no`, `qty_contract`, `contract_price`, `forecast_qty_per_month`).
+
+### 3. Backend Actions (`app/actions/campaigns/`)
+
+- CRUD actions untuk mengatur data `campaigns`, `campaign_products`, dan `campaign_contracts`.
+- Action analitik (`getCampaignDashboardData(campaignId)`) yang mengambil data `sales_revenue_sap` dan menggabungkannya dengan variabel produk dan kontrak yang sudah dikustomisasi.
+
+### 4. UI/UX Pages (`app/dashboard/campaigns/`)
+
+Dashboard akan dibangun dengan *Multi-tab* UI yang dinamis per Campaign.
+
+#### [NEW] Tab 1: Executive Summary 
+- **Top KPI Cards**: Total Revenue, Total GP, Margin %, Total Incentive, Incentive Ratio.
+- **Charts**: Monthly Revenue Trend, GP vs Incentive Trend. 
+
+#### [NEW] Tab 2: GP vs Incentive Analysis & Sales Ranking
+- Tabel performa masing-masing Sales dengan conditional formatting (Healthy, Monitor, Warning, Critical) berdasarkan Ratio Incentive vs GP.
+- Score ranking dari setiap sales (Formula: 40% GP, 20% Rev, dll).
+
+#### [NEW] Tab 3: Customer & Item Profitability
+- Matrix Customer (Revenue vs GP Margin vs Incentive).
+- Item Performance (Best Profit Item vs Highest Incentive Item).
+
+#### [NEW] Tab 4: Control Panel & Alerts
+- Tabel khusus monitoring "Red Flag Transactions" (Margin < 0%, Incentive > GP, Margin di bawah Bottom Price, dll).
+
+#### [NEW] Tab 5: Settings - Products & Incentives
+- UI untuk mencari dan menambahkan produk (berdasarkan `material_no` atau `material_group`) ke dalam Campaign.
+- Input untuk set nominal insentif (Rp atau %).
+
+#### [NEW] Tab 6: Settings - Customer Contracts
+- UI untuk mendaftarkan Customer Contract pada Campaign ini.
+- Form detail: `Qty Contract`, `Harga Contract`, `Product Contract`, dan `Forecast Qty per Bulan`.
+
+### 5. Navigasi & Roles (`lib/navigation.ts`)
+
+- Menambahkan navigasi `Campaign Dashboard` di Sidebar.
+- Menambahkan *Resource Permission* (misal: `campaigns:view`, `campaigns:edit`).
+
+## Verification Plan
+
+### Automated Tests
+- Validasi kalkulasi `GP = Revenue - COGS` dan perhitungan Insentif berdasarkan daftar produk spesifik yang di-assign ke Campaign tersebut.
+
+### Manual Verification
+- Tim Manajemen / User membuat "Test Campaign" lalu memasukkan beberapa produk kustom.
+- Verifikasi chart dan metrics di tab Executive Summary hanya menampilkan transaksi `sales_revenue_sap` untuk produk-produk yang masuk di dalam Campaign tersebut.

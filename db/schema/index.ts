@@ -18,6 +18,7 @@ export const userRelations = relations(user, ({ many }) => ({
 export { settings } from "./settings";
 
 // Domain tables & Relations
+export * from "./campaigns";
 export { bundlingHistories } from "./bundling-histories";
 export { roles } from "./roles";
 export { permissions } from "./permissions";

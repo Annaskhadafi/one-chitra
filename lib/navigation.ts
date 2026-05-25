@@ -323,6 +323,11 @@ export const navigationConfig: NavSection[] = [
                         resource: "sales-dashboard",
                     },
                     {
+                        title: "GP Campign",
+                        url: "/dashboard/campaigns",
+                        resource: "campaigns",
+                    },
+                    {
                         title: "Competitor",
                         url: "/dashboard/competitor-info-new",
                         resource: "competitor-info-new",
@@ -560,4 +565,5 @@ export const navigationConfig: NavSection[] = [
         ],
     },
 ]
+
 
