@@ -120,7 +120,7 @@ export function SlowMovingDashboardClient() {
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <Card className="bg-gradient-to-br from-blue-50 to-blue-100/50 border-blue-200">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium text-blue-900">Total Revenue</CardTitle>
+                        <CardTitle className="text-sm font-medium text-blue-900">Total Amount Sell Out Slow Moving</CardTitle>
                         <div className="rounded-full bg-blue-200 p-2"><BadgeDollarSign className="h-4 w-4 text-blue-700" /></div>
                     </CardHeader>
                     <CardContent>
@@ -166,7 +166,7 @@ export function SlowMovingDashboardClient() {
                 <Card className="col-span-2 shadow-sm border-slate-200">
                     <CardHeader>
                         <CardTitle>{trendTitle}</CardTitle>
-                        <CardDescription>Perbandingan Kuantitas Terjual (Bar) dan Revenue (Line) antar tahun</CardDescription>
+                        <CardDescription>Perbandingan Total Amount Sell Out Slow Moving (Bar) dan Kuantitas Terjual (Line) antar tahun</CardDescription>
                     </CardHeader>
                     <CardContent className="h-[400px]">
                         <ResponsiveContainer width="100%" height="100%">
@@ -181,7 +181,7 @@ export function SlowMovingDashboardClient() {
                                 <Tooltip
                                     contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                                     formatter={(value: number, name: string) => {
-                                        if (name.startsWith("Revenue")) return [formatCurrency(value), name]
+                                        if (name.startsWith("Total Amount")) return [formatCurrency(value), name]
                                         return [formatNumber(value), name]
                                     }}
                                     labelFormatter={(label) => {
@@ -191,10 +191,10 @@ export function SlowMovingDashboardClient() {
                                 />
                                 <Legend wrapperStyle={{ paddingTop: '20px' }} />
                                 {availableYearsInTrend.map((year, idx) => (
-                                    <Bar key={`bar-${year}`} yAxisId="left" dataKey={`qty_${year}`} name={`Kuantitas ${year}`} fill={BAR_COLORS_YOY[idx % BAR_COLORS_YOY.length]} radius={[4, 4, 0, 0]} maxBarSize={40} />
+                                    <Bar key={`bar-rev-${year}`} yAxisId="right" dataKey={`amount_${year}`} name={`Total Amount ${year}`} fill={BAR_COLORS_YOY[idx % BAR_COLORS_YOY.length]} radius={[4, 4, 0, 0]} maxBarSize={40} />
                                 ))}
                                 {availableYearsInTrend.map((year, idx) => (
-                                    <Line key={`line-${year}`} yAxisId="right" type="monotone" dataKey={`amount_${year}`} name={`Revenue ${year}`} stroke={LINE_COLORS_YOY[idx % LINE_COLORS_YOY.length]} strokeWidth={3} dot={{ r: 4, fill: LINE_COLORS_YOY[idx % LINE_COLORS_YOY.length], strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6 }} />
+                                    <Line key={`line-qty-${year}`} yAxisId="left" type="monotone" dataKey={`qty_${year}`} name={`Kuantitas ${year}`} stroke={LINE_COLORS_YOY[idx % LINE_COLORS_YOY.length]} strokeWidth={3} dot={{ r: 4, fill: LINE_COLORS_YOY[idx % LINE_COLORS_YOY.length], strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6 }} />
                                 ))}
                             </ComposedChart>
                         </ResponsiveContainer>
@@ -204,7 +204,7 @@ export function SlowMovingDashboardClient() {
                 {/* Top Salesman Chart */}
                 <Card className="shadow-sm border-slate-200">
                     <CardHeader>
-                        <CardTitle>Top Salesman (By Revenue)</CardTitle>
+                        <CardTitle>Top Salesman (By Total Amount)</CardTitle>
                         <CardDescription>Kontribusi tertinggi dalam menjual produk slow moving</CardDescription>
                     </CardHeader>
                     <CardContent className="h-[350px]">
@@ -218,7 +218,7 @@ export function SlowMovingDashboardClient() {
                                     contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                                     formatter={(value: number) => formatCurrency(value)}
                                 />
-                                <Bar dataKey="amount" name="Revenue" radius={[0, 4, 4, 0]}>
+                                <Bar dataKey="amount" name="Total Amount Sell Out Slow Moving" radius={[0, 4, 4, 0]}>
                                     {(data.topSalesman || []).map((entry, index) => (
                                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                     ))}
@@ -231,7 +231,7 @@ export function SlowMovingDashboardClient() {
                 {/* Top Customers Chart */}
                 <Card className="shadow-sm border-slate-200">
                     <CardHeader>
-                        <CardTitle>Top Pelanggan (By Revenue)</CardTitle>
+                        <CardTitle>Top Pelanggan (By Total Amount)</CardTitle>
                         <CardDescription>Pelanggan yang paling banyak menyerap stok slow moving</CardDescription>
                     </CardHeader>
                     <CardContent className="h-[350px]">
@@ -264,7 +264,7 @@ export function SlowMovingDashboardClient() {
                 {/* Top Category Chart */}
                 <Card className="shadow-sm border-slate-200 lg:col-span-2">
                     <CardHeader>
-                        <CardTitle>Top Kategori Produk (By Revenue)</CardTitle>
+                        <CardTitle>Top Kategori Produk (By Total Amount)</CardTitle>
                         <CardDescription>Kategori yang paling banyak menyumbang revenue dari produk slow moving</CardDescription>
                     </CardHeader>
                     <CardContent className="h-[350px]">
@@ -278,7 +278,7 @@ export function SlowMovingDashboardClient() {
                                     contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                                     formatter={(value: number) => formatCurrency(value)}
                                 />
-                                <Bar dataKey="amount" name="Revenue" radius={[4, 4, 0, 0]} maxBarSize={80}>
+                                <Bar dataKey="amount" name="Total Amount Sell Out Slow Moving" radius={[4, 4, 0, 0]} maxBarSize={80}>
                                     {(data.topCategories || []).map((entry, index) => (
                                         <Cell key={`cell-${index}`} fill={COLORS[(index + 2) % COLORS.length]} />
                                     ))}
