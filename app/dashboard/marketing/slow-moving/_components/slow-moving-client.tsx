@@ -392,7 +392,36 @@ export function SlowMovingClient({
             return base
         })
 
-        const worksheet = XLSX.utils.json_to_sheet(rows)
+        const worksheet = XLSX.utils.json_to_sheet([])
+        
+        // Add header information
+        XLSX.utils.sheet_add_aoa(worksheet, [
+            ["Laporan Slow Moving"],
+            [`Tanggal Export: ${new Date().toLocaleString("id-ID")}`],
+            []
+        ], { origin: "A1" })
+
+        // Add data
+        XLSX.utils.sheet_add_json(worksheet, rows, { origin: "A4" })
+
+        // Set column widths
+        const cols = [
+            { wch: 5 }, // No
+            { wch: 20 }, // Material Number
+            { wch: 45 }, // Desc
+            { wch: 12 }, // Stock Awal
+            { wch: 15 }, // Stock Saat Ini
+            { wch: 15 }, // Unit Price
+            { wch: 15 }, // Total Value
+            { wch: 15 }, // Total Terjual
+            { wch: 18 }, // Revenue Terjual
+            { wch: 12 }, // % Sell Out
+        ]
+        for (let i = 0; i < allMonths.length; i++) {
+            cols.push({ wch: 12 })
+        }
+        worksheet["!cols"] = cols
+
         const workbook = XLSX.utils.book_new()
         XLSX.utils.book_append_sheet(workbook, worksheet, "Slow Moving")
         XLSX.writeFile(workbook, `slow-moving-${new Date().toISOString().slice(0, 10)}.xlsx`)
