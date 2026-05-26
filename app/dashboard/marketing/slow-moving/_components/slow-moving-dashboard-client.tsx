@@ -1,11 +1,12 @@
 "use client"
 
 import { useEffect, useState, useTransition } from "react"
-import { getSlowMovingDashboardData, SlowMovingDashboardResult } from "@/app/actions/slow-moving-dashboard"
+import { getSlowMovingDashboardData, SlowMovingDashboardResult, generateSlowMovingYoYInsight, getSlowMovingFilters } from "@/app/actions/slow-moving-dashboard"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, ComposedChart, Area, Cell, PieChart, Pie } from "recharts"
-import { Loader2, TrendingUp, Package, Users, BadgeDollarSign } from "lucide-react"
+import { Loader2, TrendingUp, Package, Users, BadgeDollarSign, Sparkles, Bot, RefreshCw } from "lucide-react"
+import { Button } from "@/components/ui/button"
 
 const formatCurrency = (value: number) => {
     return new Intl.NumberFormat("id-ID", {
@@ -27,11 +28,24 @@ export function SlowMovingDashboardClient() {
     const [data, setData] = useState<SlowMovingDashboardResult | null>(null)
     const [selectedYears, setSelectedYears] = useState<string[]>(["2025", "2026"])
     const [availableYears, setAvailableYears] = useState<string[]>([])
+    
+    // New Filter States
+    const [availableTireSizes, setAvailableTireSizes] = useState<string[]>([])
+    const [availableCategories, setAvailableCategories] = useState<string[]>([])
+    const [selectedTireSize, setSelectedTireSize] = useState<string>("ALL")
+    const [selectedCategory, setSelectedCategory] = useState<string>("ALL")
+
+    const [insight, setInsight] = useState<string | null>(null)
+    const [isGeneratingInsight, setIsGeneratingInsight] = useState(false)
 
     // Initial Load
     useEffect(() => {
         startTransition(async () => {
-            const result = await getSlowMovingDashboardData(["2025", "2026"])
+            const filters = await getSlowMovingFilters()
+            setAvailableTireSizes(filters.tireSizes)
+            setAvailableCategories(filters.categories)
+
+            const result = await getSlowMovingDashboardData(["2025", "2026"], "ALL", "ALL")
             setData(result)
             if (result.yearlyTrend.length > 0) {
                 setAvailableYears(result.yearlyTrend.map(y => y.period).sort((a, b) => b.localeCompare(a)))
@@ -44,9 +58,42 @@ export function SlowMovingDashboardClient() {
         const next = selectedYears.includes(year) ? selectedYears.filter(y => y !== year) : [...selectedYears, year]
         setSelectedYears(next)
         startTransition(async () => {
-            const result = await getSlowMovingDashboardData(next)
+            const result = await getSlowMovingDashboardData(next, selectedTireSize, selectedCategory)
             setData(result)
         })
+    }
+
+    const handleTireSizeChange = (val: string) => {
+        setSelectedTireSize(val)
+        startTransition(async () => {
+            const result = await getSlowMovingDashboardData(selectedYears, val, selectedCategory)
+            setData(result)
+        })
+    }
+
+    const handleCategoryChange = (val: string) => {
+        setSelectedCategory(val)
+        startTransition(async () => {
+            const result = await getSlowMovingDashboardData(selectedYears, selectedTireSize, val)
+            setData(result)
+        })
+    }
+
+    const handleGenerateInsight = async (trendDataToProcess: any[]) => {
+        setIsGeneratingInsight(true)
+        setInsight(null)
+        try {
+            const res = await generateSlowMovingYoYInsight(trendDataToProcess, selectedYears)
+            if (res.success && res.insight) {
+                setInsight(res.insight)
+            } else {
+                setInsight("<p class='text-red-500'>Gagal memuat insight dari AI: " + (res.error || "Unknown Error") + "</p>")
+            }
+        } catch (error) {
+            setInsight("<p class='text-red-500'>Terjadi kesalahan saat memuat insight.</p>")
+        } finally {
+            setIsGeneratingInsight(false)
+        }
     }
 
     if (!data) {
@@ -90,9 +137,9 @@ export function SlowMovingDashboardClient() {
                     <h2 className="text-xl font-bold">Dashboard Analisa Slow Moving</h2>
                     <p className="text-slate-300 text-sm">Monitor pergerakan dan revenue dari produk kategori slow moving.</p>
                 </div>
-                <div className="flex items-center gap-4">
-                    <span className="text-sm font-medium">Filter Tahun:</span>
-                    <div className="flex items-center gap-3">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 bg-slate-900/50 p-3 rounded-lg border border-slate-700/50">
+                    <div className="flex items-center gap-3 border-r border-slate-700 pr-4">
+                        <span className="text-sm font-medium">Tahun:</span>
                         {availableYears.map(year => (
                             <label key={year} className="flex items-center gap-1.5 cursor-pointer hover:opacity-80">
                                 <input 
@@ -102,9 +149,39 @@ export function SlowMovingDashboardClient() {
                                     onChange={() => handleYearToggle(year)}
                                     disabled={isPending}
                                 />
-                                <span className="text-sm">{year}</span>
+                                <span className="text-sm font-medium">{year}</span>
                             </label>
                         ))}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">Tire Size:</span>
+                        <Select value={selectedTireSize} onValueChange={handleTireSizeChange} disabled={isPending}>
+                            <SelectTrigger className="w-[140px] h-8 bg-slate-800 border-slate-700 text-white text-xs">
+                                <SelectValue placeholder="Pilih Size" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="ALL">Semua Ukuran</SelectItem>
+                                {availableTireSizes.map(sz => (
+                                    <SelectItem key={sz} value={sz}>{sz}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">Category:</span>
+                        <Select value={selectedCategory} onValueChange={handleCategoryChange} disabled={isPending}>
+                            <SelectTrigger className="w-[140px] h-8 bg-slate-800 border-slate-700 text-white text-xs">
+                                <SelectValue placeholder="Pilih Category" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="ALL">Semua Kategori</SelectItem>
+                                {availableCategories.map(cat => (
+                                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
                     </div>
                 </div>
             </div>
@@ -201,6 +278,57 @@ export function SlowMovingDashboardClient() {
                     </CardContent>
                 </Card>
 
+                {/* AI INSIGHT BOX */}
+                {selectedYears.length > 0 && (
+                    <Card className="col-span-2 shadow-sm border-indigo-100 bg-gradient-to-r from-indigo-50/40 to-purple-50/40">
+                        <CardHeader className="pb-3 border-b border-indigo-100/50">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2.5 bg-indigo-100 rounded-xl shadow-sm">
+                                        <Bot className="w-5 h-5 text-indigo-700" />
+                                    </div>
+                                    <div>
+                                        <CardTitle className="text-base font-semibold text-indigo-950">Insight AI Ollama</CardTitle>
+                                        <CardDescription className="text-indigo-700/70">Ringkasan perbandingan YoY oleh asisten cerdas One Chitra</CardDescription>
+                                    </div>
+                                </div>
+                                <Button 
+                                    variant="outline" 
+                                    size="sm" 
+                                    onClick={() => handleGenerateInsight(trendData)} 
+                                    disabled={isGeneratingInsight || isPending}
+                                    className="bg-white hover:bg-indigo-50 text-indigo-600 border-indigo-200 shadow-sm"
+                                >
+                                    {isGeneratingInsight ? (
+                                        <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Menganalisa...</>
+                                    ) : (
+                                        <><Sparkles className="w-4 h-4 mr-2" /> Analisa Sekarang</>
+                                    )}
+                                </Button>
+                            </div>
+                        </CardHeader>
+                        {insight && (
+                            <CardContent className="pt-5 pb-5">
+                                <div 
+                                    className="text-sm text-slate-700 leading-relaxed max-w-none prose prose-sm prose-indigo prose-p:my-2 prose-ul:my-2" 
+                                    dangerouslySetInnerHTML={{ __html: insight }} 
+                                />
+                            </CardContent>
+                        )}
+                        {!insight && !isGeneratingInsight && (
+                            <CardContent className="pt-6 pb-6 text-center">
+                                <p className="text-sm text-slate-500">Klik tombol <b>Analisa Sekarang</b> di atas untuk menghasilkan rangkuman perbandingan performa penjualan slow moving {selectedYears.join(" vs ")}.</p>
+                            </CardContent>
+                        )}
+                        {isGeneratingInsight && (
+                            <CardContent className="pt-6 pb-6 text-center space-y-3">
+                                <div className="flex justify-center"><Loader2 className="w-8 h-8 text-indigo-400 animate-spin" /></div>
+                                <p className="text-sm text-indigo-600/80 animate-pulse font-medium">Sedang membaca data dan menyusun insight cerdas...</p>
+                            </CardContent>
+                        )}
+                    </Card>
+                )}
+
                 {/* Top Salesman Chart */}
                 <Card className="shadow-sm border-slate-200">
                     <CardHeader>
@@ -262,10 +390,10 @@ export function SlowMovingDashboardClient() {
                 </Card>
 
                 {/* Top Category Chart */}
-                <Card className="shadow-sm border-slate-200 lg:col-span-2">
+                <Card className="shadow-sm border-slate-200 lg:col-span-1">
                     <CardHeader>
                         <CardTitle>Top Kategori Produk (By Total Amount)</CardTitle>
-                        <CardDescription>Kategori yang paling banyak menyumbang revenue dari produk slow moving</CardDescription>
+                        <CardDescription>Kategori yang paling banyak menyumbang revenue</CardDescription>
                     </CardHeader>
                     <CardContent className="h-[350px]">
                         <ResponsiveContainer width="100%" height="100%">
@@ -281,6 +409,33 @@ export function SlowMovingDashboardClient() {
                                 <Bar dataKey="amount" name="Total Amount Sell Out Slow Moving" radius={[4, 4, 0, 0]} maxBarSize={80}>
                                     {(data.topCategories || []).map((entry, index) => (
                                         <Cell key={`cell-${index}`} fill={COLORS[(index + 2) % COLORS.length]} />
+                                    ))}
+                                </Bar>
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </CardContent>
+                </Card>
+
+                {/* Top Tire Size Chart */}
+                <Card className="shadow-sm border-slate-200 lg:col-span-1">
+                    <CardHeader>
+                        <CardTitle>Top Tire Size (By Total Amount)</CardTitle>
+                        <CardDescription>Ukuran ban yang paling laku di slow moving</CardDescription>
+                    </CardHeader>
+                    <CardContent className="h-[350px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={data.topTireSizes} margin={{ top: 20, right: 30, left: 40, bottom: 5 }}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                <XAxis dataKey="tireSize" tick={{ fill: '#334155', fontSize: 12 }} axisLine={{ stroke: '#cbd5e1' }} tickLine={false} />
+                                <YAxis tickFormatter={(value) => `Rp${(value / 1000000).toFixed(0)}M`} tick={{ fill: '#64748b' }} axisLine={false} tickLine={false} />
+                                <Tooltip
+                                    cursor={{ fill: '#f8fafc' }}
+                                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                                    formatter={(value: number) => formatCurrency(value)}
+                                />
+                                <Bar dataKey="amount" name="Total Amount Sell Out Slow Moving" radius={[4, 4, 0, 0]} maxBarSize={80}>
+                                    {(data.topTireSizes || []).map((entry, index) => (
+                                        <Cell key={`cell-${index}`} fill={COLORS[(index + 5) % COLORS.length]} />
                                     ))}
                                 </Bar>
                             </BarChart>
