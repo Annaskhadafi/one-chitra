@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import * as React from "react"
 import { updateSetting } from "@/app/actions/settings"
@@ -206,8 +206,7 @@ export function SlowMovingClient({
     const [manualRate, setManualRate] = React.useState(defaultRate)
     const [isImporting, setIsImporting] = React.useState(false)
     const [deletingKey, setDeletingKey] = React.useState<string | null>(null)
-    const currentYear = React.useMemo(() => new Date().getFullYear().toString(), [])
-    const [selectedYears, setSelectedYears] = React.useState<string[]>([currentYear])
+    const [selectedYears, setSelectedYears] = React.useState<string[]>(["2025", "2026"])
     const [expandedKeys, setExpandedKeys] = React.useState<string[]>([])
 
     const productOptions = React.useMemo(() => buildProductOptions(stocks), [stocks])
@@ -470,18 +469,29 @@ export function SlowMovingClient({
                             }}
                         />
                     </div>
-                    <div className="w-full lg:max-w-xs">
-                        <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Filter Tahun</label>
-                        <div className="flex min-h-10 flex-wrap items-center gap-2 rounded-md border bg-white px-3 py-2">
-                            {availableYears.map((year) => (
-                                <label key={year} className="flex cursor-pointer items-center gap-2 text-sm font-medium text-zinc-800">
-                                    <Checkbox
-                                        checked={selectedYears.includes(year)}
-                                        onCheckedChange={(checked) => toggleYearSelection(year, Boolean(checked))}
-                                    />
-                                    {year}
-                                </label>
-                            ))}
+                    <div className="flex-1 min-w-0">
+                        <label className="mb-1.5 block text-xs font-medium text-slate-500">Filter Tahun</label>
+                        <div className="flex flex-nowrap overflow-x-auto gap-2 pb-1 scrollbar-thin">
+                            {availableYears.map((year) => {
+                                const isActive = selectedYears.includes(year)
+                                return (
+                                    <label 
+                                        key={year} 
+                                        className={`flex cursor-pointer items-center gap-2 px-3 py-1.5 rounded-md border transition-all ${
+                                            isActive 
+                                                ? 'bg-indigo-50 border-indigo-200 text-indigo-700' 
+                                                : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                                        }`}
+                                    >
+                                        <Checkbox
+                                            checked={isActive}
+                                            onCheckedChange={(checked) => toggleYearSelection(year, Boolean(checked))}
+                                            className="data-[state=checked]:bg-indigo-600 data-[state=checked]:border-indigo-600"
+                                        />
+                                        <span className="text-sm font-medium">{year}</span>
+                                    </label>
+                                )
+                            })}
                         </div>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -502,7 +512,7 @@ export function SlowMovingClient({
                             onClick={() => {
                                 setSearch("")
                                 setSelectedKeys([])
-                                setSelectedYears([currentYear])
+                                setSelectedYears(["2025", "2026"])
                             }}
                             className="gap-2"
                         >

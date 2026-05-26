@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition } from "react"
 import { getSlowMovingDashboardData, SlowMovingDashboardResult, generateSlowMovingYoYInsight, getSlowMovingFilters } from "@/app/actions/slow-moving-dashboard"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, ComposedChart, Area, Cell, PieChart, Pie } from "recharts"
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, ComposedChart, Area, Cell, PieChart, Pie, LabelList } from "recharts"
 import { Loader2, TrendingUp, Package, Users, BadgeDollarSign, Sparkles, Bot, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
@@ -19,6 +19,24 @@ const formatCurrency = (value: number) => {
 
 const formatNumber = (value: number) => {
     return new Intl.NumberFormat("id-ID").format(value)
+}
+
+const formatCompactCurrency = (value: number) => {
+    if (!value) return "";
+    return new Intl.NumberFormat("id-ID", {
+        notation: "compact",
+        style: "currency",
+        currency: "IDR",
+        maximumFractionDigits: 1
+    }).format(value)
+}
+
+const formatCompactQty = (value: number) => {
+    if (!value) return "";
+    return new Intl.NumberFormat("id-ID", {
+        notation: "compact",
+        maximumFractionDigits: 1
+    }).format(value)
 }
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658', '#8dd1e1', '#a4de6c', '#d0ed57']
@@ -267,11 +285,33 @@ export function SlowMovingDashboardClient() {
                                     }}
                                 />
                                 <Legend wrapperStyle={{ paddingTop: '20px' }} />
-                                {availableYearsInTrend.map((year, idx) => (
-                                    <Bar key={`bar-rev-${year}`} yAxisId="right" dataKey={`amount_${year}`} name={`Total Amount ${year}`} fill={BAR_COLORS_YOY[idx % BAR_COLORS_YOY.length]} radius={[4, 4, 0, 0]} maxBarSize={40} />
+                                {availableYearsInTrend.map((year, index) => (
+                                    <Bar 
+                                        key={`bar-rev-${year}`} 
+                                        yAxisId="right" 
+                                        dataKey={`amount_${year}`} 
+                                        name={`Total Amount ${year}`} 
+                                        fill={BAR_COLORS_YOY[index % BAR_COLORS_YOY.length]} 
+                                        radius={[4, 4, 0, 0]}
+                                        maxBarSize={40}
+                                    >
+                                        <LabelList dataKey={`amount_${year}`} position="top" formatter={formatCompactCurrency} style={{ fontSize: '10px', fill: '#64748b' }} />
+                                    </Bar>
                                 ))}
-                                {availableYearsInTrend.map((year, idx) => (
-                                    <Line key={`line-qty-${year}`} yAxisId="left" type="monotone" dataKey={`qty_${year}`} name={`Kuantitas ${year}`} stroke={LINE_COLORS_YOY[idx % LINE_COLORS_YOY.length]} strokeWidth={3} dot={{ r: 4, fill: LINE_COLORS_YOY[idx % LINE_COLORS_YOY.length], strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6 }} />
+                                {availableYearsInTrend.map((year, index) => (
+                                    <Line 
+                                        key={`line-qty-${year}`} 
+                                        yAxisId="left" 
+                                        type="monotone" 
+                                        dataKey={`qty_${year}`} 
+                                        name={`Kuantitas ${year}`} 
+                                        stroke={LINE_COLORS_YOY[index % LINE_COLORS_YOY.length]} 
+                                        strokeWidth={3} 
+                                        dot={{ r: 4, fill: LINE_COLORS_YOY[index % LINE_COLORS_YOY.length], strokeWidth: 2, stroke: '#fff' }} 
+                                        activeDot={{ r: 6 }}
+                                    >
+                                        <LabelList dataKey={`qty_${year}`} position="top" formatter={formatCompactQty} style={{ fontSize: '10px', fill: LINE_COLORS_YOY[index % LINE_COLORS_YOY.length] }} />
+                                    </Line>
                                 ))}
                             </ComposedChart>
                         </ResponsiveContainer>
@@ -340,13 +380,14 @@ export function SlowMovingDashboardClient() {
                             <BarChart data={data.topSalesman} layout="vertical" margin={{ top: 5, right: 30, left: 40, bottom: 5 }}>
                                 <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f1f5f9" />
                                 <XAxis type="number" hide />
-                                <YAxis dataKey="salesman" type="category" axisLine={false} tickLine={false} tick={{ fill: '#334155', fontSize: 12 }} width={100} />
+                                <YAxis dataKey="salesman" type="category" axisLine={false} tickLine={false} tick={{ fill: '#334155', fontSize: 11 }} width={140} />
                                 <Tooltip
                                     cursor={{ fill: '#f8fafc' }}
                                     contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                                     formatter={(value: number) => formatCurrency(value)}
                                 />
                                 <Bar dataKey="amount" name="Total Amount Sell Out Slow Moving" radius={[0, 4, 4, 0]}>
+                                    <LabelList dataKey="amount" position="right" formatter={formatCompactCurrency} style={{ fontSize: '10px', fill: '#64748b' }} />
                                     {(data.topSalesman || []).map((entry, index) => (
                                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                     ))}
@@ -373,7 +414,7 @@ export function SlowMovingDashboardClient() {
                                     outerRadius={100}
                                     paddingAngle={2}
                                     dataKey="amount"
-                                    nameKey="customerName"
+                                    nameKey="customer_name"
                                 >
                                     {(data.topCustomers || []).map((entry, index) => (
                                         <Cell key={`cell-${index}`} fill={COLORS[(index + 4) % COLORS.length]} />
@@ -397,16 +438,25 @@ export function SlowMovingDashboardClient() {
                     </CardHeader>
                     <CardContent className="h-[350px]">
                         <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={data.topCategories} margin={{ top: 20, right: 30, left: 40, bottom: 5 }}>
+                            <BarChart data={data.topCategories} margin={{ top: 20, right: 30, left: 40, bottom: 80 }}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                <XAxis dataKey="category" tick={{ fill: '#334155', fontSize: 12 }} axisLine={{ stroke: '#cbd5e1' }} tickLine={false} />
-                                <YAxis tickFormatter={(value) => `Rp${(value / 1000000).toFixed(0)}M`} tick={{ fill: '#64748b' }} axisLine={false} tickLine={false} />
+                                <XAxis 
+                                    dataKey="category" 
+                                    tick={{ fill: '#334155', fontSize: 11 }} 
+                                    angle={-45} 
+                                    textAnchor="end" 
+                                    axisLine={{ stroke: '#cbd5e1' }} 
+                                    tickLine={false} 
+                                    interval={0}
+                                />
+                                <YAxis tickFormatter={(value) => `Rp${(value / 1000000).toFixed(0)}M`} tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} />
                                 <Tooltip
                                     cursor={{ fill: '#f8fafc' }}
                                     contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                                     formatter={(value: number) => formatCurrency(value)}
                                 />
                                 <Bar dataKey="amount" name="Total Amount Sell Out Slow Moving" radius={[4, 4, 0, 0]} maxBarSize={80}>
+                                    <LabelList dataKey="amount" position="top" formatter={formatCompactCurrency} style={{ fontSize: '10px', fill: '#64748b' }} />
                                     {(data.topCategories || []).map((entry, index) => (
                                         <Cell key={`cell-${index}`} fill={COLORS[(index + 2) % COLORS.length]} />
                                     ))}
@@ -424,16 +474,25 @@ export function SlowMovingDashboardClient() {
                     </CardHeader>
                     <CardContent className="h-[350px]">
                         <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={data.topTireSizes} margin={{ top: 20, right: 30, left: 40, bottom: 5 }}>
+                            <BarChart data={data.topTireSizes} margin={{ top: 20, right: 30, left: 40, bottom: 80 }}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                <XAxis dataKey="tireSize" tick={{ fill: '#334155', fontSize: 12 }} axisLine={{ stroke: '#cbd5e1' }} tickLine={false} />
-                                <YAxis tickFormatter={(value) => `Rp${(value / 1000000).toFixed(0)}M`} tick={{ fill: '#64748b' }} axisLine={false} tickLine={false} />
+                                <XAxis 
+                                    dataKey="tireSize" 
+                                    tick={{ fill: '#334155', fontSize: 11 }} 
+                                    angle={-45} 
+                                    textAnchor="end" 
+                                    axisLine={{ stroke: '#cbd5e1' }} 
+                                    tickLine={false} 
+                                    interval={0}
+                                />
+                                <YAxis tickFormatter={(value) => `Rp${(value / 1000000).toFixed(0)}M`} tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} />
                                 <Tooltip
                                     cursor={{ fill: '#f8fafc' }}
                                     contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                                     formatter={(value: number) => formatCurrency(value)}
                                 />
                                 <Bar dataKey="amount" name="Total Amount Sell Out Slow Moving" radius={[4, 4, 0, 0]} maxBarSize={80}>
+                                    <LabelList dataKey="amount" position="top" formatter={formatCompactCurrency} style={{ fontSize: '10px', fill: '#64748b' }} />
                                     {(data.topTireSizes || []).map((entry, index) => (
                                         <Cell key={`cell-${index}`} fill={COLORS[(index + 5) % COLORS.length]} />
                                     ))}

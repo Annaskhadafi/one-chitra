@@ -76,6 +76,13 @@ export async function getSlowMovingDashboardData(
     // Base conditions
     const baseWhere = `billing_date IS NOT NULL AND (cancelled IS NULL OR cancelled = '') AND UPPER(TRIM(material_no)) = ANY(ARRAY[${safeList}])`
     
+    // Extractor for Tire Size from material_description
+    const TIRE_SIZE_EXTRACTOR = `COALESCE(
+        SUBSTRING(material_description FROM '^[0-9]+(?:\\.[0-9]+)?(?:/[0-9]+)?\\s*[R\\-]\\s*[0-9]+(?:\\.[0-9]+)?(?:\\s*/[0-9]+(?:\\.[0-9]+)?)?'),
+        size_dimen,
+        'UNKNOWN'
+    )`
+
     // Filter by selected years
     const yearCondition = selectedYears.length > 0 
         ? ` AND TO_CHAR(billing_date, 'YYYY') = ANY(ARRAY[${selectedYears.map(y => `'${y.replace(/'/g, "''")}'`).join(",")}])` 
@@ -83,7 +90,7 @@ export async function getSlowMovingDashboardData(
 
     // Filter by Tire Size and Category
     const filtersCondition = `
-        ${selectedTireSize && selectedTireSize !== "ALL" ? ` AND size_dimen = '${selectedTireSize.replace(/'/g, "''")}'` : ""}
+        ${selectedTireSize && selectedTireSize !== "ALL" ? ` AND ${TIRE_SIZE_EXTRACTOR} = '${selectedTireSize.replace(/'/g, "''")}'` : ""}
         ${selectedCategory && selectedCategory !== "ALL" ? ` AND COALESCE(mat_grp_desc, 'UNKNOWN') = '${selectedCategory.replace(/'/g, "''")}'` : ""}
     `
 
@@ -162,12 +169,12 @@ export async function getSlowMovingDashboardData(
     // 7. Top Tire Sizes
     const tireSizeResult = await db.execute(sql.raw(`
         SELECT 
-            COALESCE(size_dimen, 'UNKNOWN') AS tireSize, 
+            ${TIRE_SIZE_EXTRACTOR} AS tireSize, 
             SUM(qty) AS total_qty, 
             SUM(revenue_in_doc_curr) AS total_amount
         FROM sales_revenue_sap 
         WHERE ${baseWhere} ${filtersCondition} ${yearCondition}
-        GROUP BY COALESCE(size_dimen, 'UNKNOWN')
+        GROUP BY ${TIRE_SIZE_EXTRACTOR}
         ORDER BY SUM(revenue_in_doc_curr) DESC
         LIMIT 10
     `))
@@ -209,10 +216,16 @@ export async function getSlowMovingFilters() {
     const safeList = upperKeys.map(k => k.replace(/'/g, "''")).map(k => "'" + k + "'").join(",")
     const baseWhere = `billing_date IS NOT NULL AND (cancelled IS NULL OR cancelled = '') AND UPPER(TRIM(material_no)) = ANY(ARRAY[${safeList}])`
 
+    const TIRE_SIZE_EXTRACTOR = `COALESCE(
+        SUBSTRING(material_description FROM '^[0-9]+(?:\\.[0-9]+)?(?:/[0-9]+)?\\s*[R\\-]\\s*[0-9]+(?:\\.[0-9]+)?(?:\\s*/[0-9]+(?:\\.[0-9]+)?)?'),
+        size_dimen,
+        'UNKNOWN'
+    )`
+
     const sizesResult = await db.execute(sql.raw(`
-        SELECT DISTINCT size_dimen
+        SELECT DISTINCT ${TIRE_SIZE_EXTRACTOR} AS size_dimen
         FROM sales_revenue_sap
-        WHERE ${baseWhere} AND size_dimen IS NOT NULL AND size_dimen != ''
+        WHERE ${baseWhere} AND ${TIRE_SIZE_EXTRACTOR} != 'UNKNOWN'
         ORDER BY size_dimen
     `))
 
