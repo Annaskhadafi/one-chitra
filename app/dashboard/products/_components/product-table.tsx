@@ -19,7 +19,7 @@ import { ProductDetail } from "./product-detail"
 import { ProductCSVUpload } from "./product-table-csv"
 import { ProductCkCSVUpload } from "./product-ck-csv"
 import { ProductPtroCSVUpload } from "./product-ptro-csv"
-import { Search, Trash2, Pencil, Package, Layers, Tag, ChevronUp, ChevronDown, RefreshCcw } from "lucide-react"
+import { Search, Trash2, Pencil, Package, Layers, Tag, ChevronUp, ChevronDown, RefreshCcw, Download } from "lucide-react"
 import { toast } from "sonner"
 import { usePermissions } from "@/hooks/use-permissions"
 import {
@@ -468,6 +468,39 @@ export function ProductTable({ data: initialData }: ProductTableProps) {
         ]
         : [0, 0]
 
+    const exportToCsv = () => {
+        const csvRows: string[][] = [
+            ["Material Number", "Material CK", "Material PTRO", "Old Material No", "Description", "Category", "Brand", "WH", "Cost SAP (USD)", "Cost IDR", "Stock"]
+        ]
+
+        data.forEach(p => {
+            csvRows.push([
+                p.materialNumber || "",
+                p.materialNumberCk || "",
+                p.materialNumberPtro || "",
+                p.oldMaterialNo || "",
+                p.materialDescription || "",
+                p.category || "",
+                p.brand || "",
+                p.slocDescription ? `${p.slocDescription} (${p.sloc})` : (p.sloc || ""),
+                (p.costSap || 0).toString(),
+                (Number(p.costSap || 0) * manualRate).toString(),
+                (p.totalStock ?? 0).toString()
+            ])
+        })
+
+        const csvContent = "data:text/csv;charset=utf-8," 
+            + csvRows.map(e => e.map(String).map(s => `"${s.replace(/"/g, '""')}"`).join(",")).join("\n")
+        
+        const encodedUri = encodeURI(csvContent)
+        const link = document.createElement("a")
+        link.setAttribute("href", encodedUri)
+        link.setAttribute("download", `products_${new Date().toISOString().split('T')[0]}.csv`)
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+    }
+
     const handleBulkDelete = async () => {
         const selectedIds = table.getSelectedRowModel().flatRows.map(r => r.original.id)
         if (confirm("Are you sure you want to delete selected products?")) {
@@ -571,6 +604,10 @@ export function ProductTable({ data: initialData }: ProductTableProps) {
                     </Select>
                 </div>
                 <div className="flex gap-2 w-full sm:w-auto">
+                    <Button variant="outline" onClick={exportToCsv} className="gap-2">
+                        <Download className="h-4 w-4" />
+                        Export CSV
+                    </Button>
                     <Button
                         variant="outline"
                         onClick={() => syncCostSapMutation.mutate()}
@@ -582,8 +619,6 @@ export function ProductTable({ data: initialData }: ProductTableProps) {
                     {canCreate && (
                         <>
                             <ProductCkCSVUpload onSuccess={() => queryClient.invalidateQueries({ queryKey: ["products"] })} />
-                            <ProductPtroCSVUpload onSuccess={() => queryClient.invalidateQueries({ queryKey: ["products"] })} />
-                            <ProductCSVUpload />
                             <ProductDialog onSuccess={() => queryClient.invalidateQueries({ queryKey: ["products"] })} />
                         </>
                     )}

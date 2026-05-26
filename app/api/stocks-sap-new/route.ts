@@ -56,10 +56,23 @@ export async function GET(req: NextRequest) {
             whereClause = sql`${whereClause} AND LOWER(stor_loc_desc) LIKE ${`%${slocDesc.toLowerCase()}%`}`
         }
 
-        // For warehouse type filtering, we might need to join or have logic
-        // But since warehouse type is derived in frontend, for now we filter what's easy in SQL
-        if (warehouseType === "repair-2002") {
-            whereClause = sql`${whereClause} AND plant_code = '2002'`
+        if (warehouseType !== "all") {
+            if (warehouseType === "repair-2002") {
+                whereClause = sql`${whereClause} AND plant_code = '2002'`
+            } else if (warehouseType === "Central Warehouse") {
+                whereClause = sql`${whereClause} AND ${normalizedStorLoc} = '101'`
+            } else {
+                const whResult = await db.execute(sql`
+                    SELECT sloc FROM public.warehouses WHERE type = ${warehouseType}
+                `)
+                const slocs = whResult.rows.map(r => normalizeSloc(r.sloc as string)).filter(Boolean)
+                if (slocs.length > 0) {
+                    const inList = sql.join(slocs.map(s => sql`${s}`), sql`, `)
+                    whereClause = sql`${whereClause} AND ${normalizedStorLoc} IN (${inList})`
+                } else {
+                    whereClause = sql`${whereClause} AND FALSE`
+                }
+            }
         }
 
         // Count total matching records and stats
