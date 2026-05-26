@@ -91,10 +91,7 @@ function formatMonthLabel(yyyyMM: string) {
 }
 
 function buildYearMonths(year: string) {
-    const now = new Date()
-    const currentYear = now.getFullYear().toString()
-    const monthCount = year === currentYear ? now.getMonth() + 1 : 12
-    return Array.from({ length: monthCount }, (_, index) => `${year}-${String(index + 1).padStart(2, "0")}`)
+    return Array.from({ length: 12 }, (_, index) => `${year}-${String(index + 1).padStart(2, "0")}`)
 }
 
 function buildProductOptions(stocks: StockRow[]) {
