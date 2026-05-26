@@ -129,8 +129,21 @@ export async function deleteSlowMovingProducts(materialKeys: string[]) {
 export type MonthlySellingQty = {
     materialKey: string
     monthlyQty: Record<string, number>
+    monthlyRevenue: Record<string, number>
+    details: SellingOutDetail[]
     totalQtySold: number
     totalRevenue: number
+}
+
+export type SellingOutDetail = {
+    month: string
+    billingDate: string | null
+    billingNo: string | null
+    qty: number
+    revenueInDocCurr: number
+    total: number
+    sales: string | null
+    customer: string | null
 }
 
 export async function getSellingOutByMonth(materialKeys: string[]): Promise<MonthlySellingQty[]> {
@@ -139,37 +152,47 @@ export async function getSellingOutByMonth(materialKeys: string[]): Promise<Mont
     const upperKeys = materialKeys.map((k) => k.toUpperCase())
     const safeList = upperKeys.map((k) => k.replace(/'/g, "''")).map((k) => "'" + k + "'").join(",")
 
-    const [monthlyResult, summaryResult] = await Promise.all([
-        db.execute(
-            sql.raw(
-                "SELECT UPPER(TRIM(material_no)) AS material_key, TO_CHAR(billing_date, 'YYYY-MM') AS month, SUM(qty) AS total_qty FROM sales_revenue_sap WHERE billing_date IS NOT NULL AND EXTRACT(YEAR FROM billing_date) = EXTRACT(YEAR FROM CURRENT_DATE) AND (cancelled IS NULL OR cancelled = '') AND UPPER(TRIM(material_no)) = ANY(ARRAY[" + safeList + "]) GROUP BY UPPER(TRIM(material_no)), TO_CHAR(billing_date, 'YYYY-MM') ORDER BY UPPER(TRIM(material_no)), TO_CHAR(billing_date, 'YYYY-MM')"
-            )
-        ),
-        db.execute(
-            sql.raw(
-                "SELECT UPPER(TRIM(material_no)) AS material_key, SUM(qty) AS total_qty_sold, SUM(revenue_in_doc_curr) AS total_revenue FROM sales_revenue_sap WHERE billing_date IS NOT NULL AND EXTRACT(YEAR FROM billing_date) = EXTRACT(YEAR FROM CURRENT_DATE) AND (cancelled IS NULL OR cancelled = '') AND UPPER(TRIM(material_no)) = ANY(ARRAY[" + safeList + "]) GROUP BY UPPER(TRIM(material_no))"
-            )
-        ),
-    ])
+    const monthlyResult = await db.execute(
+        sql.raw(
+            "SELECT UPPER(TRIM(material_no)) AS material_key, TO_CHAR(billing_date, 'YYYY-MM') AS month, billing_date, billing_no, qty, revenue_in_doc_curr, salesman, customer_name FROM sales_revenue_sap WHERE billing_date IS NOT NULL AND (cancelled IS NULL OR cancelled = '') AND UPPER(TRIM(material_no)) = ANY(ARRAY[" + safeList + "]) ORDER BY UPPER(TRIM(material_no)), billing_date DESC, billing_no"
+        )
+    )
 
     const monthlyMap = new Map<string, Record<string, number>>()
-    for (const row of monthlyResult.rows as { material_key: string; month: string; total_qty: string }[]) {
-        const key = row.material_key
-        if (!monthlyMap.has(key)) monthlyMap.set(key, {})
-        monthlyMap.get(key)![row.month] = Number(row.total_qty) || 0
-    }
-
+    const monthlyRevenueMap = new Map<string, Record<string, number>>()
     const summaryMap = new Map<string, { totalQtySold: number; totalRevenue: number }>()
-    for (const row of summaryResult.rows as { material_key: string; total_qty_sold: string; total_revenue: string }[]) {
-        summaryMap.set(row.material_key, {
-            totalQtySold: Number(row.total_qty_sold) || 0,
-            totalRevenue: Number(row.total_revenue) || 0,
+    const detailMap = new Map<string, SellingOutDetail[]>()
+    for (const row of monthlyResult.rows as { material_key: string; month: string; billing_date: string | Date | null; billing_no: string | null; qty: string | number | null; revenue_in_doc_curr: string | number | null; salesman: string | null; customer_name: string | null }[]) {
+        const key = row.material_key
+        const qty = Number(row.qty) || 0
+        const revenue = Number(row.revenue_in_doc_curr) || 0
+        if (!monthlyMap.has(key)) monthlyMap.set(key, {})
+        if (!monthlyRevenueMap.has(key)) monthlyRevenueMap.set(key, {})
+        if (!detailMap.has(key)) detailMap.set(key, [])
+        monthlyMap.get(key)![row.month] = (monthlyMap.get(key)![row.month] ?? 0) + qty
+        monthlyRevenueMap.get(key)![row.month] = (monthlyRevenueMap.get(key)![row.month] ?? 0) + revenue
+        detailMap.get(key)!.push({
+            month: row.month,
+            billingDate: row.billing_date instanceof Date ? row.billing_date.toISOString().slice(0, 10) : row.billing_date,
+            billingNo: row.billing_no,
+            qty,
+            revenueInDocCurr: revenue,
+            total: revenue,
+            sales: row.salesman,
+            customer: row.customer_name,
+        })
+        const current = summaryMap.get(key) ?? { totalQtySold: 0, totalRevenue: 0 }
+        summaryMap.set(key, {
+            totalQtySold: current.totalQtySold + qty,
+            totalRevenue: current.totalRevenue + revenue,
         })
     }
 
     return upperKeys.map((k) => ({
         materialKey: k,
         monthlyQty: monthlyMap.get(k) ?? {},
+        monthlyRevenue: monthlyRevenueMap.get(k) ?? {},
+        details: detailMap.get(k) ?? [],
         totalQtySold: summaryMap.get(k)?.totalQtySold ?? 0,
         totalRevenue: summaryMap.get(k)?.totalRevenue ?? 0,
     }))

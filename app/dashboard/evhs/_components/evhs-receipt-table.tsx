@@ -148,6 +148,7 @@ const createFallbackProduct = (productId: number): Product => ({
     category: "UNKNOWN",
     materialNumber: "-",
     materialNumberCk: null,
+    materialNumberPtro: null,
     oldMaterialNo: null,
     materialDescription: null,
     brand: null,

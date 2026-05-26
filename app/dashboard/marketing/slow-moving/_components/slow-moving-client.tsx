@@ -6,9 +6,9 @@ import {
     deleteSlowMovingProduct,
     importSlowMovingProducts,
 } from "@/app/actions/slow-moving-products"
-import type { MonthlySellingQty } from "@/app/actions/slow-moving-products"
+import type { MonthlySellingQty, SellingOutDetail } from "@/app/actions/slow-moving-products"
 import type { getStocks } from "@/app/actions/stock"
-import { Box, Download, Loader2, PackageSearch, RotateCcw, Search, Trash2, Upload } from "lucide-react"
+import { Box, ChevronRight, Download, Loader2, PackageSearch, RotateCcw, Search, Trash2, Upload } from "lucide-react"
 import * as XLSX from "xlsx"
 import { toast } from "sonner"
 
@@ -90,6 +90,13 @@ function formatMonthLabel(yyyyMM: string) {
     return date.toLocaleDateString("id-ID", { month: "short", year: "2-digit" })
 }
 
+function buildYearMonths(year: string) {
+    const now = new Date()
+    const currentYear = now.getFullYear().toString()
+    const monthCount = year === currentYear ? now.getMonth() + 1 : 12
+    return Array.from({ length: monthCount }, (_, index) => `${year}-${String(index + 1).padStart(2, "0")}`)
+}
+
 function buildProductOptions(stocks: StockRow[]) {
     const grouped = new Map<string, ProductOption>()
     for (const stock of stocks) {
@@ -143,17 +150,39 @@ function buildSlowMovingRow(stocks: StockRow[], option: ProductOption, manualRat
     }
 }
 
-function getAllMonths(sellingOutByMonth: MonthlySellingQty[]): string[] {
+function getAvailableYears(sellingOutByMonth: MonthlySellingQty[]): string[] {
     const currentYear = new Date().getFullYear().toString()
-    const monthSet = new Set<string>()
+    const yearSet = new Set<string>([currentYear])
     for (const item of sellingOutByMonth) {
         for (const month of Object.keys(item.monthlyQty)) {
-            if (month.startsWith(currentYear)) {
-                monthSet.add(month)
-            }
+            yearSet.add(month.slice(0, 4))
         }
     }
+    return Array.from(yearSet).sort((a, b) => Number(b) - Number(a))
+}
+
+function getMonthsForYears(selectedYears: string[]): string[] {
+    const monthSet = new Set<string>()
+    for (const year of selectedYears) {
+        for (const month of buildYearMonths(year)) monthSet.add(month)
+    }
     return Array.from(monthSet).sort()
+}
+
+function sumByMonths(values: Record<string, number> | undefined, months: string[]) {
+    return months.reduce((total, month) => total + (values?.[month] ?? 0), 0)
+}
+
+function filterDetailsByMonths(details: SellingOutDetail[] | undefined, months: string[]) {
+    const monthSet = new Set(months)
+    return (details ?? []).filter((detail) => monthSet.has(detail.month))
+}
+
+function formatDate(value: string | null) {
+    if (!value) return "-"
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return value
+    return date.toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })
 }
 
 export function SlowMovingClient({
@@ -177,6 +206,9 @@ export function SlowMovingClient({
     const [manualRate, setManualRate] = React.useState(defaultRate)
     const [isImporting, setIsImporting] = React.useState(false)
     const [deletingKey, setDeletingKey] = React.useState<string | null>(null)
+    const currentYear = React.useMemo(() => new Date().getFullYear().toString(), [])
+    const [selectedYears, setSelectedYears] = React.useState<string[]>([currentYear])
+    const [expandedKeys, setExpandedKeys] = React.useState<string[]>([])
 
     const productOptions = React.useMemo(() => buildProductOptions(stocks), [stocks])
 
@@ -195,13 +227,16 @@ export function SlowMovingClient({
             .map((option) => buildSlowMovingRow(stocks, option, manualRate))
     }, [importedKeys, manualRate, productOptions, stocks])
 
-    const allMonths = React.useMemo(() => getAllMonths(sellingOutByMonth), [sellingOutByMonth])
+    const availableYears = React.useMemo(() => getAvailableYears(sellingOutByMonth), [sellingOutByMonth])
+    const allMonths = React.useMemo(() => getMonthsForYears(selectedYears), [selectedYears])
 
     const sellingMap = React.useMemo(() => {
-        const map = new Map<string, { monthlyQty: Record<string, number>; totalQtySold: number; totalRevenue: number }>()
+        const map = new Map<string, { monthlyQty: Record<string, number>; monthlyRevenue: Record<string, number>; details: SellingOutDetail[]; totalQtySold: number; totalRevenue: number }>()
         for (const item of sellingOutByMonth) {
             map.set(item.materialKey, {
                 monthlyQty: item.monthlyQty,
+                monthlyRevenue: item.monthlyRevenue,
+                details: item.details,
                 totalQtySold: item.totalQtySold,
                 totalRevenue: item.totalRevenue,
             })
@@ -218,18 +253,20 @@ export function SlowMovingClient({
                 acc.moreThan366Qty += row.moreThan366Qty
                 acc.totalValue += row.totalValue
                 const entry = sellingMap.get(row.key)
-                acc.totalQtySold += entry?.totalQtySold ?? 0
-                acc.totalRevenue += entry?.totalRevenue ?? 0
+                acc.totalQtySold += sumByMonths(entry?.monthlyQty, allMonths)
+                acc.totalRevenue += sumByMonths(entry?.monthlyRevenue, allMonths)
                 const monthlyQty = entry?.monthlyQty ?? {}
                 for (const [month, qty] of Object.entries(monthlyQty)) {
-                    monthlyTotals[month] = (monthlyTotals[month] ?? 0) + qty
+                    if (allMonths.includes(month)) {
+                        monthlyTotals[month] = (monthlyTotals[month] ?? 0) + qty
+                    }
                 }
                 return acc
             },
             { totalQty: 0, lessThan366Qty: 0, moreThan366Qty: 0, totalValue: 0, totalQtySold: 0, totalRevenue: 0 }
         )
         return { ...base, monthlyTotals }
-    }, [reportRows, sellingMap])
+    }, [allMonths, reportRows, sellingMap])
 
     const selectedKeySet = React.useMemo(() => new Set(selectedKeys), [selectedKeys])
     const importedKeySet = React.useMemo(() => new Set(importedKeys), [importedKeys])
@@ -239,6 +276,18 @@ export function SlowMovingClient({
             if (checked) return current.includes(key) ? current : [...current, key]
             return current.filter((item) => item !== key)
         })
+    }
+
+    const toggleYearSelection = (year: string, checked: boolean) => {
+        setSelectedYears((current) => {
+            if (checked) return current.includes(year) ? current : [...current, year].sort()
+            const next = current.filter((item) => item !== year)
+            return next.length > 0 ? next : [year]
+        })
+    }
+
+    const toggleExpanded = (key: string) => {
+        setExpandedKeys((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key])
     }
 
     const handleImportSelected = async () => {
@@ -308,8 +357,8 @@ export function SlowMovingClient({
 
         const rows = reportRows.map((row, index) => {
             const sellingEntry = sellingMap.get(row.key)
-            const totalQtySold = sellingEntry?.totalQtySold ?? 0
-            const totalRevenue = sellingEntry?.totalRevenue ?? 0
+            const totalQtySold = sumByMonths(sellingEntry?.monthlyQty, allMonths)
+            const totalRevenue = sumByMonths(sellingEntry?.monthlyRevenue, allMonths)
             const monthlyQty = sellingEntry?.monthlyQty ?? {}
             const sellOutPct = row.totalQty > 0 ? ((totalQtySold / (row.totalQty + totalQtySold)) * 100).toFixed(1) + "%" : "-"
             const base: Record<string, unknown> = {
@@ -339,7 +388,7 @@ export function SlowMovingClient({
     }
 
     const totalMonthCols = allMonths.length
-    const totalCols = 12 + totalMonthCols
+    const totalCols = 13 + totalMonthCols
 
     return (
         <div className={showHeader ? "flex min-h-screen flex-1 flex-col gap-6 bg-white p-4 text-zinc-950 md:p-8 lg:p-10" : "flex flex-col gap-6"}>
@@ -421,6 +470,20 @@ export function SlowMovingClient({
                             }}
                         />
                     </div>
+                    <div className="w-full lg:max-w-xs">
+                        <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Filter Tahun</label>
+                        <div className="flex min-h-10 flex-wrap items-center gap-2 rounded-md border bg-white px-3 py-2">
+                            {availableYears.map((year) => (
+                                <label key={year} className="flex cursor-pointer items-center gap-2 text-sm font-medium text-zinc-800">
+                                    <Checkbox
+                                        checked={selectedYears.includes(year)}
+                                        onCheckedChange={(checked) => toggleYearSelection(year, Boolean(checked))}
+                                    />
+                                    {year}
+                                </label>
+                            ))}
+                        </div>
+                    </div>
                     <div className="flex flex-wrap gap-2">
                         <Button variant="outline" onClick={handleSelectVisible} className="gap-2">
                             <Search className="h-4 w-4" />
@@ -439,6 +502,7 @@ export function SlowMovingClient({
                             onClick={() => {
                                 setSearch("")
                                 setSelectedKeys([])
+                                setSelectedYears([currentYear])
                             }}
                             className="gap-2"
                         >
@@ -507,6 +571,7 @@ export function SlowMovingClient({
                     <Table className="border-collapse" style={{ minWidth: `${980 + totalMonthCols * 100}px` }}>
                         <TableHeader>
                             <TableRow className="bg-muted/50">
+                                <TableHead className="h-10 w-12 text-center"></TableHead>
                                 <TableHead className="h-10 w-16 text-center">No</TableHead>
                                 <TableHead className="h-10">Material Number</TableHead>
                                 <TableHead className="h-10">Desc</TableHead>
@@ -537,46 +602,109 @@ export function SlowMovingClient({
                                 reportRows.map((row, index) => {
                                     const sellingEntry = sellingMap.get(row.key)
                                     const monthlyQty = sellingEntry?.monthlyQty ?? {}
-                                    const totalQtySold = sellingEntry?.totalQtySold ?? 0
-                                    const totalRevenue = sellingEntry?.totalRevenue ?? 0
+                                    const totalQtySold = sumByMonths(sellingEntry?.monthlyQty, allMonths)
+                                    const totalRevenue = sumByMonths(sellingEntry?.monthlyRevenue, allMonths)
                                     const sellOutPct = row.totalQty > 0 ? (totalQtySold / (row.totalQty + totalQtySold)) * 100 : 0
+                                    const details = filterDetailsByMonths(sellingEntry?.details, allMonths)
+                                    const isExpanded = expandedKeys.includes(row.key)
                                     return (
-                                        <TableRow key={row.key}>
-                                            <TableCell className="text-center font-mono">{index + 1}</TableCell>
-                                            <TableCell className="font-medium text-blue-600">{row.materialNumber}</TableCell>
-                                            <TableCell className="whitespace-normal">{row.description}</TableCell>
-                                            <TableCell className="text-right font-mono">{formatQty(row.totalQty)}</TableCell>
-                                            <TableCell className="text-right font-mono">{formatQty(row.lessThan366Qty)}</TableCell>
-                                            <TableCell className="text-right font-mono">{formatQty(row.moreThan366Qty)}</TableCell>
-                                            <TableCell className="text-right font-mono">{formatCurrency(row.unitPrice)}</TableCell>
-                                            <TableCell className="text-right font-mono">{formatCurrency(row.totalValue)}</TableCell>
-                                            {allMonths.map((month) => (
-                                                <TableCell key={month} className="text-right font-mono text-blue-800">
-                                                    {formatQty(monthlyQty[month] ?? 0)}
+                                        <React.Fragment key={row.key}>
+                                            <TableRow>
+                                                <TableCell className="text-center">
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-8 w-8"
+                                                        onClick={() => toggleExpanded(row.key)}
+                                                        aria-label={`${isExpanded ? "Tutup" : "Buka"} detail ${row.materialNumber}`}
+                                                    >
+                                                        <ChevronRight className={`h-4 w-4 transition-transform ${isExpanded ? "rotate-90" : ""}`} />
+                                                    </Button>
                                                 </TableCell>
-                                            ))}
-                                            <TableCell className="text-right font-mono text-emerald-700">{formatQty(totalQtySold)}</TableCell>
-                                            <TableCell className="text-right font-mono text-emerald-700">{formatCurrency(totalRevenue)}</TableCell>
-                                            <TableCell className="text-right font-mono text-orange-700 font-semibold">
-                                                {sellOutPct > 0 ? sellOutPct.toFixed(1) + "%" : "-"}
-                                            </TableCell>
-                                            <TableCell className="text-right">
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="h-8 w-8 text-destructive"
-                                                    onClick={() => handleRemoveImported(row.key)}
-                                                    disabled={deletingKey === row.key}
-                                                    aria-label={`Hapus ${row.materialNumber}`}
-                                                >
-                                                    {deletingKey === row.key ? (
-                                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                                    ) : (
-                                                        <Trash2 className="h-4 w-4" />
-                                                    )}
-                                                </Button>
-                                            </TableCell>
-                                        </TableRow>
+                                                <TableCell className="text-center font-mono">{index + 1}</TableCell>
+                                                <TableCell className="font-medium text-blue-600">{row.materialNumber}</TableCell>
+                                                <TableCell className="whitespace-normal">{row.description}</TableCell>
+                                                <TableCell className="text-right font-mono">{formatQty(row.totalQty)}</TableCell>
+                                                <TableCell className="text-right font-mono">{formatQty(row.lessThan366Qty)}</TableCell>
+                                                <TableCell className="text-right font-mono">{formatQty(row.moreThan366Qty)}</TableCell>
+                                                <TableCell className="text-right font-mono">{formatCurrency(row.unitPrice)}</TableCell>
+                                                <TableCell className="text-right font-mono">{formatCurrency(row.totalValue)}</TableCell>
+                                                {allMonths.map((month) => (
+                                                    <TableCell key={month} className="text-right font-mono text-blue-800">
+                                                        {formatQty(monthlyQty[month] ?? 0)}
+                                                    </TableCell>
+                                                ))}
+                                                <TableCell className="text-right font-mono text-emerald-700">{formatQty(totalQtySold)}</TableCell>
+                                                <TableCell className="text-right font-mono text-emerald-700">{formatCurrency(totalRevenue)}</TableCell>
+                                                <TableCell className="text-right font-mono text-orange-700 font-semibold">
+                                                    {sellOutPct > 0 ? sellOutPct.toFixed(1) + "%" : "-"}
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-8 w-8 text-destructive"
+                                                        onClick={() => handleRemoveImported(row.key)}
+                                                        disabled={deletingKey === row.key}
+                                                        aria-label={`Hapus ${row.materialNumber}`}
+                                                    >
+                                                        {deletingKey === row.key ? (
+                                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                                        ) : (
+                                                            <Trash2 className="h-4 w-4" />
+                                                        )}
+                                                    </Button>
+                                                </TableCell>
+                                            </TableRow>
+                                            {isExpanded && (
+                                                <TableRow className="bg-slate-50/80 hover:bg-slate-50/80">
+                                                    <TableCell colSpan={totalCols} className="p-0">
+                                                        <div className="px-4 py-3">
+                                                            <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                                                <Badge variant="outline">Detail Selling Out</Badge>
+                                                                <span>{details.length} transaksi sesuai filter tahun</span>
+                                                            </div>
+                                                            <div className="overflow-x-auto rounded-md border bg-white">
+                                                                <table className="w-full min-w-[820px] text-sm">
+                                                                    <thead className="bg-muted/60 text-xs uppercase tracking-wide text-muted-foreground">
+                                                                        <tr>
+                                                                            <th className="px-3 py-2 text-left">Tanggal</th>
+                                                                            <th className="px-3 py-2 text-left">Billing</th>
+                                                                            <th className="px-3 py-2 text-right">Qty</th>
+                                                                            <th className="px-3 py-2 text-right">Revenue Docc Curr</th>
+                                                                            <th className="px-3 py-2 text-right">Total</th>
+                                                                            <th className="px-3 py-2 text-left">Sales</th>
+                                                                            <th className="px-3 py-2 text-left">Customer</th>
+                                                                        </tr>
+                                                                    </thead>
+                                                                    <tbody>
+                                                                        {details.length === 0 ? (
+                                                                            <tr>
+                                                                                <td colSpan={7} className="px-3 py-6 text-center text-muted-foreground">
+                                                                                    Tidak ada detail transaksi untuk filter tahun ini.
+                                                                                </td>
+                                                                            </tr>
+                                                                        ) : (
+                                                                            details.map((detail, detailIndex) => (
+                                                                                <tr key={`${detail.billingNo ?? detail.month}-${detailIndex}`} className="border-t">
+                                                                                    <td className="px-3 py-2 whitespace-nowrap">{formatDate(detail.billingDate)}</td>
+                                                                                    <td className="px-3 py-2 font-mono">{detail.billingNo || "-"}</td>
+                                                                                    <td className="px-3 py-2 text-right font-mono">{formatQty(detail.qty)}</td>
+                                                                                    <td className="px-3 py-2 text-right font-mono">{formatCurrency(detail.revenueInDocCurr)}</td>
+                                                                                    <td className="px-3 py-2 text-right font-mono font-semibold">{formatCurrency(detail.total)}</td>
+                                                                                    <td className="px-3 py-2">{detail.sales || "-"}</td>
+                                                                                    <td className="px-3 py-2">{detail.customer || "-"}</td>
+                                                                                </tr>
+                                                                            ))
+                                                                        )}
+                                                                    </tbody>
+                                                                </table>
+                                                            </div>
+                                                        </div>
+                                                    </TableCell>
+                                                </TableRow>
+                                            )}
+                                        </React.Fragment>
                                     )
                                 })
                             )}
@@ -584,6 +712,7 @@ export function SlowMovingClient({
                         {reportRows.length > 0 && (
                             <tfoot>
                                 <tr className="border-t bg-muted/70 font-semibold">
+                                    <td />
                                     <td colSpan={3} className="h-10 px-4 text-sm">Total</td>
                                     <td className="px-4 text-right font-mono text-sm">{formatQty(stats.totalQty)}</td>
                                     <td className="px-4 text-right font-mono text-sm">{formatQty(stats.lessThan366Qty)}</td>

@@ -119,6 +119,7 @@ export function QuickAddProductDialog({ warehouses, onProductCreated }: QuickAdd
                 category: data.category,
                 materialNumber: data.materialNumber,
                 materialNumberCk: null,
+                materialNumberPtro: null,
                 materialDescription: data.materialDescription ?? null,
                 oldMaterialNo: data.oldMaterialNo ?? null,
                 brand: data.brand ?? null,

@@ -57,7 +57,7 @@ function getHeadersFromExcel(file: File): Promise<string[]> {
                 const sheetName = workbook.SheetNames[0]
                 const worksheet = workbook.Sheets[sheetName]
                 const json = XLSX.utils.sheet_to_json<Record<string, string>>(worksheet, { header: 1 })
-                const headers = (json[0] as string[]) || []
+                const headers = (json[0] as unknown as string[]) || []
                 resolve(headers.map(String))
             } catch (err) {
                 reject(err)

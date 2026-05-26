@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import type { getCosmeticTires } from "@/app/actions/cosmetic-tires"
 import type { getProducts } from "@/app/actions/product"
@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { CosmeticTireClient } from "./cosmetic-tire-client"
 import { SlowMovingClient } from "./slow-moving-client"
+import { SlowMovingDashboardClient } from "./slow-moving-dashboard-client"
 
 type StockRow = Awaited<ReturnType<typeof getStocks>>[number]
 type SavedSlowMovingProduct = Awaited<ReturnType<typeof getSlowMovingProducts>>[number]
@@ -39,11 +40,15 @@ export function SlowMovingTabs({
                         <Badge variant="outline">{stocks.length} stock rows</Badge>
                     </div>
                 </div>
-                <Tabs defaultValue="slow-moving" className="gap-4">
+                <Tabs defaultValue="dashboard" className="gap-4">
                     <TabsList>
+                        <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
                         <TabsTrigger value="slow-moving">Slow Moving</TabsTrigger>
                         <TabsTrigger value="cosmetic-tire">Cosmetic Tire</TabsTrigger>
                     </TabsList>
+                    <TabsContent value="dashboard" className="mt-0">
+                        <SlowMovingDashboardClient />
+                    </TabsContent>
                     <TabsContent value="slow-moving" className="mt-0">
                         <SlowMovingClient
                             stocks={stocks}
