@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿"use client"
+﻿﻿﻿﻿﻿"use client"
 
 import * as React from "react"
 import Image from "next/image"
@@ -39,7 +39,7 @@ type Holiday = {
   is_national_holiday: boolean
 }
 
-type VisualStyle = "Modern & Clean" | "Elegant & Luxury" | "Playful & Vibrant" | "Corporate & Professional" | "Minimalist" | "Vectorize Minimalis" | "Vector Kartun Simple" | "Vector Detail"
+type VisualStyle = "Modern & Clean" | "Elegant & Luxury" | "Playful & Vibrant" | "Corporate & Professional" | "Minimalist" | "Vectorize Minimalis" | "Vector Kartun Simple" | "Vector Detail" | "Style Retro"
 
 const contentTypes = [
   "Ucapan ulang tahun customer",
@@ -59,9 +59,10 @@ const visualStyles: VisualStyle[] = [
   "Vectorize Minimalis",
   "Vector Kartun Simple",
   "Vector Detail",
+  "Style Retro",
 ]
 
-const wearpackStylePrompt = "Tampilkan pekerja/karyawan memakai seragam kerja resmi PT Chitra Paratama: seragam kerja resmi PT Chitra Paratama: KEMEJA LENGAN PANJANG BIRU NAVY GELAP (#002D56) di bagian dalam + ROMPI/VEST HIJAU NEON (#8DC63F) tanpa lengan di bagian luar. STRIP REFLEKTIF SILVER pada rompi: DUA garis horizontal PENUH melingkari seluruh badan rompi (satu di dada, satu di perut bawah rompi) — FULL WIDTH dari kiri ke kanan tanpa putus. Patch logo CP di saku dada kiri rompi: persegi panjang kecil BACKGROUND PUTIH SOLID, logo Chitra Paratama full color di atas putih, dijahit natural ke kain."
+const wearpackStylePrompt = "Tampilkan pekerja/karyawan memakai wearpack safety TWO-TONE resmi: lengan BIRU NAVY GELAP (#002D56), dada/bahu HIJAU NEON (#8DC63F), strip reflektif silver di pundak dan perut. WAJIB: di atas saku dada kiri wearpack, tempel patch logo Chitra Paratama berbentuk persegi panjang kecil dengan BACKGROUND PUTIH SOLID di belakang logo — logo CP berwarna asli di atas kotak putih, dijahit/bordir natural ke kain wearpack, terlihat jelas dan kontras. Patch ini harus tampak seperti name tag atau label bordir resmi yang menempel di atas saku, bukan stiker mengambang. Gunakan warna brand: Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56. Komposisi profesional, pencahayaan natural."
 
 const galleryLogoPrompt = "Tampilkan galeri produk ban atau suasana kerja lapangan PT Chitra Paratama dengan pekerja memakai wearpack safety TWO-TONE resmi: lengan BIRU NAVY GELAP (#002D56), dada/bahu HIJAU NEON (#8DC63F), strip reflektif silver di pundak dan perut. WAJIB: di atas saku dada kiri wearpack, tempel patch logo Chitra Paratama berbentuk persegi panjang kecil dengan BACKGROUND PUTIH SOLID di belakang logo — logo CP berwarna asli di atas kotak putih, dijahit/bordir natural ke kain wearpack, terlihat jelas dan kontras. Patch ini harus tampak seperti name tag atau label bordir resmi yang menempel di atas saku, bukan stiker mengambang. Gunakan warna brand: Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56. Komposisi profesional, pencahayaan natural."
 
@@ -78,9 +79,10 @@ const defaultVisualStyleByContentType: Record<(typeof contentTypes)[number], Vis
   "Hari Nasional": "Corporate & Professional",
 }
 
-const WEARPACK = "person wearing official PT Chitra Paratama work uniform: seragam kerja resmi PT Chitra Paratama: KEMEJA LENGAN PANJANG BIRU NAVY GELAP (#002D56) di bagian dalam + ROMPI/VEST HIJAU NEON (#8DC63F) tanpa lengan di bagian luar. STRIP REFLEKTIF SILVER pada rompi: DUA garis horizontal PENUH melingkari seluruh badan rompi (satu di dada, satu di perut bawah rompi) — FULL WIDTH dari kiri ke kanan tanpa putus. Patch logo CP di saku dada kiri rompi: persegi panjang kecil BACKGROUND PUTIH SOLID, logo Chitra Paratama full color di atas putih, dijahit natural ke kain."
+const WEARPACK = "person wearing official PT Chitra Paratama wearpack safety TWO-TONE resmi: lengan BIRU NAVY GELAP (#002D56), dada/bahu HIJAU NEON (#8DC63F), strip reflektif silver di pundak dan perut. WAJIB: di atas saku dada kiri wearpack, tempel patch logo Chitra Paratama berbentuk persegi panjang kecil dengan BACKGROUND PUTIH SOLID di belakang logo — logo CP berwarna asli di atas kotak putih, dijahit/bordir natural ke kain wearpack, terlihat jelas dan kontras. Patch ini harus tampak seperti name tag atau label bordir resmi yang menempel di atas saku, bukan stiker mengambang. Gunakan warna brand: Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56. Komposisi profesional, pencahayaan natural."
 const BRAND_COLORS = "Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56)"
 const SAFE_ZONE = "SAFE ZONE: keep minimum 200px margin from the TOP edge (top-left ~320x180px area is covered by logo overlay) and minimum 180px margin from the BOTTOM edge (covered by footer overlay). Place ALL headlines and key elements in the center zone only — never flush against top or bottom edges."
+const RETRO_STYLE_PROMPT = "Style Retro — retro poster, gouache illustration, fisheye perspective, tiny planet, heroic composition, editorial illustration, travel poster, grain texture, stylized environment, dynamic low angle. Use warm vintage tones balanced with Chitra Paratama brand colors, bold poster composition, hand-painted texture, and cinematic perspective while keeping text readable."
 
 const promptTemplates: Record<(typeof contentTypes)[number], Partial<Record<VisualStyle, string>>> = {
   "Ucapan ulang tahun customer": {
@@ -313,7 +315,35 @@ Variant note: Include a minimal national day illustration. ${SAFE_ZONE}`,
   },
 }
 function getPromptTemplate(contentType: (typeof contentTypes)[number], visualStyle: VisualStyle) {
+  if (visualStyle === "Style Retro") return promptTemplates[contentType][visualStyle] || getRetroPromptTemplate(contentType)
+  if (visualStyle === "Vector Detail") return promptTemplates[contentType][visualStyle] || getVectorDetailPromptTemplate(contentType)
   return promptTemplates[contentType][visualStyle] || getVectorCartoonPromptTemplate(contentType)
+}
+
+function getRetroPromptTemplate(contentType: (typeof contentTypes)[number]) {
+  const focusByContentType: Record<(typeof contentTypes)[number], string> = {
+    "Ucapan ulang tahun customer": "Birthday greeting for a valued customer or partner of PT Chitra Paratama — warm, nostalgic, and memorable.",
+    Edukasi: "Educational post about tire safety, maintenance tips, or fleet management knowledge presented as a vintage editorial travel poster.",
+    "Pencapaian perusahaan": "Company achievement or milestone celebration for PT Chitra Paratama — bold, heroic, and commemorative.",
+    "Event perusahaan": "Company event announcement or recap for PT Chitra Paratama — energetic, destination-like, and poster-worthy.",
+    "Promosi produk": "Product or service promotion for PT Chitra Paratama Michelin tire solutions — heroic and cinematic.",
+    "Hari Nasional": "National holiday greeting from PT Chitra Paratama — patriotic, vintage, and editorial.",
+  }
+  const headlineByContentType: Record<(typeof contentTypes)[number], string> = {
+    "Ucapan ulang tahun customer": "Selamat Ulang Tahun — Salam Hangat dari Chitra Paratama",
+    Edukasi: "Tips Ban Hari Ini — Perjalanan Aman Dimulai dari Ban",
+    "Pencapaian perusahaan": "Milestone Baru PT Chitra Paratama",
+    "Event perusahaan": "Event PT Chitra Paratama — Siap Berangkat Bersama",
+    "Promosi produk": "Solusi Ban Andal untuk Setiap Perjalanan",
+    "Hari Nasional": "Selamat Hari Nasional dari PT Chitra Paratama",
+  }
+
+  return `Content focus: ${focusByContentType[contentType]}
+Headline text: "${headlineByContentType[contentType]}"
+Brand/Source: "PT Chitra Paratama — Total Tire Solution"
+Visual style: ${RETRO_STYLE_PROMPT}
+Additional elements: vintage tire-service scene, stylized road or fleet environment, subtle sunburst or map-like background, painterly gouache details, visible grain texture.
+Variant note: Create a full-bleed retro poster with a heroic composition, fisheye perspective or tiny planet feel when suitable, dynamic low angle, clear central focal point, readable headline, and safe placement away from top-left logo and bottom footer overlays. ${SAFE_ZONE}`
 }
 
 function getVectorCartoonPromptTemplate(contentType: (typeof contentTypes)[number]) {
@@ -339,7 +369,7 @@ Headline text: "${headlineByContentType[contentType]}"
 Brand/Source: "PT Chitra Paratama — Total Tire Solution"
 Visual style: Vector Kartun Simple — flat vector cartoon, clean and friendly, bold outlines, solid brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56), simplified character shapes, approachable composition. Avoid photorealistic, 3D render, complex textures, or excessive detail.
 Additional elements: relevant cartoon tire, tools, or celebratory elements in brand colors.
-Variant note: One clear focal scene, readable headline, balanced whitespace, friendly flat-vector character in Chitra safety workwear (dark navy blue long sleeve shirt underneath + neon lime green vest/rompi on top, TWO full-width silver reflective stripes on the vest (one across chest, one across lower vest) — stripes go fully around, CP logo patch with solid white background on left chest pocket of vest). Do not place text or key elements in the top-left 300x300px area or bottom 150px of the canvas.`
+Variant note: One clear focal scene, readable headline, balanced whitespace, friendly flat-vector character wearing wearpack safety TWO-TONE resmi: lengan BIRU NAVY GELAP (#002D56), dada/bahu HIJAU NEON (#8DC63F), strip reflektif silver di pundak dan perut. WAJIB: di atas saku dada kiri wearpack, tempel patch logo Chitra Paratama berbentuk persegi panjang kecil dengan BACKGROUND PUTIH SOLID di belakang logo — logo CP berwarna asli di atas kotak putih, dijahit/bordir natural ke kain wearpack, terlihat jelas dan kontras. Patch ini harus tampak seperti name tag atau label bordir resmi yang menempel di atas saku, bukan stiker mengambang. Gunakan warna brand: Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56. Komposisi profesional, pencahayaan natural. Do not place text or key elements in the top-left 300x300px area or bottom 150px of the canvas.`
 }
 
 function getVectorDetailPromptTemplate(contentType: (typeof contentTypes)[number]) {
@@ -363,7 +393,7 @@ function getVectorDetailPromptTemplate(contentType: (typeof contentTypes)[number
   return `Content focus: ${focusByContentType[contentType]}
 Headline text: "${headlineByContentType[contentType]}"
 Brand/Source: "PT Chitra Paratama — Total Tire Solution"
-Visual style: Vector Detail — Inked Comic Cartoon. Bold ink outlines, detailed cross-hatching and line-work shading, expressive comic-book style characters, dynamic composition with depth and energy, cel-shaded color fills using Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56). Characters wear detailed Chitra safety workwear (dark navy blue long sleeve shirt underneath + neon lime green vest/rompi on top, TWO full-width silver reflective stripes on the vest (one across chest, one across lower vest) — stripes go fully around without cutting off, CP logo patch with solid white background on left chest pocket of vest) rendered in comic-book style with visible stitch lines. Avoid photorealistic, 3D render, flat minimalism.
+Visual style: Vector Detail — Inked Comic Cartoon. Bold ink outlines, detailed cross-hatching and line-work shading, expressive comic-book style characters, dynamic composition with depth and energy, cel-shaded color fills using Chitra Paratama brand colors (Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56). Characters wear detailed wearpack safety TWO-TONE resmi: lengan BIRU NAVY GELAP (#002D56), dada/bahu HIJAU NEON (#8DC63F), strip reflektif silver di pundak dan perut. WAJIB: di atas saku dada kiri wearpack, tempel patch logo Chitra Paratama berbentuk persegi panjang kecil dengan BACKGROUND PUTIH SOLID di belakang logo — logo CP berwarna asli di atas kotak putih, dijahit/bordir natural ke kain wearpack, terlihat jelas dan kontras. Patch ini harus tampak seperti name tag atau label bordir resmi yang menempel di atas saku, bukan stiker mengambang. Gunakan warna brand: Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56. Komposisi profesional, pencahayaan natural. rendered in comic-book style with visible stitch lines. Avoid photorealistic, 3D render, flat minimalism.
 Additional elements: detailed tire cross-section, technical callouts, or relevant industry elements in brand colors.
 Variant note: Bold inked comic composition — one clear focal scene with rich vector linework, expressive characters, readable headline in comic-style lettering, and dynamic depth. Do not place text or key elements in the top-left 300x300px area or bottom 150px of the canvas.`
 }
@@ -450,7 +480,7 @@ export function InstagramImageGeneratorClient() {
   }, [contentType])
 
   // Wearpack instruction injected when showPerson is true
-  const WEARPACK_INSTRUCTION = "Tampilkan pekerja/karyawan memakai seragam kerja resmi PT Chitra Paratama: seragam kerja resmi PT Chitra Paratama: KEMEJA LENGAN PANJANG BIRU NAVY GELAP (#002D56) di bagian dalam + ROMPI/VEST HIJAU NEON (#8DC63F) tanpa lengan di bagian luar. STRIP REFLEKTIF SILVER pada rompi: DUA garis horizontal PENUH melingkari seluruh badan rompi (satu di dada, satu di perut bawah rompi) — FULL WIDTH dari kiri ke kanan tanpa putus. Patch logo CP di saku dada kiri rompi: persegi panjang kecil BACKGROUND PUTIH SOLID, logo Chitra Paratama full color di atas putih, dijahit natural ke kain."
+  const WEARPACK_INSTRUCTION = "Tampilkan pekerja/karyawan memakai wearpack safety TWO-TONE resmi: lengan BIRU NAVY GELAP (#002D56), dada/bahu HIJAU NEON (#8DC63F), strip reflektif silver di pundak dan perut. WAJIB: di atas saku dada kiri wearpack, tempel patch logo Chitra Paratama berbentuk persegi panjang kecil dengan BACKGROUND PUTIH SOLID di belakang logo — logo CP berwarna asli di atas kotak putih, dijahit/bordir natural ke kain wearpack, terlihat jelas dan kontras. Patch ini harus tampak seperti name tag atau label bordir resmi yang menempel di atas saku, bukan stiker mengambang. Gunakan warna brand: Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56. Komposisi profesional, pencahayaan natural."
 
   // Sync prompt whenever any field changes
   React.useEffect(() => {
@@ -477,7 +507,7 @@ export function InstagramImageGeneratorClient() {
     const personLine = showPerson
       ? `\n${WEARPACK_INSTRUCTION}${personActivity.trim() ? ` Kegiatan yang dilakukan: ${personActivity.trim()}.` : ""}`
       : hasReferencePhotos
-        ? "\nJika ada orang dalam foto referensi yang diupload, pertahankan keberadaan mereka namun pastikan memakai wearpack safety resmi PT Chitra Paratama. Jika tidak ada orang dalam foto referensi, jangan tambahkan orang — fokus pada objek dan produk."
+        ? "\nJika ada orang dalam foto referensi yang diupload, pertahankan keberadaan mereka namun pastikan memakai wearpack safety TWO-TONE resmi: lengan BIRU NAVY GELAP (#002D56), dada/bahu HIJAU NEON (#8DC63F), strip reflektif silver di pundak dan perut. WAJIB: di atas saku dada kiri wearpack, tempel patch logo Chitra Paratama berbentuk persegi panjang kecil dengan BACKGROUND PUTIH SOLID di belakang logo — logo CP berwarna asli di atas kotak putih, dijahit/bordir natural ke kain wearpack, terlihat jelas dan kontras. Patch ini harus tampak seperti name tag atau label bordir resmi yang menempel di atas saku, bukan stiker mengambang. Gunakan warna brand: Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56. Komposisi profesional, pencahayaan natural. Jika tidak ada orang dalam foto referensi, jangan tambahkan orang — fokus pada objek dan produk."
         : "\nJangan tampilkan orang atau manusia dalam gambar — fokus pada objek, produk, atau elemen grafis saja."
 
     if (contentType === "Ucapan ulang tahun customer") {
@@ -612,7 +642,7 @@ export function InstagramImageGeneratorClient() {
     }
 
     if (showPerson) {
-      details.push("Tampilkan Orang/Pekerja: YA — wajib memakai wearpack safety resmi PT Chitra Paratama (lengan atas DAN bawah BIRU NAVY GELAP penuh, dada/bahu HIJAU NEON, strip reflektif silver di lengan atas, patch logo CP background putih di saku dada kiri).")
+      details.push("Tampilkan Orang/Pekerja: YA — wajib memakai wearpack safety TWO-TONE resmi: lengan BIRU NAVY GELAP (#002D56), dada/bahu HIJAU NEON (#8DC63F), strip reflektif silver di pundak dan perut. WAJIB: di atas saku dada kiri wearpack, tempel patch logo Chitra Paratama berbentuk persegi panjang kecil dengan BACKGROUND PUTIH SOLID di belakang logo — logo CP berwarna asli di atas kotak putih, dijahit/bordir natural ke kain wearpack, terlihat jelas dan kontras. Patch ini harus tampak seperti name tag atau label bordir resmi yang menempel di atas saku, bukan stiker mengambang. Gunakan warna brand: Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56. Komposisi profesional, pencahayaan natural.")
       if (personActivity.trim()) details.push(`Kegiatan yang dilakukan: ${personActivity.trim()}.`)
     } else {
       details.push("Tampilkan Orang/Pekerja: TIDAK — jangan tampilkan orang atau manusia, fokus pada objek, produk, atau elemen grafis saja.")
@@ -1192,7 +1222,7 @@ export function InstagramImageGeneratorClient() {
                   onChange={(e) => setPersonActivity(e.target.value)}
                   placeholder="Contoh: memeriksa ban truk, berdiri di depan armada, melakukan servis"
                 />
-                <p className="text-xs text-muted-foreground">Pekerja akan memakai wearpack safety resmi PT Chitra Paratama secara otomatis.</p>
+                <p className="text-xs text-muted-foreground">Pekerja akan memakai wearpack safety TWO-TONE resmi PT Chitra Paratama secara otomatis.</p>
               </div>
             )}
             {!showPerson && (
@@ -1390,3 +1420,4 @@ export function InstagramImageGeneratorClient() {
     </div>
   )
 }
+
