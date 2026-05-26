@@ -40,7 +40,7 @@ export type SlowMovingDashboardResult = {
     }
 }
 
-export async function getSlowMovingDashboardData(selectedYear?: string): Promise<SlowMovingDashboardResult> {
+export async function getSlowMovingDashboardData(selectedYears: string[] = ["2025", "2026"]): Promise<SlowMovingDashboardResult> {
     await getAuthenticatedSession("marketing", "view")
 
     // Get slow moving material keys
@@ -63,7 +63,11 @@ export async function getSlowMovingDashboardData(selectedYear?: string): Promise
 
     // Base conditions
     const baseWhere = `billing_date IS NOT NULL AND (cancelled IS NULL OR cancelled = '') AND UPPER(TRIM(material_no)) = ANY(ARRAY[${safeList}])`
-    const yearCondition = selectedYear && selectedYear !== "all" ? ` AND TO_CHAR(billing_date, 'YYYY') = '${selectedYear.replace(/'/g, "''")}'` : ""
+    
+    // Filter by selected years
+    const yearCondition = selectedYears.length > 0 
+        ? ` AND TO_CHAR(billing_date, 'YYYY') = ANY(ARRAY[${selectedYears.map(y => `'${y.replace(/'/g, "''")}'`).join(",")}])` 
+        : ""
 
     // 1. Yearly Trend (Always get all years for high-level view)
     const yearlyTrendResult = await db.execute(sql.raw(`

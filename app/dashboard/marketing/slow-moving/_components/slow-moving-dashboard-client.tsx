@@ -25,13 +25,13 @@ const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'
 export function SlowMovingDashboardClient() {
     const [isPending, startTransition] = useTransition()
     const [data, setData] = useState<SlowMovingDashboardResult | null>(null)
-    const [selectedYear, setSelectedYear] = useState<string>("all")
+    const [selectedYears, setSelectedYears] = useState<string[]>(["2025", "2026"])
     const [availableYears, setAvailableYears] = useState<string[]>([])
 
-    // Initial Load (Get all years)
+    // Initial Load
     useEffect(() => {
         startTransition(async () => {
-            const result = await getSlowMovingDashboardData()
+            const result = await getSlowMovingDashboardData(["2025", "2026"])
             setData(result)
             if (result.yearlyTrend.length > 0) {
                 setAvailableYears(result.yearlyTrend.map(y => y.period).sort((a, b) => b.localeCompare(a)))
@@ -39,11 +39,12 @@ export function SlowMovingDashboardClient() {
         })
     }, [])
 
-    // Fetch on year change
-    const handleYearChange = (year: string) => {
-        setSelectedYear(year)
+    // Fetch on year toggle
+    const handleYearToggle = (year: string) => {
+        const next = selectedYears.includes(year) ? selectedYears.filter(y => y !== year) : [...selectedYears, year]
+        setSelectedYears(next)
         startTransition(async () => {
-            const result = await getSlowMovingDashboardData(year)
+            const result = await getSlowMovingDashboardData(next)
             setData(result)
         })
     }
@@ -59,9 +60,27 @@ export function SlowMovingDashboardClient() {
         )
     }
 
-    // Determine which trend to show
-    const trendData = selectedYear === "all" ? data.yearlyTrend : data.monthlyTrend
-    const trendTitle = selectedYear === "all" ? "Tren Penjualan (Tahunan)" : `Tren Penjualan (Bulanan - ${selectedYear})`
+    // Build YoY Data
+    let trendTitle = "Tren Penjualan YoY"
+    let availableYearsInTrend = [...selectedYears].sort()
+    const yoyMap = new Map<string, any>()
+    const months = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"]
+    months.forEach(m => yoyMap.set(m, { month: m }))
+
+    data.monthlyTrend?.forEach(item => {
+        const [year, month] = item.period.split("-")
+        if (year && month) {
+            const mData = yoyMap.get(month)
+            if (mData) {
+                mData[`qty_${year}`] = item.qty
+                mData[`amount_${year}`] = item.amount
+            }
+        }
+    })
+    const trendData = Array.from(yoyMap.values())
+
+    const BAR_COLORS_YOY = ['#3b82f6', '#f59e0b', '#10b981', '#8b5cf6']
+    const LINE_COLORS_YOY = ['#1d4ed8', '#d97706', '#047857', '#6d28d9']
 
     return (
         <div className="flex flex-col gap-6">
@@ -71,19 +90,22 @@ export function SlowMovingDashboardClient() {
                     <h2 className="text-xl font-bold">Dashboard Analisa Slow Moving</h2>
                     <p className="text-slate-300 text-sm">Monitor pergerakan dan revenue dari produk kategori slow moving.</p>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-4">
                     <span className="text-sm font-medium">Filter Tahun:</span>
-                    <Select value={selectedYear} onValueChange={handleYearChange} disabled={isPending}>
-                        <SelectTrigger className="w-[140px] bg-white/10 border-white/20 text-white hover:bg-white/20 focus:ring-slate-300">
-                            <SelectValue placeholder="Pilih Tahun" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">Semua Tahun</SelectItem>
-                            {availableYears.map(year => (
-                                <SelectItem key={year} value={year}>{year}</SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
+                    <div className="flex items-center gap-3">
+                        {availableYears.map(year => (
+                            <label key={year} className="flex items-center gap-1.5 cursor-pointer hover:opacity-80">
+                                <input 
+                                    type="checkbox" 
+                                    className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 accent-blue-500 cursor-pointer"
+                                    checked={selectedYears.includes(year)}
+                                    onChange={() => handleYearToggle(year)}
+                                    disabled={isPending}
+                                />
+                                <span className="text-sm">{year}</span>
+                            </label>
+                        ))}
+                    </div>
                 </div>
             </div>
 
@@ -144,25 +166,36 @@ export function SlowMovingDashboardClient() {
                 <Card className="col-span-2 shadow-sm border-slate-200">
                     <CardHeader>
                         <CardTitle>{trendTitle}</CardTitle>
-                        <CardDescription>Perbandingan antara Kuantitas Terjual (Bar) dan Revenue (Line)</CardDescription>
+                        <CardDescription>Perbandingan Kuantitas Terjual (Bar) dan Revenue (Line) antar tahun</CardDescription>
                     </CardHeader>
                     <CardContent className="h-[400px]">
                         <ResponsiveContainer width="100%" height="100%">
                             <ComposedChart data={trendData} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                                <XAxis dataKey="period" tick={{ fill: '#64748b' }} tickLine={false} axisLine={{ stroke: '#cbd5e1' }} />
+                                <XAxis dataKey="month" tickFormatter={(v) => {
+                                    const m = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Ags", "Sep", "Okt", "Nov", "Des"]
+                                    return m[parseInt(v)-1] || v
+                                }} tick={{ fill: '#64748b' }} tickLine={false} axisLine={{ stroke: '#cbd5e1' }} />
                                 <YAxis yAxisId="left" orientation="left" tickFormatter={(value) => formatNumber(value)} tick={{ fill: '#64748b' }} axisLine={false} tickLine={false} />
                                 <YAxis yAxisId="right" orientation="right" tickFormatter={(value) => `Rp${(value / 1000000).toFixed(0)}M`} tick={{ fill: '#64748b' }} axisLine={false} tickLine={false} />
                                 <Tooltip
                                     contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                                     formatter={(value: number, name: string) => {
-                                        if (name === "Revenue (Rp)") return [formatCurrency(value), name]
+                                        if (name.startsWith("Revenue")) return [formatCurrency(value), name]
                                         return [formatNumber(value), name]
+                                    }}
+                                    labelFormatter={(label) => {
+                                        const m = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"]
+                                        return m[parseInt(label)-1] || label
                                     }}
                                 />
                                 <Legend wrapperStyle={{ paddingTop: '20px' }} />
-                                <Bar yAxisId="left" dataKey="qty" name="Kuantitas (Qty)" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={60} />
-                                <Line yAxisId="right" type="monotone" dataKey="amount" name="Revenue (Rp)" stroke="#10b981" strokeWidth={3} dot={{ r: 4, fill: '#10b981', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6 }} />
+                                {availableYearsInTrend.map((year, idx) => (
+                                    <Bar key={`bar-${year}`} yAxisId="left" dataKey={`qty_${year}`} name={`Kuantitas ${year}`} fill={BAR_COLORS_YOY[idx % BAR_COLORS_YOY.length]} radius={[4, 4, 0, 0]} maxBarSize={40} />
+                                ))}
+                                {availableYearsInTrend.map((year, idx) => (
+                                    <Line key={`line-${year}`} yAxisId="right" type="monotone" dataKey={`amount_${year}`} name={`Revenue ${year}`} stroke={LINE_COLORS_YOY[idx % LINE_COLORS_YOY.length]} strokeWidth={3} dot={{ r: 4, fill: LINE_COLORS_YOY[idx % LINE_COLORS_YOY.length], strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6 }} />
+                                ))}
                             </ComposedChart>
                         </ResponsiveContainer>
                     </CardContent>
