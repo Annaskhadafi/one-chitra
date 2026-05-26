@@ -414,7 +414,13 @@ export function SlowMovingDashboardClient() {
                                     outerRadius={100}
                                     paddingAngle={2}
                                     dataKey="amount"
-                                    nameKey="customer_name"
+                                    nameKey="customerName"
+                                    label={({ name, percent }) => {
+                                        const labelName = String(name || "Unknown");
+                                        const truncatedName = `${labelName.substring(0, 15)}${labelName.length > 15 ? '...' : ''}`;
+                                        return `${truncatedName} (${(percent * 100).toFixed(0)}%)`;
+                                    }}
+                                    labelLine={true}
                                 >
                                     {(data.topCustomers || []).map((entry, index) => (
                                         <Cell key={`cell-${index}`} fill={COLORS[(index + 4) % COLORS.length]} />
@@ -424,7 +430,6 @@ export function SlowMovingDashboardClient() {
                                     contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                                     formatter={(value: number) => formatCurrency(value)}
                                 />
-                                <Legend layout="vertical" verticalAlign="middle" align="right" wrapperStyle={{ fontSize: '12px' }} />
                             </PieChart>
                         </ResponsiveContainer>
                     </CardContent>

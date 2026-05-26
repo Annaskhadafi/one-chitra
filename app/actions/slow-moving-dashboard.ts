@@ -189,7 +189,11 @@ export async function getSlowMovingDashboardData(
         yearlyTrend: yearlyTrendResult.rows.map(r => mapRow(r, "period")) as TrendData[],
         monthlyTrend: monthlyTrendResult.rows.map(r => mapRow(r, "period")) as TrendData[],
         topSalesman: salesmanResult.rows.map(r => mapRow(r, "salesman")) as SalesmanData[],
-        topCustomers: customerResult.rows.map(r => mapRow(r, "customerName")) as CustomerData[],
+        topCustomers: customerResult.rows.map(r => ({
+            customerName: r.customer_name || "Unknown",
+            qty: Number(r.total_qty) || 0,
+            amount: Number(r.total_amount) || 0
+        })) as CustomerData[],
         topCategories: categoryResult.rows.map(r => mapRow(r, "category")) as CategoryData[],
         summary: {
             totalQty: Number(summaryResult.rows[0]?.total_qty) || 0,
