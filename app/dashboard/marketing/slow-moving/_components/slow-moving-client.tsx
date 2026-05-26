@@ -373,14 +373,13 @@ export function SlowMovingClient({
             const totalQtySold = sumByMonths(sellingEntry?.monthlyQty, allMonths)
             const totalRevenue = sumByMonths(sellingEntry?.monthlyRevenue, allMonths)
             const monthlyQty = sellingEntry?.monthlyQty ?? {}
-            const sellOutPct = row.totalQty > 0 ? ((totalQtySold / (row.totalQty + totalQtySold)) * 100).toFixed(1) + "%" : "-"
+            const sellOutPct = row.initialStock > 0 ? ((totalQtySold / row.initialStock) * 100).toFixed(1) + "%" : "-"
             const base: Record<string, unknown> = {
                 No: index + 1,
                 "Material Number": row.materialNumber,
                 Desc: row.description,
-                "All Qty": row.totalQty,
-                "<366": row.lessThan366Qty,
-                "366>": row.moreThan366Qty,
+                "Stock Awal": row.initialStock,
+                "Stock Saat Ini": row.totalQty,
                 "Unit Price": Math.round(row.unitPrice),
                 "Total Value": Math.round(row.totalValue),
                 "Total Terjual": totalQtySold,
