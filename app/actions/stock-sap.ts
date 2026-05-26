@@ -2,7 +2,7 @@
 
 import { db } from "@/db"
 import { products, warehouses, stockLevels } from "@/db/schema"
-import { and, eq } from "drizzle-orm"
+import { and, eq, sql } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { normalizeSloc } from "@/lib/sloc"
 
@@ -51,4 +51,45 @@ export async function syncIndividualStock(data: { materialNumber: string, sloc: 
     } catch (_error) {
         return { success: false, error: "SAP Sync failed" }
     }
+}
+
+export async function getStocksFromSapForSlowMoving() {
+    const result = await db.execute(sql`
+        SELECT 
+            material_no,
+            old_material_no,
+            MAX(material_desc) as material_desc,
+            SUM(total_stock) as total_stock,
+            SUM(value_stock) as total_value,
+            MAX(extracted_at) as extracted_at
+        FROM public.zmc9_stock_sap
+        GROUP BY material_no, old_material_no
+    `)
+
+    let fakeId = 1
+    return result.rows.map((row: any) => {
+        const totalQty = Number(row.total_stock) || 0
+        const totalValue = Number(row.total_value) || 0
+        const costSap = totalQty > 0 ? (totalValue / totalQty).toString() : "0"
+
+        return {
+            id: fakeId++,
+            productId: 0,
+            warehouseId: 0,
+            totalStock: totalQty,
+            minStock: 0,
+            valuationValue: totalValue.toString(),
+            createdAt: row.extracted_at ? new Date(row.extracted_at) : new Date(),
+            updatedAt: row.extracted_at ? new Date(row.extracted_at) : new Date(),
+            product: {
+                id: 0,
+                materialNumber: String(row.material_no || ""),
+                oldMaterialNo: String(row.old_material_no || ""),
+                materialDescription: String(row.material_desc || ""),
+                costSap: costSap,
+            },
+            warehouse: null,
+            stockBookings: [],
+        }
+    })
 }

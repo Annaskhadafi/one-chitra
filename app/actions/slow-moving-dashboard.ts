@@ -253,7 +253,24 @@ export async function generateSlowMovingYoYInsight(trendData: any[], selectedYea
         const apiKey = process.env.NINEROUTER_KEY || "sk-ee87ff36bc463f56-sxrwh0-272f06c4"
         const aiModel = "combo"
 
-        const dataStr = trendData.map(m => {
+        const sortedYears = [...selectedYears].sort((a, b) => Number(b) - Number(a))
+        const latestYear = sortedYears[0]
+
+        let maxMonth = 12
+        if (latestYear) {
+            for (let i = 12; i >= 1; i--) {
+                const monthStr = i.toString().padStart(2, "0")
+                const monthData = trendData.find(m => m.month === monthStr)
+                if (monthData && (monthData[`qty_${latestYear}`] > 0 || monthData[`amount_${latestYear}`] > 0)) {
+                    maxMonth = i
+                    break
+                }
+            }
+        }
+
+        const filteredTrendData = trendData.filter(m => Number(m.month) <= maxMonth)
+
+        const dataStr = filteredTrendData.map(m => {
             let row = `Bulan ${m.month}: `
             selectedYears.forEach(y => {
                 row += `[Thn ${y} -> Qty: ${m[`qty_${y}`] || 0}, Revenue: Rp${m[`amount_${y}`] || 0}] `
@@ -261,8 +278,8 @@ export async function generateSlowMovingYoYInsight(trendData: any[], selectedYea
             return row
         }).join("\n")
 
-        const prompt = `Sebagai Senior Data Analyst di One Chitra, berikan insight ringkas dan tajam mengenai tren Year-over-Year (YoY) performa barang slow moving berikut.\n\nData Per Bulan:\n${dataStr}\n\nTugas Anda:
-1. Bandingkan performa antar tahun (${selectedYears.join(" vs ")}).
+        const prompt = `Sebagai Senior Data Analyst di One Chitra, berikan insight ringkas dan tajam mengenai tren Year-over-Year (YoY) performa barang slow moving berikut.\n\nData Per Bulan (Hanya bulan 1 s/d ${maxMonth} untuk perbandingan apple-to-apple):\n${dataStr}\n\nTugas Anda:
+1. Bandingkan performa antar tahun (${selectedYears.join(" vs ")}) hanya untuk periode bulan 1 s/d ${maxMonth}.
 2. Temukan pola lonjakan atau penurunan drastis.
 3. Berikan rekomendasi singkat untuk strategi cuci gudang/promosi.
 Aturan: Gunakan bahasa Indonesia profesional dan padat. Format output menggunakan HTML ringan (seperti <b>, <ul><li>, <br>) agar rapi di UI. Jangan pakai markdown backticks.`

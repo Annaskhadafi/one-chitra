@@ -5,10 +5,11 @@ import { updateSetting } from "@/app/actions/settings"
 import {
     deleteSlowMovingProduct,
     importSlowMovingProducts,
+    updateSlowMovingProductInitialStock,
 } from "@/app/actions/slow-moving-products"
 import type { MonthlySellingQty, SellingOutDetail } from "@/app/actions/slow-moving-products"
 import type { getStocks } from "@/app/actions/stock"
-import { Box, ChevronRight, Download, Loader2, PackageSearch, RotateCcw, Search, Trash2, Upload } from "lucide-react"
+import { Box, ChevronRight, Download, Loader2, PackageSearch, RotateCcw, Search, Trash2, Upload, ArrowUpDown } from "lucide-react"
 import * as XLSX from "xlsx"
 import { toast } from "sonner"
 
@@ -38,8 +39,7 @@ type ProductOption = {
 }
 
 type SlowMovingRow = ProductOption & {
-    lessThan366Qty: number
-    moreThan366Qty: number
+    initialStock: number
     unitPrice: number
     totalValue: number
 }
@@ -91,7 +91,10 @@ function formatMonthLabel(yyyyMM: string) {
 }
 
 function buildYearMonths(year: string) {
-    return Array.from({ length: 12 }, (_, index) => `${year}-${String(index + 1).padStart(2, "0")}`)
+    const now = new Date()
+    const currentYear = now.getFullYear().toString()
+    const monthCount = year === currentYear ? now.getMonth() + 1 : 12
+    return Array.from({ length: monthCount }, (_, index) => `${year}-${String(index + 1).padStart(2, "0")}`)
 }
 
 function buildProductOptions(stocks: StockRow[]) {
@@ -118,30 +121,23 @@ function buildProductOptions(stocks: StockRow[]) {
     )
 }
 
-function buildSlowMovingRow(stocks: StockRow[], option: ProductOption, manualRate: string): SlowMovingRow {
+function buildSlowMovingRow(stocks: StockRow[], option: ProductOption, manualRate: string, initialStock: number): SlowMovingRow {
     const relatedStocks = stocks.filter((stock) => getMaterialKey(stock) === option.key)
-    let lessThan366Qty = 0
-    let moreThan366Qty = 0
     let totalValue = 0
+    let allQty = 0
     const rate = parseNumber(manualRate)
 
     for (const stock of relatedStocks) {
         const qty = Number(stock.totalStock || 0)
         const costSap = parseNumber(stock.product?.costSap)
-        if (getStockAgeDays(stock) < 366) {
-            lessThan366Qty += qty
-        } else {
-            moreThan366Qty += qty
-        }
+        allQty += qty
         totalValue += qty * costSap * rate
     }
 
-    const allQty = lessThan366Qty + moreThan366Qty
     return {
         ...option,
+        initialStock,
         totalQty: allQty,
-        lessThan366Qty,
-        moreThan366Qty,
         unitPrice: allQty > 0 ? totalValue / allQty : 0,
         totalValue,
     }
@@ -205,6 +201,7 @@ export function SlowMovingClient({
     const [deletingKey, setDeletingKey] = React.useState<string | null>(null)
     const [selectedYears, setSelectedYears] = React.useState<string[]>(["2025", "2026"])
     const [expandedKeys, setExpandedKeys] = React.useState<string[]>([])
+    const [sortConfig, setSortConfig] = React.useState<{ key: string, direction: 'asc' | 'desc' } | null>(null)
 
     const productOptions = React.useMemo(() => buildProductOptions(stocks), [stocks])
 
@@ -220,8 +217,29 @@ export function SlowMovingClient({
         return importedKeys
             .map((key) => productOptions.find((option) => option.key === key))
             .filter((option): option is ProductOption => Boolean(option))
-            .map((option) => buildSlowMovingRow(stocks, option, manualRate))
-    }, [importedKeys, manualRate, productOptions, stocks])
+            .map((option) => {
+                const saved = savedProducts.find(p => p.materialKey === option.key)
+                return buildSlowMovingRow(stocks, option, manualRate, saved?.initialStock || 0)
+            })
+    }, [importedKeys, manualRate, productOptions, stocks, savedProducts])
+
+    const sortedReportRows = React.useMemo(() => {
+        let sortableItems = [...reportRows]
+        if (sortConfig !== null) {
+            sortableItems.sort((a, b) => {
+                if (sortConfig.key === 'totalQty') {
+                    if (a.totalQty < b.totalQty) {
+                        return sortConfig.direction === 'asc' ? -1 : 1
+                    }
+                    if (a.totalQty > b.totalQty) {
+                        return sortConfig.direction === 'asc' ? 1 : -1
+                    }
+                }
+                return 0
+            })
+        }
+        return sortableItems
+    }, [reportRows, sortConfig])
 
     const availableYears = React.useMemo(() => getAvailableYears(sellingOutByMonth), [sellingOutByMonth])
     const allMonths = React.useMemo(() => getMonthsForYears(selectedYears), [selectedYears])
@@ -245,8 +263,7 @@ export function SlowMovingClient({
         const base = reportRows.reduce(
             (acc, row) => {
                 acc.totalQty += row.totalQty
-                acc.lessThan366Qty += row.lessThan366Qty
-                acc.moreThan366Qty += row.moreThan366Qty
+                acc.initialStock += row.initialStock
                 acc.totalValue += row.totalValue
                 const entry = sellingMap.get(row.key)
                 acc.totalQtySold += sumByMonths(entry?.monthlyQty, allMonths)
@@ -259,7 +276,7 @@ export function SlowMovingClient({
                 }
                 return acc
             },
-            { totalQty: 0, lessThan366Qty: 0, moreThan366Qty: 0, totalValue: 0, totalQtySold: 0, totalRevenue: 0 }
+            { totalQty: 0, initialStock: 0, totalValue: 0, totalQtySold: 0, totalRevenue: 0 }
         )
         return { ...base, monthlyTotals }
     }, [allMonths, reportRows, sellingMap])
@@ -384,7 +401,7 @@ export function SlowMovingClient({
     }
 
     const totalMonthCols = allMonths.length
-    const totalCols = 13 + totalMonthCols
+    const totalCols = 12 + totalMonthCols
 
     return (
         <div className={showHeader ? "flex min-h-screen flex-1 flex-col gap-6 bg-white p-4 text-zinc-950 md:p-8 lg:p-10" : "flex flex-col gap-6"}>
@@ -582,9 +599,22 @@ export function SlowMovingClient({
                                 <TableHead className="h-10 w-16 text-center">No</TableHead>
                                 <TableHead className="h-10">Material Number</TableHead>
                                 <TableHead className="h-10">Desc</TableHead>
-                                <TableHead className="h-10 text-right">All Qty</TableHead>
-                                <TableHead className="h-10 text-right">&lt;366</TableHead>
-                                <TableHead className="h-10 text-right">366&gt;</TableHead>
+                                <TableHead className="h-10 text-right">Stock Awal</TableHead>
+                                <TableHead 
+                                    className="h-10 text-right cursor-pointer hover:bg-muted/80 transition-colors"
+                                    onClick={() => {
+                                        let direction: 'asc' | 'desc' = 'asc'
+                                        if (sortConfig && sortConfig.key === 'totalQty' && sortConfig.direction === 'asc') {
+                                            direction = 'desc'
+                                        }
+                                        setSortConfig({ key: 'totalQty', direction })
+                                    }}
+                                >
+                                    <div className="flex items-center justify-end gap-1">
+                                        Stock Saat Ini
+                                        <ArrowUpDown className="h-3 w-3" />
+                                    </div>
+                                </TableHead>
                                 <TableHead className="h-10 text-right">Unit Price</TableHead>
                                 <TableHead className="h-10 text-right">Total Value</TableHead>
                                 {allMonths.map((month) => (
@@ -599,19 +629,19 @@ export function SlowMovingClient({
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {reportRows.length === 0 ? (
+                            {sortedReportRows.length === 0 ? (
                                 <TableRow>
                                     <TableCell colSpan={totalCols} className="h-40 text-center text-sm text-muted-foreground">
                                         Belum ada product yang diimport.
                                     </TableCell>
                                 </TableRow>
                             ) : (
-                                reportRows.map((row, index) => {
+                                sortedReportRows.map((row, index) => {
                                     const sellingEntry = sellingMap.get(row.key)
                                     const monthlyQty = sellingEntry?.monthlyQty ?? {}
                                     const totalQtySold = sumByMonths(sellingEntry?.monthlyQty, allMonths)
                                     const totalRevenue = sumByMonths(sellingEntry?.monthlyRevenue, allMonths)
-                                    const sellOutPct = row.totalQty > 0 ? (totalQtySold / (row.totalQty + totalQtySold)) * 100 : 0
+                                    const sellOutPct = row.initialStock > 0 ? (totalQtySold / row.initialStock) * 100 : 0
                                     const details = filterDetailsByMonths(sellingEntry?.details, allMonths)
                                     const isExpanded = expandedKeys.includes(row.key)
                                     return (
@@ -631,9 +661,25 @@ export function SlowMovingClient({
                                                 <TableCell className="text-center font-mono">{index + 1}</TableCell>
                                                 <TableCell className="font-medium text-blue-600">{row.materialNumber}</TableCell>
                                                 <TableCell className="whitespace-normal">{row.description}</TableCell>
+                                                <TableCell className="text-right">
+                                                    <Input
+                                                        type="number"
+                                                        defaultValue={row.initialStock}
+                                                        className="w-20 text-right h-8 ml-auto"
+                                                        onBlur={async (e) => {
+                                                            const val = parseInt(e.target.value) || 0;
+                                                            if (val !== row.initialStock) {
+                                                                await updateSlowMovingProductInitialStock(row.key, val);
+                                                            }
+                                                        }}
+                                                        onKeyDown={async (e) => {
+                                                            if (e.key === 'Enter') {
+                                                                e.currentTarget.blur();
+                                                            }
+                                                        }}
+                                                    />
+                                                </TableCell>
                                                 <TableCell className="text-right font-mono">{formatQty(row.totalQty)}</TableCell>
-                                                <TableCell className="text-right font-mono">{formatQty(row.lessThan366Qty)}</TableCell>
-                                                <TableCell className="text-right font-mono">{formatQty(row.moreThan366Qty)}</TableCell>
                                                 <TableCell className="text-right font-mono">{formatCurrency(row.unitPrice)}</TableCell>
                                                 <TableCell className="text-right font-mono">{formatCurrency(row.totalValue)}</TableCell>
                                                 {allMonths.map((month) => (
@@ -721,9 +767,8 @@ export function SlowMovingClient({
                                 <tr className="border-t bg-muted/70 font-semibold">
                                     <td />
                                     <td colSpan={3} className="h-10 px-4 text-sm">Total</td>
+                                    <td className="px-4 text-right font-mono text-sm">{formatQty(stats.initialStock)}</td>
                                     <td className="px-4 text-right font-mono text-sm">{formatQty(stats.totalQty)}</td>
-                                    <td className="px-4 text-right font-mono text-sm">{formatQty(stats.lessThan366Qty)}</td>
-                                    <td className="px-4 text-right font-mono text-sm">{formatQty(stats.moreThan366Qty)}</td>
                                     <td className="px-4 text-right font-mono text-sm"></td>
                                     <td className="px-4 text-right font-mono text-sm">{formatCurrency(stats.totalValue)}</td>
                                     {allMonths.map((month) => (
@@ -734,7 +779,7 @@ export function SlowMovingClient({
                                     <td className="px-4 text-right font-mono text-sm text-emerald-700">{formatQty(stats.totalQtySold)}</td>
                                     <td className="px-4 text-right font-mono text-sm text-emerald-700">{formatCurrency(stats.totalRevenue)}</td>
                                     <td className="px-4 text-right font-mono text-sm text-orange-700 font-semibold">
-                                        {stats.totalQty > 0 ? ((stats.totalQtySold / (stats.totalQty + stats.totalQtySold)) * 100).toFixed(1) + "%" : "-"}
+                                        {stats.initialStock > 0 ? ((stats.totalQtySold / stats.initialStock) * 100).toFixed(1) + "%" : "-"}
                                     </td>
                                     <td />
                                 </tr>

@@ -1,4 +1,4 @@
-﻿"use server"
+"use server"
 
 import { db } from "@/db"
 import { slowMovingProducts } from "@/db/schema"
@@ -27,6 +27,9 @@ async function ensureSlowMovingProductsTable() {
             "updated_at" timestamp DEFAULT now() NOT NULL
         )
     `)
+    await db.execute(sql`
+        ALTER TABLE "slow_moving_products" ADD COLUMN IF NOT EXISTS "initial_stock" integer DEFAULT 0 NOT NULL;
+    `)
 }
 
 export async function getSlowMovingProducts() {
@@ -39,6 +42,7 @@ export async function getSlowMovingProducts() {
             materialKey: slowMovingProducts.materialKey,
             materialNumber: slowMovingProducts.materialNumber,
             description: slowMovingProducts.description,
+            initialStock: slowMovingProducts.initialStock,
             createdAt: slowMovingProducts.createdAt,
             updatedAt: slowMovingProducts.updatedAt,
         })
@@ -101,6 +105,27 @@ export async function deleteSlowMovingProduct(materialKey: string) {
     } catch (error) {
         console.error("Delete slow moving product error:", error)
         return { success: false, error: "Gagal menghapus product slow moving" }
+    }
+}
+
+export async function updateSlowMovingProductInitialStock(materialKey: string, initialStock: number) {
+    try {
+        await getAuthenticatedSession("marketing", "edit")
+        await ensureSlowMovingProductsTable()
+
+        await db
+            .update(slowMovingProducts)
+            .set({ 
+                initialStock,
+                updatedAt: new Date()
+            })
+            .where(eq(slowMovingProducts.materialKey, materialKey))
+
+        revalidatePath("/dashboard/marketing/slow-moving")
+        return { success: true }
+    } catch (error) {
+        console.error("Update initial stock error:", error)
+        return { success: false, error: "Gagal mengupdate stock awal" }
     }
 }
 

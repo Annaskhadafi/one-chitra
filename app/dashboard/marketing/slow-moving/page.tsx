@@ -1,8 +1,8 @@
-﻿import { getCosmeticTires } from "@/app/actions/cosmetic-tires"
+import { getCosmeticTires } from "@/app/actions/cosmetic-tires"
 import { getProducts } from "@/app/actions/product"
 import { getSetting } from "@/app/actions/settings"
 import { getSellingOutByMonth, getSlowMovingProducts } from "@/app/actions/slow-moving-products"
-import { getStocks } from "@/app/actions/stock"
+import { getStocksFromSapForSlowMoving } from "@/app/actions/stock-sap"
 import { SlowMovingTabs } from "./_components/slow-moving-tabs"
 
 export const metadata = {
@@ -11,7 +11,7 @@ export const metadata = {
 
 export default async function SlowMovingPage() {
     const [stocks, savedRate, savedProducts, cosmeticTires, products] = await Promise.all([
-        getStocks(),
+        getStocksFromSapForSlowMoving(),
         getSetting("manual_usd_rate"),
         getSlowMovingProducts(),
         getCosmeticTires(),
