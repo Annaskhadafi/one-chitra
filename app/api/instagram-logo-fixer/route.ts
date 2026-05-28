@@ -3,11 +3,13 @@ import path from "path"
 import sharp from "sharp"
 
 export const runtime = "nodejs"
-export const maxDuration = 120
+export const maxDuration = 180
 
 const API_URL = process.env.INSTAGRAM_IMAGE_API_URL || "https://9router.chitraparatama.com/v1/images/generations"
 const API_MODEL = process.env.INSTAGRAM_IMAGE_MODEL || "cx/gpt-5.4-image"
 const MAX_DATA_URL_LENGTH = 16 * 1024 * 1024
+const PROVIDER_TIMEOUT_MS = 85_000
+const MAX_PROVIDER_ATTEMPTS = 2
 
 type LogoFixerBody = {
   sourceImage?: string
@@ -33,32 +35,7 @@ export async function POST(req: Request) {
       : await loadDefaultLogoDataUrl()
 
     const prompt = buildLogoFixerPrompt(Boolean(body.customLogo))
-    const providerResponse = await fetch(API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-        Accept: "text/event-stream",
-      },
-      body: JSON.stringify({
-        model: API_MODEL,
-        prompt,
-        image: sourceImage,
-        images: [sourceImage, logoImage],
-        reference_images: [sourceImage, logoImage],
-        input_images: [sourceImage, logoImage],
-        n: 1,
-        size: "auto",
-        output_format: "png",
-      }),
-    })
-
-    const rawText = await providerResponse.text()
-    if (!providerResponse.ok) {
-      throw new Error(`Provider gagal memperbaiki logo: ${extractProviderError(rawText)}`)
-    }
-
-    const fixed = await resolveImageBuffer(rawText)
+    const fixed = await generateLogoFix({ apiKey, prompt, sourceImage, logoImage })
     const metadata = await sharp(fixed).metadata()
     return Response.json({
       image: `data:image/png;base64,${fixed.toString("base64")}`,
@@ -73,6 +50,56 @@ export async function POST(req: Request) {
     const message = error instanceof Error ? error.message : "Gagal memperbaiki logo"
     return Response.json({ error: message }, { status: 500 })
   }
+}
+
+async function generateLogoFix(input: { apiKey: string; prompt: string; sourceImage: string; logoImage: string }) {
+  let lastError: unknown
+
+  for (let attempt = 1; attempt <= MAX_PROVIDER_ATTEMPTS; attempt += 1) {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS)
+
+    try {
+      const providerResponse = await fetch(API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${input.apiKey}`,
+          Accept: "application/json, text/event-stream",
+        },
+        body: JSON.stringify({
+          model: API_MODEL,
+          prompt: input.prompt,
+          image: input.sourceImage,
+          images: [input.sourceImage, input.logoImage],
+          reference_images: [input.sourceImage, input.logoImage],
+          input_images: [input.sourceImage, input.logoImage],
+          n: 1,
+          size: "auto",
+          output_format: "png",
+        }),
+        signal: controller.signal,
+      })
+
+      const rawText = await providerResponse.text()
+      if (!providerResponse.ok) {
+        throw new Error(`Provider gagal memperbaiki logo: ${extractProviderError(rawText)}`)
+      }
+
+      return await resolveImageBuffer(rawText)
+    } catch (error) {
+      lastError = error
+      if (attempt === MAX_PROVIDER_ATTEMPTS) break
+    } finally {
+      clearTimeout(timeout)
+    }
+  }
+
+  if (lastError instanceof Error && lastError.name === "AbortError") {
+    throw new Error("Provider terlalu lama memperbaiki logo. Coba lagi dengan gambar sumber yang lebih kecil atau ulangi proses.")
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("Provider gagal memperbaiki logo")
 }
 
 function buildLogoFixerPrompt(hasCustomLogo: boolean) {
@@ -103,7 +130,7 @@ async function normalizeDataUrlImage(value: string, label: string) {
   if (!metadata.width || !metadata.height) throw new Error(`${label} bukan gambar valid`)
   const normalized = await sharp(buffer)
     .rotate()
-    .resize({ width: 1800, height: 1800, fit: "inside", withoutEnlargement: true })
+    .resize({ width: 1400, height: 1400, fit: "inside", withoutEnlargement: true })
     .png({ quality: 100, compressionLevel: 9 })
     .toBuffer()
   return `data:image/png;base64,${normalized.toString("base64")}`
@@ -114,7 +141,7 @@ async function loadDefaultLogoDataUrl() {
   const logo = await fs.readFile(logoPath)
   const normalized = await sharp(logo)
     .rotate()
-    .resize({ width: 1024, height: 1024, fit: "inside", withoutEnlargement: true })
+    .resize({ width: 512, height: 512, fit: "inside", withoutEnlargement: true })
     .png({ quality: 100, compressionLevel: 9 })
     .toBuffer()
   return `data:image/png;base64,${normalized.toString("base64")}`
@@ -132,12 +159,27 @@ function extractProviderError(rawText: string) {
 
 async function resolveImageBuffer(rawText: string) {
   const candidates = parseImageCandidates(rawText)
-  const first = candidates[0]
-  if (!first) throw new Error("Provider tidak mengembalikan URL atau base64 gambar")
-  if (first.startsWith("data:image/")) return Buffer.from(first.split(",")[1] || "", "base64")
-  if (/^[A-Za-z0-9+/=\r\n]+$/.test(first) && first.length > 500) return Buffer.from(first.replace(/\s/g, ""), "base64")
+  let lastError: unknown
 
-  const imageResponse = await fetch(first)
+  for (const candidate of candidates) {
+    try {
+      const buffer = await resolveOneImageCandidate(candidate)
+      await sharp(buffer, { failOn: "warning" }).metadata()
+      return buffer
+    } catch (error) {
+      lastError = error
+    }
+  }
+
+  if (lastError instanceof Error) throw lastError
+  throw new Error("Provider tidak mengembalikan URL atau base64 gambar")
+}
+
+async function resolveOneImageCandidate(candidate: string) {
+  if (candidate.startsWith("data:image/")) return Buffer.from(candidate.split(",")[1] || "", "base64")
+  if (/^[A-Za-z0-9+/=\r\n]+$/.test(candidate) && candidate.length > 500) return Buffer.from(candidate.replace(/\s/g, ""), "base64")
+
+  const imageResponse = await fetch(candidate)
   if (!imageResponse.ok) throw new Error(`Gagal mengambil gambar dari provider: HTTP ${imageResponse.status}`)
   return Buffer.from(await imageResponse.arrayBuffer())
 }
@@ -153,16 +195,22 @@ function parseImageCandidates(rawText: string) {
 
   if (payloads.length === 0) payloads.push(rawText)
   for (const payload of payloads) {
+    collectStringCandidates(payload, candidates)
     try {
       collectCandidates(JSON.parse(payload), candidates)
     } catch {
       if (payload.startsWith("http") || payload.startsWith("data:image/")) candidates.push(payload)
     }
   }
-  return candidates
+  return Array.from(new Set(candidates))
 }
 
 function collectCandidates(value: unknown, candidates: string[]) {
+  if (typeof value === "string") {
+    collectStringCandidates(value, candidates)
+    return
+  }
+
   if (!value || typeof value !== "object") return
   if (Array.isArray(value)) {
     value.forEach((item) => collectCandidates(item, candidates))
@@ -170,13 +218,26 @@ function collectCandidates(value: unknown, candidates: string[]) {
   }
 
   const record = value as Record<string, unknown>
-  for (const key of ["url", "b64_json", "base64", "image", "data_url"]) {
+  for (const key of ["url", "b64_json", "base64", "image", "data_url", "image_url", "imageUrl", "image_base64", "output_image"]) {
     const candidate = record[key]
-    if (typeof candidate === "string" && candidate.length > 20) candidates.push(candidate)
+    if (typeof candidate === "string" && candidate.length > 20) collectStringCandidates(candidate, candidates)
   }
 
-  for (const nestedKey of ["data", "images", "output", "result"]) {
-    collectCandidates(record[nestedKey], candidates)
+  Object.values(record).forEach((nested) => collectCandidates(nested, candidates))
+}
+
+function collectStringCandidates(value: string, candidates: string[]) {
+  const trimmed = value.trim()
+  if (trimmed.startsWith("http") || trimmed.startsWith("data:image/") || (/^[A-Za-z0-9+/=\r\n]+$/.test(trimmed) && trimmed.length > 500)) {
+    candidates.push(trimmed)
+  }
+
+  for (const match of trimmed.matchAll(/https?:\/\/[^\s"')]+/g)) {
+    candidates.push(match[0])
+  }
+
+  for (const match of trimmed.matchAll(/data:image\/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/=\r\n]+/g)) {
+    candidates.push(match[0])
   }
 }
 

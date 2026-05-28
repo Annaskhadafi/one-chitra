@@ -30,6 +30,14 @@ describe("Instagram Logo Fixer AI", () => {
     expect(routeSource).toContain("helmet")
     expect(routeSource).toContain("left chest")
   })
+
+  it("keeps Logo Fixer provider parsing resilient", () => {
+    expect(routeSource).toContain("MAX_PROVIDER_ATTEMPTS")
+    expect(routeSource).toContain("resolveOneImageCandidate")
+    expect(routeSource).toContain("image_url")
+    expect(routeSource).toContain("Object.values(record)")
+  })
+
   it("protects official overlay logo and footer from edits", () => {
     expect(routeSource).toContain("Do not modify the official overlay logo")
     expect(routeSource).toContain("top-left")

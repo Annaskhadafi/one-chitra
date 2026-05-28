@@ -13,8 +13,9 @@ const sources = Object.fromEntries(targetFiles.map((file) => [file, readFileSync
 const requiredPhrases = [
   "wearpack safety TWO-TONE resmi",
   "lengan BIRU NAVY GELAP (#002D56)",
-  "dada/bahu HIJAU NEON (#8DC63F)",
-  "strip reflektif silver di pundak dan perut",
+  "panel dada/bahu atas HIJAU NEON (#8DC63F) berada DI ATAS strip reflektif atas",
+  "strip utama tepat di atas pusar/udel",
+  "DI BAWAH strip bawah berwarna BIRU NAVY GELAP (#002D56)",
   "BACKGROUND PUTIH SOLID di belakang logo",
   "bukan stiker mengambang",
   "Komposisi profesional, pencahayaan natural",
