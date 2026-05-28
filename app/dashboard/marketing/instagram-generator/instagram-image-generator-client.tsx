@@ -1,9 +1,9 @@
-﻿﻿﻿﻿﻿"use client"
+﻿﻿﻿"use client"
 
 import * as React from "react"
 import Image from "next/image"
 import Link from "next/link"
-import { Clipboard, Download, History as HistoryIcon, ImagePlus, Loader2, Sparkles, UploadCloud } from "lucide-react"
+import { Clipboard, Download, History as HistoryIcon, ImagePlus, Loader2, ShieldCheck, Sparkles, UploadCloud } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -11,6 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 
 type ImageFormat = "feed" | "portrait" | "story"
@@ -22,6 +23,46 @@ type GeneratedImageResult = {
   height: number
   prompt: string
   enhancedPrompt: string
+}
+
+type OverlayFormat = "feed" | "story"
+type OverlayVariant = "standard" | "white"
+
+type OverlayImageResult = {
+  image: string
+  mimeType: string
+  width: number
+  height: number
+  format: OverlayFormat
+  overlayVariant: OverlayVariant
+  template: string
+}
+
+type LogoFixerResult = {
+  image: string
+  mimeType: string
+  width: number
+  height: number
+  sourceName: string
+  logoSource: string
+  prompt: string
+}
+
+type LogoFixerSource = {
+  image: string
+  name: string
+  width?: number
+  height?: number
+}
+
+const overlayVariantLabels: Record<OverlayVariant, string> = {
+  standard: "Standar",
+  white: "Putih",
+}
+
+function getOverlayTemplateName(format: OverlayFormat | ImageFormat, variant: OverlayVariant) {
+  if (variant === "white") return format === "story" ? "Story putih.png" : "feed putih.png"
+  return format === "story" ? "Story.png" : "feed.png"
 }
 
 type UploadedAsset = {
@@ -399,10 +440,14 @@ Variant note: Bold inked comic composition — one clear focal scene with rich v
 }
 
 export function InstagramImageGeneratorClient() {
+  const [activeTab, setActiveTab] = React.useState("generator")
   const [contentType, setContentType] = React.useState<(typeof contentTypes)[number]>("Edukasi")
   const [visualStyle, setVisualStyle] = React.useState<VisualStyle>(defaultVisualStyleByContentType.Edukasi)
   const [prompt, setPrompt] = React.useState(getPromptTemplate("Edukasi", defaultVisualStyleByContentType.Edukasi))
   const [format, setFormat] = React.useState<ImageFormat>("portrait")
+  const [generatorOverlayVariant, setGeneratorOverlayVariant] = React.useState<OverlayVariant>("standard")
+  const [overlayFormat, setOverlayFormat] = React.useState<OverlayFormat>("feed")
+  const [overlayFileName, setOverlayFileName] = React.useState("")
   const [uploadedAssets, setUploadedAssets] = React.useState<UploadedAsset[]>([])
 
   // --- Ucapan Ulang Tahun Customer ---
@@ -451,7 +496,14 @@ export function InstagramImageGeneratorClient() {
 
   const [result, setResult] = React.useState<GeneratedImageResult | null>(null)
   const [variationResults, setVariationResults] = React.useState<GeneratedImageResult[]>([])
+  const [overlayResults, setOverlayResults] = React.useState<OverlayImageResult[]>([])
+  const [logoFixerSource, setLogoFixerSource] = React.useState<LogoFixerSource | null>(null)
+  const [logoFixerCustomLogo, setLogoFixerCustomLogo] = React.useState<string | null>(null)
+  const [logoFixerCustomLogoName, setLogoFixerCustomLogoName] = React.useState("")
+  const [logoFixerResult, setLogoFixerResult] = React.useState<LogoFixerResult | null>(null)
   const [isGenerating, setIsGenerating] = React.useState(false)
+  const [isComposingOverlay, setIsComposingOverlay] = React.useState(false)
+  const [isFixingLogo, setIsFixingLogo] = React.useState(false)
   const [isEnhancing, setIsEnhancing] = React.useState(false)
   const [isUploading, setIsUploading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -478,6 +530,10 @@ export function InstagramImageGeneratorClient() {
       .finally(() => { if (mounted) setIsLoadingHoliday(false) })
     return () => { mounted = false; controller.abort() }
   }, [contentType])
+
+  React.useEffect(() => {
+    setOverlayResults([])
+  }, [overlayFormat])
 
   // Wearpack instruction injected when showPerson is true
   const WEARPACK_INSTRUCTION = "Tampilkan pekerja/karyawan memakai wearpack safety TWO-TONE resmi: lengan BIRU NAVY GELAP (#002D56), dada/bahu HIJAU NEON (#8DC63F), strip reflektif silver di pundak dan perut. WAJIB: di atas saku dada kiri wearpack, tempel patch logo Chitra Paratama berbentuk persegi panjang kecil dengan BACKGROUND PUTIH SOLID di belakang logo — logo CP berwarna asli di atas kotak putih, dijahit/bordir natural ke kain wearpack, terlihat jelas dan kontras. Patch ini harus tampak seperti name tag atau label bordir resmi yang menempel di atas saku, bukan stiker mengambang. Gunakan warna brand: Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56. Komposisi profesional, pencahayaan natural."
@@ -683,6 +739,7 @@ export function InstagramImageGeneratorClient() {
         body: JSON.stringify({
           prompt: trimmedPrompt,
           format,
+          overlayVariant: generatorOverlayVariant,
           contentType,
           visualStyle,
           referenceAssets: [...getCategoryReferenceAssets(), ...uploadedAssets],
@@ -727,6 +784,7 @@ export function InstagramImageGeneratorClient() {
         body: JSON.stringify({
           prompt: trimmedPrompt,
           format,
+          overlayVariant: generatorOverlayVariant,
           contentType,
           visualStyle,
           referenceAssets: [...getCategoryReferenceAssets(), ...uploadedAssets],
@@ -770,6 +828,7 @@ export function InstagramImageGeneratorClient() {
         body: JSON.stringify({
           prompt: trimmedPrompt,
           format,
+          overlayVariant: generatorOverlayVariant,
           contentType,
           visualStyle,
           referenceAssets: [...getCategoryReferenceAssets(), ...uploadedAssets],
@@ -898,6 +957,158 @@ export function InstagramImageGeneratorClient() {
     )
   }
 
+  const onOverlayFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ""
+    if (!file) return
+
+    const allowedTypes = ["image/jpeg", "image/png", "image/webp"]
+    if (!allowedTypes.includes(file.type)) {
+      const message = "Format gambar tidak didukung. Gunakan JPG, PNG, atau WebP"
+      setError(message)
+      toast.error(message)
+      return
+    }
+
+    setIsComposingOverlay(true)
+    setError(null)
+    setOverlayResults([])
+    setOverlayFileName(file.name)
+
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 60000)
+
+    try {
+      const variants: OverlayVariant[] = ["standard", "white"]
+      const results = await Promise.all(variants.map(async (variant) => {
+        const formData = new FormData()
+        formData.append("file", file)
+        formData.append("format", overlayFormat)
+        formData.append("overlayVariant", variant)
+
+        const response = await fetch("/api/instagram-overlay-generator", {
+          method: "POST",
+          body: formData,
+          signal: controller.signal,
+        })
+        const data = await response.json().catch(() => null) as OverlayImageResult & { success?: boolean; error?: string } | null
+        if (!response.ok || !data?.success) {
+          throw new Error(data?.error || `Gagal membuat bingkai overlay ${overlayVariantLabels[variant]}`)
+        }
+
+        return {
+          image: data.image,
+          mimeType: data.mimeType,
+          width: data.width,
+          height: data.height,
+          format: data.format,
+          overlayVariant: data.overlayVariant,
+          template: data.template,
+        }
+      }))
+
+      setOverlayResults(results)
+      toast.success("Preview overlay Standar dan Putih berhasil dibuat")
+    } catch (err) {
+      const message = err instanceof Error ? (err.name === "AbortError" ? "Waktu proses overlay habis" : err.message) : "Gagal membuat bingkai overlay"
+      setError(message)
+      toast.error(message)
+    } finally {
+      clearTimeout(timeout)
+      setIsComposingOverlay(false)
+    }
+  }
+
+  const fileToDataUrl = (file: File) => new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ""))
+    reader.onerror = () => reject(new Error("Gagal membaca file gambar"))
+    reader.readAsDataURL(file)
+  })
+
+  const onLogoFixerSourceChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ""
+    if (!file) return
+
+    try {
+      const image = await fileToDataUrl(file)
+      setLogoFixerSource({ image, name: file.name })
+      setLogoFixerResult(null)
+      toast.success("Gambar sumber siap diperbaiki")
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Gagal membaca gambar sumber"
+      setError(message)
+      toast.error(message)
+    }
+  }
+
+  const onLogoFixerCustomLogoChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ""
+    if (!file) return
+
+    try {
+      const image = await fileToDataUrl(file)
+      setLogoFixerCustomLogo(image)
+      setLogoFixerCustomLogoName(file.name)
+      toast.success("Logo custom siap dipakai")
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Gagal membaca logo custom"
+      setError(message)
+      toast.error(message)
+    }
+  }
+
+  const sendToLogoFixer = (source: GeneratedImageResult, name = "hasil-ai-generator.png") => {
+    setLogoFixerSource({ image: source.image, name, width: source.width, height: source.height })
+    setLogoFixerResult(null)
+    setActiveTab("logo-fixer")
+    toast.success("Hasil AI Generator dikirim ke Logo Fixer AI")
+  }
+
+  const fixLogo = async () => {
+    if (!logoFixerSource) {
+      const message = "Pilih gambar dari AI Generator atau upload gambar manual terlebih dahulu"
+      setError(message)
+      toast.error(message)
+      return
+    }
+
+    setIsFixingLogo(true)
+    setError(null)
+    setLogoFixerResult(null)
+
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 180000)
+
+    try {
+      const response = await fetch("/api/instagram-logo-fixer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sourceImage: logoFixerSource.image,
+          sourceName: logoFixerSource.name,
+          customLogo: logoFixerCustomLogo,
+        }),
+        signal: controller.signal,
+      })
+      const data = await response.json().catch(() => null) as LogoFixerResult & { error?: string } | null
+      if (!response.ok || !data?.image) {
+        throw new Error(data?.error || "Gagal memperbaiki logo")
+      }
+      setLogoFixerResult(data)
+      toast.success("Logo pada saku/helm berhasil diperbaiki")
+    } catch (err) {
+      const message = err instanceof Error ? (err.name === "AbortError" ? "Waktu proses Logo Fixer AI habis" : err.message) : "Gagal memperbaiki logo"
+      setError(message)
+      toast.error(message)
+    } finally {
+      clearTimeout(timeout)
+      setIsFixingLogo(false)
+    }
+  }
+
   const removeAsset = (url: string) => {
     setUploadedAssets((current) => current.filter((asset) => asset.url !== url))
   }
@@ -953,6 +1164,14 @@ export function InstagramImageGeneratorClient() {
         </div>
       </div>
 
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-4">
+        <TabsList className="grid w-full grid-cols-3 sm:w-fit">
+          <TabsTrigger value="generator">AI Generator</TabsTrigger>
+          <TabsTrigger value="overlay">Bingkai / Overlay</TabsTrigger>
+          <TabsTrigger value="logo-fixer">Logo Fixer AI</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="generator" className="mt-0">
       <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
         <Card>
           <CardHeader>
@@ -1268,6 +1487,21 @@ export function InstagramImageGeneratorClient() {
             </div>
 
             <div className="grid gap-2">
+              <Label>Pilih overlay</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Button type="button" variant={generatorOverlayVariant === "standard" ? "default" : "outline"} onClick={() => setGeneratorOverlayVariant("standard")} className="h-auto flex-col gap-1 py-3">
+                  <span>Standar</span>
+                  <span className="text-xs font-normal opacity-80">{getOverlayTemplateName(format, "standard")}</span>
+                </Button>
+                <Button type="button" variant={generatorOverlayVariant === "white" ? "default" : "outline"} onClick={() => setGeneratorOverlayVariant("white")} className="h-auto flex-col gap-1 py-3">
+                  <span>Putih</span>
+                  <span className="text-xs font-normal opacity-80">{getOverlayTemplateName(format, "white")}</span>
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">Overlay dipasang setelah gambar AI selesai dibuat.</p>
+            </div>
+
+            <div className="grid gap-2">
               <div className="flex items-center justify-between gap-3">
                 <Label>Prompt</Label>
                 <div className="flex flex-wrap justify-end gap-2">
@@ -1398,6 +1632,12 @@ export function InstagramImageGeneratorClient() {
                       Download Variasi {index + 1}
                     </Button>
                   ))}
+                  {variationResults.map((variation, index) => (
+                    <Button key={`logo-fixer-${index}`} onClick={() => sendToLogoFixer(variation, `variasi-${index + 1}.png`)} variant="outline" className="w-full sm:w-fit">
+                      <ShieldCheck className="size-4" />
+                      Kirim Variasi {index + 1} ke Logo Fixer AI
+                    </Button>
+                  ))}
                 </div>
               </div>
             )}
@@ -1412,11 +1652,283 @@ export function InstagramImageGeneratorClient() {
                   <Download className="size-4" />
                   Download PNG
                 </Button>
+                <Button onClick={() => sendToLogoFixer(result)} variant="outline" className="w-full sm:w-fit">
+                  <ShieldCheck className="size-4" />
+                  Kirim ke Logo Fixer AI
+                </Button>
               </div>
             )}
           </CardContent>
         </Card>
       </div>
+        </TabsContent>
+
+        <TabsContent value="overlay" className="mt-0">
+          <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
+            <Card>
+              <CardHeader>
+                <CardTitle>Bingkai / Overlay</CardTitle>
+                <CardDescription>Upload gambar lalu sistem akan crop, resize, dan menempelkan template Feed atau Story otomatis.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <div className="space-y-3">
+                  <Label>Pilih Ukuran</Label>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <Button type="button" variant={overlayFormat === "feed" ? "default" : "outline"} onClick={() => setOverlayFormat("feed")} className="h-auto flex-col gap-1 py-3">
+                      <span>Feed</span>
+                      <span className="text-xs font-normal opacity-80">1080 × 1350 px</span>
+                    </Button>
+                    <Button type="button" variant={overlayFormat === "story" ? "default" : "outline"} onClick={() => setOverlayFormat("story")} className="h-auto flex-col gap-1 py-3">
+                      <span>Story</span>
+                      <span className="text-xs font-normal opacity-80">1080 × 1920 px</span>
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border bg-muted/20 p-4 text-sm text-muted-foreground">
+                  <p className="font-medium text-foreground">Preview otomatis dua overlay</p>
+                  <p>Setelah upload, sistem langsung membuat versi Standar ({getOverlayTemplateName(overlayFormat, "standard")}) dan Putih ({getOverlayTemplateName(overlayFormat, "white")}) sekaligus.</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="overlay-upload">Upload gambar</Label>
+                  <div className="rounded-xl border border-dashed p-4">
+                    <div className="flex flex-col gap-3">
+                      <div className="flex items-start gap-3 text-sm text-muted-foreground">
+                        <UploadCloud className="mt-0.5 size-5" />
+                        <div>
+                          <p className="font-medium text-foreground">Pilih JPG, PNG, atau WebP</p>
+                          <p>Gambar akan otomatis disesuaikan ke ukuran {overlayFormat === "story" ? "Story" : "Feed"}, lalu dibuat versi Standar dan Putih.</p>
+                        </div>
+                      </div>
+                      <Input id="overlay-upload" type="file" accept="image/jpeg,image/png,image/webp" onChange={onOverlayFileChange} disabled={isComposingOverlay} />
+                    </div>
+                  </div>
+                </div>
+
+                {overlayFileName && (
+                  <div className="rounded-lg border bg-muted/40 p-3 text-sm">
+                    <p><span className="font-medium">File:</span> {overlayFileName}</p>
+                    <p><span className="font-medium">Output:</span> Standar dan Putih</p>
+                  </div>
+                )}
+
+                {isComposingOverlay && (
+                  <div className="flex items-center gap-2 rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
+                    <Loader2 className="size-4 animate-spin" />
+                    Menyesuaikan ukuran dan memasang overlay...
+                  </div>
+                )}
+
+                {error && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">{error}</div>}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Preview Bingkai</CardTitle>
+                <CardDescription>Lihat versi Standar dan Putih sekaligus untuk Instagram {overlayFormat === "story" ? "Story" : "Feed"}.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex min-h-[520px] items-center justify-center rounded-xl border bg-muted/40 p-4">
+                  {overlayResults.length > 0 ? (
+                    <div className="grid w-full gap-4 lg:grid-cols-2">
+                      {overlayResults.map((overlayResult) => (
+                        <div key={overlayResult.overlayVariant} className="space-y-2">
+                          <div className="text-center text-sm font-medium">Overlay {overlayVariantLabels[overlayResult.overlayVariant]}</div>
+                          <Image
+                            src={overlayResult.image}
+                            alt={`Preview gambar Instagram ${overlayResult.format} overlay ${overlayVariantLabels[overlayResult.overlayVariant]}`}
+                            width={overlayResult.width}
+                            height={overlayResult.height}
+                            className="max-h-[620px] w-auto rounded-lg object-contain shadow-xl"
+                            unoptimized
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex max-w-md flex-col items-center gap-3 text-center text-muted-foreground">
+                      <UploadCloud className="size-12" />
+                      <div>
+                        <p className="font-medium text-foreground">Belum ada gambar overlay</p>
+                        <p className="text-sm">Pilih format Feed atau Story, lalu upload gambar untuk melihat versi Standar dan Putih.</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {overlayResults.length > 0 && (
+                  <div className="grid gap-3 lg:grid-cols-2">
+                    {overlayResults.map((overlayResult) => (
+                      <div key={`meta-${overlayResult.overlayVariant}`} className="flex flex-col gap-3 rounded-xl border p-4">
+                        <div className="grid gap-1 text-sm">
+                          <p><span className="font-medium">Overlay:</span> {overlayVariantLabels[overlayResult.overlayVariant]}</p>
+                          <p><span className="font-medium">Resolusi:</span> {overlayResult.width} × {overlayResult.height}px</p>
+                          <p><span className="font-medium">Template:</span> {overlayResult.template}</p>
+                          <p><span className="font-medium">Format:</span> PNG</p>
+                        </div>
+                        <Button onClick={() => downloadImage(overlayResult.image, `overlay-${overlayResult.format}-${overlayResult.overlayVariant}`)} variant="secondary" className="w-full sm:w-fit">
+                          <Download className="size-4" />
+                          Download {overlayVariantLabels[overlayResult.overlayVariant]}
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="logo-fixer" className="mt-0">
+          <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
+            <Card>
+              <CardHeader>
+                <CardTitle>Logo Fixer AI</CardTitle>
+                <CardDescription>Perbaiki hanya logo hasil AI di patch saku kiri wearpack dan helm safety; footer serta logo overlay kiri atas tidak disentuh.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <div className="rounded-xl border bg-muted/20 p-4">
+                  <div className="flex items-start gap-3">
+                    <ShieldCheck className="mt-0.5 size-5 text-primary" />
+                    <div className="space-y-1 text-sm">
+                      <p className="font-medium">Tugas khusus</p>
+                      <p className="text-muted-foreground">Replace hanya logo hasil generate di saku kiri dan helm safety. Footer serta logo resmi di kiri atas harus tetap sama.</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Gambar yang akan diperbaiki</Label>
+                  <div className="rounded-xl border border-dashed p-4">
+                    <div className="flex flex-col gap-3">
+                      <div className="flex items-start gap-3 text-sm text-muted-foreground">
+                        <UploadCloud className="mt-0.5 size-5" />
+                        <div>
+                          <p className="font-medium text-foreground">Ambil dari AI Generator atau upload manual</p>
+                          <p>Tombol di preview AI Generator bisa langsung mengirim hasil ke tab ini.</p>
+                        </div>
+                      </div>
+                      <Input type="file" accept="image/jpeg,image/png,image/webp" onChange={onLogoFixerSourceChange} disabled={isFixingLogo} />
+                    </div>
+                  </div>
+                  {logoFixerSource && (
+                    <div className="rounded-lg border bg-muted/40 p-3 text-sm">
+                      <p><span className="font-medium">Sumber:</span> {logoFixerSource.name}</p>
+                      {logoFixerSource.width && logoFixerSource.height && <p><span className="font-medium">Resolusi:</span> {logoFixerSource.width} × {logoFixerSource.height}px</p>}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-3">
+                  <Label>Logo pengganti</Label>
+                  <div className="grid gap-3 rounded-xl border p-4">
+                    <div className="flex items-center gap-4">
+                      <div className="flex size-24 items-center justify-center rounded-lg border bg-white p-2">
+                        <Image
+                          src={logoFixerCustomLogo || "/cp_logo.png"}
+                          alt="Preview logo pengganti"
+                          width={160}
+                          height={80}
+                          className="max-h-20 w-auto object-contain"
+                          unoptimized
+                        />
+                      </div>
+                      <div className="space-y-1 text-sm">
+                        <p className="font-medium">{logoFixerCustomLogoName || "cp_logo.png"}</p>
+                        <p className="text-muted-foreground">Default memakai logo CP resmi. Upload logo custom akan mengganti seluruh logo target di gambar.</p>
+                      </div>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="logo-fixer-custom-logo">Upload logo custom</Label>
+                      <Input id="logo-fixer-custom-logo" type="file" accept="image/jpeg,image/png,image/webp" onChange={onLogoFixerCustomLogoChange} disabled={isFixingLogo} />
+                      {logoFixerCustomLogo && (
+                        <Button type="button" variant="ghost" size="sm" className="w-fit" onClick={() => { setLogoFixerCustomLogo(null); setLogoFixerCustomLogoName("") }} disabled={isFixingLogo}>
+                          Pakai cp_logo.png lagi
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {error && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">{error}</div>}
+
+                <Button onClick={fixLogo} disabled={isFixingLogo || !logoFixerSource} className="w-full">
+                  {isFixingLogo ? <Loader2 className="size-4 animate-spin" /> : <ShieldCheck className="size-4" />}
+                  {isFixingLogo ? "Memperbaiki logo..." : "Fix Logo di Saku & Helm"}
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Preview Logo Fixer</CardTitle>
+                <CardDescription>Bandingkan gambar sumber dan hasil setelah logo diganti.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium">Sumber</p>
+                    <div className="flex min-h-[420px] items-center justify-center rounded-xl border bg-muted/40 p-4">
+                      {logoFixerSource ? (
+                        <Image
+                          src={logoFixerSource.image}
+                          alt="Gambar sumber Logo Fixer AI"
+                          width={logoFixerSource.width || 1080}
+                          height={logoFixerSource.height || 1350}
+                          className="max-h-[560px] w-auto rounded-lg object-contain shadow-xl"
+                          unoptimized
+                        />
+                      ) : (
+                        <div className="flex max-w-sm flex-col items-center gap-3 text-center text-muted-foreground">
+                          <ImagePlus className="size-10" />
+                          <p className="text-sm">Belum ada gambar sumber.</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium">Hasil Fix</p>
+                    <div className="flex min-h-[420px] items-center justify-center rounded-xl border bg-muted/40 p-4">
+                      {logoFixerResult ? (
+                        <Image
+                          src={logoFixerResult.image}
+                          alt="Hasil Logo Fixer AI"
+                          width={logoFixerResult.width || 1080}
+                          height={logoFixerResult.height || 1350}
+                          className="max-h-[560px] w-auto rounded-lg object-contain shadow-xl"
+                          unoptimized
+                        />
+                      ) : (
+                        <div className="flex max-w-sm flex-col items-center gap-3 text-center text-muted-foreground">
+                          <ShieldCheck className="size-10" />
+                          <p className="text-sm">Klik Fix Logo untuk memperbaiki patch saku kiri dan helm safety.</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {logoFixerResult && (
+                  <div className="flex flex-col gap-3 rounded-xl border p-4">
+                    <div className="grid gap-1 text-sm">
+                      <p><span className="font-medium">Resolusi:</span> {logoFixerResult.width} × {logoFixerResult.height}px</p>
+                      <p><span className="font-medium">Logo:</span> {logoFixerResult.logoSource}</p>
+                      <p><span className="font-medium">Format:</span> PNG</p>
+                    </div>
+                    <Button onClick={() => downloadImage(logoFixerResult.image, "logo-fixer-ai")} variant="secondary" className="w-full sm:w-fit">
+                      <Download className="size-4" />
+                      Download PNG
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

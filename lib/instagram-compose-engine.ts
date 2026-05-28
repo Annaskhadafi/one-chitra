@@ -3,13 +3,15 @@ import { promises as fs } from "fs"
 import sharp from "sharp"
 
 export type InstagramComposeFormat = "feed" | "portrait" | "story"
+export type InstagramOverlayVariant = "standard" | "white"
 
 export async function composeInstagramImage(input: {
     source: Buffer
     format: InstagramComposeFormat
+    overlayVariant?: InstagramOverlayVariant
 }) {
     const target = getTargetSize(input.format)
-    const templatePath = await resolveTemplatePath(input.format === "story" ? ["story.png", "Story.png"] : ["feed.png"])
+    const templatePath = await resolveTemplatePath(getTemplateCandidates(input.format, input.overlayVariant ?? "standard"))
     const base = await normalizeGeneratedCanvas(input.source, target.width, target.height)
     const overlay = await makeTemplateOverlay(templatePath, target.width, target.height)
 
@@ -21,6 +23,18 @@ export async function composeInstagramImage(input: {
 
 export function getInstagramComposeSize(format: InstagramComposeFormat) {
     return getTargetSize(format)
+}
+
+export function getInstagramTemplateName(format: InstagramComposeFormat, variant: InstagramOverlayVariant = "standard") {
+    if (variant === "white") return format === "story" ? "Story putih.png" : "feed putih.png"
+    return format === "story" ? "Story.png" : "feed.png"
+}
+
+function getTemplateCandidates(format: InstagramComposeFormat, variant: InstagramOverlayVariant) {
+    if (variant === "white") {
+        return format === "story" ? ["Story putih.png", "Story putiih.png"] : ["feed putih.png"]
+    }
+    return format === "story" ? ["story.png", "Story.png"] : ["feed.png"]
 }
 
 async function normalizeGeneratedCanvas(source: Buffer, width: number, height: number) {

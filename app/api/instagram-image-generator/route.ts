@@ -3,7 +3,7 @@ import sharp from "sharp"
 import fs from "fs/promises"
 import path from "path"
 import { headers } from "next/headers"
-import { composeInstagramImage } from "@/lib/instagram-compose-engine"
+import { composeInstagramImage, type InstagramOverlayVariant } from "@/lib/instagram-compose-engine"
 import { readManagedUpload, uploadBase64Image } from "@/lib/upload-storage"
 import { auth } from "@/lib/auth"
 import { db } from "@/db"
@@ -24,9 +24,12 @@ type GenerateImageBody = {
   format?: "feed" | "portrait" | "story"
   contentType?: string
   visualStyle?: string
+  overlayVariant?: InstagramOverlayVariant
   referenceAssets?: Array<string | UploadedAsset>
   mode?: "single" | "variations"
 }
+
+const OVERLAY_VARIANTS = new Set<InstagramOverlayVariant>(["standard", "white"])
 
 type GeneratedImageResult = {
   image: string
@@ -58,6 +61,7 @@ export async function POST(req: NextRequest) {
     }
 
     const format = body.format || "feed"
+    const overlayVariant = OVERLAY_VARIANTS.has(body.overlayVariant || "standard") ? body.overlayVariant || "standard" : "standard"
     const contentType = body.contentType || "Edukasi"
     const visualStyle = body.visualStyle || "Modern & Clean"
     const referenceAssets = normalizeReferenceAssets(body.referenceAssets)
@@ -67,8 +71,8 @@ export async function POST(req: NextRequest) {
 
     if (body.mode === "variations") {
       const variations = await Promise.all([
-        generateOneImage({ apiKey, prompt, format, contentType, visualStyle, referenceAssets, variationInstruction: "Variasi 1: gaya visual corporate premium, clean, elegan, komposisi seimbang, warna brand tegas, wajib ada headline utama besar yang relevan." }),
-        generateOneImage({ apiKey, prompt, format, contentType, visualStyle, referenceAssets, variationInstruction: "Variasi 2: gaya visual modern editorial, dinamis, depth lebih kuat, angle berbeda, wajib ada headline utama besar yang relevan agar konten tidak kosong." }),
+        generateOneImage({ apiKey, prompt, format, overlayVariant, contentType, visualStyle, referenceAssets, variationInstruction: "Variasi 1: gaya visual corporate premium, clean, elegan, komposisi seimbang, warna brand tegas, wajib ada headline utama besar yang relevan." }),
+        generateOneImage({ apiKey, prompt, format, overlayVariant, contentType, visualStyle, referenceAssets, variationInstruction: "Variasi 2: gaya visual modern editorial, dinamis, depth lebih kuat, angle berbeda, wajib ada headline utama besar yang relevan agar konten tidak kosong." }),
       ])
       
       if (userId) {
@@ -79,7 +83,7 @@ export async function POST(req: NextRequest) {
       return Response.json({ variations })
     }
 
-    const result = await generateOneImage({ apiKey, prompt, format, contentType, visualStyle, referenceAssets })
+    const result = await generateOneImage({ apiKey, prompt, format, overlayVariant, contentType, visualStyle, referenceAssets })
     
     if (userId) {
       // Fire and forget history save
@@ -97,6 +101,7 @@ async function generateOneImage(input: {
   apiKey: string
   prompt: string
   format: NonNullable<GenerateImageBody["format"]>
+  overlayVariant: InstagramOverlayVariant
   contentType: string
   visualStyle: string
   referenceAssets: UploadedAsset[]
@@ -151,7 +156,7 @@ async function generateOneImage(input: {
   }
 
   const sourceImage = await resolveImageBuffer(rawText)
-  const branded = await composeInstagramImage({ source: sourceImage, format: input.format })
+  const branded = await composeInstagramImage({ source: sourceImage, format: input.format, overlayVariant: input.overlayVariant })
   const metadata = await sharp(branded).metadata()
   return {
     image: `data:image/png;base64,${branded.toString("base64")}`,
@@ -296,7 +301,7 @@ function buildEnhancedPrompt(input: {
     "Desain sederhana, profesional, rapi, mudah dipahami, satu fokus utama, dan komposisi full-bleed yang mengisi seluruh kanvas tanpa border, margin, kartu putih, atau frame kosong.",
     "WAJIB: Jika prompt SECARA EKSPLISIT meminta, menampilkan, atau melibatkan sosok manusia (pekerja, mekanik, teknisi, operator, karyawan, tim lapangan), mereka HARUS memakai wearpack safety TWO-TONE resmi: lengan BIRU NAVY GELAP (#002D56), dada/bahu HIJAU NEON (#8DC63F), strip reflektif silver di pundak dan perut. WAJIB: di atas saku dada kiri wearpack, tempel patch logo Chitra Paratama berbentuk persegi panjang kecil dengan BACKGROUND PUTIH SOLID di belakang logo — logo CP berwarna asli di atas kotak putih, dijahit/bordir natural ke kain wearpack, terlihat jelas dan kontras. Patch ini harus tampak seperti name tag atau label bordir resmi yang menempel di atas saku, bukan stiker mengambang. Gunakan warna brand: Michelin Blue #004C98, Sky Blue #009EBE, Fresh Green #8DC63F, Navy #002D56. Komposisi profesional, pencahayaan natural. Jika prompt TIDAK meminta orang, jangan paksa ada orang dalam gambar.",
     "SAFE ZONE WAJIB: (1) ATAS — berikan margin minimal 200px dari tepi atas kanvas, karena area pojok kiri atas (sekitar 320x180px) tertutup logo overlay perusahaan. (2) BAWAH — berikan margin minimal 180px dari tepi bawah kanvas karena area bawah tertutup footer overlay. (3) Posisikan semua teks headline, subheadline, dan elemen penting di zona tengah kanvas (antara 200px dari atas hingga 180px dari bawah). Jangan letakkan teks apapun mepet tepi atas atau tepi bawah.",
-    "Jangan buat logo Chitra Paratama, logo perusahaan, logo brand apa pun, footer, watermark, ikon media sosial, atau teks kecil; semua elemen brand resmi hanya berasal dari overlay template feed.png atau Story.png setelah gambar dibuat.",
+    "Jangan buat logo Chitra Paratama, logo perusahaan, logo brand apa pun, footer, watermark, ikon media sosial, atau teks kecil; semua elemen brand resmi hanya berasal dari overlay template resmi setelah gambar dibuat.",
     references,
   ].join(" ").trim()
 }
