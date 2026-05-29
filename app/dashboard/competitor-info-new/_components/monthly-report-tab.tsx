@@ -55,6 +55,7 @@ type PriceRecord = {
     size: string
     brand: string
     supplier: string
+    remark: string
     price: number
     consultant: string
 }
@@ -422,6 +423,7 @@ function parsePriceRows(rows: SheetRow[]) {
             size,
             brand: normalizeBrand(brand),
             supplier: companyMapping[rawSupplier] || rawSupplier,
+            remark: getField(row, "Remark / DDP", "Remark/DDP", "Remark", "DDP"),
             price: parseMoney(row.PRICE || row.Price),
             consultant: cleanText(row["Business Consultant"]),
         }
@@ -868,6 +870,11 @@ export function MonthlyReportTab() {
             acc[size] = trend.brands.map((brand) => ({ brand, ...getBrandTrendStats(trend.data, brand) }))
             return acc
         }, {})
+        const priceDetailRows = [...monthPrices].sort((a, b) => {
+            const dateDiff = (b.infoDate?.getTime() ?? 0) - (a.infoDate?.getTime() ?? 0)
+            if (dateDiff) return dateDiff
+            return a.size.localeCompare(b.size) || a.customer.localeCompare(b.customer)
+        })
         const competitorActivityRows = [...monthActivities].sort((a, b) => (b.infoDate?.getTime() ?? 0) - (a.infoDate?.getTime() ?? 0))
         const lostSaleRows = [...monthLostSales].sort((a, b) => (b.offeringDate?.getTime() ?? 0) - (a.offeringDate?.getTime() ?? 0))
         const impactChart = aggregate(monthActivities.map((row) => row.businessImpact), 6)
@@ -907,6 +914,7 @@ export function MonthlyReportTab() {
             monthlyPriceTrendStats,
             monthlyBrandTrendBySize,
             monthlyBrandTrendStatsBySize,
+            priceDetailRows,
             competitorActivityRows,
             lostSaleRows,
             activityHighlights,
@@ -1016,8 +1024,10 @@ export function MonthlyReportTab() {
         "Maxam, Tiberplus, dan Aeolus berada di mid-tier range 55-72 jt untuk menjaga opsi substitusi saat supply premium terbatas.",
         "Data customer-supplier perlu dipakai untuk membaca vendor lock-in dan peluang masuk melalui alternatif brand.",
     ]
+    const priceFallback = [{ id: "price-empty", infoDate: null, consultant: "-", size: "Belum ada data", customer: "-", brand: "-", supplier: "-", remark: "-", price: 0 } as PriceRecord]
     const activityFallback = [{ infoDate: null, consultant: "-", competitor: "-", customer: "-", industry: "-", activityType: "Belum ada data", marketResponse: "-", businessImpact: "-", description: "-" } as ActivityRecord]
     const lostSaleFallback = [{ offeringDate: null, consultant: "-", customer: "-", productDetail: "Belum ada data", reason: "-", remark: "-", actionPlan: "-" } as LostSaleRecord]
+    const priceTablePages = paginateByWeight(report.priceDetailRows.length ? report.priceDetailRows : priceFallback, 12, (row) => textWeight(row.customer, row.brand, row.supplier, row.remark, row.size))
     const activityTablePages = paginateByWeight(report.competitorActivityRows.length ? report.competitorActivityRows : activityFallback, 11, (row) => textWeight(row.description, row.activityType, row.customer, row.competitor))
     const activityTypePages = chunkArray(report.activityTypes.length ? report.activityTypes : [{ name: "Belum ada data", value: 0 }], 7)
     const competitorPages = chunkArray(report.topCompetitors.length ? report.topCompetitors : [{ name: "Belum ada data", value: 0 }], 7)
@@ -1034,6 +1044,17 @@ export function MonthlyReportTab() {
         customers: lostCustomerPages[index] ?? [],
         actions: correctiveActionPages[index] ?? [],
     }))
+    const priceDetailSlide = 3
+    const segmentSlide = priceDetailSlide + priceTablePages.length
+    const marketSlide = segmentSlide + 1
+    const medianSlideStart = marketSlide + 1
+    const matrixSlideStart = medianSlideStart + FOCUS_SIZES.length
+    const supplierSlide = matrixSlideStart + FOCUS_SIZES.length
+    const activitySlide = supplierSlide + 1
+    const activityChartSlide = activitySlide + activityTablePages.length
+    const lostSaleSlide = activityChartSlide + activityChartPages.length
+    const lostSaleChartSlide = lostSaleSlide + lostSaleTablePages.length
+    const closingSlide = lostSaleChartSlide + lostSaleChartPages.length
 
     return (
         <div className="space-y-5">
@@ -1166,7 +1187,58 @@ export function MonthlyReportTab() {
                                 </div>
                             </div>
                         </Slide>,
-                        <Slide key="segment-overview" eyebrow="Slide 3 - Price Analysis Overview" title="Competitor Tire Price Analysis Overview">
+                        ...priceTablePages.map((rows, pageIndex) => (
+                            <Slide key={`price-detail-${pageIndex}`} eyebrow={`Slide ${priceDetailSlide}.${pageIndex + 1} - Price Competitor Detail`} title="Table Price Competitor All Size">
+                                <div className="h-[calc(100%-88px)] overflow-hidden rounded-lg border bg-white p-3 shadow-sm">
+                                    <div className="mb-2 flex items-center justify-between gap-3">
+                                        <div>
+                                            <p className="text-sm font-black text-slate-900">Data Detail Price Competitor</p>
+                                            <p className="text-[10px] text-slate-500">All size periode {monthLabel(month)} lengkap dengan BC, customer, brand, supplier, remark, dan price.</p>
+                                        </div>
+                                        <Badge variant="outline" className="text-[10px]">Page {pageIndex + 1} / {priceTablePages.length}</Badge>
+                                    </div>
+                                    <ReportTable>
+                                        <colgroup>
+                                            <col className="w-[9%]" />
+                                            <col className="w-[10%]" />
+                                            <col className="w-[9%]" />
+                                            <col className="w-[16%]" />
+                                            <col className="w-[11%]" />
+                                            <col className="w-[15%]" />
+                                            <col className="w-[18%]" />
+                                            <col className="w-[12%]" />
+                                        </colgroup>
+                                        <thead>
+                                            <tr>
+                                                <TableHeadCell>Timestamp</TableHeadCell>
+                                                <TableHeadCell>BC</TableHeadCell>
+                                                <TableHeadCell>Size Tire</TableHeadCell>
+                                                <TableHeadCell>Nama Customer</TableHeadCell>
+                                                <TableHeadCell>Brand</TableHeadCell>
+                                                <TableHeadCell>Supplier</TableHeadCell>
+                                                <TableHeadCell>Remark / DDP</TableHeadCell>
+                                                <TableHeadCell>Price</TableHeadCell>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {rows.map((row, index) => (
+                                                <tr key={`${row.id}-${pageIndex}-${index}`}>
+                                                    <TableCellCompact className="break-words text-[9px] leading-snug">{formatDateLabel(row.infoDate)}</TableCellCompact>
+                                                    <TableCellCompact className="break-words text-[9px] leading-snug">{row.consultant || "-"}</TableCellCompact>
+                                                    <TableCellCompact className="break-words text-[9px] font-semibold leading-snug">{row.size || "-"}</TableCellCompact>
+                                                    <TableCellCompact className="break-words text-[9px] leading-snug">{row.customer || "-"}</TableCellCompact>
+                                                    <TableCellCompact className="break-words text-[9px] leading-snug">{row.brand || "-"}</TableCellCompact>
+                                                    <TableCellCompact className="break-words text-[9px] leading-snug">{row.supplier || "-"}</TableCellCompact>
+                                                    <TableCellCompact className="whitespace-normal break-words text-[9px] leading-snug">{row.remark || "-"}</TableCellCompact>
+                                                    <TableCellCompact className="border-l border-blue-300 text-right text-[9px] font-black leading-snug text-slate-900">{row.price ? row.price.toLocaleString("id-ID") : "-"}</TableCellCompact>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </ReportTable>
+                                </div>
+                            </Slide>
+                        )),
+                        <Slide key="segment-overview" eyebrow={`Slide ${segmentSlide} - Price Analysis Overview`} title="Competitor Tire Price Analysis Overview">
                             <div className="space-y-3">
                                 <ReportTable>
                                     <thead><tr><TableHeadCell>Segmen</TableHeadCell><TableHeadCell>Price Range</TableHeadCell><TableHeadCell>Brand Dominan</TableHeadCell><TableHeadCell>Ukuran Umum</TableHeadCell><TableHeadCell>Data</TableHeadCell></tr></thead>
@@ -1187,7 +1259,7 @@ export function MonthlyReportTab() {
                                 <div className="rounded-lg border-l-4 border-[#f97316] bg-white px-4 py-3 text-sm font-semibold leading-relaxed text-slate-800 shadow-sm">Bridgestone & Goodyear dominasi premium, sedangkan Maxam, Aeolus, dan Tiberplus mengisi mid-tier sebagai opsi substitusi harga dan supply.</div>
                             </div>
                         </Slide>,
-                        <Slide key="market-positioning" eyebrow="Slide 4 - Market Positioning" title="Data Competitor Price">
+                        <Slide key="market-positioning" eyebrow={`Slide ${marketSlide} - Market Positioning`} title="Data Competitor Price">
                             <div className="grid h-[calc(100%-88px)] grid-cols-[1.1fr_0.9fr] gap-6">
                                 <InsightList items={marketPositioningInsights} tone="orange" />
                                 <div className="rounded-lg border bg-white p-4 shadow-sm">
@@ -1197,7 +1269,7 @@ export function MonthlyReportTab() {
                             </div>
                         </Slide>,
                         ...FOCUS_SIZES.map((size, offset) => (
-                            <Slide key={`median-${size}`} eyebrow={`Slide ${5 + offset} - Median Price ${size}`} title={`Median Price ${size}`}>
+                            <Slide key={`median-${size}`} eyebrow={`Slide ${medianSlideStart + offset} - Median Price ${size}`} title={`Median Price ${size}`}>
                                 <div className="grid h-[calc(100%-88px)] grid-cols-[0.94fr_1.06fr] gap-5">
                                     <div className="flex h-full flex-col rounded-lg border bg-white p-4 shadow-sm">
                                         <div className="mb-2 flex items-center justify-between gap-3">
@@ -1225,7 +1297,7 @@ export function MonthlyReportTab() {
                             const brandTrend = report.monthlyBrandTrendBySize[size]
                             const brandStats = report.monthlyBrandTrendStatsBySize[size]
                             return (
-                                <Slide key={`matrix-${size}`} eyebrow={`Slide ${8 + offset} - Customer Supplier ${size}`} title={`Customer Supplier ${size}`}>
+                                <Slide key={`matrix-${size}`} eyebrow={`Slide ${matrixSlideStart + offset} - Customer Supplier ${size}`} title={`Customer Supplier ${size}`}>
                                     <div className="grid h-[calc(100%-88px)] grid-rows-[170px_1fr] gap-4 overflow-hidden">
                                         <div className="min-h-0 overflow-hidden">
                                             <div className="mb-2 flex items-center justify-between">
@@ -1239,7 +1311,7 @@ export function MonthlyReportTab() {
                                 </Slide>
                             )
                         }),
-                        <Slide key="supplier-distribution" eyebrow="Slide 11 - Supplier Distribution" title="Supplier Supply Mapping">
+                        <Slide key="supplier-distribution" eyebrow={`Slide ${supplierSlide} - Supplier Distribution`} title="Supplier Supply Mapping">
                             <div className="h-[calc(100%-88px)] rounded-lg border bg-white p-5 shadow-sm">
                                 <div className="mb-4 flex items-start justify-between gap-4">
                                     <div>
@@ -1254,7 +1326,7 @@ export function MonthlyReportTab() {
                             </div>
                         </Slide>,
                         ...activityTablePages.map((rows, pageIndex) => (
-                            <Slide key={`activity-table-${pageIndex}`} eyebrow={`Slide 12.${pageIndex + 1} - Competitor Activity`} title="Competitor Activity Detail">
+                            <Slide key={`activity-table-${pageIndex}`} eyebrow={`Slide ${activitySlide}.${pageIndex + 1} - Competitor Activity`} title="Competitor Activity Detail">
                                 <div className="h-[calc(100%-88px)] overflow-hidden rounded-lg border bg-white p-3 shadow-sm">
                                     <div className="mb-2 flex items-center justify-between gap-3">
                                         <p className="text-sm font-black text-slate-900">Data Detail Competitor Activity</p>
@@ -1265,7 +1337,7 @@ export function MonthlyReportTab() {
                             </Slide>
                         )),
                         ...activityChartPages.map((page, pageIndex) => (
-                            <Slide key={`activity-chart-${pageIndex}`} eyebrow={`Slide 12C.${pageIndex + 1} - Competitor Activity`} title="Competitor Activity Charts">
+                            <Slide key={`activity-chart-${pageIndex}`} eyebrow={`Slide ${activityChartSlide}.${pageIndex + 1} - Competitor Activity`} title="Competitor Activity Charts">
                                 <div className="grid h-[calc(100%-88px)] grid-cols-2 gap-4">
                                     <div className="flex min-h-0 flex-col rounded-lg border bg-white p-3 shadow-sm"><p className="mb-2 text-sm font-black text-slate-900">Grafik Jenis Aktivitas Competitor</p><div className="min-h-0 flex-1"><ResponsiveContainer width="100%" height="100%"><BarChart data={page.activityTypes.map((item) => ({ ...item, label: shortLabel(item.name, 26) }))} layout="vertical" margin={{ top: 8, right: 28, left: 8, bottom: 4 }}><CartesianGrid strokeDasharray="3 3" horizontal={false} /><XAxis type="number" allowDecimals={false} tick={{ fontSize: 10 }} /><YAxis type="category" dataKey="label" width={172} tick={{ fontSize: 10 }} /><Tooltip /><Bar dataKey="value" radius={[0, 6, 6, 0]} fill="#0f4c81"><LabelList dataKey="value" position="right" style={{ fontSize: 11, fontWeight: 700 }} /></Bar></BarChart></ResponsiveContainer></div></div>
                                     <div className="flex min-h-0 flex-col rounded-lg border bg-white p-3 shadow-sm"><p className="mb-2 text-sm font-black text-slate-900">Grafik Kompetitor</p><div className="min-h-0 flex-1"><ResponsiveContainer width="100%" height="100%"><BarChart data={page.competitors.map((item) => ({ ...item, label: shortLabel(item.name, 26) }))} layout="vertical" margin={{ top: 8, right: 28, left: 8, bottom: 4 }}><CartesianGrid strokeDasharray="3 3" horizontal={false} /><XAxis type="number" allowDecimals={false} tick={{ fontSize: 10 }} /><YAxis type="category" dataKey="label" width={172} tick={{ fontSize: 10 }} /><Tooltip /><Bar dataKey="value" radius={[0, 6, 6, 0]} fill="#f97316"><LabelList dataKey="value" position="right" style={{ fontSize: 11, fontWeight: 700 }} /></Bar></BarChart></ResponsiveContainer></div></div>
@@ -1273,7 +1345,7 @@ export function MonthlyReportTab() {
                             </Slide>
                         )),
                         ...lostSaleTablePages.map((rows, pageIndex) => (
-                            <Slide key={`lost-sale-table-${pageIndex}`} eyebrow={`Slide 13.${pageIndex + 1} - Lost Sale`} title="Lost Sale Detail">
+                            <Slide key={`lost-sale-table-${pageIndex}`} eyebrow={`Slide ${lostSaleSlide}.${pageIndex + 1} - Lost Sale`} title="Lost Sale Detail">
                                 <div className="h-[calc(100%-88px)] overflow-hidden rounded-lg border bg-white p-3 shadow-sm">
                                     <div className="mb-2 flex items-center justify-between gap-3"><div><p className="text-sm font-black text-slate-900">Data Detail Lost Sale</p><p className="text-[10px] text-slate-500">Data terbaru di periode {monthLabel(month)} dengan detail produk, penyebab, dan action plan.</p></div><Badge variant="outline" className="text-[10px]">Page {pageIndex + 1} / {lostSaleTablePages.length}</Badge></div>
                                     <ReportTable><colgroup><col className="w-[9%]" /><col className="w-[9%]" /><col className="w-[14%]" /><col className="w-[18%]" /><col className="w-[13%]" /><col className="w-[17%]" /><col className="w-[20%]" /></colgroup><thead><tr><TableHeadCell>Tanggal</TableHeadCell><TableHeadCell>BC</TableHeadCell><TableHeadCell>Customer</TableHeadCell><TableHeadCell>Detail Produk</TableHeadCell><TableHeadCell>Penyebab</TableHeadCell><TableHeadCell>Remark</TableHeadCell><TableHeadCell>Action Plan</TableHeadCell></tr></thead><tbody>{rows.map((row, index) => <tr key={`${row.customer}-${row.productDetail}-${pageIndex}-${index}`}><TableCellCompact className="break-words text-[10px] leading-snug">{formatDateLabel(row.offeringDate)}</TableCellCompact><TableCellCompact className="break-words text-[10px] leading-snug">{row.consultant || "Unknown"}</TableCellCompact><TableCellCompact className="break-words text-[10px] font-bold leading-snug">{row.customer || "-"}</TableCellCompact><TableCellCompact className="whitespace-normal break-words text-[10px] leading-snug">{row.productDetail || "-"}</TableCellCompact><TableCellCompact className="break-words text-[10px] font-semibold leading-snug text-red-700">{row.reason || "-"}</TableCellCompact><TableCellCompact className="whitespace-normal break-words text-[10px] leading-snug">{row.remark || "-"}</TableCellCompact><TableCellCompact className="whitespace-normal break-words text-[10px] leading-snug">{row.actionPlan || "-"}</TableCellCompact></tr>)}</tbody></ReportTable>
@@ -1281,11 +1353,11 @@ export function MonthlyReportTab() {
                             </Slide>
                         )),
                         ...lostSaleChartPages.map((page, pageIndex) => (
-                            <Slide key={`lost-sale-chart-${pageIndex}`} eyebrow={`Slide 13C.${pageIndex + 1} - Lost Sale`} title="Lost Sale Charts & Follow Up">
+                            <Slide key={`lost-sale-chart-${pageIndex}`} eyebrow={`Slide ${lostSaleChartSlide}.${pageIndex + 1} - Lost Sale`} title="Lost Sale Charts & Follow Up">
                                 <div className="grid h-[calc(100%-88px)] grid-cols-[1fr_1fr_0.72fr] gap-4"><div className="flex min-h-0 flex-col rounded-lg border bg-white p-3 shadow-sm"><p className="mb-2 text-sm font-black text-slate-900">Grafik Penyebab Lost Sale</p><div className="min-h-0 flex-1"><ResponsiveContainer width="100%" height="100%"><BarChart data={page.reasons.map((item) => ({ ...item, label: shortLabel(item.name, 24) }))} layout="vertical" margin={{ top: 8, right: 28, left: 8, bottom: 4 }}><CartesianGrid strokeDasharray="3 3" horizontal={false} /><XAxis type="number" allowDecimals={false} tick={{ fontSize: 10 }} /><YAxis type="category" dataKey="label" width={148} tick={{ fontSize: 10 }} /><Tooltip /><Bar dataKey="value" radius={[0, 6, 6, 0]} fill="#dc2626"><LabelList dataKey="value" position="right" style={{ fontSize: 11, fontWeight: 700 }} /></Bar></BarChart></ResponsiveContainer></div></div><div className="flex min-h-0 flex-col rounded-lg border bg-white p-3 shadow-sm"><p className="mb-2 text-sm font-black text-slate-900">Grafik Customer Lost Sale</p><div className="min-h-0 flex-1"><ResponsiveContainer width="100%" height="100%"><BarChart data={page.customers.map((item) => ({ ...item, label: shortLabel(item.name, 24) }))} layout="vertical" margin={{ top: 8, right: 28, left: 8, bottom: 4 }}><CartesianGrid strokeDasharray="3 3" horizontal={false} /><XAxis type="number" allowDecimals={false} tick={{ fontSize: 10 }} /><YAxis type="category" dataKey="label" width={148} tick={{ fontSize: 10 }} /><Tooltip /><Bar dataKey="value" radius={[0, 6, 6, 0]} fill="#0f4c81"><LabelList dataKey="value" position="right" style={{ fontSize: 11, fontWeight: 700 }} /></Bar></BarChart></ResponsiveContainer></div></div><div className="rounded-lg border border-orange-100 bg-orange-50 p-3 shadow-sm"><p className="text-sm font-black text-orange-900">Priority Follow Up</p><div className="mt-2 space-y-2">{page.actions.map((item, index) => <div key={`${item}-${pageIndex}-${index}`} className="rounded-md bg-white/85 p-2 text-[10px] font-semibold leading-snug text-slate-700 shadow-sm"><span className="mr-1 font-black text-orange-700">{(pageIndex * 4) + index + 1}.</span>{item}</div>)}</div></div></div>
                             </Slide>
                         )),
-                        <Slide key="thanks" eyebrow="Slide 14 - Closing" title="Thank You / Closing">
+                        <Slide key="thanks" eyebrow={`Slide ${closingSlide} - Closing`} title="Thank You / Closing">
                             <div className="flex h-[calc(100%-88px)] flex-col items-center justify-center rounded-lg bg-[#0f4c81] text-center text-white">
                                 <Image src="/cp_logo_alpha.png" alt="Chitra Paratama" width={190} height={80} className="mb-8 h-20 w-auto rounded bg-white/95 p-3" />
                                 <p className="text-7xl font-black">Thank You!</p>
