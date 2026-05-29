@@ -4,8 +4,8 @@ import { useEffect, useState, useTransition } from "react"
 import { getSlowMovingDashboardData, SlowMovingDashboardResult, generateSlowMovingYoYInsight, getSlowMovingFilters } from "@/app/actions/slow-moving-dashboard"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, ComposedChart, Area, Cell, PieChart, Pie, LabelList } from "recharts"
-import { Loader2, TrendingUp, Package, Users, BadgeDollarSign, Sparkles, Bot, RefreshCw } from "lucide-react"
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Line, ComposedChart, Cell, PieChart, Pie, LabelList } from "recharts"
+import { Loader2, TrendingUp, Package, Users, BadgeDollarSign, Sparkles, Bot } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 const formatCurrency = (value: number) => {
@@ -29,6 +29,24 @@ const formatCompactCurrency = (value: number) => {
         currency: "IDR",
         maximumFractionDigits: 1
     }).format(value)
+}
+
+const formatRupiahAxis = (value: number) => {
+    const absoluteValue = Math.abs(value)
+    const formatter = new Intl.NumberFormat("id-ID", {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 1,
+    })
+
+    if (absoluteValue >= 1_000_000_000) {
+        return `Rp ${formatter.format(value / 1_000_000_000)} Miliar`
+    }
+
+    if (absoluteValue >= 1_000_000) {
+        return `Rp ${formatter.format(value / 1_000_000)} Juta`
+    }
+
+    return formatCurrency(value)
 }
 
 const formatCompactQty = (value: number) => {
@@ -107,7 +125,7 @@ export function SlowMovingDashboardClient() {
             } else {
                 setInsight("<p class='text-red-500'>Gagal memuat insight dari AI: " + (res.error || "Unknown Error") + "</p>")
             }
-        } catch (error) {
+        } catch {
             setInsight("<p class='text-red-500'>Terjadi kesalahan saat memuat insight.</p>")
         } finally {
             setIsGeneratingInsight(false)
@@ -215,7 +233,7 @@ export function SlowMovingDashboardClient() {
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <Card className="bg-gradient-to-br from-blue-50 to-blue-100/50 border-blue-200">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium text-blue-900">Total Amount Sell Out Slow Moving</CardTitle>
+                        <CardTitle className="text-sm font-medium text-blue-900">Total Revenue Slow Moving</CardTitle>
                         <div className="rounded-full bg-blue-200 p-2"><BadgeDollarSign className="h-4 w-4 text-blue-700" /></div>
                     </CardHeader>
                     <CardContent>
@@ -261,22 +279,39 @@ export function SlowMovingDashboardClient() {
                 <Card className="col-span-2 shadow-sm border-slate-200">
                     <CardHeader>
                         <CardTitle>{trendTitle}</CardTitle>
-                        <CardDescription>Perbandingan Total Amount Sell Out Slow Moving (Bar) dan Kuantitas Terjual (Line) antar tahun</CardDescription>
+                        <CardDescription>Perbandingan Total Revenue Slow Moving (Bar) dan Kuantitas Terjual (Line) antar tahun</CardDescription>
                     </CardHeader>
                     <CardContent className="h-[400px]">
                         <ResponsiveContainer width="100%" height="100%">
-                            <ComposedChart data={trendData} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                            <ComposedChart data={trendData} margin={{ top: 20, right: 88, bottom: 20, left: 20 }}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                                 <XAxis dataKey="month" tickFormatter={(v) => {
                                     const m = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Ags", "Sep", "Okt", "Nov", "Des"]
                                     return m[parseInt(v)-1] || v
                                 }} tick={{ fill: '#64748b' }} tickLine={false} axisLine={{ stroke: '#cbd5e1' }} />
                                 <YAxis yAxisId="left" orientation="left" tickFormatter={(value) => formatNumber(value)} tick={{ fill: '#64748b' }} axisLine={false} tickLine={false} />
-                                <YAxis yAxisId="right" orientation="right" tickFormatter={(value) => `Rp${(value / 1000000).toFixed(0)}M`} tick={{ fill: '#64748b' }} axisLine={false} tickLine={false} />
+                                <YAxis
+                                    yAxisId="right"
+                                    orientation="right"
+                                    tickFormatter={formatRupiahAxis}
+                                    tick={{ fill: '#1e3a8a', fontSize: 12, fontWeight: 600 }}
+                                    width={118}
+                                    axisLine={{ stroke: '#bfdbfe' }}
+                                    tickLine={false}
+                                    label={{
+                                        value: 'Total Revenue',
+                                        angle: 90,
+                                        position: 'insideRight',
+                                        offset: -72,
+                                        fill: '#1e3a8a',
+                                        fontSize: 12,
+                                        fontWeight: 700,
+                                    }}
+                                />
                                 <Tooltip
                                     contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                                     formatter={(value: number, name: string) => {
-                                        if (name.startsWith("Total Amount")) return [formatCurrency(value), name]
+                                        if (name.startsWith("Total Revenue")) return [formatCurrency(value), name]
                                         return [formatNumber(value), name]
                                     }}
                                     labelFormatter={(label) => {
@@ -290,7 +325,7 @@ export function SlowMovingDashboardClient() {
                                         key={`bar-rev-${year}`} 
                                         yAxisId="right" 
                                         dataKey={`amount_${year}`} 
-                                        name={`Total Amount ${year}`} 
+                                        name={`Total Revenue ${year}`} 
                                         fill={BAR_COLORS_YOY[index % BAR_COLORS_YOY.length]} 
                                         radius={[4, 4, 0, 0]}
                                         maxBarSize={40}
@@ -372,7 +407,7 @@ export function SlowMovingDashboardClient() {
                 {/* Top Salesman Chart */}
                 <Card className="shadow-sm border-slate-200">
                     <CardHeader>
-                        <CardTitle>Top Salesman (By Total Amount)</CardTitle>
+                        <CardTitle>Top Salesman (By Total Revenue)</CardTitle>
                         <CardDescription>Kontribusi tertinggi dalam menjual produk slow moving</CardDescription>
                     </CardHeader>
                     <CardContent className="h-[350px]">
@@ -386,7 +421,7 @@ export function SlowMovingDashboardClient() {
                                     contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                                     formatter={(value: number) => formatCurrency(value)}
                                 />
-                                <Bar dataKey="amount" name="Total Amount Sell Out Slow Moving" radius={[0, 4, 4, 0]}>
+                                <Bar dataKey="amount" name="Total Revenue Slow Moving" radius={[0, 4, 4, 0]}>
                                     <LabelList dataKey="amount" position="right" formatter={formatCompactCurrency} style={{ fontSize: '10px', fill: '#64748b' }} />
                                     {(data.topSalesman || []).map((entry, index) => (
                                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -400,7 +435,7 @@ export function SlowMovingDashboardClient() {
                 {/* Top Customers Chart */}
                 <Card className="shadow-sm border-slate-200">
                     <CardHeader>
-                        <CardTitle>Top Pelanggan (By Total Amount)</CardTitle>
+                        <CardTitle>Top Pelanggan (By Total Revenue)</CardTitle>
                         <CardDescription>Pelanggan yang paling banyak menyerap stok slow moving</CardDescription>
                     </CardHeader>
                     <CardContent className="h-[350px]">
@@ -438,7 +473,7 @@ export function SlowMovingDashboardClient() {
                 {/* Top Category Chart */}
                 <Card className="shadow-sm border-slate-200 lg:col-span-1">
                     <CardHeader>
-                        <CardTitle>Top Kategori Produk (By Total Amount)</CardTitle>
+                        <CardTitle>Top Kategori Produk (By Total Revenue)</CardTitle>
                         <CardDescription>Kategori yang paling banyak menyumbang revenue</CardDescription>
                     </CardHeader>
                     <CardContent className="h-[350px]">
@@ -460,7 +495,7 @@ export function SlowMovingDashboardClient() {
                                     contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                                     formatter={(value: number) => formatCurrency(value)}
                                 />
-                                <Bar dataKey="amount" name="Total Amount Sell Out Slow Moving" radius={[4, 4, 0, 0]} maxBarSize={80}>
+                                <Bar dataKey="amount" name="Total Revenue Slow Moving" radius={[4, 4, 0, 0]} maxBarSize={80}>
                                     <LabelList dataKey="amount" position="top" formatter={formatCompactCurrency} style={{ fontSize: '10px', fill: '#64748b' }} />
                                     {(data.topCategories || []).map((entry, index) => (
                                         <Cell key={`cell-${index}`} fill={COLORS[(index + 2) % COLORS.length]} />
@@ -474,7 +509,7 @@ export function SlowMovingDashboardClient() {
                 {/* Top Tire Size Chart */}
                 <Card className="shadow-sm border-slate-200 lg:col-span-1">
                     <CardHeader>
-                        <CardTitle>Top Tire Size (By Total Amount)</CardTitle>
+                        <CardTitle>Top Tire Size (By Total Revenue)</CardTitle>
                         <CardDescription>Ukuran ban yang paling laku di slow moving</CardDescription>
                     </CardHeader>
                     <CardContent className="h-[350px]">
@@ -496,7 +531,7 @@ export function SlowMovingDashboardClient() {
                                     contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                                     formatter={(value: number) => formatCurrency(value)}
                                 />
-                                <Bar dataKey="amount" name="Total Amount Sell Out Slow Moving" radius={[4, 4, 0, 0]} maxBarSize={80}>
+                                <Bar dataKey="amount" name="Total Revenue Slow Moving" radius={[4, 4, 0, 0]} maxBarSize={80}>
                                     <LabelList dataKey="amount" position="top" formatter={formatCompactCurrency} style={{ fontSize: '10px', fill: '#64748b' }} />
                                     {(data.topTireSizes || []).map((entry, index) => (
                                         <Cell key={`cell-${index}`} fill={COLORS[(index + 5) % COLORS.length]} />

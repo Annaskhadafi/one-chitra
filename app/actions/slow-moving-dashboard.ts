@@ -4,6 +4,8 @@ import { db } from "@/db"
 import { getAuthenticatedSession } from "@/lib/rbac"
 import { sql } from "drizzle-orm"
 
+const REVENUE_DOC_CURR_AMOUNT = "COALESCE(NULLIF(revenue_in_doc_curr, 'NaN'::float8), 0)"
+
 export type TrendData = {
     period: string
     qty: number
@@ -99,7 +101,7 @@ export async function getSlowMovingDashboardData(
         SELECT 
             TO_CHAR(billing_date, 'YYYY') AS period, 
             SUM(qty) AS total_qty, 
-            SUM(revenue_in_doc_curr) AS total_amount
+            SUM(${REVENUE_DOC_CURR_AMOUNT}) AS total_amount
         FROM sales_revenue_sap 
         WHERE ${baseWhere} ${filtersCondition}
         GROUP BY TO_CHAR(billing_date, 'YYYY')
@@ -111,7 +113,7 @@ export async function getSlowMovingDashboardData(
         SELECT 
             TO_CHAR(billing_date, 'YYYY-MM') AS period, 
             SUM(qty) AS total_qty, 
-            SUM(revenue_in_doc_curr) AS total_amount
+            SUM(${REVENUE_DOC_CURR_AMOUNT}) AS total_amount
         FROM sales_revenue_sap 
         WHERE ${baseWhere} ${filtersCondition} ${yearCondition}
         GROUP BY TO_CHAR(billing_date, 'YYYY-MM')
@@ -123,11 +125,11 @@ export async function getSlowMovingDashboardData(
         SELECT 
             COALESCE(salesman, 'UNKNOWN') AS salesman, 
             SUM(qty) AS total_qty, 
-            SUM(revenue_in_doc_curr) AS total_amount
+            SUM(${REVENUE_DOC_CURR_AMOUNT}) AS total_amount
         FROM sales_revenue_sap 
         WHERE ${baseWhere} ${filtersCondition} ${yearCondition}
         GROUP BY COALESCE(salesman, 'UNKNOWN')
-        ORDER BY SUM(revenue_in_doc_curr) DESC
+        ORDER BY SUM(${REVENUE_DOC_CURR_AMOUNT}) DESC
         LIMIT 15
     `))
 
@@ -136,11 +138,11 @@ export async function getSlowMovingDashboardData(
         SELECT 
             COALESCE(customer_name, 'UNKNOWN') AS customer_name, 
             SUM(qty) AS total_qty, 
-            SUM(revenue_in_doc_curr) AS total_amount
+            SUM(${REVENUE_DOC_CURR_AMOUNT}) AS total_amount
         FROM sales_revenue_sap 
         WHERE ${baseWhere} ${filtersCondition} ${yearCondition}
         GROUP BY COALESCE(customer_name, 'UNKNOWN')
-        ORDER BY SUM(revenue_in_doc_curr) DESC
+        ORDER BY SUM(${REVENUE_DOC_CURR_AMOUNT}) DESC
         LIMIT 10
     `))
 
@@ -148,7 +150,7 @@ export async function getSlowMovingDashboardData(
     const summaryResult = await db.execute(sql.raw(`
         SELECT 
             SUM(qty) AS total_qty, 
-            SUM(revenue_in_doc_curr) AS total_amount
+            SUM(${REVENUE_DOC_CURR_AMOUNT}) AS total_amount
         FROM sales_revenue_sap 
         WHERE ${baseWhere} ${filtersCondition} ${yearCondition}
     `))
@@ -158,11 +160,11 @@ export async function getSlowMovingDashboardData(
         SELECT 
             COALESCE(mat_grp_desc, 'UNKNOWN') AS category, 
             SUM(qty) AS total_qty, 
-            SUM(revenue_in_doc_curr) AS total_amount
+            SUM(${REVENUE_DOC_CURR_AMOUNT}) AS total_amount
         FROM sales_revenue_sap 
         WHERE ${baseWhere} ${filtersCondition} ${yearCondition}
         GROUP BY COALESCE(mat_grp_desc, 'UNKNOWN')
-        ORDER BY SUM(revenue_in_doc_curr) DESC
+        ORDER BY SUM(${REVENUE_DOC_CURR_AMOUNT}) DESC
         LIMIT 10
     `))
 
@@ -171,11 +173,11 @@ export async function getSlowMovingDashboardData(
         SELECT 
             ${TIRE_SIZE_EXTRACTOR} AS tireSize, 
             SUM(qty) AS total_qty, 
-            SUM(revenue_in_doc_curr) AS total_amount
+            SUM(${REVENUE_DOC_CURR_AMOUNT}) AS total_amount
         FROM sales_revenue_sap 
         WHERE ${baseWhere} ${filtersCondition} ${yearCondition}
         GROUP BY ${TIRE_SIZE_EXTRACTOR}
-        ORDER BY SUM(revenue_in_doc_curr) DESC
+        ORDER BY SUM(${REVENUE_DOC_CURR_AMOUNT}) DESC
         LIMIT 10
     `))
 
