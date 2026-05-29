@@ -2,7 +2,7 @@
 
 import { db } from "@/db"
 import { salesRevenueSap, zmc9StockSap } from "@/db/schema/sap"
-import { desc, sql, eq, and, inArray, ne } from "drizzle-orm"
+import { desc, sql, and, inArray, ne } from "drizzle-orm"
 
 export interface TopCustomerFilter {
   year?: string;
@@ -25,6 +25,15 @@ export async function getTopCustomersThisYear(filter?: TopCustomerFilter) {
 
   const whereCondition = and(...conditions)
 
+  const totalRevenueData = await db
+    .select({
+      totalRevenueAll: sql<number>`coalesce(sum(${salesRevenueSap.revenueInDocCurr}), 0)`.mapWith(Number),
+    })
+    .from(salesRevenueSap)
+    .where(whereCondition)
+
+  const totalRevenueAll = Number(totalRevenueData[0]?.totalRevenueAll) || 0
+
   // 1. Get Top 15 Customers by Revenue
   const topCustomersData = await db
     .select({
@@ -38,7 +47,7 @@ export async function getTopCustomersThisYear(filter?: TopCustomerFilter) {
     .limit(15)
 
   if (!topCustomersData || topCustomersData.length === 0) {
-    return { customers: [], topProducts: [] }
+    return { customers: [], topProducts: [], totalRevenueAll }
   }
 
   const customerNames = topCustomersData.map((c) => c.customerName).filter(Boolean) as string[]
@@ -142,5 +151,5 @@ export async function getTopCustomersThisYear(filter?: TopCustomerFilter) {
     .sort((a, b) => b.itemRevenue - a.itemRevenue)
     .slice(0, 15)
 
-  return { customers: result, topProducts }
+  return { customers: result, topProducts, totalRevenueAll }
 }
