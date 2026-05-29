@@ -496,7 +496,7 @@ function MetricTile({ icon: Icon, label, value, note }: { icon: typeof Trophy; l
 
 function Slide({ children, eyebrow, title }: { children: React.ReactNode; eyebrow: string; title: string }) {
     return (
-        <section className="monthly-report-slide relative mx-auto h-[760px] w-full max-w-[1350px] overflow-hidden rounded-lg border border-slate-200 bg-[#f8fafc] p-8 shadow-sm print:rounded-none print:border-0 print:shadow-none">
+        <section className="monthly-report-slide relative h-[760px] w-full overflow-hidden rounded-lg border border-slate-200 bg-[#f8fafc] p-8 shadow-sm print:rounded-none print:border-0 print:shadow-none">
             <div className="absolute left-0 top-0 h-2 w-full bg-[#0f4c81]" />
             <div className="mb-5 flex items-center justify-between gap-4">
                 <div>
@@ -1097,7 +1097,7 @@ export function MonthlyReportTab() {
             ) : (
                 <div className="space-y-6">
                     {[
-                        <section key="cover" className="monthly-report-slide relative mx-auto h-[760px] w-full max-w-[1350px] overflow-hidden rounded-lg bg-[#f8fafc] shadow-sm print:rounded-none print:shadow-none">
+                        <section key="cover" className="monthly-report-slide relative h-[760px] w-full overflow-hidden rounded-lg bg-[#f8fafc] shadow-sm print:rounded-none print:shadow-none">
                             <div className="absolute inset-y-0 right-0 w-[38%] bg-[#0f4c81]" />
                             <div className="absolute left-0 top-0 h-2 w-full bg-[#0f4c81]" />
                             <div className="absolute bottom-0 left-0 h-2 w-full bg-emerald-300" />
@@ -1293,7 +1293,7 @@ export function MonthlyReportTab() {
                             </div>
                         </Slide>,
                     ].map((slide, index) => (
-                        <div key={slide.key} ref={(node) => { slideRefs.current[index] = node }}>
+                        <div key={slide.key} ref={(node) => { slideRefs.current[index] = node }} className="mx-auto w-full max-w-[1350px]">
                             {slide}
                         </div>
                     ))}
