@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import Papa from "papaparse"
 import { format } from "date-fns"
-import { Bar, BarChart, CartesianGrid, Cell, LabelList, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
+import { Bar, BarChart, CartesianGrid, Cell, LabelList, Legend, Line, LineChart, Pie, PieChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 import { AlertTriangle, CalendarDays, Database, Download, RefreshCw, Search, Tag, Truck, Wallet } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -14,6 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { ScoreCard } from "@/components/score-card"
+import { getMonthlyBrandTrendAverage, getMonthlyBrandTrendStats } from "./price-competitor-chart-utils"
 import { cleanText, normalizeBrand, normalizeNames } from "./utils"
 
 const PRICE_SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTFCYrDPugIyxFQMQaUS2e11OY8NIGSOqd-jz5jznHSMGORjl0SSFEFNA2p0Iw_r8FHz3PGJ78IncXk/pub?output=csv&gid=1444121083"
@@ -281,7 +282,17 @@ function getSeriesTrend(data: Record<string, string | number | null>[], key: str
     }
 }
 
-function TrendBadge({ label, trend, color }: { label: string; trend: ReturnType<typeof getSeriesTrend>; color: string }) {
+function TrendBadge({
+    label,
+    trend,
+    color,
+    priceStats,
+}: {
+    label: string
+    trend: ReturnType<typeof getSeriesTrend>
+    color: string
+    priceStats?: ReturnType<typeof getMonthlyBrandTrendStats>
+}) {
     const arrow = trend.direction === "up" ? "↑" : trend.direction === "down" ? "↓" : "→"
     const tone = trend.direction === "up"
         ? "bg-red-50 text-red-700 border-red-200"
@@ -298,6 +309,22 @@ function TrendBadge({ label, trend, color }: { label: string; trend: ReturnType<
             <div className="mt-1 text-sm">
                 {arrow} {Math.abs(trend.delta).toLocaleString("id-ID", { maximumFractionDigits: 1 })}%
             </div>
+            {priceStats && priceStats.average > 0 && (
+                <div className="mt-2 grid grid-cols-3 gap-1 border-t pt-2 text-[10px] leading-tight text-slate-600">
+                    <div>
+                        <p className="font-medium text-slate-500">Min</p>
+                        <p className="font-semibold text-slate-800">{formatShortNumber(priceStats.min)}</p>
+                    </div>
+                    <div>
+                        <p className="font-medium text-slate-500">Avg</p>
+                        <p className="font-semibold text-slate-800">{formatShortNumber(priceStats.average)}</p>
+                    </div>
+                    <div>
+                        <p className="font-medium text-slate-500">Max</p>
+                        <p className="font-semibold text-slate-800">{formatShortNumber(priceStats.max)}</p>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }
@@ -853,7 +880,10 @@ export function PriceCompetitorDashboard() {
             </Card>
 
             <div className="grid gap-4">
-                {monthlyBrandTrends.map((trend) => (
+                {monthlyBrandTrends.map((trend) => {
+                    const averagePrice = getMonthlyBrandTrendAverage(trend.data, trend.brands)
+
+                    return (
                     <Card key={trend.size}>
                         <CardHeader>
                             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -870,6 +900,7 @@ export function PriceCompetitorDashboard() {
                                             label={brand}
                                             trend={getSeriesTrend(trend.data, brand)}
                                             color={LINE_COLORS[index % LINE_COLORS.length]}
+                                            priceStats={getMonthlyBrandTrendStats(trend.data, brand)}
                                         />
                                     ))}
                                 </div>
@@ -883,6 +914,22 @@ export function PriceCompetitorDashboard() {
                                     <YAxis tickFormatter={formatMoney} tick={{ fontSize: 11 }} />
                                     <Tooltip formatter={(value) => formatMoney(Number(value))} />
                                     <Legend verticalAlign="top" height={32} wrapperStyle={{ fontSize: 11 }} />
+                                    {averagePrice > 0 && (
+                                        <ReferenceLine
+                                            y={averagePrice}
+                                            stroke="#334155"
+                                            strokeDasharray="6 4"
+                                            strokeWidth={2}
+                                            ifOverflow="extendDomain"
+                                            label={{
+                                                value: `Average ${formatShortNumber(averagePrice)}`,
+                                                position: "insideTopRight",
+                                                fill: "#334155",
+                                                fontSize: 11,
+                                                fontWeight: 600,
+                                            }}
+                                        />
+                                    )}
                                     {trend.brands.map((brand, index) => (
                                         <Line
                                             key={`${trend.size}-${brand}`}
@@ -900,7 +947,8 @@ export function PriceCompetitorDashboard() {
                             </ResponsiveContainer>
                         </CardContent>
                     </Card>
-                ))}
+                    )
+                })}
             </div>
         </div>
     )
