@@ -11,7 +11,6 @@ import {
     ClipboardList,
     Lock,
     Wrench,
-    IdCard,
     type LucideIcon
 } from "lucide-react"
 
@@ -40,6 +39,12 @@ export const navigationConfig: NavSection[] = [
                 title: "Dashboard",
                 url: "/dashboard",
                 icon: Home,
+                resource: "dashboard",
+            },
+            {
+                title: "Feature Map",
+                url: "/dashboard/feature-map",
+                icon: BarChart3,
                 resource: "dashboard",
             },
             {
