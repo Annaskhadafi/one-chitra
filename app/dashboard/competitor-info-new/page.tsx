@@ -2,6 +2,7 @@
 import { PriceCompetitorDashboard } from "./_components/price-competitor-dashboard"
 import { CompetitorActivityDashboard } from "./_components/activity-dashboard"
 import { LostSaleDashboard } from "./_components/lost-sale-dashboard"
+import { MonthlyReportTab } from "./_components/monthly-report-tab"
 import { PermissionGuard } from "@/components/permission-guard"
 
 export default function CompetitorInfoNewPage() {
@@ -16,10 +17,11 @@ export default function CompetitorInfoNewPage() {
                 </div>
 
                 <Tabs defaultValue="price" className="w-full">
-                    <TabsList className="grid w-full grid-cols-3 max-w-[580px] mb-4">
+                    <TabsList className="grid w-full grid-cols-4 max-w-[780px] mb-4">
                         <TabsTrigger value="price">Price Competitor</TabsTrigger>
                         <TabsTrigger value="activity">Competitor Activity</TabsTrigger>
                         <TabsTrigger value="lost-sale">Lost Sale</TabsTrigger>
+                        <TabsTrigger value="monthly-report">Monthly Report</TabsTrigger>
                     </TabsList>
                     <TabsContent value="price" className="mt-0">
                         <PriceCompetitorDashboard />
@@ -29,6 +31,9 @@ export default function CompetitorInfoNewPage() {
                     </TabsContent>
                     <TabsContent value="lost-sale" className="mt-0">
                         <LostSaleDashboard />
+                    </TabsContent>
+                    <TabsContent value="monthly-report" className="mt-0">
+                        <MonthlyReportTab />
                     </TabsContent>
                 </Tabs>
             </div>

@@ -9,8 +9,96 @@ import Papa from "papaparse"
 import { and, eq } from "drizzle-orm"
 import { type SQLiteTableWithColumns } from "drizzle-orm/sqlite-core"
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type InferInsertModel<T extends SQLiteTableWithColumns<any>> = T["$inferInsert"]
+
+type MonthlyReportInsightInput = {
+    monthLabel: string
+    priceCount: number
+    activityCount: number
+    lostSaleCount: number
+    medianPrice: string
+    topSizes: Array<{ name: string; value: number }>
+    topBrands: Array<{ name: string; value: number }>
+    topCompetitors: Array<{ name: string; value: number }>
+    topLostReasons: Array<{ name: string; value: number }>
+    lostCustomers: Array<{ name: string; value: number }>
+    activityHighlights: string[]
+}
+
+function buildFallbackMonthlyReportInsight(input: MonthlyReportInsightInput) {
+    const topBrand = input.topBrands[0]?.name || "brand competitor utama"
+    const topSize = input.topSizes[0]?.name || "size prioritas"
+    const topCompetitor = input.topCompetitors[0]?.name || "competitor utama"
+    const topLostReason = input.topLostReasons[0]?.name || "penyebab dominan"
+    const topLostCustomer = input.lostCustomers[0]?.name || "customer terdampak"
+
+    return [
+        `Bulan ${input.monthLabel} mencatat ${input.priceCount} price intelligence, ${input.activityCount} aktivitas competitor, dan ${input.lostSaleCount} lost sale. Median price terpantau ${input.medianPrice}.`,
+        `Fokus price competitor terbesar ada pada ${topSize} dan brand ${topBrand}. Pantau gap harga untuk size ini karena menjadi sinyal paling kuat untuk negosiasi dan proposal bundling.`,
+        `Aktivitas pasar paling sering terkait ${topCompetitor}. Hubungkan temuan aktivitas dengan customer update agar follow-up sales tidak hanya berbasis harga, tetapi juga timing, supply, dan response pasar.`,
+        `Lost sale paling banyak dipicu ${topLostReason}, terutama pada ${topLostCustomer}. Prioritas corrective action adalah validasi stok, alternatif brand, dan eskalasi harga sebelum opportunity bergerak ke vendor lain.`,
+    ]
+}
+
+export async function generateCompetitorMonthlyReportInsight(input: MonthlyReportInsightInput) {
+    const fallback = buildFallbackMonthlyReportInsight(input)
+
+    try {
+        const rawUrl = process.env.OLLAMA_URL || "http://localhost:11434"
+        const baseUrl = rawUrl.replace(/\/$/, "")
+        const endpoint = baseUrl.endsWith("/api/chat") ? baseUrl : `${baseUrl}/api/chat`
+        const ollamaModel = process.env.OLLAMA_MODEL || "kimi-k2.5:cloud"
+        const ollamaApiKey = process.env.OLLAMA_API_KEY || ""
+
+        const response = await fetch(endpoint, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                ...(ollamaApiKey ? { Authorization: `Bearer ${ollamaApiKey}` } : {}),
+            },
+            body: JSON.stringify({
+                model: ollamaModel,
+                stream: false,
+                messages: [
+                    {
+                        role: "system",
+                        content: [
+                            "Anda adalah analis sales operation untuk One Chitra.",
+                            "Buat interpretasi data bulanan competitor dalam Bahasa Indonesia yang ringkas, tajam, dan actionable.",
+                            "Output harus JSON valid: {\"insights\":[\"...\",\"...\",\"...\",\"...\"]}.",
+                            "Jangan gunakan markdown, jangan mengarang angka di luar data input, dan batasi setiap insight maksimal 28 kata.",
+                        ].join(" "),
+                    },
+                    {
+                        role: "user",
+                        content: JSON.stringify(input),
+                    },
+                ],
+            }),
+        })
+
+        if (!response.ok) {
+            return { success: false, insights: fallback, error: `AI service error ${response.status}` }
+        }
+
+        const data = await response.json()
+        const rawContent = String(data.message?.content || "").trim()
+        const jsonMatch = rawContent.match(/\{[\s\S]*\}/)
+        const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : rawContent) as { insights?: unknown }
+        const insights = Array.isArray(parsed.insights)
+            ? parsed.insights.map((item) => String(item).trim()).filter(Boolean).slice(0, 5)
+            : []
+
+        if (insights.length === 0) {
+            return { success: false, insights: fallback, error: "AI response kosong" }
+        }
+
+        return { success: true, insights }
+    } catch (error) {
+        console.error("Error generating competitor monthly report insight:", error)
+        return { success: false, insights: fallback, error: error instanceof Error ? error.message : "AI generation failed" }
+    }
+}
 
 // --- Price Competitor ---
 
@@ -83,7 +171,6 @@ export async function createCompetitorActivity(data: Record<string, unknown>) {
         if (!userId) return { success: false, error: "Unauthorized" }
 
         await db.insert(competitorActivities).values(
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             { ...(data as any), createdById: userId }
         )
         revalidatePath("/dashboard/competitor-info-new")
@@ -120,7 +207,6 @@ export async function createLostSale(data: Record<string, unknown>) {
         if (!userId) return { success: false, error: "Unauthorized" }
 
         await db.insert(lostSales).values(
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             { ...(data as any), createdById: userId }
         )
         revalidatePath("/dashboard/competitor-info-new")
