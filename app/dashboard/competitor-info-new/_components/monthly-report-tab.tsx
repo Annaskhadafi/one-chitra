@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Progress } from "@/components/ui/progress"
 import { cleanText, normalizeBrand, normalizeNames } from "./utils"
 
 const PRICE_SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTFCYrDPugIyxFQMQaUS2e11OY8NIGSOqd-jz5jznHSMGORjl0SSFEFNA2p0Iw_r8FHz3PGJ78IncXk/pub?output=csv&gid=1444121083"
@@ -20,6 +21,21 @@ const ACTIVITY_SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTFC
 const LOST_SALE_SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTFCYrDPugIyxFQMQaUS2e11OY8NIGSOqd-jz5jznHSMGORjl0SSFEFNA2p0Iw_r8FHz3PGJ78IncXk/pub?output=csv&gid=1550828239"
 const BAR_COLORS = ["#0f4c81", "#f97316", "#16a34a", "#7c3aed", "#dc2626", "#0891b2", "#ca8a04", "#be123c"]
 const FOCUS_SIZES = ["27.00R49", "24.00R35", "12.00R24"]
+const EXPORT_SLIDE_WIDTH = 1350
+const EXPORT_SLIDE_HEIGHT = 760
+const PDF_PAGE_WIDTH = 960
+const PDF_PAGE_HEIGHT = 540
+const EXPORT_SLIDE_STYLE: Partial<CSSStyleDeclaration> = {
+    width: `${EXPORT_SLIDE_WIDTH}px`,
+    height: `${EXPORT_SLIDE_HEIGHT}px`,
+    minWidth: `${EXPORT_SLIDE_WIDTH}px`,
+    maxWidth: "none",
+    margin: "0",
+    left: "0",
+    right: "auto",
+    transform: "none",
+    boxSizing: "border-box",
+}
 const SEGMENT_TEMPLATE = [
     { segment: "Extra Large", priceRange: "140-180 jt", brands: "Goodyear, Bridgestone", sizes: "27.00R49" },
     { segment: "Large", priceRange: "60-109 jt", brands: "Maxam, Bridgestone, Tiberplus", sizes: "24.00R35, 33.25R29" },
@@ -164,7 +180,14 @@ function formatMoney(value: number) {
 }
 
 function currentMonthKey() {
-    return "2026-02"
+    const today = new Date()
+    return format(new Date(today.getFullYear(), today.getMonth() - 1, 1), "yyyy-MM")
+}
+
+function waitForExportFrame() {
+    return new Promise<void>((resolve) => {
+        window.requestAnimationFrame(() => window.setTimeout(resolve, 0))
+    })
 }
 
 function monthLabel(monthKey: string) {
@@ -761,6 +784,7 @@ export function MonthlyReportTab() {
     const [lostSales, setLostSales] = useState<LostSaleRecord[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [isExporting, setIsExporting] = useState(false)
+    const [exportProgress, setExportProgress] = useState({ current: 0, total: 0, message: "" })
     const [isAiLoading, setIsAiLoading] = useState(false)
     const [error, setError] = useState("")
     const [aiInsights, setAiInsights] = useState<string[]>([])
@@ -930,27 +954,61 @@ export function MonthlyReportTab() {
 
     const exportPdf = async () => {
         setIsExporting(true)
+        setExportProgress({ current: 0, total: 0, message: "Menyiapkan export PDF..." })
         try {
-            const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([import("html2canvas"), import("jspdf")])
-            const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" })
+            const [{ toPng }, { jsPDF }] = await Promise.all([import("html-to-image"), import("jspdf")])
+            const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: [PDF_PAGE_WIDTH, PDF_PAGE_HEIGHT] })
             const width = pdf.internal.pageSize.getWidth()
             const height = pdf.internal.pageSize.getHeight()
             const slides = slideRefs.current.filter(Boolean) as HTMLElement[]
 
-            for (let index = 0; index < slides.length; index += 1) {
-                const canvas = await html2canvas(slides[index], { scale: 2, backgroundColor: "#f8fafc", useCORS: true })
-                const image = canvas.toDataURL("image/png")
-                if (index > 0) pdf.addPage("a4", "landscape")
-                pdf.addImage(image, "PNG", 0, 0, width, height)
+            if (!slides.length) {
+                toast.error("Tidak ada slide yang bisa diexport.")
+                return
             }
 
+            setExportProgress({ current: 0, total: slides.length, message: `Menyiapkan ${slides.length} slide...` })
+
+            for (let index = 0; index < slides.length; index += 1) {
+                setExportProgress({ current: index, total: slides.length, message: `Rendering slide ${index + 1} dari ${slides.length}...` })
+                slides[index].dataset.exportSlide = String(index)
+                let image: string
+                try {
+                    await waitForExportFrame()
+                    image = await toPng(slides[index], {
+                        width: EXPORT_SLIDE_WIDTH,
+                        height: EXPORT_SLIDE_HEIGHT,
+                        canvasWidth: EXPORT_SLIDE_WIDTH,
+                        canvasHeight: EXPORT_SLIDE_HEIGHT,
+                        pixelRatio: 1.5,
+                        backgroundColor: "#f8fafc",
+                        cacheBust: true,
+                        style: EXPORT_SLIDE_STYLE,
+                    })
+                    await waitForExportFrame()
+                } finally {
+                    delete slides[index].dataset.exportSlide
+                }
+                if (index > 0) pdf.addPage([PDF_PAGE_WIDTH, PDF_PAGE_HEIGHT], "landscape")
+                pdf.addImage(image, "PNG", 0, 0, width, height)
+                setExportProgress({ current: index + 1, total: slides.length, message: `Slide ${index + 1} dari ${slides.length} selesai.` })
+            }
+
+            setExportProgress({ current: slides.length, total: slides.length, message: "Membuat file PDF dan memulai download..." })
+            await waitForExportFrame()
             pdf.save(`competitor-monthly-report-${month}.pdf`)
+            setExportProgress({ current: slides.length, total: slides.length, message: "Download PDF dimulai." })
+            toast.success("PDF report berhasil dibuat.")
         } catch (caught) {
+            console.error("Export PDF gagal", caught)
             toast.error(caught instanceof Error ? caught.message : "Export PDF gagal")
         } finally {
             setIsExporting(false)
+            window.setTimeout(() => setExportProgress({ current: 0, total: 0, message: "" }), 2500)
         }
     }
+
+    const exportPercentage = exportProgress.total ? Math.round((exportProgress.current / exportProgress.total) * 100) : 0
 
     const marketPositioningInsights = [
         "Bridgestone VMDT dan Goodyear terbaca sebagai premium benchmark, terutama saat harga masuk range extra large.",
@@ -997,9 +1055,30 @@ export function MonthlyReportTab() {
                         </div>
                         <Button variant="outline" onClick={loadData} disabled={isLoading}><RefreshCw className="mr-2 h-4 w-4" />Refresh</Button>
                         <Button variant="outline" onClick={handleGenerateAi} disabled={isAiLoading || isLoading}><Bot className="mr-2 h-4 w-4" />Interpretasi AI</Button>
-                        <Button onClick={exportPdf} disabled={isExporting || isLoading}><Download className="mr-2 h-4 w-4" />Export PDF</Button>
+                        <Button onClick={exportPdf} disabled={isExporting || isLoading} className="min-w-[132px]">
+                            {isExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+                            {isExporting ? `${exportPercentage}%` : "Export PDF"}
+                        </Button>
                     </div>
                 </CardHeader>
+                {(isExporting || exportProgress.message) && (
+                    <CardContent className="pt-0">
+                        <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-blue-950">
+                            <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-sm">
+                                <div className="flex items-center gap-2 font-bold">
+                                    {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                                    <span>{exportProgress.message || "Menyiapkan export PDF..."}</span>
+                                </div>
+                                <span className="font-black tabular-nums">{exportPercentage}%</span>
+                            </div>
+                            <Progress value={exportPercentage} className="h-2 bg-blue-100 [&>div]:bg-[#0f4c81]" />
+                            <div className="mt-2 flex flex-wrap justify-between gap-2 text-[11px] font-semibold text-blue-800">
+                                <span>{exportProgress.total ? `${exportProgress.current} / ${exportProgress.total} slide selesai` : "Menghitung jumlah slide..."}</span>
+                                <span>Jangan tutup halaman sampai download dimulai.</span>
+                            </div>
+                        </div>
+                    </CardContent>
+                )}
                 {error && <CardContent><div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div></CardContent>}
                 {aiInsights.length > 0 && (
                     <CardContent className="pt-0">
@@ -1018,25 +1097,52 @@ export function MonthlyReportTab() {
             ) : (
                 <div className="space-y-6">
                     {[
-                        <Slide key="cover" eyebrow="Slide 1 - Cover" title="Monthly Competitor Dashboard - BIMA">
-                            <div className="grid h-[calc(100%-88px)] grid-cols-[1.08fr_0.92fr] gap-8">
-                                <div className="flex flex-col justify-center">
-                                    <p className="text-sm font-bold uppercase tracking-[0.22em] text-slate-500">Periode</p>
-                                    <p className="mt-2 text-6xl font-black tracking-tight text-[#0f4c81]">{monthLabel(month)}</p>
-                                    <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-600">Dashboard BIMA untuk membaca price intelligence, aktivitas kompetitor, customer-supplier mapping, dan indikasi risiko market bulanan.</p>
-                                    <div className="mt-8 grid grid-cols-3 gap-3">
+                        <section key="cover" className="monthly-report-slide relative mx-auto h-[760px] w-full max-w-[1350px] overflow-hidden rounded-lg bg-[#f8fafc] shadow-sm print:rounded-none print:shadow-none">
+                            <div className="absolute inset-y-0 right-0 w-[38%] bg-[#0f4c81]" />
+                            <div className="absolute left-0 top-0 h-2 w-full bg-[#0f4c81]" />
+                            <div className="absolute bottom-0 left-0 h-2 w-full bg-emerald-300" />
+                            <div className="absolute right-[33%] top-0 h-full w-16 skew-x-[-10deg] bg-emerald-300" />
+                            <div className="relative grid h-full grid-cols-[1.08fr_0.92fr] gap-8 p-10">
+                                <div className="flex flex-col justify-between py-2">
+                                    <div className="flex items-center gap-4">
+                                        <Image src="/cp_logo_alpha.png" alt="Chitra Paratama" width={182} height={72} className="h-16 w-auto rounded-md bg-white p-2 shadow-sm outline outline-1 outline-black/10" priority />
+                                        <div className="h-12 w-px bg-slate-300" />
+                                        <div>
+                                            <p className="text-xs font-black uppercase tracking-[0.28em] text-[#0f4c81]">BIMA</p>
+                                            <p className="text-sm font-semibold text-slate-500">Business Intelligence Market Analysis</p>
+                                        </div>
+                                    </div>
+                                    <div className="max-w-[690px]">
+                                        <p className="mb-4 inline-flex rounded-md bg-[#0f4c81] px-3 py-1 text-xs font-black uppercase tracking-[0.22em] text-white shadow-sm">Monthly Report</p>
+                                        <h2 className="max-w-[680px] text-[58px] font-black leading-[0.98] tracking-tight text-slate-950 text-balance">Monthly Competitor Dashboard</h2>
+                                        <p className="mt-3 text-[42px] font-black leading-none text-[#0f4c81]">{monthLabel(month)}</p>
+                                        <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-600 text-pretty">Dashboard BIMA untuk membaca price intelligence, aktivitas kompetitor, customer-supplier mapping, dan indikasi risiko market bulanan.</p>
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-3">
                                         <MetricTile icon={FileText} label="Price" value={report.prices.length} note="competitor price data" />
                                         <MetricTile icon={Users} label="Active BC" value={report.activeBcCount} note="pengumpul data aktif" />
                                         <MetricTile icon={Target} label="Activity" value={report.activities.length} note="competitor activity" />
                                     </div>
                                 </div>
-                                <div className="flex flex-col items-center justify-center rounded-lg bg-[#0f4c81] p-8 text-center text-white">
-                                    <Image src="/cp_logo_alpha.png" alt="Chitra Paratama" width={220} height={96} className="mb-8 h-24 w-auto rounded bg-white/95 p-3" priority />
-                                    <p className="text-sm font-semibold uppercase tracking-[0.24em] text-blue-100">BIMA</p>
-                                    <p className="mt-2 text-4xl font-black leading-tight">Business Intelligence Market Analysis</p>
+                                <div className="relative flex items-center justify-center pl-6 text-slate-950">
+                                    <div className="w-full rounded-lg border border-emerald-200 bg-emerald-100/95 p-8 shadow-2xl outline outline-1 outline-white/50">
+                                        <p className="text-sm font-black uppercase tracking-[0.3em] text-emerald-800">Competitor Intelligence</p>
+                                        <p className="mt-6 text-5xl font-black leading-tight text-[#0f4c81]">Market Price<br />Activity<br />Lost Sale</p>
+                                        <div className="mt-10 grid grid-cols-2 gap-3 text-sm">
+                                            <div className="rounded-md bg-white/95 p-4 text-[#0f4c81] shadow-sm">
+                                                <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Median Price</p>
+                                                <p className="mt-1 text-2xl font-black tabular-nums">{formatMoney(report.medianPrice)}</p>
+                                            </div>
+                                            <div className="rounded-md bg-[#0f4c81] p-4 text-white shadow-sm">
+                                                <p className="text-xs font-bold uppercase tracking-wide text-blue-100">Activity</p>
+                                                <p className="mt-1 text-2xl font-black tabular-nums">{report.activities.length}</p>
+                                            </div>
+                                        </div>
+                                        <p className="mt-8 text-sm font-semibold leading-7 text-emerald-900">Prepared for monthly commercial review and competitor movement monitoring.</p>
+                                    </div>
                                 </div>
                             </div>
-                        </Slide>,
+                        </section>,
                         <Slide key="bc-activity" eyebrow="Slide 2 - Competitor Price Update" title="BC Activity Contribution">
                             <div className="grid h-[calc(100%-88px)] grid-cols-[0.85fr_1.15fr] gap-6">
                                 <div className="grid content-start gap-4">

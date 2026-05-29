@@ -1,0 +1,6 @@
+task mode: create
+primary deck-profile: product-platform
+required proof object: one-slide platform map showing One Chitra as a connected operating system, not isolated feature cards
+source requirements: use lib/navigation.ts as the authoritative feature inventory, verify against app/dashboard routes and Graphify report
+QA gates: one slide only; features grouped by business workflow; connectors explain relationship from demand to fulfillment to governance and analytics
+known missing inputs: no corporate PPT template supplied, so visual system is generated for editable PowerPoint output

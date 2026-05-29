@@ -1,0 +1,10 @@
+Primary source: lib/navigation.ts navigationConfig.
+Secondary source: app/dashboard route inventory and graphify-out/GRAPH_REPORT.md.
+Feature grouping used for the slide:
+- Main: Dashboard, Portal.
+- SCM Management: Master Data & Umum, Inbound & Receiving, Outbound & Operations, Inventory Control, Logistics & Cost.
+- Business & Analytics: Marketing, Sales, Reports & Analytics.
+- Central Services: WIP Repair.
+- Approval: Approval Inbox, Approval Settings, Matrix Approval.
+- System Management: Security, Integration & Sync, Admin.
+Identity assets: no logo embedded because no verified official image asset was requested or located in the source pass.

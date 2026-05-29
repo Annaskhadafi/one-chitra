@@ -1,0 +1,28 @@
+{
+  "output": "D:\\[01] PROJECT\\one-chitra\\outputs\\manual-one-chitra-slide\\presentations\\one-chitra-feature-map\\output\\one-chitra-feature-map.pptx",
+  "outputBytes": 17060,
+  "slideCount": 1,
+  "slideSize": {
+    "width": 1280,
+    "height": 720
+  },
+  "previewDir": "D:\\[01] PROJECT\\one-chitra\\outputs\\manual-one-chitra-slide\\presentations\\one-chitra-feature-map\\preview",
+  "previewPaths": [
+    "D:\\[01] PROJECT\\one-chitra\\outputs\\manual-one-chitra-slide\\presentations\\one-chitra-feature-map\\preview\\slide-01.png"
+  ],
+  "layoutDir": "D:\\[01] PROJECT\\one-chitra\\outputs\\manual-one-chitra-slide\\presentations\\one-chitra-feature-map\\layout",
+  "layoutResults": [
+    {
+      "layoutPath": "D:\\[01] PROJECT\\one-chitra\\outputs\\manual-one-chitra-slide\\presentations\\one-chitra-feature-map\\layout\\slide-01.layout.json"
+    }
+  ],
+  "contactSheet": "D:\\[01] PROJECT\\one-chitra\\outputs\\manual-one-chitra-slide\\presentations\\one-chitra-feature-map\\qa\\contact-sheet.png",
+  "slides": [
+    {
+      "index": 1,
+      "requestedSlideNumber": 1,
+      "modulePath": "D:\\[01] PROJECT\\one-chitra\\outputs\\manual-one-chitra-slide\\presentations\\one-chitra-feature-map\\slides\\slide-01.mjs",
+      "exportName": "slide01"
+    }
+  ]
+}

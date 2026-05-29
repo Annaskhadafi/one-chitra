@@ -1,0 +1,9 @@
+Single-slide macro layout: executive product-platform map.
+Reading order:
+1. Left rail states the system thesis and operating layers.
+2. Center hub is One Chitra Operating System.
+3. Top lane covers commercial demand and sales motion.
+4. Middle lane covers SCM execution and physical operations.
+5. Bottom lane covers controls, services, and management foundation.
+6. Right rail shows business outcomes and feedback loop to analytics.
+Connectors: arrows encode flow of work and data feedback, not decoration.
