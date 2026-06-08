@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { format } from "date-fns"
-import { Search, Edit2, Package, CheckCircle2, Factory } from "lucide-react"
+import { Search, Edit2, Package, CheckCircle2, Factory, Download } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { EvhsStockUsageDialog } from "./evhs-stock-usage-dialog"
 import { EvhsEditUsageDialog } from "./evhs-edit-usage-dialog"
@@ -21,6 +21,7 @@ import { EvhsMultipleUsageDialog } from "./evhs-multiple-usage-dialog"
 import { Checkbox } from "@/components/ui/checkbox"
 import type { CheckedState } from "@radix-ui/react-checkbox"
 import { toast } from "sonner"
+import { exportToExcel } from "@/lib/export-excel"
 
 type WarehouseOption = {
     id: number
@@ -210,6 +211,28 @@ export function EvhsTrackingTable({ trackingData }: { trackingData: TrackingRow[
         .filter(item => getAvailableQty(item) > 0 && (!lockedWarehouseId || item.warehouseId === lockedWarehouseId))
         .every(item => selectedItemsForBatch.includes(item.id.toString()))
 
+    const handleExportExcel = () => {
+        const exportData = filteredData.map((item, index) => ({
+            "No": index + 1,
+            "Date In": item.dateIn ? format(new Date(item.dateIn), "dd-MMM-yy") : "-",
+            "Site VHS": item.warehouse ? `${item.warehouse.sloc} - ${item.warehouse.description || ''}` : "-",
+            "CP DO": item.cpDo || "-",
+            "Material Number CP": item.materialNumberCp,
+            "Material Number CK": item.materialNumberCk || "-",
+            "SN": item.sn,
+            "Qty": item.receivedQty ? `${getAvailableQty(item)} / ${getReceivedQty(item)}` : item.qty,
+            "Install Date": item.installDate ? format(new Date(item.installDate), "dd-MMM-yy") : "-",
+            "POS": item.pos || "-",
+            "Unit ID": item.unitId || "-",
+            "Voucher": item.voucherNo || "-",
+            "WO Number": item.woNo || "-",
+            "GI Number": item.giNumber || "-",
+            "MRKO": item.mrko || "-",
+            "INV": item.inv || "-"
+        }))
+        exportToExcel(exportData, `Stock_VHS_WO_${format(new Date(), "yyyyMMdd_HHmmss")}`)
+    }
+
     return (
         <div className="space-y-4">
             <div className="grid gap-4 md:grid-cols-3 mb-6">
@@ -270,9 +293,15 @@ export function EvhsTrackingTable({ trackingData }: { trackingData: TrackingRow[
                         onChange={(e) => setSearchQuery(e.target.value)}
                     />
                 </div>
-                <Badge variant="outline" className="px-3 py-1.5 font-normal text-sm">
-                    Total baris: <strong>{filteredData.length}</strong>
-                </Badge>
+                <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="px-3 py-1.5 font-normal text-sm">
+                        Total baris: <strong>{filteredData.length}</strong>
+                    </Badge>
+                    <Button variant="outline" size="sm" onClick={handleExportExcel} className="h-9">
+                        <Download className="mr-2 h-4 w-4" />
+                        Export Excel
+                    </Button>
+                </div>
             </div>
 
             {selectedItemsForBatch.length > 0 && (

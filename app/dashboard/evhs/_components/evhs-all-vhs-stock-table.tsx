@@ -16,11 +16,12 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import { Search, ChevronRight, ChevronDown, Package, Layers3, History, Edit2, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
+import { Search, ChevronRight, ChevronDown, Package, Layers3, History, Edit2, ArrowUpDown, ArrowUp, ArrowDown, Download } from "lucide-react"
 import { EvhsStockUsageDialog } from "./evhs-stock-usage-dialog"
 import { EvhsEditUsageDialog } from "./evhs-edit-usage-dialog"
 import { EvhsMultipleUsageDialog } from "./evhs-multiple-usage-dialog"
 import { toast } from "sonner"
+import { exportToExcel } from "@/lib/export-excel"
 
 type EvhsAllVhsDetailRow = {
     id: string
@@ -402,6 +403,23 @@ export function EvhsAllVhsStockTable({ rows }: { rows: EvhsAllVhsStockRow[] }) {
         setUsageDialogOpen(true)
     }
 
+    const handleExportExcel = () => {
+        const exportData = sortedRows.map((row, index) => ({
+            "No": index + 1,
+            "Material Number": row.materialNumber,
+            "Material Description": row.materialDescription || "-",
+            "Category": row.category,
+            "SLoc": row.warehouse.sloc,
+            "SLoc Description": row.warehouse.description || "-",
+            "Stock SAP": row.sapStock,
+            "Stock Local": row.totalStock,
+            "Used EVHS": row.usedQty,
+            "Available EVHS": row.availableQty,
+            "Status": getStatusLabel(row)
+        }))
+        exportToExcel(exportData, `Stock_All_VHS_${format(new Date(), "yyyyMMdd_HHmmss")}`)
+    }
+
     return (
         <div className="space-y-5">
             <div className="grid gap-4 md:grid-cols-4">
@@ -477,9 +495,15 @@ export function EvhsAllVhsStockTable({ rows }: { rows: EvhsAllVhsStockRow[] }) {
                         />
                     </div>
                 </div>
-                <Badge variant="outline" className="px-3 py-1.5 text-sm font-normal">
-                    Total baris: <strong>{sortedRows.length}</strong>
-                </Badge>
+                <div className="flex items-center gap-3">
+                    <Badge variant="outline" className="px-3 py-1.5 text-sm font-normal">
+                        Total baris: <strong>{sortedRows.length}</strong>
+                    </Badge>
+                    <Button variant="outline" size="sm" onClick={handleExportExcel} className="h-8">
+                        <Download className="mr-2 h-4 w-4" />
+                        Export Excel
+                    </Button>
+                </div>
             </div>
 
             {selectedItemsForBatch.length > 0 && (
