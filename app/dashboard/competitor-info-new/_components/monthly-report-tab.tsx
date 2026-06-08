@@ -105,6 +105,14 @@ function parseMoney(value?: string) {
     if (!raw) return 0
     const dotCount = (raw.match(/\./g) ?? []).length
     const commaCount = (raw.match(/,/g) ?? []).length
+    if (dotCount === 1 && commaCount === 0) {
+        const parts = raw.split(".")
+        if (parts[1].length === 3) return Number(raw.replace(".", "")) || 0
+    }
+    if (commaCount === 1 && dotCount === 0) {
+        const parts = raw.split(",")
+        if (parts[1].length === 3) return Number(raw.replace(",", "")) || 0
+    }
     if (dotCount > 1 && commaCount === 0) return Number(raw.replaceAll(".", "")) || 0
     if (commaCount > 1 && dotCount === 0) return Number(raw.replaceAll(",", "")) || 0
     const lastComma = raw.lastIndexOf(",")
