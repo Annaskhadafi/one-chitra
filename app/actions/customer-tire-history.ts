@@ -192,3 +192,25 @@ export async function getCustomerTireHistory(filters?: TireHistoryFilters): Prom
     return { success: false, error: "Failed to fetch customer tire history" }
   }
 }
+
+export async function getReadyStockForMatching(): Promise<{ success: true; data: { materialDescription: string; totalStock: number }[] } | { success: false; error: string }> {
+  try {
+    const result = await db.execute(sql`
+      SELECT 
+        MAX(material_desc) as material_desc,
+        SUM(total_stock) as total_stock
+      FROM public.zmc9_stock_sap
+      GROUP BY material_no, old_material_no
+    `)
+    
+    const stocks = result.rows.map((row: any) => ({
+      materialDescription: String(row.material_desc || ""),
+      totalStock: Number(row.total_stock) || 0
+    })).filter(s => s.totalStock > 0 && s.materialDescription)
+
+    return { success: true, data: stocks }
+  } catch (err) {
+    console.error("[getReadyStockForMatching]", err)
+    return { success: false, error: "Failed to fetch ready stock" }
+  }
+}

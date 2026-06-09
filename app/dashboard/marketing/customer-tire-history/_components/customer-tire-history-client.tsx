@@ -16,12 +16,13 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { ChevronsUpDown } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as ReTooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from "recharts"
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as ReTooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend, Sankey } from "recharts"
 import { toast } from "sonner"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { updateCustomerBusinessCategory } from "@/app/actions/customer-industry"
-import { getCustomerTireHistory } from "@/app/actions/customer-tire-history"
+import { getCustomerTireHistory, getReadyStockForMatching } from "@/app/actions/customer-tire-history"
 import type { TireHistoryCustomer } from "@/app/actions/customer-tire-history"
+import Fuse from "fuse.js"
 import * as XLSX from "xlsx"
 
 const GROUP_COLORS: Record<string, string> = {
@@ -124,7 +125,12 @@ function CategoryCombobox({ value, onChange }: { value: string; onChange: (v: st
     )
 }
 
-function CustomerRow({ customer, onCategoryUpdated }: { customer: TireHistoryCustomer; onCategoryUpdated: () => void }) {
+function extractSize(desc: string) {
+    const m = desc.match(/(\d{2,3}(?:\.\d+)?\s*(?:R|-|X)\s*\d{2,3})/i)
+    return m ? m[1].replace(/\s+/g, '') : "Lainnya"
+}
+
+function CustomerRow({ customer, onCategoryUpdated, stockFuse }: { customer: TireHistoryCustomer; onCategoryUpdated: () => void; stockFuse: Fuse<{ materialDescription: string; totalStock: number }> | null }) {
     const [open, setOpen] = useState(false)
     const [editing, setEditing] = useState(false)
     const [editValue, setEditValue] = useState(customer.businessCategory || "")
@@ -219,6 +225,7 @@ function CustomerRow({ customer, onCategoryUpdated }: { customer: TireHistoryCus
                                                     <tr className="border-b text-muted-foreground">
                                                         <th className="text-left py-1 pr-3 font-medium">Material Group</th>
                                                         <th className="text-left py-1 pr-3 font-medium">Deskripsi</th>
+                                                        <th className="text-right py-1 pr-3 font-medium">Ready Stock</th>
                                                         <th className="text-right py-1 pr-3 font-medium">Qty</th>
                                                         <th className="text-right py-1 pr-3 font-medium">Revenue</th>
                                                         <th className="text-right py-1 font-medium">Terakhir Beli</th>
@@ -227,15 +234,31 @@ function CustomerRow({ customer, onCategoryUpdated }: { customer: TireHistoryCus
                                                 <tbody>
                                                     {data.items
                                                         .sort((a, b) => b.totalRevenue - a.totalRevenue)
-                                                        .map((item, idx) => (
+                                                        .map((item, idx) => {
+                                                            let stockAmount = 0
+                                                            if (stockFuse) {
+                                                                const res = stockFuse.search(item.materialDescription)
+                                                                if (res.length > 0 && res[0].score && res[0].score < 0.4) {
+                                                                    stockAmount = res[0].item.totalStock
+                                                                }
+                                                            }
+                                                            return (
                                                             <tr key={idx} className="border-b border-muted/40 hover:bg-muted/30">
                                                                 <td className="py-1 pr-3 text-muted-foreground font-mono text-[10px]">{item.matGrpDesc}</td>
                                                                 <td className="py-1 pr-3 font-medium">{item.materialDescription || "-"}</td>
+                                                                <td className="py-1 pr-3 text-right">
+                                                                    {stockAmount > 0 ? (
+                                                                        <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] px-1 py-0">{stockAmount.toLocaleString()} pcs</Badge>
+                                                                    ) : (
+                                                                        <span className="text-[10px] text-muted-foreground">-</span>
+                                                                    )}
+                                                                </td>
                                                                 <td className="py-1 pr-3 text-right">{item.totalQty.toLocaleString()}</td>
                                                                 <td className="py-1 pr-3 text-right font-medium">{formatIDR(item.totalRevenue)}</td>
                                                                 <td className="py-1 text-right text-muted-foreground">{formatDate(item.lastPurchaseDate)}</td>
                                                             </tr>
-                                                        ))}
+                                                            )
+                                                        })}
                                                 </tbody>
                                             </table>
                                         </div>
@@ -255,6 +278,7 @@ export function CustomerTireHistoryClient() {
     const [filterGroup, setFilterGroup] = useState("all")
     const [filterBizCat, setFilterBizCat] = useState("all")
     const [filterYear, setFilterYear] = useState("all")
+    const [filterSize, setFilterSize] = useState("all")
 
     const { data, isLoading, refetch } = useQuery({
         queryKey: ["customer-tire-history", filterYear],
@@ -268,15 +292,45 @@ export function CustomerTireHistoryClient() {
         staleTime: 5 * 60 * 1000,
     })
 
+    const { data: stockData } = useQuery({
+        queryKey: ["ready-stock-matching"],
+        queryFn: async () => {
+            const res = await getReadyStockForMatching()
+            if (res.success) return res.data
+            return []
+        },
+        staleTime: 5 * 60 * 1000,
+    })
+
+    const stockFuse = useMemo(() => {
+        if (!stockData || stockData.length === 0) return null
+        return new Fuse(stockData, { keys: ["materialDescription"], threshold: 0.3, includeScore: true })
+    }, [stockData])
+
+    const sizeList = useMemo(() => {
+        if (!data) return []
+        const sizes = new Set<string>()
+        for (const c of data.customers) {
+            for (const d of Object.values(c.matGroups)) {
+                for (const item of d.items) {
+                    const size = extractSize(item.materialDescription)
+                    if (size !== "Lainnya") sizes.add(size)
+                }
+            }
+        }
+        return Array.from(sizes).sort()
+    }, [data])
+
     const filteredCustomers = useMemo(() => {
         if (!data) return []
         return data.customers.filter(c => {
             const matchSearch = !search || c.customerName.toLowerCase().includes(search.toLowerCase())
             const matchGroup = filterGroup === "all" || !!c.matGroups[filterGroup]
             const matchBiz = filterBizCat === "all" || (c.businessCategory || "Belum Dikategorikan") === filterBizCat
-            return matchSearch && matchGroup && matchBiz
+            const matchSize = filterSize === "all" || Object.values(c.matGroups).some(g => g.items.some(i => extractSize(i.materialDescription) === filterSize))
+            return matchSearch && matchGroup && matchBiz && matchSize
         })
-    }, [data, search, filterGroup, filterBizCat])
+    }, [data, search, filterGroup, filterBizCat, filterSize])
 
     const handleExport = useCallback(() => {
         if (!data) return
@@ -334,6 +388,87 @@ export function CustomerTireHistoryClient() {
         }
         return Array.from(map.entries()).sort((a, b) => b[1] - a[1]).slice(0, 8)
             .map(([name, value]) => ({ name, value, fill: BIZ_COLORS[name] || "#94a3b8" }))
+    }, [filteredCustomers])
+
+    const revenuePerSizeChart = useMemo(() => {
+        if (!filteredCustomers.length) return []
+        const map = new Map<string, number>()
+        for (const c of filteredCustomers) {
+            for (const d of Object.values(c.matGroups)) {
+                for (const item of d.items) {
+                    const size = extractSize(item.materialDescription)
+                    map.set(size, (map.get(size) || 0) + item.totalRevenue)
+                }
+            }
+        }
+        return Array.from(map.entries())
+            .filter(a => a[0] !== "Lainnya")
+            .sort((a, b) => b[1] - a[1]).slice(0, 10)
+            .map(([name, value]) => ({ name, value, fill: "#8b5cf6" }))
+    }, [filteredCustomers])
+
+    const sankeyData = useMemo(() => {
+        if (!filteredCustomers.length) return { nodes: [], links: [] }
+        const nodesMap = new Map<string, number>()
+        const linksMap = new Map<string, number>()
+
+        const nodes: {name: string}[] = []
+        const getNodeIdx = (name: string) => {
+            if (!nodesMap.has(name)) {
+                nodesMap.set(name, nodes.length)
+                nodes.push({ name })
+            }
+            return nodesMap.get(name)!
+        }
+        
+        const addLink = (src: string, tgt: string, val: number) => {
+            const s = getNodeIdx(src)
+            const t = getNodeIdx(tgt)
+            const k = `${s}-${t}`
+            linksMap.set(k, (linksMap.get(k) || 0) + val)
+        }
+
+        for (const c of filteredCustomers) {
+            const custName = c.customerName.replace(/^PT\.?\s*/i, "").replace(/^CV\.?\s*/i, "").substring(0, 15)
+            for (const [group, d] of Object.entries(c.matGroups)) {
+                for (const item of d.items) {
+                    const size = extractSize(item.materialDescription)
+                    if (size !== "Lainnya") {
+                        addLink(size, group, item.totalRevenue)
+                        addLink(group, custName, item.totalRevenue)
+                    }
+                }
+            }
+        }
+        
+        const links = Array.from(linksMap.entries()).map(([k, val]) => {
+            const [s, t] = k.split('-').map(Number)
+            return { source: s, target: t, value: val }
+        })
+        
+        const topLinks = links.sort((a,b) => b.value - a.value).slice(0, 30)
+        const usedNodes = new Set<number>()
+        for (const l of topLinks) {
+            usedNodes.add(l.source)
+            usedNodes.add(l.target)
+        }
+        
+        const finalNodes: {name: string}[] = []
+        const newIdxMap = new Map<number, number>()
+        
+        let currentIdx = 0
+        for (const n of usedNodes) {
+            finalNodes.push(nodes[n])
+            newIdxMap.set(n, currentIdx++)
+        }
+        
+        const finalLinks = topLinks.map(l => ({
+            source: newIdxMap.get(l.source)!,
+            target: newIdxMap.get(l.target)!,
+            value: l.value
+        }))
+        
+        return { nodes: finalNodes, links: finalLinks }
     }, [filteredCustomers])
 
     if (isLoading) return (
@@ -465,6 +600,52 @@ export function CustomerTireHistoryClient() {
                     </Card>
                 )}
 
+                <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
+                    {revenuePerSizeChart.length > 0 && (
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="text-base flex items-center gap-2">
+                                    <Package className="h-4 w-4 text-primary" />
+                                    Revenue per Size Ban (Top 10)
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <ResponsiveContainer width="100%" height={260}>
+                                    <BarChart data={revenuePerSizeChart} layout="vertical" margin={{ left: 8, right: 16 }}>
+                                        <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                                        <XAxis type="number" tickFormatter={v => formatIDR(v)} tick={{ fontSize: 10 }} />
+                                        <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={90} />
+                                        <ReTooltip formatter={(v: number) => [formatIDR(v)]} />
+                                        <Bar dataKey="value" fill="#8b5cf6" radius={[0, 4, 4, 0]} />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </CardContent>
+                        </Card>
+                    )}
+                    {sankeyData.nodes.length > 0 && (
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="text-base flex items-center gap-2">
+                                    <Layers className="h-4 w-4 text-primary" />
+                                    Persebaran Size ➔ Kategori ➔ Customer
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <ResponsiveContainer width="100%" height={260}>
+                                    <Sankey
+                                        data={sankeyData}
+                                        nodePadding={20}
+                                        margin={{ left: 20, right: 20, top: 10, bottom: 10 }}
+                                        link={{ stroke: '#cbd5e1', strokeOpacity: 0.3 }}
+                                    >
+                                        <ReTooltip />
+                                    </Sankey>
+                                </ResponsiveContainer>
+                            </CardContent>
+                        </Card>
+                    )}
+                </div>
+
                 <Card>
                     <CardHeader>
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -500,6 +681,13 @@ export function CustomerTireHistoryClient() {
                                     {data.matGrpGroupList.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
                                 </SelectContent>
                             </Select>
+                            <Select value={filterSize} onValueChange={setFilterSize}>
+                                <SelectTrigger className="h-8 text-sm w-[150px]"><SelectValue placeholder="Size Ban" /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">Semua Size</SelectItem>
+                                    {sizeList.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
                             <Select value={filterBizCat} onValueChange={setFilterBizCat}>
                                 <SelectTrigger className="h-8 text-sm w-[200px]"><SelectValue placeholder="Kategori Bisnis" /></SelectTrigger>
                                 <SelectContent>
@@ -530,7 +718,7 @@ export function CustomerTireHistoryClient() {
                                             </TableCell>
                                         </TableRow>
                                     ) : filteredCustomers.map(customer => (
-                                        <CustomerRow key={customer.customerName} customer={customer} onCategoryUpdated={() => refetch()} />
+                                        <CustomerRow key={customer.customerName} customer={customer} onCategoryUpdated={() => refetch()} stockFuse={stockFuse} />
                                     ))}
                                 </TableBody>
                             </Table>

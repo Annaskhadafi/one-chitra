@@ -21,6 +21,16 @@ function getSafeCallbackUrl(searchParams: { get(name: string): string | null } |
     return callbackUrl
 }
 
+function getSignInErrorMessage(message?: string) {
+    const normalizedMessage = message?.trim()
+
+    if (!normalizedMessage || normalizedMessage === "Invalid email or password") {
+        return "Email atau password tidak sesuai."
+    }
+
+    return normalizedMessage
+}
+
 type AuthActionResult = {
     data?: {
         message?: string
@@ -135,7 +145,7 @@ export function AuthEntryScreen() {
             })
 
             if (result.error) {
-                setError(result.error.message || "Sign in gagal")
+                setError(getSignInErrorMessage(result.error.message))
                 return
             }
 
