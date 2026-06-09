@@ -225,7 +225,7 @@ function CustomerRow({ customer, onCategoryUpdated, stockFuse }: { customer: Tir
                                                     <tr className="border-b text-muted-foreground">
                                                         <th className="text-left py-1 pr-3 font-medium">Material Group</th>
                                                         <th className="text-left py-1 pr-3 font-medium">Deskripsi</th>
-                                                        <th className="text-right py-1 pr-3 font-medium">Ready Stock</th>
+                                                        <th className="text-left py-1 pr-3 font-medium">Rekomendasi Stok</th>
                                                         <th className="text-right py-1 pr-3 font-medium">Qty</th>
                                                         <th className="text-right py-1 pr-3 font-medium">Revenue</th>
                                                         <th className="text-right py-1 font-medium">Terakhir Beli</th>
@@ -236,19 +236,24 @@ function CustomerRow({ customer, onCategoryUpdated, stockFuse }: { customer: Tir
                                                         .sort((a, b) => b.totalRevenue - a.totalRevenue)
                                                         .map((item, idx) => {
                                                             let stockAmount = 0
+                                                            let stockName = ""
                                                             if (stockFuse) {
                                                                 const res = stockFuse.search(item.materialDescription)
                                                                 if (res.length > 0 && res[0].score && res[0].score < 0.4) {
                                                                     stockAmount = res[0].item.totalStock
+                                                                    stockName = res[0].item.materialDescription
                                                                 }
                                                             }
                                                             return (
                                                             <tr key={idx} className="border-b border-muted/40 hover:bg-muted/30">
                                                                 <td className="py-1 pr-3 text-muted-foreground font-mono text-[10px]">{item.matGrpDesc}</td>
                                                                 <td className="py-1 pr-3 font-medium">{item.materialDescription || "-"}</td>
-                                                                <td className="py-1 pr-3 text-right">
+                                                                <td className="py-1 pr-3">
                                                                     {stockAmount > 0 ? (
-                                                                        <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] px-1 py-0">{stockAmount.toLocaleString()} pcs</Badge>
+                                                                        <div className="flex flex-col gap-0.5">
+                                                                            <span className="text-[10px] font-medium text-emerald-700">{stockName}</span>
+                                                                            <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[9px] px-1 py-0 w-fit">{stockAmount.toLocaleString()} pcs ready</Badge>
+                                                                        </div>
                                                                     ) : (
                                                                         <span className="text-[10px] text-muted-foreground">-</span>
                                                                     )}
@@ -407,7 +412,7 @@ export function CustomerTireHistoryClient() {
             .map(([name, value]) => ({ name, value, fill: "#8b5cf6" }))
     }, [filteredCustomers])
 
-    const sankeyData = useMemo(() => {
+    const buildSankeyData = useCallback((targetGroup: string) => {
         if (!filteredCustomers.length) return { nodes: [], links: [] }
         const nodesMap = new Map<string, number>()
         const linksMap = new Map<string, number>()
@@ -430,12 +435,12 @@ export function CustomerTireHistoryClient() {
 
         for (const c of filteredCustomers) {
             const custName = c.customerName.replace(/^PT\.?\s*/i, "").replace(/^CV\.?\s*/i, "").substring(0, 15)
-            for (const [group, d] of Object.entries(c.matGroups)) {
+            const d = c.matGroups[targetGroup]
+            if (d) {
                 for (const item of d.items) {
                     const size = extractSize(item.materialDescription)
                     if (size !== "Lainnya") {
-                        addLink(size, group, item.totalRevenue)
-                        addLink(group, custName, item.totalRevenue)
+                        addLink(size, custName, item.totalRevenue)
                     }
                 }
             }
@@ -446,7 +451,7 @@ export function CustomerTireHistoryClient() {
             return { source: s, target: t, value: val }
         })
         
-        const topLinks = links.sort((a,b) => b.value - a.value).slice(0, 30)
+        const topLinks = links.sort((a,b) => b.value - a.value).slice(0, 20)
         const usedNodes = new Set<number>()
         for (const l of topLinks) {
             usedNodes.add(l.source)
@@ -471,6 +476,10 @@ export function CustomerTireHistoryClient() {
         return { nodes: finalNodes, links: finalLinks }
     }, [filteredCustomers])
 
+    const sankeyEM = useMemo(() => buildSankeyData("Earthmover"), [buildSankeyData])
+    const sankeyTB = useMemo(() => buildSankeyData("Truck & Bus"), [buildSankeyData])
+    const sankeyInd = useMemo(() => buildSankeyData("Industrial"), [buildSankeyData])
+
     if (isLoading) return (
         <div className="flex items-center justify-center h-64">
             <div className="flex flex-col items-center gap-3">
@@ -485,6 +494,28 @@ export function CustomerTireHistoryClient() {
             <p className="text-muted-foreground">Gagal memuat data.</p>
         </div>
     )
+
+    const CustomSankeyNode = (props: any) => {
+        const { x, y, width, height, index, payload } = props
+        const isRight = x > 150
+        const h = Math.max(height, 2)
+        return (
+            <g>
+                <rect x={x} y={y} width={width} height={h} fill="#3b82f6" fillOpacity={0.8} rx={1} />
+                <text
+                    x={isRight ? x - 6 : x + width + 6}
+                    y={y + h / 2}
+                    dy=".35em"
+                    textAnchor={isRight ? "end" : "start"}
+                    fontSize={10}
+                    fontWeight={500}
+                    fill="#475569"
+                >
+                    {payload.name}
+                </text>
+            </g>
+        )
+    }
 
     const totalRevFiltered = filteredCustomers.reduce((s, c) => s + c.totalRevenue, 0)
     const totalQtyFiltered = filteredCustomers.reduce((s, c) => s + c.totalQty, 0)
@@ -600,7 +631,7 @@ export function CustomerTireHistoryClient() {
                     </Card>
                 )}
 
-                <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
+                <div className="grid gap-4 grid-cols-1">
                     {revenuePerSizeChart.length > 0 && (
                         <Card>
                             <CardHeader>
@@ -622,28 +653,60 @@ export function CustomerTireHistoryClient() {
                             </CardContent>
                         </Card>
                     )}
-                    {sankeyData.nodes.length > 0 && (
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="text-base flex items-center gap-2">
-                                    <Layers className="h-4 w-4 text-primary" />
-                                    Persebaran Size ➔ Kategori ➔ Customer
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <ResponsiveContainer width="100%" height={260}>
-                                    <Sankey
-                                        data={sankeyData}
-                                        nodePadding={20}
-                                        margin={{ left: 20, right: 20, top: 10, bottom: 10 }}
-                                        link={{ stroke: '#cbd5e1', strokeOpacity: 0.3 }}
-                                    >
-                                        <ReTooltip />
-                                    </Sankey>
-                                </ResponsiveContainer>
-                            </CardContent>
-                        </Card>
-                    )}
+
+                    <div className="grid gap-4 grid-cols-1 lg:grid-cols-3">
+                        {sankeyEM.nodes.length > 0 && (
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle className="text-base flex items-center gap-2">
+                                        <Layers className="h-4 w-4 text-primary" />
+                                        Earthmover (Size ➔ Customer)
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    <ResponsiveContainer width="100%" height={300}>
+                                        <Sankey data={sankeyEM} nodePadding={15} node={<CustomSankeyNode />}
+                                            margin={{ left: 20, right: 20, top: 20, bottom: 20 }}
+                                            link={{ stroke: '#f59e0b', strokeOpacity: 0.2 }} />
+                                    </ResponsiveContainer>
+                                </CardContent>
+                            </Card>
+                        )}
+                        {sankeyTB.nodes.length > 0 && (
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle className="text-base flex items-center gap-2">
+                                        <Layers className="h-4 w-4 text-primary" />
+                                        Truck & Bus (Size ➔ Customer)
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    <ResponsiveContainer width="100%" height={300}>
+                                        <Sankey data={sankeyTB} nodePadding={15} node={<CustomSankeyNode />}
+                                            margin={{ left: 20, right: 20, top: 20, bottom: 20 }}
+                                            link={{ stroke: '#3b82f6', strokeOpacity: 0.2 }} />
+                                    </ResponsiveContainer>
+                                </CardContent>
+                            </Card>
+                        )}
+                        {sankeyInd.nodes.length > 0 && (
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle className="text-base flex items-center gap-2">
+                                        <Layers className="h-4 w-4 text-primary" />
+                                        Industrial (Size ➔ Customer)
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    <ResponsiveContainer width="100%" height={300}>
+                                        <Sankey data={sankeyInd} nodePadding={15} node={<CustomSankeyNode />}
+                                            margin={{ left: 20, right: 20, top: 20, bottom: 20 }}
+                                            link={{ stroke: '#8b5cf6', strokeOpacity: 0.2 }} />
+                                    </ResponsiveContainer>
+                                </CardContent>
+                            </Card>
+                        )}
+                    </div>
                 </div>
 
                 <Card>
