@@ -476,9 +476,80 @@ export function CustomerTireHistoryClient() {
         return { nodes: finalNodes, links: finalLinks }
     }, [filteredCustomers])
 
+    const buildStockSankeyData = useCallback((targetGroup: string) => {
+        if (!filteredCustomers.length || !stockFuse) return { nodes: [], links: [] }
+        const nodesMap = new Map<string, number>()
+        const linksMap = new Map<string, number>()
+
+        const nodes: {name: string}[] = []
+        const getNodeIdx = (name: string) => {
+            if (!nodesMap.has(name)) {
+                nodesMap.set(name, nodes.length)
+                nodes.push({ name })
+            }
+            return nodesMap.get(name)!
+        }
+        
+        const addLink = (src: string, tgt: string, val: number) => {
+            const s = getNodeIdx(src)
+            const t = getNodeIdx(tgt)
+            const k = `${s}-${t}`
+            linksMap.set(k, (linksMap.get(k) || 0) + val)
+        }
+
+        for (const c of filteredCustomers) {
+            const custName = c.customerName.replace(/^PT\.?\s*/i, "").replace(/^CV\.?\s*/i, "").substring(0, 15)
+            const d = c.matGroups[targetGroup]
+            if (d) {
+                for (const item of d.items) {
+                    const size = extractSize(item.materialDescription)
+                    if (size !== "Lainnya") {
+                        const res = stockFuse.search(item.materialDescription)
+                        if (res.length > 0 && res[0].score && res[0].score < 0.4 && res[0].item.totalStock > 0) {
+                            addLink(size, custName, item.totalRevenue)
+                        }
+                    }
+                }
+            }
+        }
+        
+        const links = Array.from(linksMap.entries()).map(([k, val]) => {
+            const [s, t] = k.split('-').map(Number)
+            return { source: s, target: t, value: val }
+        })
+        
+        const topLinks = links.sort((a,b) => b.value - a.value).slice(0, 20)
+        const usedNodes = new Set<number>()
+        for (const l of topLinks) {
+            usedNodes.add(l.source)
+            usedNodes.add(l.target)
+        }
+        
+        const finalNodes: {name: string}[] = []
+        const newIdxMap = new Map<number, number>()
+        
+        let currentIdx = 0
+        for (const n of usedNodes) {
+            finalNodes.push(nodes[n])
+            newIdxMap.set(n, currentIdx++)
+        }
+        
+        const finalLinks = topLinks.map(l => ({
+            source: newIdxMap.get(l.source)!,
+            target: newIdxMap.get(l.target)!,
+            value: l.value
+        }))
+        
+        return { nodes: finalNodes, links: finalLinks }
+    }, [filteredCustomers, stockFuse])
+
     const sankeyEM = useMemo(() => buildSankeyData("Earthmover"), [buildSankeyData])
     const sankeyTB = useMemo(() => buildSankeyData("Truck & Bus"), [buildSankeyData])
     const sankeyInd = useMemo(() => buildSankeyData("Industrial"), [buildSankeyData])
+
+    const stockSankeyEM = useMemo(() => buildStockSankeyData("Earthmover"), [buildStockSankeyData])
+    const stockSankeyTB = useMemo(() => buildStockSankeyData("Truck & Bus"), [buildStockSankeyData])
+    const stockSankeyInd = useMemo(() => buildStockSankeyData("Industrial"), [buildStockSankeyData])
 
     if (isLoading) return (
         <div className="flex items-center justify-center h-64">
@@ -707,6 +778,68 @@ export function CustomerTireHistoryClient() {
                             </Card>
                         )}
                     </div>
+
+                    {(stockSankeyEM.nodes.length > 0 || stockSankeyTB.nodes.length > 0 || stockSankeyInd.nodes.length > 0) && (
+                        <>
+                            <div className="flex items-center gap-2 mt-4 mb-2">
+                                <Package className="h-5 w-5 text-emerald-600" />
+                                <h3 className="text-lg font-semibold">Stock Ready (Rekomendasi Matching History Customer)</h3>
+                            </div>
+                            <div className="grid gap-4 grid-cols-1 lg:grid-cols-3">
+                                {stockSankeyEM.nodes.length > 0 && (
+                                    <Card className="border-emerald-200">
+                                        <CardHeader className="bg-emerald-50/50 pb-4">
+                                            <CardTitle className="text-base flex items-center gap-2 text-emerald-800">
+                                                <Layers className="h-4 w-4" />
+                                                Earthmover (Ready Stock ➔ Customer)
+                                            </CardTitle>
+                                        </CardHeader>
+                                        <CardContent className="pt-4">
+                                            <ResponsiveContainer width="100%" height={300}>
+                                                <Sankey data={stockSankeyEM} nodePadding={15} node={<CustomSankeyNode />}
+                                                    margin={{ left: 20, right: 20, top: 20, bottom: 20 }}
+                                                    link={{ stroke: '#10b981', strokeOpacity: 0.2 }} />
+                                            </ResponsiveContainer>
+                                        </CardContent>
+                                    </Card>
+                                )}
+                                {stockSankeyTB.nodes.length > 0 && (
+                                    <Card className="border-emerald-200">
+                                        <CardHeader className="bg-emerald-50/50 pb-4">
+                                            <CardTitle className="text-base flex items-center gap-2 text-emerald-800">
+                                                <Layers className="h-4 w-4" />
+                                                Truck & Bus (Ready Stock ➔ Customer)
+                                            </CardTitle>
+                                        </CardHeader>
+                                        <CardContent className="pt-4">
+                                            <ResponsiveContainer width="100%" height={300}>
+                                                <Sankey data={stockSankeyTB} nodePadding={15} node={<CustomSankeyNode />}
+                                                    margin={{ left: 20, right: 20, top: 20, bottom: 20 }}
+                                                    link={{ stroke: '#10b981', strokeOpacity: 0.2 }} />
+                                            </ResponsiveContainer>
+                                        </CardContent>
+                                    </Card>
+                                )}
+                                {stockSankeyInd.nodes.length > 0 && (
+                                    <Card className="border-emerald-200">
+                                        <CardHeader className="bg-emerald-50/50 pb-4">
+                                            <CardTitle className="text-base flex items-center gap-2 text-emerald-800">
+                                                <Layers className="h-4 w-4" />
+                                                Industrial (Ready Stock ➔ Customer)
+                                            </CardTitle>
+                                        </CardHeader>
+                                        <CardContent className="pt-4">
+                                            <ResponsiveContainer width="100%" height={300}>
+                                                <Sankey data={stockSankeyInd} nodePadding={15} node={<CustomSankeyNode />}
+                                                    margin={{ left: 20, right: 20, top: 20, bottom: 20 }}
+                                                    link={{ stroke: '#10b981', strokeOpacity: 0.2 }} />
+                                            </ResponsiveContainer>
+                                        </CardContent>
+                                    </Card>
+                                )}
+                            </div>
+                        </>
+                    )}
                 </div>
 
                 <Card>
