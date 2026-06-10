@@ -14,13 +14,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select"
+
 import { CheckCircle2, Save, AlertTriangle } from "lucide-react"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
@@ -483,27 +477,20 @@ export function EvhsFillDraftDialog({
                                                     <td className="py-2 px-3">
                                                         {item.requiresSerial ? (
                                                             <div className="space-y-1">
-                                                                <Select
-                                                                    value={item.serialNumber || undefined}
-                                                                    onValueChange={(value) => updateEditItem(item.rowKey, "serialNumber", value)}
-                                                                >
-                                                                    <SelectTrigger className="h-7 w-full text-xs font-mono">
-                                                                        <SelectValue placeholder={serialOptions.length > 0 ? "Pilih SN dari receipt..." : "SN belum tersedia"} />
-                                                                    </SelectTrigger>
-                                                                    <SelectContent>
-                                                                        {serialOptions.length > 0 ? serialOptions.map((serialNumber) => (
-                                                                            <SelectItem key={serialNumber} value={serialNumber}>
-                                                                                {serialNumber}
-                                                                            </SelectItem>
-                                                                        )) : (
-                                                                            <SelectItem value="__no-serial__" disabled>
-                                                                                SN tidak tersedia di warehouse ini
-                                                                            </SelectItem>
-                                                                        )}
-                                                                    </SelectContent>
-                                                                </Select>
+                                                                <Input
+                                                                    list={`sn-options-${item.rowKey}`}
+                                                                    value={item.serialNumber || ""}
+                                                                    onChange={(e) => updateEditItem(item.rowKey, "serialNumber", e.target.value)}
+                                                                    placeholder={serialOptions.length > 0 ? "Pilih/Ketik SN..." : "Ketik SN manual..."}
+                                                                    className="h-7 w-full text-xs font-mono"
+                                                                />
+                                                                <datalist id={`sn-options-${item.rowKey}`}>
+                                                                    {serialOptions.map((serialNumber) => (
+                                                                        <option key={serialNumber} value={serialNumber} />
+                                                                    ))}
+                                                                </datalist>
                                                                 <p className="text-[10px] text-muted-foreground">
-                                                                    {serialOptions.length} SN tersedia
+                                                                    {serialOptions.length > 0 ? `${serialOptions.length} SN tersedia` : "Ketik manual (SN tidak ada di receipt)"}
                                                                 </p>
                                                             </div>
                                                         ) : (
