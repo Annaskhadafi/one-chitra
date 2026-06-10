@@ -847,7 +847,7 @@ function ScrapDashboard({ rows }: { rows: TirePerformanceRow[] }) {
                     </div>
                     <div className="flex items-center gap-4">
                         <div className="text-right">
-                            <p className="text-xs text-white/40">Michelin Avg Hours Before Scrap</p>
+                            <p className="text-xs text-white/40">Michelin Avg Hours Scrap</p>
                             <p className="text-4xl font-black tabular-nums" style={{ color: MICHELIN_YELLOW }}>
                                 {fmtHours(michelinAvg)}
                             </p>
@@ -895,9 +895,9 @@ function ScrapDashboard({ rows }: { rows: TirePerformanceRow[] }) {
                 />
             </div>
 
-            {/* Avg Hours Before Scrap per Specification */}
+            {/* Avg Hours Scrap per Specification */}
             <ChartCard
-                title="⏱️ Avg. Hours Before Scrap per Specification"
+                title="⏱️ Avg. Hours Scrap per Specification"
                 subtitle="Semakin tinggi = semakin tahan lama sebelum di-scrap. Warna kuning = Michelin."
             >
                 <ResponsiveContainer width="100%" height={340}>
@@ -938,9 +938,9 @@ function ScrapDashboard({ rows }: { rows: TirePerformanceRow[] }) {
                 </ResponsiveContainer>
             </ChartCard>
 
-            {/* Avg Hours Before Scrap per Tire Size */}
+            {/* Avg Hours Scrap per Tire Size */}
             <ChartCard
-                title="📏 Avg. Hours Before Scrap per Tire Size"
+                title="📏 Avg. Hours Scrap per Tire Size"
                 subtitle="Ketahanan sebelum scrap berdasarkan ukuran ban (Tire Size). Warna kuning = Michelin beroperasi di ukuran ini."
             >
                 <ResponsiveContainer width="100%" height={260}>
