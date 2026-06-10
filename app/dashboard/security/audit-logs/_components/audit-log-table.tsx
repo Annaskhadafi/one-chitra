@@ -29,6 +29,7 @@ interface AuditLogTableProps {
     pageSize: number
     currentAction: string
     currentUserId: string
+    currentDescription?: string
 }
 
 function actionColor(action: string) {
@@ -46,12 +47,14 @@ export function AuditLogTable({
     totalPages,
     currentAction,
     currentUserId,
+    currentDescription = "",
 }: AuditLogTableProps) {
     const router = useRouter()
     const searchParams = useSearchParams()
 
     const [actionFilter, setActionFilter] = useState(currentAction)
     const [userFilter, setUserFilter] = useState(currentUserId)
+    const [descriptionFilter, setDescriptionFilter] = useState(currentDescription)
 
     function applyFilters() {
         const params = new URLSearchParams(searchParams.toString())
@@ -59,6 +62,8 @@ export function AuditLogTable({
         else params.delete("action")
         if (userFilter) params.set("userId", userFilter)
         else params.delete("userId")
+        if (descriptionFilter) params.set("description", descriptionFilter)
+        else params.delete("description")
         params.set("page", "1")
         router.push(`/dashboard/security/audit-logs?${params.toString()}`)
     }
@@ -66,6 +71,7 @@ export function AuditLogTable({
     function clearFilters() {
         setActionFilter("")
         setUserFilter("")
+        setDescriptionFilter("")
         router.push("/dashboard/security/audit-logs")
     }
 
@@ -75,7 +81,7 @@ export function AuditLogTable({
         router.push(`/dashboard/security/audit-logs?${params.toString()}`)
     }
 
-    const hasFilters = currentAction || currentUserId
+    const hasFilters = currentAction || currentUserId || currentDescription
 
     return (
         <div className="space-y-4">
@@ -100,6 +106,16 @@ export function AuditLogTable({
                         placeholder="User ID…"
                         value={userFilter}
                         onChange={(e) => setUserFilter(e.target.value)}
+                        className="w-52"
+                        onKeyDown={(e) => e.key === "Enter" && applyFilters()}
+                    />
+                </div>
+                <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Search description</label>
+                    <Input
+                        placeholder="Description…"
+                        value={descriptionFilter}
+                        onChange={(e) => setDescriptionFilter(e.target.value)}
                         className="w-52"
                         onKeyDown={(e) => e.key === "Enter" && applyFilters()}
                     />

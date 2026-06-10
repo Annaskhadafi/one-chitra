@@ -502,16 +502,18 @@ export async function getAuditLogs(params: {
     pageSize?: number
     userId?: string
     action?: string
+    description?: string
     from?: Date
     to?: Date
 }) {
     await getAuthenticatedSession("admin", "view")
 
-    const { page = 1, pageSize = 50, userId, action, from, to } = params
+    const { page = 1, pageSize = 50, userId, action, description, from, to } = params
 
     const conditions = []
     if (userId) conditions.push(eq(auditLogs.userId, userId))
     if (action) conditions.push(ilike(auditLogs.action, `%${action}%`))
+    if (description) conditions.push(ilike(auditLogs.description, `%${description}%`))
     if (from) conditions.push(gte(auditLogs.createdAt, from))
     if (to) conditions.push(lte(auditLogs.createdAt, to))
 

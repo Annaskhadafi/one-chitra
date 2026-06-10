@@ -1,7 +1,7 @@
 "use server"
 
 import { db } from "@/db"
-import { deliveries, deliveryItems, salesOrders, stockLevels, products, stockTransfers, stockTransferItems, warehouses, fleetTrips } from "@/db/schema"
+import { deliveries, deliveryItems, salesOrders, stockLevels, products, stockTransfers, stockTransferItems, warehouses, fleetTrips, settings } from "@/db/schema"
 import { eq, desc, and, sql, isNotNull, inArray } from "drizzle-orm"
 import { revalidatePath, unstable_noStore as noStore } from "next/cache"
 import { z } from "zod"
@@ -664,21 +664,26 @@ export async function generateDeliveryNumber() {
     const now = new Date()
     const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`
 
-    // Use SQL to count instead of fetching everything
-    const [result] = await db
-        .select({ count: sql<number>`count(*)` })
-        .from(deliveries)
-        .where(sql`${deliveries.deliveryNumber} LIKE ${`DLV-${dateStr}-%`}`)
+    const key = `seq_dlv_${dateStr}`
 
-    const nextNum = (Number(result?.count) || 0) + 1
+    // Use settings table as a sequence to prevent reusing deleted delivery numbers
+    const [updated] = await db.insert(settings)
+        .values({ key, value: "1" })
+        .onConflictDoUpdate({
+            target: settings.key,
+            set: { value: sql`CAST(CAST(${settings.value} AS INTEGER) + 1 AS TEXT)` }
+        })
+        .returning()
+
+    let nextNum = parseInt(updated.value, 10)
     
-    // Safety check: if the number exists, increment until we find a free one
-    let finalNum = nextNum
+    // Safety check: if the number already exists (e.g., from old count-based logic), 
+    // increment until we find a free one and update the sequence.
     let exists = true
     let finalDeliveryNumber = ""
 
     while (exists) {
-        finalDeliveryNumber = `DLV-${dateStr}-${String(finalNum).padStart(4, "0")}`
+        finalDeliveryNumber = `DLV-${dateStr}-${String(nextNum).padStart(4, "0")}`
         const check = await db.query.deliveries.findFirst({
             where: eq(deliveries.deliveryNumber, finalDeliveryNumber),
             columns: { id: true }
@@ -686,7 +691,10 @@ export async function generateDeliveryNumber() {
         if (!check) {
             exists = false
         } else {
-            finalNum++
+            nextNum++
+            await db.update(settings)
+                .set({ value: nextNum.toString() })
+                .where(eq(settings.key, key))
         }
     }
 

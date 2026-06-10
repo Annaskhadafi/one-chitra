@@ -5,6 +5,7 @@ interface SearchParams {
     page?: string
     action?: string
     userId?: string
+    description?: string
 }
 
 export default async function AuditLogsPage({
@@ -16,8 +17,9 @@ export default async function AuditLogsPage({
     const page = parseInt(params.page ?? "1", 10)
     const action = params.action ?? ""
     const userId = params.userId ?? ""
+    const description = params.description ?? ""
 
-    const result = await getAuditLogs({ page, pageSize: 50, action: action || undefined, userId: userId || undefined })
+    const result = await getAuditLogs({ page, pageSize: 50, action: action || undefined, userId: userId || undefined, description: description || undefined })
 
     return (
         <div className="p-6 space-y-6">
@@ -35,6 +37,7 @@ export default async function AuditLogsPage({
                 pageSize={result.pageSize}
                 currentAction={action}
                 currentUserId={userId}
+                currentDescription={description}
             />
         </div>
     )
