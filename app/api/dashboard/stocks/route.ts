@@ -65,6 +65,7 @@ export async function POST(req: NextRequest) {
                 AND ${normalizedProductSloc} = ${normalizedStorLoc}
             WHERE z.plant_code IN (${plantList})
                 AND z.material_no = ${material}
+                AND z.stor_loc_desc = 'CP TRD BPN'
             GROUP BY z.plant_code, z.material_no, ${normalizedStorLoc}
             ORDER BY z.plant_code ASC, z.material_no ASC, ${normalizedStorLoc} ASC
         `)
