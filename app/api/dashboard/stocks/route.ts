@@ -32,6 +32,18 @@ export async function POST(req: NextRequest) {
         const body = await req.json().catch(() => ({}))
         const plants = normalizeArrayFilter(body?.plants, ["2000", "2001"])
         const category = String(body?.category ?? "TYRE").trim().toUpperCase()
+        const material = String(body?.material ?? body?.materialNo ?? "").trim()
+
+        if (!material) {
+            return NextResponse.json(
+                {
+                    status: "ERROR",
+                    message: "material is required",
+                },
+                { status: 400 }
+            )
+        }
+
         const normalizedStorLoc = normalizedSlocSql(sql`z.stor_loc`)
         const normalizedProductSloc = normalizedSlocSql(sql`p.sloc`)
         const plantList = sql.join(plants.map((plant) => sql`${plant}`), sql`, `)
@@ -52,6 +64,7 @@ export async function POST(req: NextRequest) {
                 AND NULLIF(TRIM(p.sloc), '') IS NOT NULL
                 AND ${normalizedProductSloc} = ${normalizedStorLoc}
             WHERE z.plant_code IN (${plantList})
+                AND z.material_no = ${material}
             GROUP BY z.plant_code, z.material_no, ${normalizedStorLoc}
             ORDER BY z.plant_code ASC, z.material_no ASC, ${normalizedStorLoc} ASC
         `)
@@ -71,6 +84,7 @@ export async function POST(req: NextRequest) {
             filters: {
                 plants,
                 category,
+                material,
             },
             result: data,
             count: data.length,
