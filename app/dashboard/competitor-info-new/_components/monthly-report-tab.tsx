@@ -1163,7 +1163,20 @@ export function MonthlyReportTab() {
     const lostSaleSlide = activityChartSlide + activityChartPages.length
     const lostSaleChartSlide = lostSaleSlide + lostSaleTablePages.length
     const rmiSummarySlide = lostSaleChartSlide + lostSaleChartPages.length
-    const quotationSlide = rmiSummarySlide + 1
+
+    // Lost Sale + Stock Match pagination (max 5 items per slide)
+    const lostStockItems = (lostSaleStockData?.lostItems ?? []).filter((l: any) => {
+        const [fy, fm] = month.split("-").map(Number)
+        const d = new Date(l.date)
+        return d.getFullYear() === fy && (d.getMonth() + 1) === fm
+    })
+    const LOST_STOCK_PER_PAGE = 5
+    const lostStockPages: typeof lostStockItems[] = []
+    for (let i = 0; i < lostStockItems.length; i += LOST_STOCK_PER_PAGE) {
+        lostStockPages.push(lostStockItems.slice(i, i + LOST_STOCK_PER_PAGE))
+    }
+    const lostStockSlideStart = rmiSummarySlide + 1
+    const quotationSlide = lostStockSlideStart + Math.max(lostStockPages.length, 1)
     const closingSlide = quotationSlide + 1
 
     return (
@@ -1683,149 +1696,141 @@ export function MonthlyReportTab() {
                                 )
                             })()}
                         </Slide>,
-                        <Slide key="quotation-analysis" eyebrow={`Slide ${quotationSlide} - Lost Sale & Ready Stock`} title={`Lost Sale — Matching dengan Stok Ready — ${monthLabel(month)}`}>
-                            {(() => {
-                                const lsData = lostSaleStockData
-                                const lostItems = lsData?.lostItems ?? []
-                                const totalLost = lsData?.totalLost ?? 0
-                                const totalMatched = lsData?.totalMatched ?? 0
-                                const totalUnmatched = lsData?.totalUnmatched ?? 0
-                                const readyStockCount = lsData?.readyStockCount ?? 0
+                        ...lostStockPages.map((pageItems, pageIndex) => {
+                            const lsData = lostSaleStockData
+                            const totalLost = lsData?.totalLost ?? 0
+                            const totalMatched = lsData?.totalMatched ?? 0
+                            const totalUnmatched = lsData?.totalUnmatched ?? 0
+                            const readyStockCount = lsData?.readyStockCount ?? 0
+                            const allMonthItems = lostStockItems
+                            const monthMatched = allMonthItems.filter((i: any) => i.hasMatch).length
+                            const monthUnmatched = allMonthItems.length - monthMatched
+                            const isFirstPage = pageIndex === 0
 
-                                // Filter by current month
-                                const [filterYear, filterMonthNum] = month.split("-").map(Number)
-                                const monthItems = lostItems.filter((l: any) => {
-                                    const d = new Date(l.date)
-                                    return d.getFullYear() === filterYear && (d.getMonth() + 1) === filterMonthNum
-                                })
-                                const monthMatched = monthItems.filter((i: any) => i.hasMatch).length
-                                const monthUnmatched = monthItems.length - monthMatched
+                            // Status distribution (all month items)
+                            const statusDist: Record<string, number> = {}
+                            allMonthItems.forEach((i: any) => {
+                                statusDist[i.status] = (statusDist[i.status] || 0) + 1
+                            })
+                            const statusData = Object.entries(statusDist).map(([name, value]) => ({ name, value }))
 
-                                // Status distribution
-                                const statusDist: Record<string, number> = {}
-                                monthItems.forEach((i: any) => {
-                                    statusDist[i.status] = (statusDist[i.status] || 0) + 1
-                                })
-                                const statusData = Object.entries(statusDist).map(([name, value]) => ({ name, value }))
+                            // Top lost products (all month items)
+                            const prodFreq: Record<string, { name: string; count: number; hasMatch: boolean }> = {}
+                            allMonthItems.forEach((i: any) => {
+                                const key = i.productName
+                                if (!prodFreq[key]) prodFreq[key] = { name: i.productName, count: 0, hasMatch: i.hasMatch }
+                                prodFreq[key].count += 1
+                                if (i.hasMatch) prodFreq[key].hasMatch = true
+                            })
+                            const topLostProducts = Object.values(prodFreq)
+                                .sort((a, b) => b.count - a.count)
+                                .slice(0, 8)
 
-                                // Top lost products
-                                const prodFreq: Record<string, { name: string; count: number; hasMatch: boolean }> = {}
-                                monthItems.forEach((i: any) => {
-                                    const key = i.productName
-                                    if (!prodFreq[key]) prodFreq[key] = { name: i.productName, count: 0, hasMatch: i.hasMatch }
-                                    prodFreq[key].count += 1
-                                    if (i.hasMatch) prodFreq[key].hasMatch = true
-                                })
-                                const topLostProducts = Object.values(prodFreq)
-                                    .sort((a, b) => b.count - a.count)
-                                    .slice(0, 8)
+                            const STATUS_COLORS: Record<string, string> = { rejected: "#dc2626", expired: "#f97316", cancelled: "#6b7280", lost: "#7c3aed", converted: "#16a34a", approved: "#16a34a" }
+                            const slideNum = lostStockSlideStart + pageIndex
 
-                                // Matched items only (top 6 for table)
-                                const matchedItems = monthItems.filter((i: any) => i.hasMatch).slice(0, 6)
-
-                                const STATUS_COLORS: Record<string, string> = { rejected: "#dc2626", expired: "#f97316", cancelled: "#6b7280", lost: "#7c3aed", converted: "#16a34a", approved: "#16a34a" }
-
-                                return (
+                            return (
+                                <Slide key={`lost-stock-${pageIndex}`} eyebrow={`Slide ${slideNum} - Lost Sale & Ready Stock${lostStockPages.length > 1 ? ` (${pageIndex + 1}/${lostStockPages.length})` : ''}`} title={`Lost Sale — Matching Stok Ready — ${monthLabel(month)}${lostStockPages.length > 1 ? ` [${pageIndex + 1}/${lostStockPages.length}]` : ''}`}>
                                     <div className="grid h-[calc(100%-88px)] grid-rows-[auto_1fr] gap-3">
-                                        {/* KPI Row */}
-                                        <div className="grid grid-cols-5 gap-2">
-                                            <div className="rounded-lg border bg-white p-3 shadow-sm">
-                                                <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Total Lost</p>
-                                                <p className="text-2xl font-black text-red-600">{monthItems.length}</p>
-                                                <p className="text-[9px] text-slate-400">{totalLost} total keseluruhan</p>
-                                            </div>
-                                            <div className="rounded-lg border bg-white p-3 shadow-sm">
-                                                <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Bisa Dipulihkan</p>
-                                                <p className="text-2xl font-black text-emerald-600">{monthMatched}</p>
-                                                <p className="text-[9px] text-slate-400">cocok dengan stok ready</p>
-                                            </div>
-                                            <div className="rounded-lg border bg-white p-3 shadow-sm">
-                                                <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Belum Cocok</p>
-                                                <p className="text-2xl font-black text-amber-600">{monthUnmatched}</p>
-                                                <p className="text-[9px] text-slate-400">perlu cari alternatif</p>
-                                            </div>
-                                            <div className="rounded-lg border bg-white p-3 shadow-sm">
-                                                <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Ready Stock Items</p>
-                                                <p className="text-2xl font-black text-[#0f4c81]">{readyStockCount}</p>
-                                                <p className="text-[9px] text-slate-400">item tersedia di SAP</p>
-                                            </div>
-                                            <div className="rounded-lg border bg-white p-3 shadow-sm">
-                                                <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Recovery Rate</p>
-                                                <p className={`text-2xl font-black ${monthItems.length > 0 && (monthMatched / monthItems.length) > 0.5 ? "text-emerald-600" : "text-amber-600"}`}>
-                                                    {monthItems.length > 0 ? Math.round((monthMatched / monthItems.length) * 100) : 0}%
-                                                </p>
-                                                <p className="text-[9px] text-slate-400">persentase match</p>
-                                            </div>
-                                        </div>
-
-                                        {/* Charts + Table Row */}
-                                        <div className="grid grid-cols-[1fr_1.2fr] gap-3">
-                                            {/* Left: Status Distribution + Top Lost Products */}
-                                            <div className="flex min-h-0 flex-col gap-3">
-                                                {/* Status Distribution */}
-                                                <div className="flex-1 rounded-lg border bg-white p-3 shadow-sm">
-                                                    <p className="mb-1 text-sm font-black text-slate-900">Distribusi Status Lost</p>
-                                                    <div className="mt-2 flex flex-wrap gap-2">
-                                                        {statusData.map(s => (
-                                                            <div key={s.name} className="flex items-center gap-2 rounded-md border px-3 py-1.5">
-                                                                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: STATUS_COLORS[s.name] || "#94a3b8" }} />
-                                                                <span className="text-xs font-semibold text-slate-700 capitalize">{s.name}</span>
-                                                                <span className="text-xs font-bold" style={{ color: STATUS_COLORS[s.name] || "#334155" }}>{s.value}</span>
-                                                            </div>
-                                                        ))}
-                                                        {statusData.length === 0 && (
-                                                            <p className="text-xs text-slate-400 italic">Tidak ada data bulan ini</p>
-                                                        )}
-                                                    </div>
+                                        {/* KPI Row - only on first page */}
+                                        {isFirstPage && (
+                                            <div className="grid grid-cols-5 gap-2">
+                                                <div className="rounded-lg border bg-white p-3 shadow-sm">
+                                                    <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Total Lost</p>
+                                                    <p className="text-2xl font-black text-red-600">{allMonthItems.length}</p>
+                                                    <p className="text-[9px] text-slate-400">{totalLost} total keseluruhan</p>
                                                 </div>
-
-                                                {/* Top Lost Products */}
-                                                <div className="flex-[1.5] rounded-lg border bg-white p-3 shadow-sm">
-                                                    <p className="mb-1 text-sm font-black text-slate-900">Top Produk Lost</p>
-                                                    <p className="mb-2 text-[10px] text-slate-400">Produk yang paling banyak hilang</p>
-                                                    <div className="space-y-1.5">
-                                                        {topLostProducts.map((p, idx) => (
-                                                            <div key={idx} className="flex items-center gap-2 rounded-md bg-slate-50 px-2.5 py-1.5">
-                                                                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-200 text-[9px] font-bold text-slate-600">{idx + 1}</span>
-                                                                <span className="min-w-0 flex-1 truncate text-[10px] font-semibold text-slate-700">{p.name}</span>
-                                                                <span className="text-[10px] font-bold text-slate-500">{p.count}x</span>
-                                                                <span className={`shrink-0 rounded px-1.5 py-0.5 text-[8px] font-bold ${p.hasMatch ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-600"}`}>
-                                                                    {p.hasMatch ? "ADA STOK" : "NO STOK"}
-                                                                </span>
-                                                            </div>
-                                                        ))}
-                                                        {topLostProducts.length === 0 && (
-                                                            <p className="text-xs text-slate-400 italic py-4 text-center">Tidak ada data bulan ini</p>
-                                                        )}
-                                                    </div>
+                                                <div className="rounded-lg border bg-white p-3 shadow-sm">
+                                                    <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Bisa Dipulihkan</p>
+                                                    <p className="text-2xl font-black text-emerald-600">{monthMatched}</p>
+                                                    <p className="text-[9px] text-slate-400">cocok dengan stok ready</p>
+                                                </div>
+                                                <div className="rounded-lg border bg-white p-3 shadow-sm">
+                                                    <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Belum Cocok</p>
+                                                    <p className="text-2xl font-black text-amber-600">{monthUnmatched}</p>
+                                                    <p className="text-[9px] text-slate-400">perlu cari alternatif</p>
+                                                </div>
+                                                <div className="rounded-lg border bg-white p-3 shadow-sm">
+                                                    <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Ready Stock Items</p>
+                                                    <p className="text-2xl font-black text-[#0f4c81]">{readyStockCount}</p>
+                                                    <p className="text-[9px] text-slate-400">item tersedia di SAP</p>
+                                                </div>
+                                                <div className="rounded-lg border bg-white p-3 shadow-sm">
+                                                    <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Recovery Rate</p>
+                                                    <p className={`text-2xl font-black ${allMonthItems.length > 0 && (monthMatched / allMonthItems.length) > 0.5 ? "text-emerald-600" : "text-amber-600"}`}>
+                                                        {allMonthItems.length > 0 ? Math.round((monthMatched / allMonthItems.length) * 100) : 0}%
+                                                    </p>
+                                                    <p className="text-[9px] text-slate-400">persentase match</p>
                                                 </div>
                                             </div>
+                                        )}
 
-                                            {/* Right: Matched Items Table */}
+                                        {/* Content Row */}
+                                        <div className={`grid ${isFirstPage ? 'grid-cols-[1fr_1.2fr]' : 'grid-cols-1'} gap-3`}>
+                                            {/* Left: Status + Top Products (only on first page) */}
+                                            {isFirstPage && (
+                                                <div className="flex min-h-0 flex-col gap-3">
+                                                    <div className="flex-1 rounded-lg border bg-white p-3 shadow-sm">
+                                                        <p className="mb-1 text-sm font-black text-slate-900">Distribusi Status Lost</p>
+                                                        <div className="mt-2 flex flex-wrap gap-2">
+                                                            {statusData.map(s => (
+                                                                <div key={s.name} className="flex items-center gap-2 rounded-md border px-3 py-1.5">
+                                                                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: STATUS_COLORS[s.name] || "#94a3b8" }} />
+                                                                    <span className="text-xs font-semibold text-slate-700 capitalize">{s.name}</span>
+                                                                    <span className="text-xs font-bold" style={{ color: STATUS_COLORS[s.name] || "#334155" }}>{s.value}</span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex-[1.5] rounded-lg border bg-white p-3 shadow-sm">
+                                                        <p className="mb-1 text-sm font-black text-slate-900">Top Produk Lost</p>
+                                                        <div className="space-y-1.5">
+                                                            {topLostProducts.map((p, idx) => (
+                                                                <div key={idx} className="flex items-center gap-2 rounded-md bg-slate-50 px-2.5 py-1.5">
+                                                                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-200 text-[9px] font-bold text-slate-600">{idx + 1}</span>
+                                                                    <span className="min-w-0 flex-1 truncate text-[10px] font-semibold text-slate-700">{p.name}</span>
+                                                                    <span className="text-[10px] font-bold text-slate-500">{p.count}x</span>
+                                                                    <span className={`shrink-0 rounded px-1.5 py-0.5 text-[8px] font-bold ${p.hasMatch ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-600"}`}>
+                                                                        {p.hasMatch ? "ADA STOK" : "NO STOK"}
+                                                                    </span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Right/Full: Items Table for this page */}
                                             <div className="flex min-h-0 flex-col rounded-lg border bg-white p-3 shadow-sm">
                                                 <div className="mb-2 flex items-center justify-between">
                                                     <div>
-                                                        <p className="text-sm font-black text-slate-900">Lost Sale — Matching dengan Ready Stock</p>
-                                                        <p className="text-[10px] text-slate-400">Produk lost yang cocok dengan stok SAP yang tersedia</p>
+                                                        <p className="text-sm font-black text-slate-900">
+                                                            {isFirstPage ? "Lost Sale — Detail Matching" : `Lost Sale — Lanjutan (Halaman ${pageIndex + 1})`}
+                                                        </p>
+                                                        <p className="text-[10px] text-slate-400">
+                                                            {isFirstPage ? "Produk lost yang cocok dengan stok SAP yang tersedia" : `Item ${pageIndex * LOST_STOCK_PER_PAGE + 1}-${Math.min((pageIndex + 1) * LOST_STOCK_PER_PAGE, allMonthItems.length)} dari ${allMonthItems.length}`}
+                                                        </p>
                                                     </div>
-                                                    <span className="rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">{monthMatched} item match</span>
+                                                    {isFirstPage && <span className="rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">{monthMatched} item match</span>}
                                                 </div>
                                                 <div className="min-h-0 flex-1 overflow-auto">
                                                     <table className="w-full text-left text-[10px]">
                                                         <thead>
                                                             <tr className="border-b border-slate-200">
+                                                                <th className="pb-1.5 font-bold text-slate-500">#</th>
                                                                 <th className="pb-1.5 font-bold text-slate-500">Customer</th>
                                                                 <th className="pb-1.5 font-bold text-slate-500">Produk Lost</th>
                                                                 <th className="pb-1.5 font-bold text-slate-500 text-center">Qty</th>
                                                                 <th className="pb-1.5 font-bold text-slate-500">Status</th>
-                                                                <th className="pb-1.5 font-bold text-emerald-600">Stok Ready (Cocok)</th>
+                                                                <th className="pb-1.5 font-bold text-slate-500">Stok Ready (Cocok)</th>
                                                             </tr>
                                                         </thead>
                                                         <tbody>
-                                                            {matchedItems.map((item: any, idx: number) => (
-                                                                <tr key={idx} className="border-b border-slate-100 last:border-0">
-                                                                    <td className="py-1.5 font-semibold text-slate-700 max-w-[100px] truncate" title={item.customerName}>{item.customerName}</td>
-                                                                    <td className="py-1.5 text-slate-600 max-w-[150px] truncate" title={item.productName}>{item.productName}</td>
+                                                            {pageItems.map((item: any, idx: number) => (
+                                                                <tr key={idx} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/50">
+                                                                    <td className="py-1.5 font-bold text-slate-400">{pageIndex * LOST_STOCK_PER_PAGE + idx + 1}</td>
+                                                                    <td className="py-1.5 font-semibold text-slate-700 max-w-[90px] truncate" title={item.customerName}>{item.customerName}</td>
+                                                                    <td className="py-1.5 text-slate-600 max-w-[140px] truncate" title={item.productName}>{item.productName}</td>
                                                                     <td className="py-1.5 text-center font-mono font-bold text-slate-700">{item.quantity}</td>
                                                                     <td className="py-1.5">
                                                                         <span className="rounded px-1.5 py-0.5 text-[8px] font-bold capitalize" style={{ backgroundColor: (STATUS_COLORS[item.status] || "#94a3b8") + "20", color: STATUS_COLORS[item.status] || "#334155" }}>
@@ -1833,37 +1838,34 @@ export function MonthlyReportTab() {
                                                                         </span>
                                                                     </td>
                                                                     <td className="py-1.5">
-                                                                        <div className="space-y-0.5">
-                                                                            {item.matchedStock.slice(0, 2).map((s: any, si: number) => (
-                                                                                <div key={si} className="flex items-center gap-1">
-                                                                                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                                                                                    <span className="truncate text-[9px] text-emerald-700 font-medium max-w-[180px]" title={s.materialDesc}>{s.materialDesc}</span>
-                                                                                    <span className="text-[8px] text-emerald-500 font-bold">({s.totalQty} pcs)</span>
-                                                                                </div>
-                                                                            ))}
-                                                                            {item.matchedStock.length > 2 && (
-                                                                                <span className="text-[8px] text-emerald-500">+{item.matchedStock.length - 2} lainnya</span>
-                                                                            )}
-                                                                        </div>
+                                                                        {item.hasMatch ? (
+                                                                            <div className="space-y-0.5">
+                                                                                {item.matchedStock.slice(0, 2).map((s: any, si: number) => (
+                                                                                    <div key={si} className="flex items-center gap-1">
+                                                                                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                                                                                        <span className="truncate text-[9px] text-emerald-700 font-medium max-w-[180px]" title={s.materialDesc}>{s.materialDesc}</span>
+                                                                                        <span className="text-[8px] text-emerald-500 font-bold">({s.totalQty} pcs)</span>
+                                                                                    </div>
+                                                                                ))}
+                                                                                {item.matchedStock.length > 2 && (
+                                                                                    <span className="text-[8px] text-emerald-500">+{item.matchedStock.length - 2} lainnya</span>
+                                                                                )}
+                                                                            </div>
+                                                                        ) : (
+                                                                            <span className="text-[9px] text-slate-400 italic">Tidak ada stok cocok</span>
+                                                                        )}
                                                                     </td>
                                                                 </tr>
                                                             ))}
-                                                            {matchedItems.length === 0 && (
-                                                                <tr>
-                                                                    <td colSpan={5} className="py-8 text-center text-xs text-slate-400 italic">
-                                                                        Tidak ada lost sale yang cocok dengan stok ready bulan ini
-                                                                    </td>
-                                                                </tr>
-                                                            )}
                                                         </tbody>
                                                     </table>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
-                                )
-                            })()}
-                        </Slide>,
+                                </Slide>
+                            )
+                        }),
                         <Slide key="thanks" eyebrow={`Slide ${closingSlide} - Closing`} title="Thank You / Closing">
                             <div className="flex h-[calc(100%-88px)] flex-col items-center justify-center rounded-lg bg-[#0f4c81] text-center text-white">
                                 <Image src="/cp_logo_alpha.png" alt="Chitra Paratama" width={190} height={80} className="mb-8 h-20 w-auto rounded bg-white/95 p-3" />
