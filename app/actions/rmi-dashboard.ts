@@ -1,7 +1,7 @@
 "use server"
 
 import { db } from "@/db"
-import { rmiRecords, quarterlyExchangeRates, rmiWeights } from "@/db/schema"
+import { rmiRecords, quarterlyExchangeRates, rmiWeights, quotations } from "@/db/schema"
 import { getAuthenticatedSession } from "@/lib/rbac"
 import { getRealtimeExchangeRate } from "./settings"
 import { and, desc, eq, sql } from "drizzle-orm"
@@ -1006,6 +1006,133 @@ export async function getExternalPricesForMonthlyCollapse() {
     } catch (error) {
         console.error("Error generating monthly collapse data:", error)
         return { success: false, error: "Gagal memuat detail bulanan" }
+    }
+}
+
+// -------------------------------------------------------------
+// LOST SALE + SAP READY STOCK MATCHING
+// -------------------------------------------------------------
+export async function getLostSaleStockMatch() {
+    try {
+        await getAuthenticatedSession("rmi-dashboard", "view")
+
+        // 1. Fetch all quotations with items + product
+        const allQuotes = await db.query.quotations.findMany({
+            with: {
+                items: { with: { product: true } },
+                customer: true,
+                salesPerson: true,
+                createdByUser: true,
+            },
+            orderBy: [desc(quotations.quotationDate)]
+        })
+
+        // 2. Fetch SAP ready stock (all categories, stock > 0)
+        const stockResult = await db.execute(sql`
+            SELECT 
+                z.material_no as "materialNo", 
+                MAX(z.material_desc) as "materialDesc", 
+                SUM(CAST(z.total_stock AS numeric)) as "totalQty", 
+                SUM(CAST(z.value_stock AS numeric)) as "totalValue",
+                MAX(z.currency) as currency
+            FROM public.zmc9_stock_sap z
+            GROUP BY z.material_no
+            HAVING SUM(CAST(z.total_stock AS numeric)) > 0
+            ORDER BY MAX(z.material_desc) ASC
+        `)
+
+        const readyStock = stockResult.rows.map(r => ({
+            materialNo: String(r.materialNo || ""),
+            materialDesc: String(r.materialDesc || ""),
+            totalQty: Number(r.totalQty || 0),
+            totalValue: Number(r.totalValue || 0),
+            currency: String(r.currency || "USD"),
+        }))
+
+        // 3. Tire size regex
+        const tireSizeRegex = /(\d{1,3}(\.\d{1,2})?\s?R\s?\d{1,2}(\.\d{1})?)|(\d{3}\/\d{2}\s?R\s?\d{2})|(\d{1,2}\.?\d{0,2}-\d{2})/gi
+        const extractTireSize = (desc: string) => {
+            const matches = desc.match(tireSizeRegex)
+            return matches ? matches[0].replace(/\s+/g, '').toUpperCase() : null
+        }
+
+        // 4. Filter lost/rejected/expired quotes
+        const lostStatuses = ['rejected', 'expired', 'lost', 'cancelled']
+        const lostQuotes = allQuotes.filter(q => lostStatuses.includes(q.status))
+
+        // 5. Build lost items with stock matching
+        const lostItems = lostQuotes.flatMap(q =>
+            q.items.map(item => {
+                if (!item.product) return null
+                const desc = item.product.materialDescription || ""
+                const isTire = item.product.category?.toUpperCase().includes('TYRE')
+
+                // Find matching ready stock
+                let matchedStock: typeof readyStock = []
+
+                if (isTire) {
+                    const size = extractTireSize(desc)
+                    if (size) {
+                        matchedStock = readyStock.filter(s => {
+                            const sSize = extractTireSize(s.materialDesc)
+                            return sSize === size
+                        })
+                    }
+                }
+
+                // Fallback: fuzzy match by material description
+                if (matchedStock.length === 0) {
+                    const lowerDesc = desc.toLowerCase()
+                    matchedStock = readyStock.filter(s => {
+                        const sLower = s.materialDesc.toLowerCase()
+                        // Check if significant words overlap
+                        const words = lowerDesc.split(/\s+/).filter(w => w.length > 3)
+                        return words.some(w => sLower.includes(w))
+                    }).slice(0, 3)
+                }
+
+                return {
+                    quotationNumber: q.quotationNumber,
+                    quotationId: q.id,
+                    customerName: q.customer?.name || "-",
+                    salesName: q.salesPerson?.name || q.createdByUser?.name || "-",
+                    productName: desc,
+                    productId: item.productId,
+                    category: item.product.category,
+                    quantity: item.quantity,
+                    unitPrice: item.unitPrice,
+                    status: q.status,
+                    date: q.quotationDate,
+                    matchedStock: matchedStock.map(s => ({
+                        materialNo: s.materialNo,
+                        materialDesc: s.materialDesc,
+                        totalQty: s.totalQty,
+                        totalValue: s.totalValue,
+                        currency: s.currency,
+                    })),
+                    hasMatch: matchedStock.length > 0,
+                }
+            })
+        ).filter(Boolean)
+
+        // 6. Summary stats
+        const totalLost = lostItems.length
+        const totalMatched = lostItems.filter(i => i.hasMatch).length
+        const totalUnmatched = totalLost - totalMatched
+
+        return {
+            success: true,
+            data: {
+                lostItems,
+                readyStockCount: readyStock.length,
+                totalLost,
+                totalMatched,
+                totalUnmatched,
+            }
+        }
+    } catch (error) {
+        console.error("Error matching lost sale with stock:", error)
+        return { success: false, error: "Gagal memuat data lost sale & stock" }
     }
 }
 

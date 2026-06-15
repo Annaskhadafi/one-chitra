@@ -9,8 +9,7 @@ import { Bot, CalendarDays, Download, FileText, Loader2, RefreshCw, Sparkles, Ta
 import { toast } from "sonner"
 
 import { generateCompetitorMonthlyReportInsight } from "@/app/actions/competitor-new"
-import { getExternalPricesForMonthlyCollapse, getRmiWeights } from "@/app/actions/rmi-dashboard"
-import { getQuotationAnalysis, type QuotationAnalysisData } from "@/app/actions/quotation-analysis"
+import { getExternalPricesForMonthlyCollapse, getRmiWeights, getLostSaleStockMatch } from "@/app/actions/rmi-dashboard"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -823,7 +822,33 @@ export function MonthlyReportTab() {
         basePeriodFreight: number
         basePeriodExchangeRate: number
     } | null>(null)
-    const [quotationData, setQuotationData] = useState<QuotationAnalysisData | null>(null)
+    const [lostSaleStockData, setLostSaleStockData] = useState<{
+        lostItems: Array<{
+            quotationNumber: string | null
+            quotationId: number
+            customerName: string
+            salesName: string
+            productName: string
+            productId: number
+            category: string | null
+            quantity: number
+            unitPrice: string | number | null
+            status: string
+            date: Date | string
+            matchedStock: Array<{
+                materialNo: string
+                materialDesc: string
+                totalQty: number
+                totalValue: number
+                currency: string
+            }>
+            hasMatch: boolean
+        }>
+        readyStockCount: number
+        totalLost: number
+        totalMatched: number
+        totalUnmatched: number
+    } | null>(null)
     const slideRefs = useRef<Array<HTMLElement | null>>([]);
 
     const loadData = async () => {
@@ -883,14 +908,14 @@ export function MonthlyReportTab() {
         } catch {
             // Weights data is optional
         }
-        // Load Quotation Analysis data (non-blocking)
+        // Load Lost Sale + Stock Match data (non-blocking)
         try {
-            const qRes = await getQuotationAnalysis()
-            if (qRes) {
-                setQuotationData(qRes as QuotationAnalysisData)
+            const lsRes = await getLostSaleStockMatch()
+            if (lsRes?.success && lsRes.data) {
+                setLostSaleStockData(lsRes.data as any)
             }
         } catch {
-            // Quotation data is optional
+            // Lost sale data is optional
         }
     }
 
@@ -1658,155 +1683,183 @@ export function MonthlyReportTab() {
                                 )
                             })()}
                         </Slide>,
-                        <Slide key="quotation-analysis" eyebrow={`Slide ${quotationSlide} - Quotation Analysis`} title={`Analisis Quotation & Konversi Penjualan — ${monthLabel(month)}`}>
+                        <Slide key="quotation-analysis" eyebrow={`Slide ${quotationSlide} - Lost Sale & Ready Stock`} title={`Lost Sale — Matching dengan Stok Ready — ${monthLabel(month)}`}>
                             {(() => {
-                                const qData = quotationData
-                                const allQuotes = qData?.allQuotes ?? []
-                                const summary = qData?.summary ?? { totalQuotes: 0, totalSent: 0, totalConverted: 0, conversionRate: 0 }
-                                const topItems = qData?.topItems ?? []
-                                const lostAnalysis = qData?.lostAnalysis ?? []
-                                const monthlyTrend = qData?.monthlyTrend ?? []
+                                const lsData = lostSaleStockData
+                                const lostItems = lsData?.lostItems ?? []
+                                const totalLost = lsData?.totalLost ?? 0
+                                const totalMatched = lsData?.totalMatched ?? 0
+                                const totalUnmatched = lsData?.totalUnmatched ?? 0
+                                const readyStockCount = lsData?.readyStockCount ?? 0
 
                                 // Filter by current month
                                 const [filterYear, filterMonthNum] = month.split("-").map(Number)
-                                const monthQuotes = allQuotes.filter(q => {
-                                    const d = new Date(q.quotationDate)
-                                    return d.getFullYear() === filterYear && (d.getMonth() + 1) === filterMonthNum
-                                })
-                                const monthSent = monthQuotes.filter(q => q.status !== "draft").length
-                                const monthConverted = monthQuotes.filter(q => q.status === "approved" || q.status === "converted").length
-                                const monthRate = monthSent > 0 ? (monthConverted / monthSent) * 100 : 0
-                                const monthLost = lostAnalysis.filter(l => {
+                                const monthItems = lostItems.filter((l: any) => {
                                     const d = new Date(l.date)
                                     return d.getFullYear() === filterYear && (d.getMonth() + 1) === filterMonthNum
-                                }).length
-
-                                // Top items this month
-                                const monthItemFreq: Record<number, { name: string; count: number }> = {}
-                                monthQuotes.forEach(q => {
-                                    q.items.forEach(item => {
-                                        if (!item.productId || !item.product) return
-                                        if (!monthItemFreq[item.productId]) {
-                                            monthItemFreq[item.productId] = { name: item.product.materialDescription || item.product.materialNumber, count: 0 }
-                                        }
-                                        monthItemFreq[item.productId].count += 1
-                                    })
                                 })
-                                const monthTopItems = Object.entries(monthItemFreq)
-                                    .map(([id, v]) => ({ productId: Number(id), name: v.name, count: v.count }))
+                                const monthMatched = monthItems.filter((i: any) => i.hasMatch).length
+                                const monthUnmatched = monthItems.length - monthMatched
+
+                                // Status distribution
+                                const statusDist: Record<string, number> = {}
+                                monthItems.forEach((i: any) => {
+                                    statusDist[i.status] = (statusDist[i.status] || 0) + 1
+                                })
+                                const statusData = Object.entries(statusDist).map(([name, value]) => ({ name, value }))
+
+                                // Top lost products
+                                const prodFreq: Record<string, { name: string; count: number; hasMatch: boolean }> = {}
+                                monthItems.forEach((i: any) => {
+                                    const key = i.productName
+                                    if (!prodFreq[key]) prodFreq[key] = { name: i.productName, count: 0, hasMatch: i.hasMatch }
+                                    prodFreq[key].count += 1
+                                    if (i.hasMatch) prodFreq[key].hasMatch = true
+                                })
+                                const topLostProducts = Object.values(prodFreq)
                                     .sort((a, b) => b.count - a.count)
                                     .slice(0, 8)
 
-                                // Lost by status
-                                const lostByStatus: Record<string, number> = {}
-                                lostAnalysis.forEach(l => {
-                                    const d = new Date(l.date)
-                                    if (d.getFullYear() === filterYear && (d.getMonth() + 1) === filterMonthNum) {
-                                        lostByStatus[l.status] = (lostByStatus[l.status] || 0) + 1
-                                    }
-                                })
-                                const lostStatusData = Object.entries(lostByStatus).map(([name, value]) => ({ name, value }))
+                                // Matched items only (top 6 for table)
+                                const matchedItems = monthItems.filter((i: any) => i.hasMatch).slice(0, 6)
 
-                                const BAR_COLORS_Q = ["#0f4c81", "#f97316", "#16a34a", "#7c3aed", "#dc2626", "#0891b2", "#ca8a04", "#be123c"]
-                                const STATUS_COLORS: Record<string, string> = { rejected: "#dc2626", expired: "#f97316", cancelled: "#6b7280", lost: "#7c3aed" }
+                                const STATUS_COLORS: Record<string, string> = { rejected: "#dc2626", expired: "#f97316", cancelled: "#6b7280", lost: "#7c3aed", converted: "#16a34a", approved: "#16a34a" }
 
                                 return (
                                     <div className="grid h-[calc(100%-88px)] grid-rows-[auto_1fr] gap-3">
                                         {/* KPI Row */}
-                                        <div className="grid grid-cols-4 gap-2">
+                                        <div className="grid grid-cols-5 gap-2">
                                             <div className="rounded-lg border bg-white p-3 shadow-sm">
-                                                <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Total Quotations</p>
-                                                <p className="text-2xl font-black text-[#0f4c81]">{summary.totalQuotes}</p>
-                                                <p className="text-[9px] text-slate-400">{monthQuotes.length} di bulan ini</p>
+                                                <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Total Lost</p>
+                                                <p className="text-2xl font-black text-red-600">{monthItems.length}</p>
+                                                <p className="text-[9px] text-slate-400">{totalLost} total keseluruhan</p>
                                             </div>
                                             <div className="rounded-lg border bg-white p-3 shadow-sm">
-                                                <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Conversion Rate</p>
-                                                <p className={`text-2xl font-black ${summary.conversionRate > 20 ? "text-emerald-600" : "text-amber-600"}`}>{summary.conversionRate.toFixed(1)}%</p>
-                                                <p className="text-[9px] text-slate-400">{summary.totalConverted} disetujui dari {summary.totalSent}</p>
+                                                <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Bisa Dipulihkan</p>
+                                                <p className="text-2xl font-black text-emerald-600">{monthMatched}</p>
+                                                <p className="text-[9px] text-slate-400">cocok dengan stok ready</p>
                                             </div>
                                             <div className="rounded-lg border bg-white p-3 shadow-sm">
-                                                <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Potential Lost</p>
-                                                <p className="text-2xl font-black text-red-600">{monthLost}</p>
-                                                <p className="text-[9px] text-slate-400">{lostAnalysis.length} total keseluruhan</p>
+                                                <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Belum Cocok</p>
+                                                <p className="text-2xl font-black text-amber-600">{monthUnmatched}</p>
+                                                <p className="text-[9px] text-slate-400">perlu cari alternatif</p>
                                             </div>
                                             <div className="rounded-lg border bg-white p-3 shadow-sm">
-                                                <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Top Product</p>
-                                                <p className="text-sm font-black text-[#0f4c81] truncate">{monthTopItems[0]?.name || "-"}</p>
-                                                <p className="text-[9px] text-slate-400">{monthTopItems[0]?.count || 0}x dikutip</p>
+                                                <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Ready Stock Items</p>
+                                                <p className="text-2xl font-black text-[#0f4c81]">{readyStockCount}</p>
+                                                <p className="text-[9px] text-slate-400">item tersedia di SAP</p>
+                                            </div>
+                                            <div className="rounded-lg border bg-white p-3 shadow-sm">
+                                                <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Recovery Rate</p>
+                                                <p className={`text-2xl font-black ${monthItems.length > 0 && (monthMatched / monthItems.length) > 0.5 ? "text-emerald-600" : "text-amber-600"}`}>
+                                                    {monthItems.length > 0 ? Math.round((monthMatched / monthItems.length) * 100) : 0}%
+                                                </p>
+                                                <p className="text-[9px] text-slate-400">persentase match</p>
                                             </div>
                                         </div>
 
-                                        {/* Charts Row */}
-                                        <div className="grid grid-cols-2 gap-3">
-                                            {/* Conversion Trend */}
-                                            <div className="flex min-h-0 flex-col rounded-lg border bg-white p-3 shadow-sm">
-                                                <p className="mb-1 text-sm font-black text-slate-900">Conversion Trend (6 Bulan)</p>
-                                                <p className="mb-2 text-[10px] text-slate-400">Persentase kuotasi yang disetujui vs dikirim</p>
-                                                <div className="min-h-0 flex-1">
-                                                    <ResponsiveContainer width="100%" height="100%">
-                                                        <AreaChart data={monthlyTrend}>
-                                                            <defs>
-                                                                <linearGradient id="colorConvRate" x1="0" y1="0" x2="0" y2="1">
-                                                                    <stop offset="5%" stopColor="#0f4c81" stopOpacity={0.3} />
-                                                                    <stop offset="95%" stopColor="#0f4c81" stopOpacity={0} />
-                                                                </linearGradient>
-                                                            </defs>
-                                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                                                            <XAxis dataKey="month" tick={{ fontSize: 10, fill: "#64748b" }} axisLine={false} />
-                                                            <YAxis tick={{ fontSize: 10, fill: "#64748b" }} axisLine={false} tickFormatter={(val) => `${val}%`} />
-                                                            <Tooltip
-                                                                contentStyle={{ backgroundColor: "#fff", border: "1px solid #e2e8f0", borderRadius: "8px", fontSize: 11 }}
-                                                                formatter={(value: number | string) => [`${parseFloat(String(value)).toFixed(1)}%`, 'Rate']}
-                                                            />
-                                                            <Area type="monotone" dataKey="rate" stroke="#0f4c81" strokeWidth={2.5} fillOpacity={1} fill="url(#colorConvRate)" />
-                                                        </AreaChart>
-                                                    </ResponsiveContainer>
+                                        {/* Charts + Table Row */}
+                                        <div className="grid grid-cols-[1fr_1.2fr] gap-3">
+                                            {/* Left: Status Distribution + Top Lost Products */}
+                                            <div className="flex min-h-0 flex-col gap-3">
+                                                {/* Status Distribution */}
+                                                <div className="flex-1 rounded-lg border bg-white p-3 shadow-sm">
+                                                    <p className="mb-1 text-sm font-black text-slate-900">Distribusi Status Lost</p>
+                                                    <div className="mt-2 flex flex-wrap gap-2">
+                                                        {statusData.map(s => (
+                                                            <div key={s.name} className="flex items-center gap-2 rounded-md border px-3 py-1.5">
+                                                                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: STATUS_COLORS[s.name] || "#94a3b8" }} />
+                                                                <span className="text-xs font-semibold text-slate-700 capitalize">{s.name}</span>
+                                                                <span className="text-xs font-bold" style={{ color: STATUS_COLORS[s.name] || "#334155" }}>{s.value}</span>
+                                                            </div>
+                                                        ))}
+                                                        {statusData.length === 0 && (
+                                                            <p className="text-xs text-slate-400 italic">Tidak ada data bulan ini</p>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                {/* Top Lost Products */}
+                                                <div className="flex-[1.5] rounded-lg border bg-white p-3 shadow-sm">
+                                                    <p className="mb-1 text-sm font-black text-slate-900">Top Produk Lost</p>
+                                                    <p className="mb-2 text-[10px] text-slate-400">Produk yang paling banyak hilang</p>
+                                                    <div className="space-y-1.5">
+                                                        {topLostProducts.map((p, idx) => (
+                                                            <div key={idx} className="flex items-center gap-2 rounded-md bg-slate-50 px-2.5 py-1.5">
+                                                                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-200 text-[9px] font-bold text-slate-600">{idx + 1}</span>
+                                                                <span className="min-w-0 flex-1 truncate text-[10px] font-semibold text-slate-700">{p.name}</span>
+                                                                <span className="text-[10px] font-bold text-slate-500">{p.count}x</span>
+                                                                <span className={`shrink-0 rounded px-1.5 py-0.5 text-[8px] font-bold ${p.hasMatch ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-600"}`}>
+                                                                    {p.hasMatch ? "ADA STOK" : "NO STOK"}
+                                                                </span>
+                                                            </div>
+                                                        ))}
+                                                        {topLostProducts.length === 0 && (
+                                                            <p className="text-xs text-slate-400 italic py-4 text-center">Tidak ada data bulan ini</p>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
 
-                                            {/* Most Quoted Products + Lost Status */}
+                                            {/* Right: Matched Items Table */}
                                             <div className="flex min-h-0 flex-col rounded-lg border bg-white p-3 shadow-sm">
-                                                <p className="mb-1 text-sm font-black text-slate-900">Most Quoted Products</p>
-                                                <p className="mb-2 text-[10px] text-slate-400">Top barang yang paling sering masuk kuotasi</p>
-                                                <div className="min-h-0 flex-1">
-                                                    <ResponsiveContainer width="100%" height="100%">
-                                                        <BarChart data={monthTopItems} layout="vertical" margin={{ top: 4, right: 40, left: 8, bottom: 4 }}>
-                                                            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
-                                                            <XAxis type="number" allowDecimals={false} tick={{ fontSize: 10, fill: "#64748b" }} axisLine={false} />
-                                                            <YAxis type="category" dataKey="name" width={130} tick={{ fontSize: 9, fill: "#334155" }} axisLine={false} tickFormatter={(val: string) => val.length > 22 ? val.slice(0, 22) + "..." : val} />
-                                                            <Tooltip
-                                                                contentStyle={{ backgroundColor: "#fff", border: "1px solid #e2e8f0", borderRadius: "8px", fontSize: 11 }}
-                                                            />
-                                                            <Bar dataKey="count" radius={[0, 4, 4, 0]}>
-                                                                {monthTopItems.map((entry, idx) => (
-                                                                    <Cell key={`cell-${idx}`} fill={BAR_COLORS_Q[idx % BAR_COLORS_Q.length]} fillOpacity={idx < 3 ? 1 : 0.5} />
-                                                                ))}
-                                                                <LabelList dataKey="count" position="right" style={{ fontSize: 10, fontWeight: 700, fill: "#334155" }} />
-                                                            </Bar>
-                                                        </BarChart>
-                                                    </ResponsiveContainer>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Lost Opportunity Summary */}
-                                        {lostStatusData.length > 0 && (
-                                            <div className="rounded-lg border bg-white p-3 shadow-sm">
                                                 <div className="mb-2 flex items-center justify-between">
-                                                    <p className="text-sm font-black text-slate-900">Lost Opportunity Summary — Bulan Ini</p>
-                                                    <p className="text-[10px] text-slate-400">{monthLost} total lost</p>
+                                                    <div>
+                                                        <p className="text-sm font-black text-slate-900">Lost Sale — Matching dengan Ready Stock</p>
+                                                        <p className="text-[10px] text-slate-400">Produk lost yang cocok dengan stok SAP yang tersedia</p>
+                                                    </div>
+                                                    <span className="rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">{monthMatched} item match</span>
                                                 </div>
-                                                <div className="flex gap-3">
-                                                    {lostStatusData.map(s => (
-                                                        <div key={s.name} className="flex items-center gap-2 rounded-md border px-3 py-1.5">
-                                                            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: STATUS_COLORS[s.name] || "#94a3b8" }} />
-                                                            <span className="text-xs font-semibold text-slate-700 capitalize">{s.name}</span>
-                                                            <span className="text-xs font-bold" style={{ color: STATUS_COLORS[s.name] || "#334155" }}>{s.value}</span>
-                                                        </div>
-                                                    ))}
+                                                <div className="min-h-0 flex-1 overflow-auto">
+                                                    <table className="w-full text-left text-[10px]">
+                                                        <thead>
+                                                            <tr className="border-b border-slate-200">
+                                                                <th className="pb-1.5 font-bold text-slate-500">Customer</th>
+                                                                <th className="pb-1.5 font-bold text-slate-500">Produk Lost</th>
+                                                                <th className="pb-1.5 font-bold text-slate-500 text-center">Qty</th>
+                                                                <th className="pb-1.5 font-bold text-slate-500">Status</th>
+                                                                <th className="pb-1.5 font-bold text-emerald-600">Stok Ready (Cocok)</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {matchedItems.map((item: any, idx: number) => (
+                                                                <tr key={idx} className="border-b border-slate-100 last:border-0">
+                                                                    <td className="py-1.5 font-semibold text-slate-700 max-w-[100px] truncate" title={item.customerName}>{item.customerName}</td>
+                                                                    <td className="py-1.5 text-slate-600 max-w-[150px] truncate" title={item.productName}>{item.productName}</td>
+                                                                    <td className="py-1.5 text-center font-mono font-bold text-slate-700">{item.quantity}</td>
+                                                                    <td className="py-1.5">
+                                                                        <span className="rounded px-1.5 py-0.5 text-[8px] font-bold capitalize" style={{ backgroundColor: (STATUS_COLORS[item.status] || "#94a3b8") + "20", color: STATUS_COLORS[item.status] || "#334155" }}>
+                                                                            {item.status}
+                                                                        </span>
+                                                                    </td>
+                                                                    <td className="py-1.5">
+                                                                        <div className="space-y-0.5">
+                                                                            {item.matchedStock.slice(0, 2).map((s: any, si: number) => (
+                                                                                <div key={si} className="flex items-center gap-1">
+                                                                                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                                                                                    <span className="truncate text-[9px] text-emerald-700 font-medium max-w-[180px]" title={s.materialDesc}>{s.materialDesc}</span>
+                                                                                    <span className="text-[8px] text-emerald-500 font-bold">({s.totalQty} pcs)</span>
+                                                                                </div>
+                                                                            ))}
+                                                                            {item.matchedStock.length > 2 && (
+                                                                                <span className="text-[8px] text-emerald-500">+{item.matchedStock.length - 2} lainnya</span>
+                                                                            )}
+                                                                        </div>
+                                                                    </td>
+                                                                </tr>
+                                                            ))}
+                                                            {matchedItems.length === 0 && (
+                                                                <tr>
+                                                                    <td colSpan={5} className="py-8 text-center text-xs text-slate-400 italic">
+                                                                        Tidak ada lost sale yang cocok dengan stok ready bulan ini
+                                                                    </td>
+                                                                </tr>
+                                                            )}
+                                                        </tbody>
+                                                    </table>
                                                 </div>
                                             </div>
-                                        )}
+                                        </div>
                                     </div>
                                 )
                             })()}
