@@ -1650,7 +1650,7 @@ export function MonthlyReportTab() {
                                                         </div>
                                                         {idxVal !== null && idxVal > 0 ? (
                                                             <>
-                                                                <p className={`mt-1.5 text-lg font-black leading-none ${trendColor}`}>{idxVal.toFixed(1)}<span className="ml-1 text-[10px]">idx</span></p>
+                                                                <p className={`mt-1.5 text-lg font-black leading-none ${trendColor}`}>{idxVal.toFixed(1)}<span className="ml-1 text-[10px]">%</span></p>
                                                                 <p className="text-[9px] text-slate-500">{arrow} vs base Q4 2025 (100)</p>
                                                                 {rawVal !== null && rawVal !== undefined && rawVal > 0 && (
                                                                     <p className="mt-1 text-[9px] font-semibold text-slate-600">{rawVal.toFixed(rawVal < 100 ? 2 : 0)} {mat.unit}</p>
@@ -1680,8 +1680,8 @@ export function MonthlyReportTab() {
                                                         <LineChart data={chartRows} margin={{ top: 12, right: 16, left: 0, bottom: 4 }}>
                                                             <CartesianGrid strokeDasharray="3 3" vertical={false} />
                                                             <XAxis dataKey="label" tick={{ fontSize: 9 }} angle={-25} textAnchor="end" height={40} />
-                                                            <YAxis width={44} tick={{ fontSize: 9 }} domain={["auto", "auto"]} unit=" idx" />
-                                                            <Tooltip formatter={(v, n) => [`${Number(v).toFixed(1)} idx`, n]} />
+                                                            <YAxis width={44} tick={{ fontSize: 9 }} domain={["auto", "auto"]} unit="%" />
+                                                            <Tooltip formatter={(v, n) => [`${Number(v).toFixed(1)}%`, n]} />
                                                             <Legend wrapperStyle={{ fontSize: 10 }} />
                                                             <ReferenceLine y={100} stroke="#94a3b8" strokeDasharray="5 3" label={{ value: "Base 100", position: "insideTopRight", fontSize: 9, fill: "#64748b" }} />
                                                             <Line type="monotone" dataKey="nr" name="Natural Rubber" stroke={BAR_COLORS[0]} strokeWidth={2} dot={{ r: 2.5 }} connectNulls />
@@ -1753,123 +1753,113 @@ export function MonthlyReportTab() {
 
                             return (
                                 <Slide key={`lost-stock-${pageIndex}`} eyebrow={`Slide ${slideNum} — Top Customer Lost Sale${lostStockPages.length > 1 ? ` (${pageIndex + 1}/${lostStockPages.length})` : ''}`} title={`Top Customer — Lost Sale Value — ${monthLabel(month)}`}>
-                                    <div className="grid h-[calc(100%-88px)] grid-rows-[auto_1fr] gap-3">
+                                    <div className="flex h-[calc(100%-88px)] flex-col gap-2 overflow-hidden">
                                         {/* KPI Row */}
                                         {isFirstPage && (
                                             <div className="grid grid-cols-4 gap-2">
-                                                <div className="rounded-lg border bg-white p-3 shadow-sm">
-                                                    <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Total Lost Items</p>
-                                                    <p className="text-2xl font-black text-red-600">{allMonthItems.length}</p>
-                                                    <p className="text-[9px] text-slate-400">{topCustSorted.length} customer</p>
+                                                <div className="rounded-lg border bg-white p-2 shadow-sm">
+                                                    <p className="text-[8px] font-bold uppercase tracking-wide text-slate-500">Total Lost</p>
+                                                    <p className="text-xl font-black text-red-600">{allMonthItems.length}</p>
+                                                    <p className="text-[8px] text-slate-400">{topCustSorted.length} customer</p>
                                                 </div>
-                                                <div className="rounded-lg border bg-white p-3 shadow-sm">
-                                                    <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Total Value Lost</p>
-                                                    <p className="text-2xl font-black text-red-600">${totalValue.toLocaleString("en-US", { maximumFractionDigits: 0 })}</p>
-                                                    <p className="text-[9px] text-slate-400">nilai quotation hilang</p>
+                                                <div className="rounded-lg border bg-white p-2 shadow-sm">
+                                                    <p className="text-[8px] font-bold uppercase tracking-wide text-slate-500">Total Value</p>
+                                                    <p className="text-xl font-black text-red-600">Rp {totalValue.toLocaleString("id-ID")}</p>
                                                 </div>
-                                                <div className="rounded-lg border bg-white p-3 shadow-sm">
-                                                    <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Bisa Dipulihkan</p>
-                                                    <p className="text-2xl font-black text-emerald-600">{monthMatched}</p>
-                                                    <p className="text-[9px] text-slate-400">item cocok dengan stok</p>
+                                                <div className="rounded-lg border bg-white p-2 shadow-sm">
+                                                    <p className="text-[8px] font-bold uppercase tracking-wide text-slate-500">Bisa Dipulihkan</p>
+                                                    <p className="text-xl font-black text-emerald-600">{monthMatched}</p>
                                                 </div>
-                                                <div className="rounded-lg border bg-white p-3 shadow-sm">
-                                                    <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Ready Stock</p>
-                                                    <p className="text-2xl font-black text-[#0f4c81]">{readyStockCount}</p>
-                                                    <p className="text-[9px] text-slate-400">item tersedia SAP</p>
+                                                <div className="rounded-lg border bg-white p-2 shadow-sm">
+                                                    <p className="text-[8px] font-bold uppercase tracking-wide text-slate-500">Ready Stock</p>
+                                                    <p className="text-xl font-black text-[#0f4c81]">{readyStockCount}</p>
                                                 </div>
                                             </div>
                                         )}
 
-                                        {/* Customer Cards */}
-                                        <div className="min-h-0 overflow-auto">
-                                            <div className="grid grid-cols-1 gap-3">
-                                                {pageCustomers.map((cust, ci) => {
-                                                    const custItems = lostStockItems.filter((i: any) => i.customerName === cust.customerName)
-                                                    const matchedCount = custItems.filter((i: any) => i.hasMatch).length
-                                                    const cats = Object.entries(cust.categories).sort(([, a], [, b]) => b.value - a.value)
-                                                    const rank = pageIndex * 3 + ci + 1
+                                        {/* Customer Cards - compact */}
+                                        <div className="min-h-0 flex-1 space-y-2 overflow-hidden">
+                                            {pageCustomers.map((cust, ci) => {
+                                                const custItems = lostStockItems.filter((i: any) => i.customerName === cust.customerName)
+                                                const matchedCount = custItems.filter((i: any) => i.hasMatch).length
+                                                const cats = Object.entries(cust.categories).sort(([, a], [, b]) => b.value - a.value)
+                                                const rank = pageIndex * 3 + ci + 1
 
-                                                    return (
-                                                        <div key={ci} className="rounded-lg border bg-white p-3 shadow-sm">
-                                                            {/* Customer Header */}
-                                                            <div className="mb-2 flex items-center justify-between">
-                                                                <div className="flex items-center gap-2.5">
-                                                                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#0f4c81] text-[11px] font-black text-white">{rank}</span>
-                                                                    <div>
-                                                                        <p className="text-sm font-black text-slate-900">{cust.customerName}</p>
-                                                                        <p className="text-[10px] text-slate-400">{cust.itemCount} item · {cust.totalQty} pcs</p>
-                                                                    </div>
-                                                                </div>
-                                                                <div className="text-right">
-                                                                    <p className="text-lg font-black text-slate-900">${cust.totalValue.toLocaleString("en-US", { maximumFractionDigits: 0 })}</p>
-                                                                    {matchedCount > 0 && <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[8px] font-bold text-emerald-700">{matchedCount} cocok stok</span>}
-                                                                </div>
+                                                return (
+                                                    <div key={ci} className="rounded-lg border bg-white p-2 shadow-sm">
+                                                        {/* Customer Header */}
+                                                        <div className="mb-1 flex items-center justify-between">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#0f4c81] text-[10px] font-black text-white">{rank}</span>
+                                                                <span className="text-xs font-black text-slate-900">{cust.customerName}</span>
+                                                                <span className="text-[9px] text-slate-400">· {cust.itemCount} item · {cust.totalQty} pcs</span>
+                                                                {matchedCount > 0 && <span className="rounded bg-emerald-100 px-1 py-0.5 text-[7px] font-bold text-emerald-700">{matchedCount} cocok stok</span>}
                                                             </div>
-
-                                                            {/* Category Breakdown */}
-                                                            <div className="flex gap-2">
-                                                                {cats.map(([cat, data]) => (
-                                                                    <div key={cat} className="flex items-center gap-1.5 rounded-md border px-2.5 py-1.5" style={{ borderColor: (CAT_COLORS[cat] || "#94a3b8") + "40" }}>
-                                                                        <span className="h-2 w-2 rounded-full" style={{ backgroundColor: CAT_COLORS[cat] || "#94a3b8" }} />
-                                                                        <span className="text-[10px] font-bold text-slate-700">{cat}</span>
-                                                                        <span className="text-[10px] font-black" style={{ color: CAT_COLORS[cat] || "#334155" }}>${data.value.toLocaleString("en-US", { maximumFractionDigits: 0 })}</span>
-                                                                        <span className="text-[8px] text-slate-400">({data.count} item)</span>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-
-                                                            {/* Items Table */}
-                                                            <div className="mt-2 overflow-auto">
-                                                                <table className="w-full text-left text-[9px]">
-                                                                    <thead>
-                                                                        <tr className="border-b border-slate-200">
-                                                                            <th className="pb-1 font-medium text-slate-500">Produk</th>
-                                                                            <th className="pb-1 font-medium text-slate-500">Kategori</th>
-                                                                            <th className="pb-1 font-medium text-slate-500 text-center">Qty</th>
-                                                                            <th className="pb-1 font-medium text-slate-500 text-right">Value</th>
-                                                                            <th className="pb-1 font-medium text-slate-500">Status</th>
-                                                                            <th className="pb-1 font-medium text-emerald-600">Stok Ready</th>
-                                                                        </tr>
-                                                                    </thead>
-                                                                    <tbody>
-                                                                        {custItems.map((item: any, ii: number) => {
-                                                                            const up = Number(item.unitPrice || 0)
-                                                                            const tv = up * item.quantity
-                                                                            return (
-                                                                            <tr key={ii} className="border-b border-slate-100 last:border-0">
-                                                                                <td className="py-1 font-medium text-slate-700 max-w-[150px] truncate" title={item.productName}>{item.productName}</td>
-                                                                                <td className="py-1">
-                                                                                    <span className="rounded px-1 py-0.5 text-[7px] font-bold" style={{ backgroundColor: (CAT_COLORS[(item.category || "OTHER").toUpperCase()] || "#94a3b8") + "20", color: CAT_COLORS[(item.category || "OTHER").toUpperCase()] || "#334155" }}>
-                                                                                        {(item.category || "OTHER").toUpperCase()}
-                                                                                    </span>
-                                                                                </td>
-                                                                                <td className="py-1 text-center font-mono font-bold text-slate-700">{item.quantity}</td>
-                                                                                <td className="py-1 text-right font-mono font-bold text-slate-700">${tv.toLocaleString("en-US", { maximumFractionDigits: 0 })}</td>
-                                                                                <td className="py-1">
-                                                                                    <span className="rounded px-1 py-0.5 text-[7px] font-bold capitalize" style={{ backgroundColor: (STATUS_COLORS[item.status] || "#94a3b8") + "20", color: STATUS_COLORS[item.status] || "#334155" }}>
-                                                                                        {item.status}
-                                                                                    </span>
-                                                                                </td>
-                                                                                <td className="py-1">
-                                                                                    {item.hasMatch ? (
-                                                                                        <div className="flex items-center gap-1">
-                                                                                            <span className="h-1 w-1 rounded-full bg-emerald-500" />
-                                                                                            <span className="truncate text-[8px] text-emerald-700 font-medium max-w-[120px]" title={item.matchedStock[0]?.materialDesc}>{item.matchedStock[0]?.materialDesc}</span>
-                                                                                        </div>
-                                                                                    ) : (
-                                                                                        <span className="text-[8px] text-slate-400 italic">—</span>
-                                                                                    )}
-                                                                                </td>
-                                                                            </tr>
-                                                                            )
-                                                                        })}
-                                                                    </tbody>
-                                                                </table>
-                                                            </div>
+                                                            <span className="text-sm font-black text-slate-900">Rp {cust.totalValue.toLocaleString("id-ID")}</span>
                                                         </div>
-                                                    )
-                                                })}
-                                            </div>
+
+                                                        {/* Category Breakdown - inline */}
+                                                        <div className="mb-1 flex flex-wrap gap-1">
+                                                            {cats.map(([cat, data]) => (
+                                                                <span key={cat} className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[8px]" style={{ borderColor: (CAT_COLORS[cat] || "#94a3b8") + "40" }}>
+                                                                    <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: CAT_COLORS[cat] || "#94a3b8" }} />
+                                                                    <span className="font-bold text-slate-700">{cat}</span>
+                                                                    <span className="font-black" style={{ color: CAT_COLORS[cat] || "#334155" }}>Rp {data.value.toLocaleString("id-ID")}</span>
+                                                                    <span className="text-slate-400">({data.count})</span>
+                                                                </span>
+                                                            ))}
+                                                        </div>
+
+                                                        {/* Items Table - compact */}
+                                                        <table className="w-full text-left text-[8px]">
+                                                            <thead>
+                                                                <tr className="border-b border-slate-200">
+                                                                    <th className="pb-0.5 font-medium text-slate-500">Produk</th>
+                                                                    <th className="pb-0.5 font-medium text-slate-500">Kategori</th>
+                                                                    <th className="pb-0.5 font-medium text-slate-500 text-center">Qty</th>
+                                                                    <th className="pb-0.5 font-medium text-slate-500 text-right">Value</th>
+                                                                    <th className="pb-0.5 font-medium text-slate-500">Status</th>
+                                                                    <th className="pb-0.5 font-medium text-emerald-600">Stok</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {custItems.slice(0, 4).map((item: any, ii: number) => {
+                                                                    const up = Number(item.unitPrice || 0)
+                                                                    const tv = up * item.quantity
+                                                                    return (
+                                                                    <tr key={ii} className="border-b border-slate-50 last:border-0">
+                                                                        <td className="py-0.5 font-medium text-slate-700 max-w-[130px] truncate" title={item.productName}>{item.productName}</td>
+                                                                        <td className="py-0.5">
+                                                                            <span className="rounded px-1 py-0.5 text-[6px] font-bold" style={{ backgroundColor: (CAT_COLORS[(item.category || "OTHER").toUpperCase()] || "#94a3b8") + "20", color: CAT_COLORS[(item.category || "OTHER").toUpperCase()] || "#334155" }}>
+                                                                                {(item.category || "OTHER").toUpperCase()}
+                                                                            </span>
+                                                                        </td>
+                                                                        <td className="py-0.5 text-center font-mono font-bold text-slate-700">{item.quantity}</td>
+                                                                        <td className="py-0.5 text-right font-mono font-bold text-slate-700">Rp {tv.toLocaleString("id-ID")}</td>
+                                                                        <td className="py-0.5">
+                                                                            <span className="rounded px-1 py-0.5 text-[6px] font-bold capitalize" style={{ backgroundColor: (STATUS_COLORS[item.status] || "#94a3b8") + "20", color: STATUS_COLORS[item.status] || "#334155" }}>
+                                                                                {item.status}
+                                                                            </span>
+                                                                        </td>
+                                                                        <td className="py-0.5">
+                                                                            {item.hasMatch ? (
+                                                                                <span className="flex items-center gap-0.5">
+                                                                                    <span className="h-1 w-1 rounded-full bg-emerald-500" />
+                                                                                    <span className="truncate text-[7px] text-emerald-700 font-medium max-w-[100px]">{item.matchedStock[0]?.materialDesc}</span>
+                                                                                </span>
+                                                                            ) : <span className="text-slate-300">—</span>}
+                                                                        </td>
+                                                                    </tr>
+                                                                    )
+                                                                })}
+                                                                {custItems.length > 4 && (
+                                                                    <tr><td colSpan={6} className="py-0.5 text-center text-[7px] text-slate-400">+{custItems.length - 4} item lainnya</td></tr>
+                                                                )}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                )
+                                            })}
                                         </div>
                                     </div>
                                 </Slide>
