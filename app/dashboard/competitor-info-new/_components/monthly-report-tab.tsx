@@ -10,6 +10,7 @@ import { toast } from "sonner"
 
 import { generateCompetitorMonthlyReportInsight } from "@/app/actions/competitor-new"
 import { getExternalPricesForMonthlyCollapse, getRmiWeights } from "@/app/actions/rmi-dashboard"
+import { getQuotationAnalysis, type QuotationAnalysisData } from "@/app/actions/quotation-analysis"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -822,6 +823,7 @@ export function MonthlyReportTab() {
         basePeriodFreight: number
         basePeriodExchangeRate: number
     } | null>(null)
+    const [quotationData, setQuotationData] = useState<QuotationAnalysisData | null>(null)
     const slideRefs = useRef<Array<HTMLElement | null>>([]);
 
     const loadData = async () => {
@@ -880,6 +882,15 @@ export function MonthlyReportTab() {
             }
         } catch {
             // Weights data is optional
+        }
+        // Load Quotation Analysis data (non-blocking)
+        try {
+            const qRes = await getQuotationAnalysis()
+            if (qRes) {
+                setQuotationData(qRes as QuotationAnalysisData)
+            }
+        } catch {
+            // Quotation data is optional
         }
     }
 
@@ -1127,7 +1138,8 @@ export function MonthlyReportTab() {
     const lostSaleSlide = activityChartSlide + activityChartPages.length
     const lostSaleChartSlide = lostSaleSlide + lostSaleTablePages.length
     const rmiSummarySlide = lostSaleChartSlide + lostSaleChartPages.length
-    const closingSlide = rmiSummarySlide + 1
+    const quotationSlide = rmiSummarySlide + 1
+    const closingSlide = quotationSlide + 1
 
     return (
         <div className="space-y-5">
@@ -1642,6 +1654,159 @@ export function MonthlyReportTab() {
                                                 )}
                                             </div>
                                         </div>
+                                    </div>
+                                )
+                            })()}
+                        </Slide>,
+                        <Slide key="quotation-analysis" eyebrow={`Slide ${quotationSlide} - Quotation Analysis`} title={`Analisis Quotation & Konversi Penjualan — ${monthLabel(month)}`}>
+                            {(() => {
+                                const qData = quotationData
+                                const allQuotes = qData?.allQuotes ?? []
+                                const summary = qData?.summary ?? { totalQuotes: 0, totalSent: 0, totalConverted: 0, conversionRate: 0 }
+                                const topItems = qData?.topItems ?? []
+                                const lostAnalysis = qData?.lostAnalysis ?? []
+                                const monthlyTrend = qData?.monthlyTrend ?? []
+
+                                // Filter by current month
+                                const [filterYear, filterMonthNum] = month.split("-").map(Number)
+                                const monthQuotes = allQuotes.filter(q => {
+                                    const d = new Date(q.quotationDate)
+                                    return d.getFullYear() === filterYear && (d.getMonth() + 1) === filterMonthNum
+                                })
+                                const monthSent = monthQuotes.filter(q => q.status !== "draft").length
+                                const monthConverted = monthQuotes.filter(q => q.status === "approved" || q.status === "converted").length
+                                const monthRate = monthSent > 0 ? (monthConverted / monthSent) * 100 : 0
+                                const monthLost = lostAnalysis.filter(l => {
+                                    const d = new Date(l.date)
+                                    return d.getFullYear() === filterYear && (d.getMonth() + 1) === filterMonthNum
+                                }).length
+
+                                // Top items this month
+                                const monthItemFreq: Record<number, { name: string; count: number }> = {}
+                                monthQuotes.forEach(q => {
+                                    q.items.forEach(item => {
+                                        if (!item.productId || !item.product) return
+                                        if (!monthItemFreq[item.productId]) {
+                                            monthItemFreq[item.productId] = { name: item.product.materialDescription || item.product.materialNumber, count: 0 }
+                                        }
+                                        monthItemFreq[item.productId].count += 1
+                                    })
+                                })
+                                const monthTopItems = Object.entries(monthItemFreq)
+                                    .map(([id, v]) => ({ productId: Number(id), name: v.name, count: v.count }))
+                                    .sort((a, b) => b.count - a.count)
+                                    .slice(0, 8)
+
+                                // Lost by status
+                                const lostByStatus: Record<string, number> = {}
+                                lostAnalysis.forEach(l => {
+                                    const d = new Date(l.date)
+                                    if (d.getFullYear() === filterYear && (d.getMonth() + 1) === filterMonthNum) {
+                                        lostByStatus[l.status] = (lostByStatus[l.status] || 0) + 1
+                                    }
+                                })
+                                const lostStatusData = Object.entries(lostByStatus).map(([name, value]) => ({ name, value }))
+
+                                const BAR_COLORS_Q = ["#0f4c81", "#f97316", "#16a34a", "#7c3aed", "#dc2626", "#0891b2", "#ca8a04", "#be123c"]
+                                const STATUS_COLORS: Record<string, string> = { rejected: "#dc2626", expired: "#f97316", cancelled: "#6b7280", lost: "#7c3aed" }
+
+                                return (
+                                    <div className="grid h-[calc(100%-88px)] grid-rows-[auto_1fr] gap-3">
+                                        {/* KPI Row */}
+                                        <div className="grid grid-cols-4 gap-2">
+                                            <div className="rounded-lg border bg-white p-3 shadow-sm">
+                                                <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Total Quotations</p>
+                                                <p className="text-2xl font-black text-[#0f4c81]">{summary.totalQuotes}</p>
+                                                <p className="text-[9px] text-slate-400">{monthQuotes.length} di bulan ini</p>
+                                            </div>
+                                            <div className="rounded-lg border bg-white p-3 shadow-sm">
+                                                <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Conversion Rate</p>
+                                                <p className={`text-2xl font-black ${summary.conversionRate > 20 ? "text-emerald-600" : "text-amber-600"}`}>{summary.conversionRate.toFixed(1)}%</p>
+                                                <p className="text-[9px] text-slate-400">{summary.totalConverted} disetujui dari {summary.totalSent}</p>
+                                            </div>
+                                            <div className="rounded-lg border bg-white p-3 shadow-sm">
+                                                <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Potential Lost</p>
+                                                <p className="text-2xl font-black text-red-600">{monthLost}</p>
+                                                <p className="text-[9px] text-slate-400">{lostAnalysis.length} total keseluruhan</p>
+                                            </div>
+                                            <div className="rounded-lg border bg-white p-3 shadow-sm">
+                                                <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Top Product</p>
+                                                <p className="text-sm font-black text-[#0f4c81] truncate">{monthTopItems[0]?.name || "-"}</p>
+                                                <p className="text-[9px] text-slate-400">{monthTopItems[0]?.count || 0}x dikutip</p>
+                                            </div>
+                                        </div>
+
+                                        {/* Charts Row */}
+                                        <div className="grid grid-cols-2 gap-3">
+                                            {/* Conversion Trend */}
+                                            <div className="flex min-h-0 flex-col rounded-lg border bg-white p-3 shadow-sm">
+                                                <p className="mb-1 text-sm font-black text-slate-900">Conversion Trend (6 Bulan)</p>
+                                                <p className="mb-2 text-[10px] text-slate-400">Persentase kuotasi yang disetujui vs dikirim</p>
+                                                <div className="min-h-0 flex-1">
+                                                    <ResponsiveContainer width="100%" height="100%">
+                                                        <AreaChart data={monthlyTrend}>
+                                                            <defs>
+                                                                <linearGradient id="colorConvRate" x1="0" y1="0" x2="0" y2="1">
+                                                                    <stop offset="5%" stopColor="#0f4c81" stopOpacity={0.3} />
+                                                                    <stop offset="95%" stopColor="#0f4c81" stopOpacity={0} />
+                                                                </linearGradient>
+                                                            </defs>
+                                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                                                            <XAxis dataKey="month" tick={{ fontSize: 10, fill: "#64748b" }} axisLine={false} />
+                                                            <YAxis tick={{ fontSize: 10, fill: "#64748b" }} axisLine={false} tickFormatter={(val) => `${val}%`} />
+                                                            <Tooltip
+                                                                contentStyle={{ backgroundColor: "#fff", border: "1px solid #e2e8f0", borderRadius: "8px", fontSize: 11 }}
+                                                                formatter={(value: number | string) => [`${parseFloat(String(value)).toFixed(1)}%`, 'Rate']}
+                                                            />
+                                                            <Area type="monotone" dataKey="rate" stroke="#0f4c81" strokeWidth={2.5} fillOpacity={1} fill="url(#colorConvRate)" />
+                                                        </AreaChart>
+                                                    </ResponsiveContainer>
+                                                </div>
+                                            </div>
+
+                                            {/* Most Quoted Products + Lost Status */}
+                                            <div className="flex min-h-0 flex-col rounded-lg border bg-white p-3 shadow-sm">
+                                                <p className="mb-1 text-sm font-black text-slate-900">Most Quoted Products</p>
+                                                <p className="mb-2 text-[10px] text-slate-400">Top barang yang paling sering masuk kuotasi</p>
+                                                <div className="min-h-0 flex-1">
+                                                    <ResponsiveContainer width="100%" height="100%">
+                                                        <BarChart data={monthTopItems} layout="vertical" margin={{ top: 4, right: 40, left: 8, bottom: 4 }}>
+                                                            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
+                                                            <XAxis type="number" allowDecimals={false} tick={{ fontSize: 10, fill: "#64748b" }} axisLine={false} />
+                                                            <YAxis type="category" dataKey="name" width={130} tick={{ fontSize: 9, fill: "#334155" }} axisLine={false} tickFormatter={(val: string) => val.length > 22 ? val.slice(0, 22) + "..." : val} />
+                                                            <Tooltip
+                                                                contentStyle={{ backgroundColor: "#fff", border: "1px solid #e2e8f0", borderRadius: "8px", fontSize: 11 }}
+                                                            />
+                                                            <Bar dataKey="count" radius={[0, 4, 4, 0]}>
+                                                                {monthTopItems.map((entry, idx) => (
+                                                                    <Cell key={`cell-${idx}`} fill={BAR_COLORS_Q[idx % BAR_COLORS_Q.length]} fillOpacity={idx < 3 ? 1 : 0.5} />
+                                                                ))}
+                                                                <LabelList dataKey="count" position="right" style={{ fontSize: 10, fontWeight: 700, fill: "#334155" }} />
+                                                            </Bar>
+                                                        </BarChart>
+                                                    </ResponsiveContainer>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Lost Opportunity Summary */}
+                                        {lostStatusData.length > 0 && (
+                                            <div className="rounded-lg border bg-white p-3 shadow-sm">
+                                                <div className="mb-2 flex items-center justify-between">
+                                                    <p className="text-sm font-black text-slate-900">Lost Opportunity Summary — Bulan Ini</p>
+                                                    <p className="text-[10px] text-slate-400">{monthLost} total lost</p>
+                                                </div>
+                                                <div className="flex gap-3">
+                                                    {lostStatusData.map(s => (
+                                                        <div key={s.name} className="flex items-center gap-2 rounded-md border px-3 py-1.5">
+                                                            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: STATUS_COLORS[s.name] || "#94a3b8" }} />
+                                                            <span className="text-xs font-semibold text-slate-700 capitalize">{s.name}</span>
+                                                            <span className="text-xs font-bold" style={{ color: STATUS_COLORS[s.name] || "#334155" }}>{s.value}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 )
                             })()}
