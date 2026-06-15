@@ -1,7 +1,7 @@
 "use server"
 
 import { db } from "@/db"
-import { rmiRecords, quarterlyExchangeRates } from "@/db/schema"
+import { rmiRecords, quarterlyExchangeRates, rmiWeights } from "@/db/schema"
 import { getAuthenticatedSession } from "@/lib/rbac"
 import { getRealtimeExchangeRate } from "./settings"
 import { and, desc, eq, sql } from "drizzle-orm"
@@ -88,10 +88,33 @@ async function ensureRmiTables() {
         ADD COLUMN IF NOT EXISTS "freight" numeric(14, 4) DEFAULT '0' NOT NULL,
         ADD COLUMN IF NOT EXISTS "fx_index" numeric(14, 4) DEFAULT '0' NOT NULL;
     `)
+
+    // Memastikan tabel rmi_weights ada
+    await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "rmi_weights" (
+            "id" serial PRIMARY KEY NOT NULL,
+            "label" varchar(255) DEFAULT 'Default' NOT NULL,
+            "natural_rubber_weight" numeric(5, 4) DEFAULT '0.35' NOT NULL,
+            "synthetic_rubber_weight" numeric(5, 4) DEFAULT '0.20' NOT NULL,
+            "carbon_black_weight" numeric(5, 4) DEFAULT '0.20' NOT NULL,
+            "steel_cord_weight" numeric(5, 4) DEFAULT '0.15' NOT NULL,
+            "freight_weight" numeric(5, 4) DEFAULT '0.05' NOT NULL,
+            "fx_weight" numeric(5, 4) DEFAULT '0.05' NOT NULL,
+            "base_period_natural_rubber" numeric(14, 4) DEFAULT '2.05' NOT NULL,
+            "base_period_synthetic_rubber" numeric(14, 4) DEFAULT '13200.0' NOT NULL,
+            "base_period_carbon_black" numeric(14, 4) DEFAULT '1.45' NOT NULL,
+            "base_period_steel_cord" numeric(14, 4) DEFAULT '1.10' NOT NULL,
+            "base_period_freight" numeric(14, 4) DEFAULT '2800.0' NOT NULL,
+            "base_period_exchange_rate" numeric(14, 4) DEFAULT '16500.0' NOT NULL,
+            "is_active" boolean DEFAULT true NOT NULL,
+            "created_at" timestamp DEFAULT now() NOT NULL,
+            "updated_at" timestamp DEFAULT now() NOT NULL
+        )
+    `)
 }
 
-// Konstanta Harga Dasar (Base Period Q4 2025) untuk perhitungan indeks
-const BASE_PRICES = {
+// Konstanta Harga Dasar (Base Period Q4 2025) untuk perhitungan indeks (fallback)
+const DEFAULT_BASE_PRICES = {
     naturalRubber: 2.05,
     syntheticRubber: 13200.0,
     carbonBlack: 1.45,
@@ -100,19 +123,68 @@ const BASE_PRICES = {
     exchangeRate: 16500.0
 }
 
-// Menghitung nilai RMI berdasarkan formula indeks berbobot baru:
-// Natural Rubber (35%), Synthetic Rubber (20%), Carbon Black (20%), Steel Cord (15%), Freight (5%), FX Index (5%)
-function calculateRmiValue(nr: number, sr: number, cb: number, sc: number, fr: number = 0, fx: number = 0): number {
+const DEFAULT_WEIGHTS = {
+    naturalRubber: 0.35,
+    syntheticRubber: 0.20,
+    carbonBlack: 0.20,
+    steelCord: 0.15,
+    freight: 0.05,
+    fx: 0.05
+}
+
+export type RmiWeightsConfig = {
+    naturalRubberWeight: number
+    syntheticRubberWeight: number
+    carbonBlackWeight: number
+    steelCordWeight: number
+    freightWeight: number
+    fxWeight: number
+    basePeriodNaturalRubber: number
+    basePeriodSyntheticRubber: number
+    basePeriodCarbonBlack: number
+    basePeriodSteelCord: number
+    basePeriodFreight: number
+    basePeriodExchangeRate: number
+}
+
+// Menghitung nilai RMI berdasarkan formula indeks berbobot (dynamic)
+function calculateRmiValue(
+    nr: number,
+    sr: number,
+    cb: number,
+    sc: number,
+    fr: number = 0,
+    fx: number = 0,
+    weights?: RmiWeightsConfig
+): number {
+    const w = weights ? {
+        nr: weights.naturalRubberWeight,
+        sr: weights.syntheticRubberWeight,
+        cb: weights.carbonBlackWeight,
+        sc: weights.steelCordWeight,
+        fr: weights.freightWeight,
+        fx: weights.fxWeight,
+    } : DEFAULT_WEIGHTS
+
+    const bp = weights ? {
+        nr: weights.basePeriodNaturalRubber,
+        sr: weights.basePeriodSyntheticRubber,
+        cb: weights.basePeriodCarbonBlack,
+        sc: weights.basePeriodSteelCord,
+        fr: weights.basePeriodFreight,
+        fx: weights.basePeriodExchangeRate,
+    } : DEFAULT_BASE_PRICES
+
     // Hitung indeks masing-masing komponen (Harga Saat Ini / Harga Base * 100)
-    const idxNR = (nr / BASE_PRICES.naturalRubber) * 100
-    const idxSR = (sr / BASE_PRICES.syntheticRubber) * 100
-    const idxCB = (cb / BASE_PRICES.carbonBlack) * 100
-    const idxSC = (sc / BASE_PRICES.steelCord) * 100
-    const idxFR = fr > 0 ? (fr / BASE_PRICES.freight) * 100 : 100
+    const idxNR = bp.nr > 0 ? (nr / bp.nr) * 100 : 0
+    const idxSR = bp.sr > 0 ? (sr / bp.sr) * 100 : 0
+    const idxCB = bp.cb > 0 ? (cb / bp.cb) * 100 : 0
+    const idxSC = bp.sc > 0 ? (sc / bp.sc) * 100 : 0
+    const idxFR = fr > 0 && bp.fr > 0 ? (fr / bp.fr) * 100 : 100
     const idxFX = fx > 0 ? fx : 100
 
     // RMI = sum(Bobot * Index)
-    return (idxNR * 0.35) + (idxSR * 0.20) + (idxCB * 0.20) + (idxSC * 0.15) + (idxFR * 0.05) + (idxFX * 0.05)
+    return (idxNR * w.nr) + (idxSR * w.sr) + (idxCB * w.cb) + (idxSC * w.sc) + (idxFR * w.fr) + (idxFX * w.fx)
 }
 
 // -------------------------------------------------------------
@@ -129,6 +201,157 @@ export async function getExchangeRateDependencies() {
     } catch (error) {
         console.error("Error fetching exchange rate dependency:", error)
         return { success: true, rate: 17981, isFallback: true }
+    }
+}
+
+// -------------------------------------------------------------
+// RMI WEIGHTS (BOBOT) ACTIONS
+// -------------------------------------------------------------
+const rmiWeightsSchema = z.object({
+    label: z.string().max(255).optional().default("Default"),
+    naturalRubberWeight: z.number().min(0).max(1),
+    syntheticRubberWeight: z.number().min(0).max(1),
+    carbonBlackWeight: z.number().min(0).max(1),
+    steelCordWeight: z.number().min(0).max(1),
+    freightWeight: z.number().min(0).max(1),
+    fxWeight: z.number().min(0).max(1),
+    basePeriodNaturalRubber: z.number().min(0),
+    basePeriodSyntheticRubber: z.number().min(0),
+    basePeriodCarbonBlack: z.number().min(0),
+    basePeriodSteelCord: z.number().min(0),
+    basePeriodFreight: z.number().min(0),
+    basePeriodExchangeRate: z.number().min(0),
+})
+
+export type RmiWeightsInput = z.infer<typeof rmiWeightsSchema>
+
+export async function getRmiWeights() {
+    try {
+        await ensureRmiTables()
+
+        const data = await db
+            .select()
+            .from(rmiWeights)
+            .where(eq(rmiWeights.isActive, true))
+            .orderBy(desc(rmiWeights.id))
+            .limit(1)
+
+        // Jika belum ada data, seed default
+        if (data.length === 0) {
+            const [created] = await db
+                .insert(rmiWeights)
+                .values({
+                    label: "Default (Q4 2025)",
+                    naturalRubberWeight: "0.35",
+                    syntheticRubberWeight: "0.20",
+                    carbonBlackWeight: "0.20",
+                    steelCordWeight: "0.15",
+                    freightWeight: "0.05",
+                    fxWeight: "0.05",
+                    basePeriodNaturalRubber: "2.05",
+                    basePeriodSyntheticRubber: "13200.0",
+                    basePeriodCarbonBlack: "1.45",
+                    basePeriodSteelCord: "1.10",
+                    basePeriodFreight: "2800.0",
+                    basePeriodExchangeRate: "16500.0",
+                    isActive: true,
+                })
+                .returning()
+            return { success: true, data: created }
+        }
+
+        return { success: true, data: data[0] }
+    } catch (error) {
+        console.error("Error fetching RMI weights:", error)
+        return { success: false, error: "Gagal memuat data bobot RMI" }
+    }
+}
+
+export async function getAllRmiWeights() {
+    try {
+        await ensureRmiTables()
+
+        const data = await db
+            .select()
+            .from(rmiWeights)
+            .orderBy(desc(rmiWeights.createdAt))
+
+        return { success: true, data }
+    } catch (error) {
+        console.error("Error fetching all RMI weights:", error)
+        return { success: false, error: "Gagal memuat data bobot RMI" }
+    }
+}
+
+export async function updateRmiWeights(id: number, data: RmiWeightsInput) {
+    try {
+        await getAuthenticatedSession("rmi-dashboard", "edit")
+        await ensureRmiTables()
+        const parsed = rmiWeightsSchema.parse(data)
+
+        const [updated] = await db
+            .update(rmiWeights)
+            .set({
+                label: parsed.label,
+                naturalRubberWeight: parsed.naturalRubberWeight.toString(),
+                syntheticRubberWeight: parsed.syntheticRubberWeight.toString(),
+                carbonBlackWeight: parsed.carbonBlackWeight.toString(),
+                steelCordWeight: parsed.steelCordWeight.toString(),
+                freightWeight: parsed.freightWeight.toString(),
+                fxWeight: parsed.fxWeight.toString(),
+                basePeriodNaturalRubber: parsed.basePeriodNaturalRubber.toString(),
+                basePeriodSyntheticRubber: parsed.basePeriodSyntheticRubber.toString(),
+                basePeriodCarbonBlack: parsed.basePeriodCarbonBlack.toString(),
+                basePeriodSteelCord: parsed.basePeriodSteelCord.toString(),
+                basePeriodFreight: parsed.basePeriodFreight.toString(),
+                basePeriodExchangeRate: parsed.basePeriodExchangeRate.toString(),
+                updatedAt: new Date(),
+            })
+            .where(eq(rmiWeights.id, id))
+            .returning()
+
+        revalidatePath("/dashboard/rmi")
+        return { success: true, data: updated }
+    } catch (error) {
+        console.error("Error updating RMI weights:", error)
+        return { success: false, error: "Gagal memperbarui data bobot RMI" }
+    }
+}
+
+export async function createRmiWeights(data: RmiWeightsInput) {
+    try {
+        await getAuthenticatedSession("rmi-dashboard", "create")
+        await ensureRmiTables()
+        const parsed = rmiWeightsSchema.parse(data)
+
+        // Deactivate all existing active weights
+        await db.update(rmiWeights).set({ isActive: false }).where(eq(rmiWeights.isActive, true))
+
+        const [created] = await db
+            .insert(rmiWeights)
+            .values({
+                label: parsed.label,
+                naturalRubberWeight: parsed.naturalRubberWeight.toString(),
+                syntheticRubberWeight: parsed.syntheticRubberWeight.toString(),
+                carbonBlackWeight: parsed.carbonBlackWeight.toString(),
+                steelCordWeight: parsed.steelCordWeight.toString(),
+                freightWeight: parsed.freightWeight.toString(),
+                fxWeight: parsed.fxWeight.toString(),
+                basePeriodNaturalRubber: parsed.basePeriodNaturalRubber.toString(),
+                basePeriodSyntheticRubber: parsed.basePeriodSyntheticRubber.toString(),
+                basePeriodCarbonBlack: parsed.basePeriodCarbonBlack.toString(),
+                basePeriodSteelCord: parsed.basePeriodSteelCord.toString(),
+                basePeriodFreight: parsed.basePeriodFreight.toString(),
+                basePeriodExchangeRate: parsed.basePeriodExchangeRate.toString(),
+                isActive: true,
+            })
+            .returning()
+
+        revalidatePath("/dashboard/rmi")
+        return { success: true, data: created }
+    } catch (error) {
+        console.error("Error creating RMI weights:", error)
+        return { success: false, error: "Gagal menambahkan data bobot RMI" }
     }
 }
 
@@ -169,13 +392,18 @@ export async function createRmiRecord(data: RmiRecordInput) {
             return { success: false, error: `Data untuk Tahun ${parsed.year} Q${parsed.quarter} sudah ada.` }
         }
 
+        // Fetch active weights
+        const weightsResult = await getRmiWeights()
+        const weightsConfig = weightsResult.success && weightsResult.data ? weightsResult.data as RmiWeightsConfig : undefined
+
         const rmiValue = calculateRmiValue(
             parsed.naturalRubber,
             parsed.syntheticRubber,
             parsed.carbonBlack,
             parsed.steelCord,
             parsed.freight ?? 0,
-            parsed.fxIndex ?? 0
+            parsed.fxIndex ?? 0,
+            weightsConfig
         )
 
         const [created] = await db
@@ -225,13 +453,18 @@ export async function updateRmiRecord(id: number, data: RmiRecordInput) {
             return { success: false, error: `Tahun ${parsed.year} Q${parsed.quarter} sudah digunakan di record lain.` }
         }
 
+        // Fetch active weights
+        const weightsResult = await getRmiWeights()
+        const weightsConfig = weightsResult.success && weightsResult.data ? weightsResult.data as RmiWeightsConfig : undefined
+
         const rmiValue = calculateRmiValue(
             parsed.naturalRubber,
             parsed.syntheticRubber,
             parsed.carbonBlack,
             parsed.steelCord,
             parsed.freight ?? 0,
-            parsed.fxIndex ?? 0
+            parsed.fxIndex ?? 0,
+            weightsConfig
         )
 
         const [updated] = await db
@@ -628,13 +861,18 @@ export async function syncRmiFromExternalApis(year: number, quarter: number) {
         const fxIndexVal = (currentRate / baseRate) * 100
 
         // Hitung RMI value
+        // Fetch active weights
+        const weightsResult = await getRmiWeights()
+        const weightsConfig = weightsResult.success && weightsResult.data ? weightsResult.data as RmiWeightsConfig : undefined
+
         const rmiValue = calculateRmiValue(
             naturalRubberVal,
             syntheticRubberVal,
             carbonBlackVal,
             steelCordVal,
             freightVal,
-            fxIndexVal
+            fxIndexVal,
+            weightsConfig
         )
 
         return {

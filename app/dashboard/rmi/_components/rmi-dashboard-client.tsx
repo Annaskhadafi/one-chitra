@@ -93,8 +93,11 @@ import {
     deleteQuarterlyRate,
     syncRmiFromExternalApis,
     getExternalPricesForMonthlyCollapse,
+    getRmiWeights,
+    updateRmiWeights,
     RmiRecordInput,
-    QuarterlyRateInput
+    QuarterlyRateInput,
+    RmiWeightsInput
 } from "@/app/actions/rmi-dashboard"
 
 interface RmiRecord {
@@ -148,13 +151,35 @@ interface RmiDashboardClientProps {
     initialQuarterlyRates: any[]
     realtimeRate: number
     sapTires: SapTireProduct[]
+    initialWeights: any
+}
+
+interface RmiWeights {
+    id: number
+    label: string
+    naturalRubberWeight: string
+    syntheticRubberWeight: string
+    carbonBlackWeight: string
+    steelCordWeight: string
+    freightWeight: string
+    fxWeight: string
+    basePeriodNaturalRubber: string
+    basePeriodSyntheticRubber: string
+    basePeriodCarbonBlack: string
+    basePeriodSteelCord: string
+    basePeriodFreight: string
+    basePeriodExchangeRate: string
+    isActive: boolean
+    createdAt: Date
+    updatedAt: Date
 }
 
 export function RmiDashboardClient({ 
     initialRmiRecords, 
     initialQuarterlyRates,
     realtimeRate,
-    sapTires = []
+    sapTires = [],
+    initialWeights
 }: RmiDashboardClientProps) {
     const { hasResourcePermission } = usePermissions()
     const canCreate = hasResourcePermission("rmi-dashboard", "create")
@@ -168,10 +193,14 @@ export function RmiDashboardClient({
     const [quarterlyRates, setQuarterlyRates] = useState<QuarterlyRate[]>(
         initialQuarterlyRates.map(r => ({ ...r, createdAt: new Date(r.createdAt), updatedAt: new Date(r.updatedAt) }))
     )
+    const [currentWeights, setCurrentWeights] = useState<RmiWeights | null>(
+        initialWeights ? { ...initialWeights, createdAt: new Date(initialWeights.createdAt), updatedAt: new Date(initialWeights.updatedAt) } : null
+    )
 
     // Form Dialog States
     const [showRmiDialog, setShowRmiDialog] = useState(false)
     const [showRateDialog, setShowRateDialog] = useState(false)
+    const [showWeightsDialog, setShowWeightsDialog] = useState(false)
     const [editingRmi, setEditingRmi] = useState<RmiRecord | null>(null)
     const [editingRate, setEditingRate] = useState<QuarterlyRate | null>(null)
 
@@ -195,6 +224,22 @@ export function RmiDashboardClient({
     const [rateMonth2, setRateMonth2] = useState<number>(16500)
     const [rateMonth3, setRateMonth3] = useState<number>(16500)
     const [rateRemarks, setRateRemarks] = useState("")
+
+    // Weights Form Fields
+    const [weightsLabel, setWeightsLabel] = useState<string>("Default (Q4 2025)")
+    const [wNr, setWNr] = useState<number>(0.35)
+    const [wSr, setWSr] = useState<number>(0.20)
+    const [wCb, setWCb] = useState<number>(0.20)
+    const [wSc, setWSc] = useState<number>(0.15)
+    const [wFr, setWFr] = useState<number>(0.05)
+    const [wFx, setWFx] = useState<number>(0.05)
+    const [bpNr, setBpNr] = useState<number>(2.05)
+    const [bpSr, setBpSr] = useState<number>(13200.0)
+    const [bpCb, setBpCb] = useState<number>(1.45)
+    const [bpSc, setBpSc] = useState<number>(1.10)
+    const [bpFr, setBpFr] = useState<number>(2800.0)
+    const [bpFx, setBpFx] = useState<number>(16500.0)
+    const [isSavingWeights, setIsSavingWeights] = useState(false)
 
     // Table Expand/Collapse State
     const [expandedRateIds, setExpandedRateIds] = useState<Set<number>>(new Set())
@@ -326,6 +371,25 @@ export function RmiDashboardClient({
             }))
     }, [rmiRecords])
 
+    // Helper: get current weights as config object
+    const getWeightsConfig = () => {
+        if (!currentWeights) return undefined
+        return {
+            naturalRubberWeight: parseFloat(currentWeights.naturalRubberWeight),
+            syntheticRubberWeight: parseFloat(currentWeights.syntheticRubberWeight),
+            carbonBlackWeight: parseFloat(currentWeights.carbonBlackWeight),
+            steelCordWeight: parseFloat(currentWeights.steelCordWeight),
+            freightWeight: parseFloat(currentWeights.freightWeight),
+            fxWeight: parseFloat(currentWeights.fxWeight),
+            basePeriodNaturalRubber: parseFloat(currentWeights.basePeriodNaturalRubber),
+            basePeriodSyntheticRubber: parseFloat(currentWeights.basePeriodSyntheticRubber),
+            basePeriodCarbonBlack: parseFloat(currentWeights.basePeriodCarbonBlack),
+            basePeriodSteelCord: parseFloat(currentWeights.basePeriodSteelCord),
+            basePeriodFreight: parseFloat(currentWeights.basePeriodFreight),
+            basePeriodExchangeRate: parseFloat(currentWeights.basePeriodExchangeRate),
+        }
+    }
+
     // Perhitungan Simulator
     const simulatorResult = useMemo(() => {
         if (!selectedBaseQuarter || !selectedEvalQuarter) return null
@@ -379,14 +443,23 @@ export function RmiDashboardClient({
     const chartData = useMemo(() => {
         const list: any[] = []
 
-        // Konstanta dasar Q4 2025 untuk hitung indeks bulanan
+        // Dynamic base prices from weights config
+        const wCfg = getWeightsConfig()
         const bases = {
-            nr: 2.05,
-            sr: 13200.0,
-            cb: 1.45,
-            sc: 1.10,
-            fr: 2800.0,
-            fx: 16500.0
+            nr: wCfg?.basePeriodNaturalRubber ?? 2.05,
+            sr: wCfg?.basePeriodSyntheticRubber ?? 13200.0,
+            cb: wCfg?.basePeriodCarbonBlack ?? 1.45,
+            sc: wCfg?.basePeriodSteelCord ?? 1.10,
+            fr: wCfg?.basePeriodFreight ?? 2800.0,
+            fx: wCfg?.basePeriodExchangeRate ?? 16500.0
+        }
+        const weights = {
+            nr: wCfg?.naturalRubberWeight ?? 0.35,
+            sr: wCfg?.syntheticRubberWeight ?? 0.20,
+            cb: wCfg?.carbonBlackWeight ?? 0.20,
+            sc: wCfg?.steelCordWeight ?? 0.15,
+            fr: wCfg?.freightWeight ?? 0.05,
+            fx: wCfg?.fxWeight ?? 0.05
         }
 
         // Singkatan nama bulan
@@ -437,7 +510,7 @@ export function RmiDashboardClient({
                 // Hitung RMI bulanan: sum(bobot * indeks)
                 let rmiVal = 0
                 if (idxNR > 0 || idxSR > 0 || idxCB > 0 || idxSC > 0) {
-                    rmiVal = (idxNR * 0.35) + (idxSR * 0.20) + (idxCB * 0.20) + (idxSC * 0.15) + (idxFR * 0.05) + (idxFX * 0.05)
+                    rmiVal = (idxNR * weights.nr) + (idxSR * weights.sr) + (idxCB * weights.cb) + (idxSC * weights.sc) + (idxFR * weights.fr) + (idxFX * weights.fx)
                 }
 
                 list.push({
@@ -457,7 +530,7 @@ export function RmiDashboardClient({
 
         // Urutkan berdasarkan waktu (sortKey)
         return list.sort((a, b) => a.sortKey - b.sortKey)
-    }, [rmiMonthlyDetails, quarterlyRates])
+    }, [rmiMonthlyDetails, quarterlyRates, currentWeights])
 
     // Export Detail Simulasi Rinci dalam Format Excel (.xlsx) dengan Rumus Excel asli
     const exportDetailedSimulationToExcel = async () => {
@@ -478,7 +551,20 @@ export function RmiDashboardClient({
             const workbook = XLSX.utils.book_new()
             
             // Baris data mentah dan formula Excel
-            // Kita akan menulis cell-by-cell atau aoa, lalu menambahkan properti .f untuk rumus
+            const wCfg = getWeightsConfig()
+            const bpNr = wCfg?.basePeriodNaturalRubber ?? 2.05
+            const bpSr = wCfg?.basePeriodSyntheticRubber ?? 13200
+            const bpCb = wCfg?.basePeriodCarbonBlack ?? 1.45
+            const bpSc = wCfg?.basePeriodSteelCord ?? 1.10
+            const bpFr = wCfg?.basePeriodFreight ?? 2800
+            const bpFx = wCfg?.basePeriodExchangeRate ?? 16500
+            const wNrVal = wCfg?.naturalRubberWeight ?? 0.35
+            const wSrVal = wCfg?.syntheticRubberWeight ?? 0.20
+            const wCbVal = wCfg?.carbonBlackWeight ?? 0.20
+            const wScVal = wCfg?.steelCordWeight ?? 0.15
+            const wFrVal = wCfg?.freightWeight ?? 0.05
+            const wFxVal = wCfg?.fxWeight ?? 0.05
+
             const wsData: any[][] = [
                 ["SIMULASI PRICE ADJUSTMENT DETAIL REPORT"],
                 [`Dibuat pada: ${new Date().toLocaleString("id-ID")}`],
@@ -492,12 +578,12 @@ export function RmiDashboardClient({
                 ["Bobot Kurs (FX) (%)", weightFx / 100],                                               // B10
                 [],
                 ["RINCIAN KOMPONEN INDEKS BAHAN BAKU", `BASE (${selectedBaseQuarter})`, `EVALUATION (${selectedEvalQuarter})`, "INDEKS BASE (Q4 2025)", "BOBOT (%)", "INDEX BASE VAL (%)", "INDEX EVAL VAL (%)"],
-                ["Natural Rubber (USD/kg)", parseFloat(baseRmiObj.naturalRubber), parseFloat(evalRmiObj.naturalRubber), 2.05, 0.35, "", ""],  // Baris 13 (A13:G13)
-                ["Synthetic Rubber (CNY/T)", parseFloat(baseRmiObj.syntheticRubber), parseFloat(evalRmiObj.syntheticRubber), 13200, 0.20, "", ""], // Baris 14
-                ["Carbon Black (USD/kg)", parseFloat(baseRmiObj.carbonBlack), parseFloat(evalRmiObj.carbonBlack), 1.45, 0.20, "", ""],  // Baris 15
-                ["Steel Cord (USD/kg)", parseFloat(baseRmiObj.steelCord), parseFloat(evalRmiObj.steelCord), 1.10, 0.15, "", ""],   // Baris 16
-                ["Freight (USD/40ft)", parseFloat(baseRmiObj.freight || "0"), parseFloat(evalRmiObj.freight || "0"), 2800, 0.05, "", ""], // Baris 17
-                ["USD/IDR FX Rate (Kurs Tengah BI)", simulatorResult.baseRate, simulatedRate, 16500, 0.05, "", ""], // Baris 18
+                ["Natural Rubber (USD/kg)", parseFloat(baseRmiObj.naturalRubber), parseFloat(evalRmiObj.naturalRubber), bpNr, wNrVal, "", ""],  // Baris 13 (A13:G13)
+                ["Synthetic Rubber (CNY/T)", parseFloat(baseRmiObj.syntheticRubber), parseFloat(evalRmiObj.syntheticRubber), bpSr, wSrVal, "", ""], // Baris 14
+                ["Carbon Black (USD/kg)", parseFloat(baseRmiObj.carbonBlack), parseFloat(evalRmiObj.carbonBlack), bpCb, wCbVal, "", ""],  // Baris 15
+                ["Steel Cord (USD/kg)", parseFloat(baseRmiObj.steelCord), parseFloat(evalRmiObj.steelCord), bpSc, wScVal, "", ""],   // Baris 16
+                ["Freight (USD/40ft)", parseFloat(baseRmiObj.freight || "0"), parseFloat(evalRmiObj.freight || "0"), bpFr, wFrVal, "", ""], // Baris 17
+                ["USD/IDR FX Rate (Kurs Tengah BI)", simulatorResult.baseRate, simulatedRate, bpFx, wFxVal, "", ""], // Baris 18
                 [],
                 ["HASIL KALKULASI UTAMA", "SEBELUM", "SESUDAH", "PERSENTASE PERUBAHAN (%)", "BOBOT FORMULA (%)", "KONTRIBUSI PENYESUAIAN HARGA (%)"], // Baris 20
                 ["Raw Material Index (RMI)", "", "", "", "", ""], // Baris 21
@@ -802,6 +888,72 @@ export function RmiDashboardClient({
         setShowRateDialog(true)
     }
 
+    // Open Edit Weights Dialog
+    const openEditWeights = () => {
+        if (currentWeights) {
+            setWeightsLabel(currentWeights.label || "Default")
+            setWNr(parseFloat(currentWeights.naturalRubberWeight))
+            setWSr(parseFloat(currentWeights.syntheticRubberWeight))
+            setWCb(parseFloat(currentWeights.carbonBlackWeight))
+            setWSc(parseFloat(currentWeights.steelCordWeight))
+            setWFr(parseFloat(currentWeights.freightWeight))
+            setWFx(parseFloat(currentWeights.fxWeight))
+            setBpNr(parseFloat(currentWeights.basePeriodNaturalRubber))
+            setBpSr(parseFloat(currentWeights.basePeriodSyntheticRubber))
+            setBpCb(parseFloat(currentWeights.basePeriodCarbonBlack))
+            setBpSc(parseFloat(currentWeights.basePeriodSteelCord))
+            setBpFr(parseFloat(currentWeights.basePeriodFreight))
+            setBpFx(parseFloat(currentWeights.basePeriodExchangeRate))
+        }
+        setShowWeightsDialog(true)
+    }
+
+    // Save Weights
+    const handleSaveWeights = async (e: React.FormEvent) => {
+        e.preventDefault()
+        setIsSavingWeights(true)
+        try {
+            const totalWeight = wNr + wSr + wCb + wSc + wFr + wFx
+            if (Math.abs(totalWeight - 1.0) > 0.01) {
+                toast.error(`Total bobot harus 100% (saat ini ${(totalWeight * 100).toFixed(1)}%)`)
+                setIsSavingWeights(false)
+                return
+            }
+
+            const payload: RmiWeightsInput = {
+                label: weightsLabel,
+                naturalRubberWeight: wNr,
+                syntheticRubberWeight: wSr,
+                carbonBlackWeight: wCb,
+                steelCordWeight: wSc,
+                freightWeight: wFr,
+                fxWeight: wFx,
+                basePeriodNaturalRubber: bpNr,
+                basePeriodSyntheticRubber: bpSr,
+                basePeriodCarbonBlack: bpCb,
+                basePeriodSteelCord: bpSc,
+                basePeriodFreight: bpFr,
+                basePeriodExchangeRate: bpFx,
+            }
+
+            if (currentWeights) {
+                const res = await updateRmiWeights(currentWeights.id, payload)
+                if (res.success && res.data) {
+                    toast.success("Bobot & Harga Dasar berhasil diperbarui")
+                    setCurrentWeights({ ...res.data, createdAt: new Date(res.data.createdAt), updatedAt: new Date() } as any)
+                    setShowWeightsDialog(false)
+                } else {
+                    toast.error(res.error || "Gagal menyimpan bobot")
+                }
+            }
+        } catch (error) {
+            console.error(error)
+            toast.error("Terjadi kesalahan saat menyimpan bobot")
+        } finally {
+            setIsSavingWeights(false)
+        }
+    }
+
     // Toggle Expand Kurs Row
     const toggleRateExpand = (id: number) => {
         setExpandedRateIds(prev => {
@@ -917,16 +1069,30 @@ export function RmiDashboardClient({
                     </p>
                 </div>
 
-                {/* API Kurs Real-time Badge */}
-                <div className="flex items-center gap-3 bg-indigo-50/70 border border-indigo-100 p-4 rounded-xl">
-                    <Coins className="h-8 w-8 text-indigo-600" />
-                    <div>
-                        <div className="text-[10px] font-bold text-indigo-900/60 uppercase tracking-wider">Kurs Tengah BI Hari Ini</div>
-                        <div className="text-lg font-extrabold text-indigo-950 flex items-center gap-1.5">
-                            <span>{formatIDR(realtimeRate)}</span>
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-600 text-white font-medium">API Realtime</span>
+                <div className="flex items-center gap-3 flex-wrap">
+                    {/* API Kurs Real-time Badge */}
+                    <div className="flex items-center gap-3 bg-indigo-50/70 border border-indigo-100 p-4 rounded-xl">
+                        <Coins className="h-8 w-8 text-indigo-600" />
+                        <div>
+                            <div className="text-[10px] font-bold text-indigo-900/60 uppercase tracking-wider">Kurs Tengah BI Hari Ini</div>
+                            <div className="text-lg font-extrabold text-indigo-950 flex items-center gap-1.5">
+                                <span>{formatIDR(realtimeRate)}</span>
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-600 text-white font-medium">API Realtime</span>
+                            </div>
                         </div>
                     </div>
+
+                    {/* Bobot & Harga Dasar Button */}
+                    {canEdit && (
+                        <Button 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={openEditWeights}
+                            className="gap-1.5 border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 h-10"
+                        >
+                            <Sliders className="h-4 w-4" /> Atur Bobot & Harga Dasar
+                        </Button>
+                    )}
                 </div>
             </div>
 
@@ -2065,6 +2231,117 @@ export function RmiDashboardClient({
                 </DialogContent>
             </Dialog>
 
+            {/* DIALOG FORM: EDIT WEIGHTS (BOBOT & HARGA DASAR) */}
+            <Dialog open={showWeightsDialog} onOpenChange={setShowWeightsDialog}>
+                <DialogContent className="sm:max-w-[560px] max-h-[85vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle>Atur Bobot (Bobot Kontribusi) Indeks RMI</DialogTitle>
+                        <DialogDescription>
+                            Ubah persentase bobot kontribusi masing-masing komponen bahan baku. Total bobot harus = 100%.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <form onSubmit={handleSaveWeights} className="space-y-5 pt-2">
+                        {/* Label */}
+                        <div className="space-y-1.5">
+                            <Label htmlFor="weightsLabel" className="text-xs font-semibold text-slate-600">Label / Nama Konfigurasi</Label>
+                            <Input 
+                                id="weightsLabel" 
+                                value={weightsLabel} 
+                                onChange={(e) => setWeightsLabel(e.target.value)} 
+                                placeholder="Contoh: Default (Q4 2025)" 
+                            />
+                        </div>
+
+                        {/* Weights Section */}
+                        <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-indigo-700 uppercase tracking-wider">Bobot Kontribusi (%)</span>
+                                <span className={`text-xs font-bold px-2 py-0.5 rounded ${(wNr + wSr + wCb + wSc + wFr + wFx) === 1.0 ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"}`}>
+                                    Total: {((wNr + wSr + wCb + wSc + wFr + wFx) * 100).toFixed(1)}%
+                                </span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs text-emerald-700 font-semibold">Natural Rubber</Label>
+                                    <Input type="number" step="0.01" min="0" max="1" value={wNr} onChange={(e) => setWNr(Number(e.target.value))} required />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs text-amber-700 font-semibold">Synthetic Rubber</Label>
+                                    <Input type="number" step="0.01" min="0" max="1" value={wSr} onChange={(e) => setWSr(Number(e.target.value))} required />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs text-blue-700 font-semibold">Carbon Black</Label>
+                                    <Input type="number" step="0.01" min="0" max="1" value={wCb} onChange={(e) => setWCb(Number(e.target.value))} required />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs text-violet-700 font-semibold">Steel Cord</Label>
+                                    <Input type="number" step="0.01" min="0" max="1" value={wSc} onChange={(e) => setWSc(Number(e.target.value))} required />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs text-pink-700 font-semibold">Freight</Label>
+                                    <Input type="number" step="0.01" min="0" max="1" value={wFr} onChange={(e) => setWFr(Number(e.target.value))} required />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs text-slate-700 font-semibold">FX Index</Label>
+                                    <Input type="number" step="0.01" min="0" max="1" value={wFx} onChange={(e) => setWFx(Number(e.target.value))} required />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Base Prices Section - Read Only */}
+                        <div className="space-y-3 border-t border-slate-100 pt-4">
+                            <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Harga Dasar (Base Period Q4 2025)</span>
+                                <span className="text-[10px] bg-amber-50 text-amber-700 px-2 py-0.5 rounded border border-amber-200 font-medium">Konstanta Index - Tidak Dapat Diubah</span>
+                            </div>
+                            <p className="text-[11px] text-slate-400 leading-relaxed">
+                                Harga dasar di bawah merupakan konstanta periode dasar (Q4 2025) yang mendefinisikan nilai indeks = 100%. 
+                                Mengubah harga dasar akan mempengaruhi perhitungan RMI di SEMUA tahun/kuartal.
+                            </p>
+                            <div className="grid grid-cols-2 gap-3 opacity-70">
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs text-slate-500">Natural Rubber (USD/kg)</Label>
+                                    <Input type="number" step="0.01" min="0" value={bpNr} readOnly className="bg-slate-50 border-slate-200 text-slate-600 cursor-not-allowed" />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs text-slate-500">Synthetic Rubber (CNY/T)</Label>
+                                    <Input type="number" step="0.01" min="0" value={bpSr} readOnly className="bg-slate-50 border-slate-200 text-slate-600 cursor-not-allowed" />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs text-slate-500">Carbon Black (USD/kg)</Label>
+                                    <Input type="number" step="0.01" min="0" value={bpCb} readOnly className="bg-slate-50 border-slate-200 text-slate-600 cursor-not-allowed" />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs text-slate-500">Steel Cord (USD/kg)</Label>
+                                    <Input type="number" step="0.01" min="0" value={bpSc} readOnly className="bg-slate-50 border-slate-200 text-slate-600 cursor-not-allowed" />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs text-slate-500">Freight (USD/40ft)</Label>
+                                    <Input type="number" step="0.01" min="0" value={bpFr} readOnly className="bg-slate-50 border-slate-200 text-slate-600 cursor-not-allowed" />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs text-slate-500">Exchange Rate (USD/IDR)</Label>
+                                    <Input type="number" step="0.01" min="0" value={bpFx} readOnly className="bg-slate-50 border-slate-200 text-slate-600 cursor-not-allowed" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <DialogFooter className="pt-4 border-t border-slate-100">
+                            <Button type="button" variant="outline" onClick={() => setShowWeightsDialog(false)}>
+                                Batal
+                            </Button>
+                            <Button 
+                                type="submit" 
+                                className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                                disabled={isSavingWeights}
+                            >
+                                {isSavingWeights ? "Menyimpan..." : "Simpan Bobot"}
+                            </Button>
+                        </DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
+
             {/* PANDUAN FORMULA PERHITUNGAN */}
             <Card className="border-slate-100 shadow-sm overflow-hidden bg-slate-50/20 mt-6">
                 <CardHeader className="bg-slate-50/80 border-b border-slate-100">
@@ -2083,11 +2360,18 @@ export function RmiDashboardClient({
                                 <span className="font-bold text-slate-900">Perhitungan Indeks RMI (Raw Material Index)</span>
                             </div>
                             <p className="text-xs text-slate-500 leading-relaxed">
-                                Indeks Bahan Baku (RMI) mencerminkan harga komoditas global pembuat ban dengan bobot default:
-                                Natural Rubber (35%), Synthetic Rubber (25%), Carbon Black (20%), dan Steel Cord (20%).
+                                Indeks Bahan Baku (RMI) mencerminkan harga komoditas global pembuat ban dengan bobot:
+                                Natural Rubber ({currentWeights ? (parseFloat(currentWeights.naturalRubberWeight) * 100).toFixed(0) : "35"}%), 
+                                Synthetic Rubber ({currentWeights ? (parseFloat(currentWeights.syntheticRubberWeight) * 100).toFixed(0) : "20"}%), 
+                                Carbon Black ({currentWeights ? (parseFloat(currentWeights.carbonBlackWeight) * 100).toFixed(0) : "20"}%), 
+                                Steel Cord ({currentWeights ? (parseFloat(currentWeights.steelCordWeight) * 100).toFixed(0) : "15"}%), 
+                                Freight ({currentWeights ? (parseFloat(currentWeights.freightWeight) * 100).toFixed(0) : "5"}%), 
+                                dan FX Index ({currentWeights ? (parseFloat(currentWeights.fxWeight) * 100).toFixed(0) : "5"}%).
                             </p>
                             <div className="bg-slate-50 p-2.5 rounded font-mono text-[11px] text-slate-800 space-y-1 border border-slate-100">
-                                <div className="font-semibold text-indigo-700">RMI = (Natural Rubber × 0.35) + (Synthetic Rubber × 0.25) + (Carbon Black × 0.20) + (Steel Cord × 0.20)</div>
+                                <div className="font-semibold text-indigo-700">
+                                    RMI = (NR × {currentWeights ? parseFloat(currentWeights.naturalRubberWeight).toFixed(2) : "0.35"}) + (SR × {currentWeights ? parseFloat(currentWeights.syntheticRubberWeight).toFixed(2) : "0.20"}) + (CB × {currentWeights ? parseFloat(currentWeights.carbonBlackWeight).toFixed(2) : "0.20"}) + (SC × {currentWeights ? parseFloat(currentWeights.steelCordWeight).toFixed(2) : "0.15"}) + (FR × {currentWeights ? parseFloat(currentWeights.freightWeight).toFixed(2) : "0.05"}) + (FX × {currentWeights ? parseFloat(currentWeights.fxWeight).toFixed(2) : "0.05"})
+                                </div>
                                 <div className="text-slate-400 mt-1.5 border-t border-slate-200/60 pt-1.5">% Δ RMI = ((RMI Evaluasi ÷ RMI Basis) - 1) × 100%</div>
                             </div>
                         </div>

@@ -1,9 +1,9 @@
 import 'dotenv/config';
 import { db } from '../db/index';
-import { rmiRecords, quarterlyExchangeRates } from '../db/schema';
+import { rmiRecords, quarterlyExchangeRates, rmiWeights } from '../db/schema';
 import { eq, and } from 'drizzle-orm';
 
-const BASE_PRICES = {
+const DEFAULT_BASE_PRICES = {
     naturalRubber: 2.05,
     syntheticRubber: 13200.0,
     carbonBlack: 1.45,
@@ -12,16 +12,57 @@ const BASE_PRICES = {
     exchangeRate: 16500.0
 };
 
-// Bobot baru: NR 35%, SR 20%, CB 20%, SC 15%, Freight 5%, FX Index 5%
-function calculateRmiValue(nr: number, sr: number, cb: number, sc: number, fr: number = 0, fx: number = 0): number {
-    const idxNR = (nr / BASE_PRICES.naturalRubber) * 100;
-    const idxSR = (sr / BASE_PRICES.syntheticRubber) * 100;
-    const idxCB = (cb / BASE_PRICES.carbonBlack) * 100;
-    const idxSC = (sc / BASE_PRICES.steelCord) * 100;
-    const idxFR = fr > 0 ? (fr / BASE_PRICES.freight) * 100 : 100;
+const DEFAULT_WEIGHTS = {
+    naturalRubber: 0.35,
+    syntheticRubber: 0.20,
+    carbonBlack: 0.20,
+    steelCord: 0.15,
+    freight: 0.05,
+    fx: 0.05
+};
+
+async function getActiveWeights() {
+    const data = await db
+        .select()
+        .from(rmiWeights)
+        .where(eq(rmiWeights.isActive, true))
+        .limit(1);
+    
+    if (data.length > 0) {
+        const w = data[0];
+        return {
+            weights: {
+                naturalRubber: parseFloat(w.naturalRubberWeight),
+                syntheticRubber: parseFloat(w.syntheticRubberWeight),
+                carbonBlack: parseFloat(w.carbonBlackWeight),
+                steelCord: parseFloat(w.steelCordWeight),
+                freight: parseFloat(w.freightWeight),
+                fx: parseFloat(w.fxWeight),
+            },
+            basePrices: {
+                naturalRubber: parseFloat(w.basePeriodNaturalRubber),
+                syntheticRubber: parseFloat(w.basePeriodSyntheticRubber),
+                carbonBlack: parseFloat(w.basePeriodCarbonBlack),
+                steelCord: parseFloat(w.basePeriodSteelCord),
+                freight: parseFloat(w.basePeriodFreight),
+                exchangeRate: parseFloat(w.basePeriodExchangeRate),
+            }
+        };
+    }
+    return { weights: DEFAULT_WEIGHTS, basePrices: DEFAULT_BASE_PRICES };
+}
+
+async function calculateRmiValue(nr: number, sr: number, cb: number, sc: number, fr: number = 0, fx: number = 0): Promise<number> {
+    const { weights: w, basePrices: bp } = await getActiveWeights();
+    
+    const idxNR = bp.naturalRubber > 0 ? (nr / bp.naturalRubber) * 100 : 0;
+    const idxSR = bp.syntheticRubber > 0 ? (sr / bp.syntheticRubber) * 100 : 0;
+    const idxCB = bp.carbonBlack > 0 ? (cb / bp.carbonBlack) * 100 : 0;
+    const idxSC = bp.steelCord > 0 ? (sc / bp.steelCord) * 100 : 0;
+    const idxFR = fr > 0 && bp.freight > 0 ? (fr / bp.freight) * 100 : 100;
     const idxFX = fx > 0 ? fx : 100;
 
-    return (idxNR * 0.35) + (idxSR * 0.20) + (idxCB * 0.20) + (idxSC * 0.15) + (idxFR * 0.05) + (idxFX * 0.05);
+    return (idxNR * w.naturalRubber) + (idxSR * w.syntheticRubber) + (idxCB * w.carbonBlack) + (idxSC * w.steelCord) + (idxFR * w.freight) + (idxFX * w.fx);
 }
 
 async function syncQuarter(year: number, quarter: number, rawRubber: number, rawSynthetic: number, rawCarbon: number, rawSteel: number, rawFreight: number, averageRate: number) {
@@ -38,9 +79,10 @@ async function syncQuarter(year: number, quarter: number, rawRubber: number, raw
     // Freight murni
     const fr = rawFreight;
     // FX Index = (Kurs kuartal berjalan / Kurs Q4 2025) * 100
-    const fx = (averageRate / 16500) * 100;
+    const { basePrices } = await getActiveWeights();
+    const fx = (averageRate / basePrices.exchangeRate) * 100;
     
-    const rmiValue = calculateRmiValue(nr, sr, cb, sc, fr, fx);
+    const rmiValue = await calculateRmiValue(nr, sr, cb, sc, fr, fx);
     
     // Perbarui atau Masukkan Kurs Tengah
     const existingRate = await db

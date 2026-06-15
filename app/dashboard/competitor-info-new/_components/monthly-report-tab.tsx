@@ -9,7 +9,7 @@ import { Bot, CalendarDays, Download, FileText, Loader2, RefreshCw, Sparkles, Ta
 import { toast } from "sonner"
 
 import { generateCompetitorMonthlyReportInsight } from "@/app/actions/competitor-new"
-import { getExternalPricesForMonthlyCollapse } from "@/app/actions/rmi-dashboard"
+import { getExternalPricesForMonthlyCollapse, getRmiWeights } from "@/app/actions/rmi-dashboard"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -808,6 +808,20 @@ export function MonthlyReportTab() {
         steelCord: number
         freight: number
     }[]>>({})
+    const [rmiWeights, setRmiWeights] = useState<{
+        naturalRubberWeight: number
+        syntheticRubberWeight: number
+        carbonBlackWeight: number
+        steelCordWeight: number
+        freightWeight: number
+        fxWeight: number
+        basePeriodNaturalRubber: number
+        basePeriodSyntheticRubber: number
+        basePeriodCarbonBlack: number
+        basePeriodSteelCord: number
+        basePeriodFreight: number
+        basePeriodExchangeRate: number
+    } | null>(null)
     const slideRefs = useRef<Array<HTMLElement | null>>([]);
 
     const loadData = async () => {
@@ -843,6 +857,29 @@ export function MonthlyReportTab() {
             }
         } catch {
             // RMI data is optional for this slide
+        }
+        // Load RMI weights (non-blocking)
+        try {
+            const wRes = await getRmiWeights()
+            if (wRes.success && wRes.data) {
+                const d = wRes.data as any
+                setRmiWeights({
+                    naturalRubberWeight: parseFloat(d.naturalRubberWeight),
+                    syntheticRubberWeight: parseFloat(d.syntheticRubberWeight),
+                    carbonBlackWeight: parseFloat(d.carbonBlackWeight),
+                    steelCordWeight: parseFloat(d.steelCordWeight),
+                    freightWeight: parseFloat(d.freightWeight),
+                    fxWeight: parseFloat(d.fxWeight),
+                    basePeriodNaturalRubber: parseFloat(d.basePeriodNaturalRubber),
+                    basePeriodSyntheticRubber: parseFloat(d.basePeriodSyntheticRubber),
+                    basePeriodCarbonBlack: parseFloat(d.basePeriodCarbonBlack),
+                    basePeriodSteelCord: parseFloat(d.basePeriodSteelCord),
+                    basePeriodFreight: parseFloat(d.basePeriodFreight),
+                    basePeriodExchangeRate: parseFloat(d.basePeriodExchangeRate),
+                })
+            }
+        } catch {
+            // Weights data is optional
         }
     }
 
@@ -1395,9 +1432,21 @@ export function MonthlyReportTab() {
                         )),
                         <Slide key="rmi-summary" eyebrow={`Slide ${rmiSummarySlide} - RMI Summary`} title={`Raw Material Index — ${monthLabel(month)}`}>
                             {(() => {
-                                // Konstanta dasar Q4 2025 untuk hitung indeks
-                                const RMI_BASES = { nr: 2.05, sr: 13200.0, cb: 1.45, sc: 1.10, fr: 2800.0 }
-                                const RMI_WEIGHTS = { nr: 0.35, sr: 0.20, cb: 0.20, sc: 0.15, fr: 0.05 }
+                                // Dynamic RMI_BASES and RMI_WEIGHTS from database
+                                const RMI_BASES = { 
+                                    nr: rmiWeights?.basePeriodNaturalRubber ?? 2.05, 
+                                    sr: rmiWeights?.basePeriodSyntheticRubber ?? 13200.0, 
+                                    cb: rmiWeights?.basePeriodCarbonBlack ?? 1.45, 
+                                    sc: rmiWeights?.basePeriodSteelCord ?? 1.10, 
+                                    fr: rmiWeights?.basePeriodFreight ?? 2800.0 
+                                }
+                                const RMI_WEIGHTS = { 
+                                    nr: rmiWeights?.naturalRubberWeight ?? 0.35, 
+                                    sr: rmiWeights?.syntheticRubberWeight ?? 0.20, 
+                                    cb: rmiWeights?.carbonBlackWeight ?? 0.20, 
+                                    sc: rmiWeights?.steelCordWeight ?? 0.15, 
+                                    fr: rmiWeights?.freightWeight ?? 0.05 
+                                }
 
                                 // Ambil data bulanan untuk chart tren (semua data tersedia)
                                 const chartRows: { label: string; nr: number; sr: number; cb: number; sc: number; fr: number; rmi: number; sortKey: number }[] = []
