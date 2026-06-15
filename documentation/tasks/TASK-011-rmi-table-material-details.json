@@ -1,10 +1,12 @@
 {
   "id": "TASK-011",
-  "status": "in_progress",
+  "status": "completed",
   "priority": "P0",
   "title": "Menambahkan OUM dan Source untuk Setiap Material di Tabel RMI",
   "description": "Memodifikasi header dan baris Tabel RMI agar setiap material (Natural Rubber, Synthetic Rubber, Carbon Black, Steel Cord, Freight) menampilkan OUM (satuan) dan Source data spesifiknya di samping nilai RMI/harganya.",
   "createdAt": "2026-06-15T06:23:00.000Z",
-  "updatedAt": "2026-06-15T06:22:41.504Z",
-  "startedAt": "2026-06-15T06:22:41.504Z"
+  "updatedAt": "2026-06-15T07:35:13.491Z",
+  "startedAt": "2026-06-15T06:22:41.504Z",
+  "completedAt": "2026-06-15T07:35:13.491Z",
+  "completionDetails": "Menambahkan OUM dan Source di tabel RMI, tombol Excel rinci di simulator, serta memperbaiki formula indeks chart bulanan"
 }

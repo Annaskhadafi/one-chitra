@@ -24,7 +24,8 @@ import {
     BookOpen,
     ChevronRight,
     ChevronDown,
-    ChevronsUpDown
+    ChevronsUpDown,
+    ExternalLink
 } from "lucide-react"
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -132,6 +133,14 @@ interface SapTireProduct {
     totalQty: number
     totalValue: number
     currency: string
+}
+
+const MATERIAL_SOURCES = {
+    rubber: "https://tradingeconomics.com/commodity/rubber",
+    syntheticRubber: "https://tradingeconomics.com/commodity/synthetic-rubber",
+    carbonBlack: "https://www.imarcgroup.com/carbon-black-pricing-report",
+    steelCord: "https://tradingeconomics.com/commodity/hrc-steel",
+    freight: "https://www.drewry.co.uk/supply-chain-advisors/supply-chain-expertise/world-container-index-assessed-by-drewry"
 }
 
 interface RmiDashboardClientProps {
@@ -1391,27 +1400,102 @@ export function RmiDashboardClient({
                                                                      {/* Natural Rubber */}
                                                                      <TableCell>{parseFloat(r.naturalRubber).toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</TableCell>
                                                                      <TableCell className="text-xs text-slate-500 italic">USD/kg</TableCell>
-                                                                     <TableCell className="text-[10px] text-slate-500">{rubberSrc}</TableCell>
+                                                                     <TableCell className="text-[10px] text-slate-500">
+                                                                         {rubberSrc !== "Manual" ? (
+                                                                             <a 
+                                                                                 href={MATERIAL_SOURCES.rubber} 
+                                                                                 target="_blank" 
+                                                                                 rel="noopener noreferrer" 
+                                                                                 className="inline-flex items-center gap-0.5 text-indigo-600 hover:text-indigo-800 hover:underline"
+                                                                                 onClick={(e) => e.stopPropagation()}
+                                                                             >
+                                                                                 {rubberSrc}
+                                                                                 <ExternalLink className="h-2.5 w-2.5" />
+                                                                             </a>
+                                                                         ) : (
+                                                                             "Manual"
+                                                                         )}
+                                                                     </TableCell>
                                                                      
                                                                      {/* Synthetic Rubber */}
                                                                      <TableCell>{parseFloat(r.syntheticRubber).toLocaleString("id-ID", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</TableCell>
                                                                      <TableCell className="text-xs text-slate-500 italic">CNY/T</TableCell>
-                                                                     <TableCell className="text-[10px] text-slate-500">{synthSrc}</TableCell>
+                                                                     <TableCell className="text-[10px] text-slate-500">
+                                                                         {synthSrc !== "Manual" ? (
+                                                                             <a 
+                                                                                 href={MATERIAL_SOURCES.syntheticRubber} 
+                                                                                 target="_blank" 
+                                                                                 rel="noopener noreferrer" 
+                                                                                 className="inline-flex items-center gap-0.5 text-indigo-600 hover:text-indigo-800 hover:underline"
+                                                                                 onClick={(e) => e.stopPropagation()}
+                                                                             >
+                                                                                 {synthSrc}
+                                                                                 <ExternalLink className="h-2.5 w-2.5" />
+                                                                             </a>
+                                                                         ) : (
+                                                                             "Manual"
+                                                                         )}
+                                                                     </TableCell>
                                                                      
                                                                      {/* Carbon Black */}
                                                                      <TableCell>{parseFloat(r.carbonBlack).toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</TableCell>
                                                                      <TableCell className="text-xs text-slate-500 italic">USD/kg</TableCell>
-                                                                     <TableCell className="text-[10px] text-slate-500">{carbonSrc}</TableCell>
+                                                                     <TableCell className="text-[10px] text-slate-500">
+                                                                         {carbonSrc !== "Manual" ? (
+                                                                             <a 
+                                                                                 href={MATERIAL_SOURCES.carbonBlack} 
+                                                                                 target="_blank" 
+                                                                                 rel="noopener noreferrer" 
+                                                                                 className="inline-flex items-center gap-0.5 text-indigo-600 hover:text-indigo-800 hover:underline"
+                                                                                 onClick={(e) => e.stopPropagation()}
+                                                                             >
+                                                                                 {carbonSrc}
+                                                                                 <ExternalLink className="h-2.5 w-2.5" />
+                                                                             </a>
+                                                                         ) : (
+                                                                             "Manual"
+                                                                         )}
+                                                                     </TableCell>
                                                                      
                                                                      {/* Steel Cord */}
                                                                      <TableCell>{parseFloat(r.steelCord).toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</TableCell>
                                                                      <TableCell className="text-xs text-slate-500 italic">USD/kg</TableCell>
-                                                                     <TableCell className="text-[10px] text-slate-500">{steelSrc}</TableCell>
+                                                                     <TableCell className="text-[10px] text-slate-500">
+                                                                         {steelSrc !== "Manual" ? (
+                                                                             <a 
+                                                                                 href={MATERIAL_SOURCES.steelCord} 
+                                                                                 target="_blank" 
+                                                                                 rel="noopener noreferrer" 
+                                                                                 className="inline-flex items-center gap-0.5 text-indigo-600 hover:text-indigo-800 hover:underline"
+                                                                                 onClick={(e) => e.stopPropagation()}
+                                                                             >
+                                                                                 {steelSrc}
+                                                                                 <ExternalLink className="h-2.5 w-2.5" />
+                                                                             </a>
+                                                                         ) : (
+                                                                             "Manual"
+                                                                         )}
+                                                                     </TableCell>
                                                                      
                                                                      {/* Freight */}
                                                                      <TableCell>{parseFloat(r.freight || "0").toLocaleString("id-ID", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</TableCell>
                                                                      <TableCell className="text-xs text-slate-500 italic">USD/40ft</TableCell>
-                                                                     <TableCell className="text-[10px] text-slate-500">{freightSrc}</TableCell>
+                                                                     <TableCell className="text-[10px] text-slate-500">
+                                                                         {freightSrc !== "Manual" ? (
+                                                                             <a 
+                                                                                 href={MATERIAL_SOURCES.freight} 
+                                                                                 target="_blank" 
+                                                                                 rel="noopener noreferrer" 
+                                                                                 className="inline-flex items-center gap-0.5 text-indigo-600 hover:text-indigo-800 hover:underline"
+                                                                                 onClick={(e) => e.stopPropagation()}
+                                                                             >
+                                                                                 {freightSrc}
+                                                                                 <ExternalLink className="h-2.5 w-2.5" />
+                                                                             </a>
+                                                                         ) : (
+                                                                             "Manual"
+                                                                         )}
+                                                                     </TableCell>
                                                                      
                                                                      <TableCell>{parseFloat(r.fxIndex || "0").toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%</TableCell>
                                                                      <TableCell className="font-extrabold text-indigo-600">{parseFloat(r.rmiValue).toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
@@ -1445,27 +1529,82 @@ export function RmiDashboardClient({
                                                                                      {/* Natural Rubber */}
                                                                                      <TableCell className="text-xs text-slate-600">{m.naturalRubber > 0 ? m.naturalRubber.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 4 }) : "-"}</TableCell>
                                                                                      <TableCell className="text-xs text-slate-400 italic">USD/kg</TableCell>
-                                                                                     <TableCell className="text-[10px] text-slate-400">Rubber</TableCell>
+                                                                                     <TableCell className="text-[10px] text-slate-400">
+                                                                                         <a 
+                                                                                             href={MATERIAL_SOURCES.rubber} 
+                                                                                             target="_blank" 
+                                                                                             rel="noopener noreferrer" 
+                                                                                             className="inline-flex items-center gap-0.5 text-indigo-500 hover:text-indigo-700 hover:underline"
+                                                                                             onClick={(e) => e.stopPropagation()}
+                                                                                         >
+                                                                                             Rubber
+                                                                                             <ExternalLink className="h-2.5 w-2.5" />
+                                                                                         </a>
+                                                                                     </TableCell>
                                                                                      
                                                                                      {/* Synthetic Rubber */}
                                                                                      <TableCell className="text-xs text-slate-600">{m.syntheticRubber > 0 ? m.syntheticRubber.toLocaleString("id-ID", { minimumFractionDigits: 0, maximumFractionDigits: 2 }) : "-"}</TableCell>
                                                                                      <TableCell className="text-xs text-slate-400 italic">CNY/T</TableCell>
-                                                                                     <TableCell className="text-[10px] text-slate-400">Synthetic Rubber</TableCell>
+                                                                                     <TableCell className="text-[10px] text-slate-400">
+                                                                                         <a 
+                                                                                             href={MATERIAL_SOURCES.syntheticRubber} 
+                                                                                             target="_blank" 
+                                                                                             rel="noopener noreferrer" 
+                                                                                             className="inline-flex items-center gap-0.5 text-indigo-500 hover:text-indigo-700 hover:underline"
+                                                                                             onClick={(e) => e.stopPropagation()}
+                                                                                         >
+                                                                                             Synthetic Rubber
+                                                                                             <ExternalLink className="h-2.5 w-2.5" />
+                                                                                         </a>
+                                                                                     </TableCell>
                                                                                      
                                                                                      {/* Carbon Black */}
                                                                                      <TableCell className="text-xs text-slate-600">{m.carbonBlack > 0 ? m.carbonBlack.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 4 }) : "-"}</TableCell>
                                                                                      <TableCell className="text-xs text-slate-400 italic">USD/kg</TableCell>
-                                                                                     <TableCell className="text-[10px] text-slate-400">CB Europe</TableCell>
+                                                                                     <TableCell className="text-[10px] text-slate-400">
+                                                                                         <a 
+                                                                                             href={MATERIAL_SOURCES.carbonBlack} 
+                                                                                             target="_blank" 
+                                                                                             rel="noopener noreferrer" 
+                                                                                             className="inline-flex items-center gap-0.5 text-indigo-500 hover:text-indigo-700 hover:underline"
+                                                                                             onClick={(e) => e.stopPropagation()}
+                                                                                         >
+                                                                                             CB Europe
+                                                                                             <ExternalLink className="h-2.5 w-2.5" />
+                                                                                         </a>
+                                                                                     </TableCell>
                                                                                      
                                                                                      {/* Steel Cord */}
                                                                                      <TableCell className="text-xs text-slate-600">{m.steelCord > 0 ? m.steelCord.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 4 }) : "-"}</TableCell>
                                                                                      <TableCell className="text-xs text-slate-400 italic">USD/kg</TableCell>
-                                                                                     <TableCell className="text-[10px] text-slate-400">HRC Steel</TableCell>
+                                                                                     <TableCell className="text-[10px] text-slate-400">
+                                                                                         <a 
+                                                                                             href={MATERIAL_SOURCES.steelCord} 
+                                                                                             target="_blank" 
+                                                                                             rel="noopener noreferrer" 
+                                                                                             className="inline-flex items-center gap-0.5 text-indigo-500 hover:text-indigo-700 hover:underline"
+                                                                                             onClick={(e) => e.stopPropagation()}
+                                                                                         >
+                                                                                             HRC Steel
+                                                                                             <ExternalLink className="h-2.5 w-2.5" />
+                                                                                         </a>
+                                                                                     </TableCell>
                                                                                      
                                                                                      {/* Freight */}
                                                                                      <TableCell className="text-xs text-slate-600">{m.freight > 0 ? m.freight.toLocaleString("id-ID", { minimumFractionDigits: 0, maximumFractionDigits: 2 }) : "-"}</TableCell>
                                                                                      <TableCell className="text-xs text-slate-400 italic">USD/40ft</TableCell>
-                                                                                     <TableCell className="text-[10px] text-slate-400">Drewry Index</TableCell>
+                                                                                     <TableCell className="text-[10px] text-slate-400">
+                                                                                         <a 
+                                                                                             href={MATERIAL_SOURCES.freight} 
+                                                                                             target="_blank" 
+                                                                                             rel="noopener noreferrer" 
+                                                                                             className="inline-flex items-center gap-0.5 text-indigo-500 hover:text-indigo-700 hover:underline"
+                                                                                             onClick={(e) => e.stopPropagation()}
+                                                                                         >
+                                                                                             Drewry Index
+                                                                                             <ExternalLink className="h-2.5 w-2.5" />
+                                                                                         </a>
+                                                                                     </TableCell>
                                                                                      
                                                                                      <TableCell className="text-xs text-slate-400">-</TableCell>
                                                                                      <TableCell className="text-xs text-slate-500 italic" colSpan={2}>Rata-rata Bulanan API</TableCell>
