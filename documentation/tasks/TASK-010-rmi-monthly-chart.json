@@ -1,0 +1,12 @@
+{
+  "id": "TASK-010",
+  "status": "completed",
+  "priority": "P0",
+  "title": "Mengubah Grafik Tren RMI Menjadi Bulanan",
+  "description": "Mengubah visualisasi grafik Recharts pada RMI Dashboard agar menampilkan data tren bulanan secara halus berdasarkan histori API eksternal, bukan per kuartal lagi.",
+  "createdAt": "2026-06-15T06:12:00.000Z",
+  "updatedAt": "2026-06-15T06:11:58.777Z",
+  "startedAt": "2026-06-15T06:10:34.555Z",
+  "completedAt": "2026-06-15T06:11:58.777Z",
+  "completionDetails": "\\ Mengubah grafik tren RMI menjadi bulanan berbasis persentase indeks komoditas dengan filter dimulai sejak Q4 2025\\"
+}

@@ -401,7 +401,7 @@ export function RmiDashboardClient({
             const qRateVal = qRateObj ? parseFloat(qRateObj.averageRate) : 16500
 
             details.forEach((m: any) => {
-                // Konversi nominal material ke Indeks (%)
+                // Konversi nominal material ke Indeks (%) secara langsung (tanpa dikali Kurs Tengah USD/IDR)
                 const idxNR = m.naturalRubber > 0 ? (m.naturalRubber / bases.nr) * 100 : 0
                 const idxSR = m.syntheticRubber > 0 ? (m.syntheticRubber / bases.sr) * 100 : 0
                 const idxCB = m.carbonBlack > 0 ? (m.carbonBlack / bases.cb) * 100 : 0
@@ -449,6 +449,128 @@ export function RmiDashboardClient({
         // Urutkan berdasarkan waktu (sortKey)
         return list.sort((a, b) => a.sortKey - b.sortKey)
     }, [rmiMonthlyDetails, quarterlyRates])
+
+    // Export Detail Simulasi Rinci dalam Format Excel (.xlsx) dengan Rumus Excel asli
+    const exportDetailedSimulationToExcel = async () => {
+        if (!simulatorResult) return
+
+        const [baseY, baseQ] = selectedBaseQuarter.split("-Q").map(Number)
+        const [evalY, evalQ] = selectedEvalQuarter.split("-Q").map(Number)
+
+        const baseRmiObj = rmiRecords.find(r => r.year === baseY && r.quarter === baseQ)
+        const evalRmiObj = rmiRecords.find(r => r.year === evalY && r.quarter === evalQ)
+
+        if (!baseRmiObj || !evalRmiObj) return
+
+        try {
+            // Mengimpor xlsx secara dinamis untuk efisiensi
+            const XLSX = await import("xlsx")
+
+            const workbook = XLSX.utils.book_new()
+            
+            // Baris data mentah dan formula Excel
+            // Kita akan menulis cell-by-cell atau aoa, lalu menambahkan properti .f untuk rumus
+            const wsData: any[][] = [
+                ["SIMULASI PRICE ADJUSTMENT DETAIL REPORT"],
+                [`Dibuat pada: ${new Date().toLocaleString("id-ID")}`],
+                [],
+                ["PARAMETER SIMULASI", "NILAI"],
+                ["Base Period", `${selectedBaseQuarter}`],                                             // B5
+                ["Evaluation Period", `${selectedEvalQuarter}`],                                       // B6
+                ["Base Price Ban (Tire IDR)", basePrice],                                              // B7
+                ["Kurs Tengah Saat Ini", simulatedRate],                                               // B8
+                ["Bobot RMI (%)", weightRmi / 100],                                                    // B9
+                ["Bobot Kurs (FX) (%)", weightFx / 100],                                               // B10
+                [],
+                ["RINCIAN KOMPONEN INDEKS BAHAN BAKU", `BASE (${selectedBaseQuarter})`, `EVALUATION (${selectedEvalQuarter})`, "INDEKS BASE (Q4 2025)", "BOBOT (%)", "INDEX BASE VAL (%)", "INDEX EVAL VAL (%)"],
+                ["Natural Rubber (USD/kg)", parseFloat(baseRmiObj.naturalRubber), parseFloat(evalRmiObj.naturalRubber), 2.05, 0.35, "", ""],  // Baris 13 (A13:G13)
+                ["Synthetic Rubber (CNY/T)", parseFloat(baseRmiObj.syntheticRubber), parseFloat(evalRmiObj.syntheticRubber), 13200, 0.20, "", ""], // Baris 14
+                ["Carbon Black (USD/kg)", parseFloat(baseRmiObj.carbonBlack), parseFloat(evalRmiObj.carbonBlack), 1.45, 0.20, "", ""],  // Baris 15
+                ["Steel Cord (USD/kg)", parseFloat(baseRmiObj.steelCord), parseFloat(evalRmiObj.steelCord), 1.10, 0.15, "", ""],   // Baris 16
+                ["Freight (USD/40ft)", parseFloat(baseRmiObj.freight || "0"), parseFloat(evalRmiObj.freight || "0"), 2800, 0.05, "", ""], // Baris 17
+                ["USD/IDR FX Rate (Kurs Tengah BI)", simulatorResult.baseRate, simulatedRate, 16500, 0.05, "", ""], // Baris 18
+                [],
+                ["HASIL KALKULASI UTAMA", "SEBELUM", "SESUDAH", "PERSENTASE PERUBAHAN (%)", "BOBOT FORMULA (%)", "KONTRIBUSI PENYESUAIAN HARGA (%)"], // Baris 20
+                ["Raw Material Index (RMI)", "", "", "", "", ""], // Baris 21
+                ["USD/IDR Exchange Rate (FX)", "", "", "", "", ""], // Baris 22
+                [],
+                ["KESIMPULAN ADJUSTMENT", "NILAI"], // Baris 24
+                ["Total Price Adjustment (%)", ""], // Baris 25
+                ["Estimasi Harga Baru (Adjusted Price)", ""], // Baris 26
+                ["Selisih Nominal (Rupiah)", ""] // Baris 27
+            ]
+
+            const worksheet = XLSX.utils.aoa_to_sheet(wsData)
+
+            // Terapkan Rumus Excel (Formula)
+            // Baris 13-18 Kolom F (Index Base Val %): =(B/D)*100
+            // Baris 13-18 Kolom G (Index Eval Val %): =(C/D)*100
+            for (let i = 13; i <= 18; i++) {
+                worksheet[`F${i}`] = { t: 'n', f: `(B${i}/D${i})*100` }
+                worksheet[`G${i}`] = { t: 'n', f: `(C${i}/D${i})*100` }
+            }
+
+            // RMI Sebelum (B21) = RMI = sum(Bobot * Index Base Val)
+            // Formula RMI Sebelum: =(F13*E13)+(F14*E14)+(F15*E15)+(F16*E16)+(F17*E17)+(F18*E18)
+            worksheet['B21'] = { t: 'n', f: 'SUMPRODUCT(F13:F18,E13:E18)' }
+            // RMI Sesudah (C21) = RMI = sum(Bobot * Index Eval Val)
+            worksheet['C21'] = { t: 'n', f: 'SUMPRODUCT(G13:G18,E13:E18)' }
+            // Persentase Perubahan RMI (D21): =((C21/B21)-1)*100
+            worksheet['D21'] = { t: 'n', f: '((C21/B21)-1)*100' }
+            // Bobot Formula RMI (E21): =B9
+            worksheet['E21'] = { t: 'n', f: 'B9' }
+            // Kontribusi Penyesuaian Harga RMI (F21): =D21*E21
+            worksheet['F21'] = { t: 'n', f: 'D21*E21' }
+
+            // FX Sebelum (B22) = Kurs Base (B18)
+            worksheet['B22'] = { t: 'n', f: 'B18' }
+            // FX Sesudah (C22) = Kurs Tengah Eval (C18)
+            worksheet['C22'] = { t: 'n', f: 'C18' }
+            // Persentase Perubahan FX (D22): =((C22/B22)-1)*100
+            worksheet['D22'] = { t: 'n', f: '((C22/B22)-1)*100' }
+            // Bobot Formula FX (E22): =B10
+            worksheet['E22'] = { t: 'n', f: 'B10' }
+            // Kontribusi Penyesuaian Harga FX (F22): =D22*E22
+            worksheet['F22'] = { t: 'n', f: 'D22*E22' }
+
+            // Total Price Adjustment % (B25): =F21+F22
+            worksheet['B25'] = { t: 'n', f: 'F21+F22' }
+
+            // Estimasi Harga Baru (B26): =B7*(1+(B25/100))
+            worksheet['B26'] = { t: 'n', f: 'B7*(1+(B25/100))' }
+
+            // Selisih Nominal (B27): =B26-B7
+            worksheet['B27'] = { t: 'n', f: 'B26-B7' }
+
+            // Set Format Tampilan Excel (Persentase dan Rupiah)
+            worksheet['B9'].z = '0.0%'
+            worksheet['B10'].z = '0.0%'
+            worksheet['B7'].z = '"Rp"#,##0'
+            worksheet['B8'].z = '"Rp"#,##0.00'
+            worksheet['B18'].z = '"Rp"#,##0.00'
+            worksheet['C18'].z = '"Rp"#,##0.00'
+            worksheet['B22'].z = '"Rp"#,##0.00'
+            worksheet['C22'].z = '"Rp"#,##0.00'
+            worksheet['B26'].z = '"Rp"#,##0'
+            worksheet['B27'].z = '"Rp"#,##0'
+            worksheet['D21'].z = '0.00"%"'
+            worksheet['E21'].z = '0.0%'
+            worksheet['F21'].z = '0.00"%"'
+            worksheet['D22'].z = '0.00"%"'
+            worksheet['E22'].z = '0.0%'
+            worksheet['F22'].z = '0.00"%"'
+            worksheet['B25'].z = '0.00"%"'
+
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Detail Perhitungan")
+            
+            // Trigger download file Excel
+            XLSX.writeFile(workbook, `Detail_Kalkulasi_Price_Adjustment_${selectedBaseQuarter}_to_${selectedEvalQuarter}.xlsx`)
+            toast.success("Berhasil mendownload Excel laporan perhitungan rinci!")
+        } catch (error) {
+            console.error("Gagal mendownload Excel", error)
+            toast.error("Gagal men-generate file Excel")
+        }
+    }
 
     // Virtualization setup
     const rmiParentRef = useRef<HTMLDivElement>(null)
@@ -1124,6 +1246,14 @@ export function RmiDashboardClient({
                                             </span>
                                         </div>
                                     </div>
+
+                                    <Button
+                                        onClick={exportDetailedSimulationToExcel}
+                                        type="button"
+                                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-4 rounded-lg text-xs gap-1.5 shadow-md flex items-center justify-center border border-emerald-500 transition-all cursor-pointer"
+                                    >
+                                        <Download className="h-3.5 w-3.5" /> Unduh Perhitungan Rinci (Excel)
+                                    </Button>
 
                                     {/* Informasi Keterangan Sesuai Gambar User */}
                                     <div className="bg-slate-100 p-3 rounded-lg border flex gap-2 items-start text-[11px] text-slate-600">

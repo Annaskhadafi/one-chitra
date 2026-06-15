@@ -3,9 +3,25 @@ import { db } from '../db/index';
 import { rmiRecords, quarterlyExchangeRates } from '../db/schema';
 import { eq, and } from 'drizzle-orm';
 
+const BASE_PRICES = {
+    naturalRubber: 2.05,
+    syntheticRubber: 13200.0,
+    carbonBlack: 1.45,
+    steelCord: 1.10,
+    freight: 2800.0,
+    exchangeRate: 16500.0
+};
+
 // Bobot baru: NR 35%, SR 20%, CB 20%, SC 15%, Freight 5%, FX Index 5%
 function calculateRmiValue(nr: number, sr: number, cb: number, sc: number, fr: number = 0, fx: number = 0): number {
-    return (nr * 0.35) + (sr * 0.20) + (cb * 0.20) + (sc * 0.15) + (fr * 0.05) + (fx * 0.05);
+    const idxNR = (nr / BASE_PRICES.naturalRubber) * 100;
+    const idxSR = (sr / BASE_PRICES.syntheticRubber) * 100;
+    const idxCB = (cb / BASE_PRICES.carbonBlack) * 100;
+    const idxSC = (sc / BASE_PRICES.steelCord) * 100;
+    const idxFR = fr > 0 ? (fr / BASE_PRICES.freight) * 100 : 100;
+    const idxFX = fx > 0 ? fx : 100;
+
+    return (idxNR * 0.35) + (idxSR * 0.20) + (idxCB * 0.20) + (idxSC * 0.15) + (idxFR * 0.05) + (idxFX * 0.05);
 }
 
 async function syncQuarter(year: number, quarter: number, rawRubber: number, rawSynthetic: number, rawCarbon: number, rawSteel: number, rawFreight: number, averageRate: number) {

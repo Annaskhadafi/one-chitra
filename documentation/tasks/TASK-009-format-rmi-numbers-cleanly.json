@@ -1,0 +1,12 @@
+{
+  "id": "TASK-009",
+  "status": "completed",
+  "priority": "P1",
+  "title": "Merapikan Format Angka dan Desimal pada Tabel RMI",
+  "description": "Menyesuaikan format desimal dan pemisah ribuan pada kolom tabel RMI (baik baris utama maupun sub-baris bulanan) agar konsisten menggunakan 2 angka di belakang koma dan pemisah ribuan yang rapi sesuai contoh Excel.",
+  "createdAt": "2026-06-15T06:10:00.000Z",
+  "updatedAt": "2026-06-15T06:09:30.156Z",
+  "startedAt": "2026-06-15T06:08:44.649Z",
+  "completedAt": "2026-06-15T06:09:30.156Z",
+  "completionDetails": "\\ Merapikan format angka desimal dan pemisah ribuan pada tabel RMI dan detail bulanan agar konsisten dengan Excel\\"
+}

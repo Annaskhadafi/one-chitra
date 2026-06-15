@@ -1,0 +1,12 @@
+{
+  "id": "TASK-008",
+  "status": "completed",
+  "priority": "P0",
+  "title": "Perbaikan Formula Perhitungan RMI Berdasarkan Indeks",
+  "description": "Memperbaiki formula kalkulasi RMI agar menghitung indeks masing-masing komponen terhadap Q4 2025 (Base Period) sebelum dikalikan dengan bobotnya, sehingga nilai RMI komposit berupa indeks komposit nominal 100 pada periode dasar.",
+  "createdAt": "2026-06-15T06:05:00.000Z",
+  "updatedAt": "2026-06-15T06:04:43.585Z",
+  "startedAt": "2026-06-15T06:03:51.231Z",
+  "completedAt": "2026-06-15T06:04:43.585Z",
+  "completionDetails": "\\ Memperbaiki formula kalkulasi RMI berbasis Indeks Kuartal Basis\\"
+}
