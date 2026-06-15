@@ -1,0 +1,12 @@
+{
+  "id": "TASK-005",
+  "status": "completed",
+  "priority": "P1",
+  "title": "Collapse Detail Bulanan & Kenaikan Kurs di Tabel Kurs Tengah",
+  "description": "Menambahkan fitur collapse di tabel Nilai Kurs Tengah pada Dashboard RMI untuk menampilkan rincian harga per bulan dalam kuartal tersebut dan persentase kenaikan/penurunan dari bulan berikutnya.",
+  "createdAt": "2026-06-15T11:20:00.000Z",
+  "updatedAt": "2026-06-15T03:29:00.885Z",
+  "startedAt": "2026-06-15T03:20:17.243Z",
+  "completedAt": "2026-06-15T03:29:00.885Z",
+  "completionDetails": "Mengimplementasikan collapse detail bulanan dengan nama bulan dinamis dan persentase kenaikan kurs antar bulan triwulan secara presisi (membandingkan Bulan 1 ke Bulan 3 kuartal sebelumnya), serta memperbarui seeding data kuartal berjalan Q2 2026 agar berada di kisaran 17.600-an yang realistis mendekati angka API Kurs harian saat ini."
+}

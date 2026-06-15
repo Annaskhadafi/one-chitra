@@ -1,0 +1,12 @@
+{
+  "id": "TASK-004",
+  "status": "completed",
+  "priority": "P0",
+  "title": "Dashboard RMI Dan Nilai tengah Kurs Quarterly",
+  "description": "Membuat Dashboard RMI & Nilai Tengah Kurs Quarterly untuk Tire yang terhubung dengan API Kurs, serta mendukung visualisasi data, tabel virtual, ekspor/impor data, simulasi price adjustment, dan integrasi RBAC.",
+  "createdAt": "2026-06-15T10:10:00.000Z",
+  "updatedAt": "2026-06-15T02:31:36.456Z",
+  "startedAt": "2026-06-15T02:14:08.721Z",
+  "completedAt": "2026-06-15T02:31:36.456Z",
+  "completionDetails": "Mengimplementasikan Dashboard RMI dan Nilai Tengah Kurs Quarterly beserta Simulator Price Adjustment interaktif yang terhubung ke API Kurs real-time, grafik Recharts, tabel virtual, ekspor CSV, dan RBAC."
+}

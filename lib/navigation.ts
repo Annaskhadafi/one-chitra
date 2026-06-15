@@ -416,6 +416,11 @@ export const navigationConfig: NavSection[] = [
                         resource: "revenue-forecast",
                     },
                     {
+                        title: "RMI & Kurs Quarterly",
+                        url: "/dashboard/rmi",
+                        resource: "rmi-dashboard",
+                    },
+                    {
                         title: "Reports Hub",
                         url: "/dashboard/reports",
                         resource: "reports",

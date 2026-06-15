@@ -372,7 +372,7 @@ function buildVoucherHtml(voucher: VoucherPreviewData, logoUrl: string) {
                     </div>
                     <div class="pdf-info-row right">
                         <span class="pdf-label">Status:</span>
-                        <span class="uppercase text-emerald-600">${escapeHtml(voucher.status || "-")}</span>
+                        <span class="uppercase text-emerald-600">${escapeHtml(voucher.status === "draft" ? "completed" : (voucher.status || "-"))}</span>
                     </div>
                 </div>
             </div>
@@ -617,7 +617,9 @@ function VoucherContent({ voucher }: { voucher: VoucherPreviewData }) {
                     </div>
                     <div className="pdf-info-row right">
                         <span className="pdf-label">Status:</span>
-                        <span className="uppercase text-emerald-600">{voucher.status || "-"}</span>
+                        <span className="uppercase text-emerald-600">
+                            {voucher.status === "draft" ? "completed" : (voucher.status || "-")}
+                        </span>
                     </div>
                 </div>
             </div>
