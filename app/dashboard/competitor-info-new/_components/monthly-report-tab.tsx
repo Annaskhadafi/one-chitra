@@ -1164,19 +1164,38 @@ export function MonthlyReportTab() {
     const lostSaleChartSlide = lostSaleSlide + lostSaleTablePages.length
     const rmiSummarySlide = lostSaleChartSlide + lostSaleChartPages.length
 
-    // Lost Sale + Stock Match pagination (max 5 items per slide)
+    // Lost Sale + Stock Match: Group by Customer, max 2 slides
     const lostStockItems = (lostSaleStockData?.lostItems ?? []).filter((l: any) => {
         const [fy, fm] = month.split("-").map(Number)
         const d = new Date(l.date)
         return d.getFullYear() === fy && (d.getMonth() + 1) === fm
     })
-    const LOST_STOCK_PER_PAGE = 5
-    const lostStockPages: typeof lostStockItems[] = []
-    for (let i = 0; i < lostStockItems.length; i += LOST_STOCK_PER_PAGE) {
-        lostStockPages.push(lostStockItems.slice(i, i + LOST_STOCK_PER_PAGE))
+
+    // Group by customer
+    const customerMap: Record<string, { customerName: string; items: typeof lostStockItems; totalMatched: number; totalUnmatched: number }> = {}
+    lostStockItems.forEach((item: any) => {
+        const name = item.customerName || "Unknown"
+        if (!customerMap[name]) customerMap[name] = { customerName: name, items: [], totalMatched: 0, totalUnmatched: 0 }
+        customerMap[name].items.push(item)
+        if (item.hasMatch) customerMap[name].totalMatched++
+        else customerMap[name].totalUnmatched++
+    })
+    const customerGroups = Object.values(customerMap).sort((a, b) => b.items.length - a.items.length)
+
+    // Split into max 2 slides (first half + second half)
+    const MAX_SLIDES = 2
+    const lostStockPages: typeof customerGroups[] = []
+    if (customerGroups.length <= MAX_SLIDES) {
+        customerGroups.forEach(g => lostStockPages.push([g]))
+    } else {
+        const half = Math.ceil(customerGroups.length / MAX_SLIDES)
+        lostStockPages.push(customerGroups.slice(0, half))
+        lostStockPages.push(customerGroups.slice(half))
     }
+    if (lostStockPages.length === 0) lostStockPages.push([])
+
     const lostStockSlideStart = rmiSummarySlide + 1
-    const quotationSlide = lostStockSlideStart + Math.max(lostStockPages.length, 1)
+    const quotationSlide = lostStockSlideStart + lostStockPages.length
     const closingSlide = quotationSlide + 1
 
     return (
@@ -1696,7 +1715,7 @@ export function MonthlyReportTab() {
                                 )
                             })()}
                         </Slide>,
-                        ...lostStockPages.map((pageItems, pageIndex) => {
+                        ...lostStockPages.map((pageGroups, pageIndex) => {
                             const lsData = lostSaleStockData
                             const totalLost = lsData?.totalLost ?? 0
                             const totalMatched = lsData?.totalMatched ?? 0
@@ -1714,23 +1733,15 @@ export function MonthlyReportTab() {
                             })
                             const statusData = Object.entries(statusDist).map(([name, value]) => ({ name, value }))
 
-                            // Top lost products (all month items)
-                            const prodFreq: Record<string, { name: string; count: number; hasMatch: boolean }> = {}
-                            allMonthItems.forEach((i: any) => {
-                                const key = i.productName
-                                if (!prodFreq[key]) prodFreq[key] = { name: i.productName, count: 0, hasMatch: i.hasMatch }
-                                prodFreq[key].count += 1
-                                if (i.hasMatch) prodFreq[key].hasMatch = true
-                            })
-                            const topLostProducts = Object.values(prodFreq)
-                                .sort((a, b) => b.count - a.count)
-                                .slice(0, 8)
-
                             const STATUS_COLORS: Record<string, string> = { rejected: "#dc2626", expired: "#f97316", cancelled: "#6b7280", lost: "#7c3aed", converted: "#16a34a", approved: "#16a34a" }
                             const slideNum = lostStockSlideStart + pageIndex
 
+                            // Count items in this page
+                            const pageCount = pageGroups.reduce((sum, g) => sum + g.items.length, 0)
+                            const groupCount = pageGroups.length
+
                             return (
-                                <Slide key={`lost-stock-${pageIndex}`} eyebrow={`Slide ${slideNum} - Lost Sale & Ready Stock${lostStockPages.length > 1 ? ` (${pageIndex + 1}/${lostStockPages.length})` : ''}`} title={`Lost Sale — Matching Stok Ready — ${monthLabel(month)}${lostStockPages.length > 1 ? ` [${pageIndex + 1}/${lostStockPages.length}]` : ''}`}>
+                                <Slide key={`lost-stock-${pageIndex}`} eyebrow={`Slide ${slideNum} - Lost Sale per Customer${lostStockPages.length > 1 ? ` (${pageIndex + 1}/${lostStockPages.length})` : ''}`} title={`Lost Sale per Customer — ${monthLabel(month)}${lostStockPages.length > 1 ? ` [${pageIndex + 1}/${lostStockPages.length}]` : ''}`}>
                                     <div className="grid h-[calc(100%-88px)] grid-rows-[auto_1fr] gap-3">
                                         {/* KPI Row - only on first page */}
                                         {isFirstPage && (
@@ -1765,13 +1776,13 @@ export function MonthlyReportTab() {
                                             </div>
                                         )}
 
-                                        {/* Content Row */}
-                                        <div className={`grid ${isFirstPage ? 'grid-cols-[1fr_1.2fr]' : 'grid-cols-1'} gap-3`}>
-                                            {/* Left: Status + Top Products (only on first page) */}
+                                        {/* Content: Status (first page) + Customer Groups */}
+                                        <div className={`grid ${isFirstPage ? 'grid-cols-[0.8fr_1.2fr]' : 'grid-cols-1'} gap-3`}>
+                                            {/* Left: Status Distribution (first page only) */}
                                             {isFirstPage && (
                                                 <div className="flex min-h-0 flex-col gap-3">
                                                     <div className="flex-1 rounded-lg border bg-white p-3 shadow-sm">
-                                                        <p className="mb-1 text-sm font-black text-slate-900">Distribusi Status Lost</p>
+                                                        <p className="mb-1 text-sm font-black text-slate-900">Distribusi Status</p>
                                                         <div className="mt-2 flex flex-wrap gap-2">
                                                             {statusData.map(s => (
                                                                 <div key={s.name} className="flex items-center gap-2 rounded-md border px-3 py-1.5">
@@ -1782,16 +1793,17 @@ export function MonthlyReportTab() {
                                                             ))}
                                                         </div>
                                                     </div>
-                                                    <div className="flex-[1.5] rounded-lg border bg-white p-3 shadow-sm">
-                                                        <p className="mb-1 text-sm font-black text-slate-900">Top Produk Lost</p>
+                                                    <div className="flex-[2] rounded-lg border bg-white p-3 shadow-sm overflow-auto">
+                                                        <p className="mb-1 text-sm font-black text-slate-900">Ringkasan per Customer</p>
+                                                        <p className="mb-2 text-[10px] text-slate-400">{customerGroups.length} customer memiliki lost sale</p>
                                                         <div className="space-y-1.5">
-                                                            {topLostProducts.map((p, idx) => (
+                                                            {customerGroups.map((g, idx) => (
                                                                 <div key={idx} className="flex items-center gap-2 rounded-md bg-slate-50 px-2.5 py-1.5">
                                                                     <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-200 text-[9px] font-bold text-slate-600">{idx + 1}</span>
-                                                                    <span className="min-w-0 flex-1 truncate text-[10px] font-semibold text-slate-700">{p.name}</span>
-                                                                    <span className="text-[10px] font-bold text-slate-500">{p.count}x</span>
-                                                                    <span className={`shrink-0 rounded px-1.5 py-0.5 text-[8px] font-bold ${p.hasMatch ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-600"}`}>
-                                                                        {p.hasMatch ? "ADA STOK" : "NO STOK"}
+                                                                    <span className="min-w-0 flex-1 truncate text-[10px] font-semibold text-slate-700">{g.customerName}</span>
+                                                                    <span className="text-[10px] font-bold text-slate-500">{g.items.length} item</span>
+                                                                    <span className={`shrink-0 rounded px-1.5 py-0.5 text-[8px] font-bold ${g.totalMatched > 0 ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-600"}`}>
+                                                                        {g.totalMatched > 0 ? `${g.totalMatched} STOK` : "NO STOK"}
                                                                     </span>
                                                                 </div>
                                                             ))}
@@ -1800,65 +1812,74 @@ export function MonthlyReportTab() {
                                                 </div>
                                             )}
 
-                                            {/* Right/Full: Items Table for this page */}
-                                            <div className="flex min-h-0 flex-col rounded-lg border bg-white p-3 shadow-sm">
+                                            {/* Right/Full: Customer Groups with Items */}
+                                            <div className="flex min-h-0 flex-col rounded-lg border bg-white p-3 shadow-sm overflow-auto">
                                                 <div className="mb-2 flex items-center justify-between">
                                                     <div>
                                                         <p className="text-sm font-black text-slate-900">
-                                                            {isFirstPage ? "Lost Sale — Detail Matching" : `Lost Sale — Lanjutan (Halaman ${pageIndex + 1})`}
+                                                            {isFirstPage ? "Detail Lost Sale per Customer" : `Lanjutan — Customer (${pageIndex + 1}/${lostStockPages.length})`}
                                                         </p>
-                                                        <p className="text-[10px] text-slate-400">
-                                                            {isFirstPage ? "Produk lost yang cocok dengan stok SAP yang tersedia" : `Item ${pageIndex * LOST_STOCK_PER_PAGE + 1}-${Math.min((pageIndex + 1) * LOST_STOCK_PER_PAGE, allMonthItems.length)} dari ${allMonthItems.length}`}
-                                                        </p>
+                                                        <p className="text-[10px] text-slate-400">{groupCount} customer, {pageCount} item</p>
                                                     </div>
-                                                    {isFirstPage && <span className="rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">{monthMatched} item match</span>}
+                                                    {isFirstPage && <span className="rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">{monthMatched} match</span>}
                                                 </div>
-                                                <div className="min-h-0 flex-1 overflow-auto">
-                                                    <table className="w-full text-left text-[10px]">
-                                                        <thead>
-                                                            <tr className="border-b border-slate-200">
-                                                                <th className="pb-1.5 font-bold text-slate-500">#</th>
-                                                                <th className="pb-1.5 font-bold text-slate-500">Customer</th>
-                                                                <th className="pb-1.5 font-bold text-slate-500">Produk Lost</th>
-                                                                <th className="pb-1.5 font-bold text-slate-500 text-center">Qty</th>
-                                                                <th className="pb-1.5 font-bold text-slate-500">Status</th>
-                                                                <th className="pb-1.5 font-bold text-slate-500">Stok Ready (Cocok)</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            {pageItems.map((item: any, idx: number) => (
-                                                                <tr key={idx} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/50">
-                                                                    <td className="py-1.5 font-bold text-slate-400">{pageIndex * LOST_STOCK_PER_PAGE + idx + 1}</td>
-                                                                    <td className="py-1.5 font-semibold text-slate-700 max-w-[90px] truncate" title={item.customerName}>{item.customerName}</td>
-                                                                    <td className="py-1.5 text-slate-600 max-w-[140px] truncate" title={item.productName}>{item.productName}</td>
-                                                                    <td className="py-1.5 text-center font-mono font-bold text-slate-700">{item.quantity}</td>
-                                                                    <td className="py-1.5">
-                                                                        <span className="rounded px-1.5 py-0.5 text-[8px] font-bold capitalize" style={{ backgroundColor: (STATUS_COLORS[item.status] || "#94a3b8") + "20", color: STATUS_COLORS[item.status] || "#334155" }}>
-                                                                            {item.status}
-                                                                        </span>
-                                                                    </td>
-                                                                    <td className="py-1.5">
-                                                                        {item.hasMatch ? (
-                                                                            <div className="space-y-0.5">
-                                                                                {item.matchedStock.slice(0, 2).map((s: any, si: number) => (
-                                                                                    <div key={si} className="flex items-center gap-1">
-                                                                                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                                                                                        <span className="truncate text-[9px] text-emerald-700 font-medium max-w-[180px]" title={s.materialDesc}>{s.materialDesc}</span>
-                                                                                        <span className="text-[8px] text-emerald-500 font-bold">({s.totalQty} pcs)</span>
+                                                <div className="min-h-0 flex-1 space-y-3 overflow-auto">
+                                                    {pageGroups.map((group, gi) => (
+                                                        <div key={gi} className="rounded-lg border border-slate-100 bg-slate-50/50 p-2.5">
+                                                            <div className="mb-1.5 flex items-center justify-between">
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#0f4c81] text-[9px] font-bold text-white">{gi + 1}</span>
+                                                                    <span className="text-xs font-black text-slate-900">{group.customerName}</span>
+                                                                </div>
+                                                                <div className="flex items-center gap-1.5">
+                                                                    <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[8px] font-bold text-slate-600">{group.items.length} item</span>
+                                                                    {group.totalMatched > 0 && <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[8px] font-bold text-emerald-700">{group.totalMatched} cocok</span>}
+                                                                    {group.totalUnmatched > 0 && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[8px] font-bold text-amber-700">{group.totalUnmatched} belum</span>}
+                                                                </div>
+                                                            </div>
+                                                            <table className="w-full text-left text-[9px]">
+                                                                <thead>
+                                                                    <tr className="border-b border-slate-200">
+                                                                        <th className="pb-1 font-medium text-slate-500">Produk</th>
+                                                                        <th className="pb-1 font-medium text-slate-500 text-center">Qty</th>
+                                                                        <th className="pb-1 font-medium text-slate-500">Status</th>
+                                                                        <th className="pb-1 font-medium text-emerald-600">Stok Ready</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    {group.items.map((item: any, ii: number) => (
+                                                                        <tr key={ii} className="border-b border-slate-100 last:border-0">
+                                                                            <td className="py-1 font-medium text-slate-700 max-w-[160px] truncate" title={item.productName}>{item.productName}</td>
+                                                                            <td className="py-1 text-center font-mono font-bold text-slate-700">{item.quantity}</td>
+                                                                            <td className="py-1">
+                                                                                <span className="rounded px-1 py-0.5 text-[7px] font-bold capitalize" style={{ backgroundColor: (STATUS_COLORS[item.status] || "#94a3b8") + "20", color: STATUS_COLORS[item.status] || "#334155" }}>
+                                                                                    {item.status}
+                                                                                </span>
+                                                                            </td>
+                                                                            <td className="py-1">
+                                                                                {item.hasMatch ? (
+                                                                                    <div className="space-y-0.5">
+                                                                                        {item.matchedStock.slice(0, 1).map((s: any, si: number) => (
+                                                                                            <div key={si} className="flex items-center gap-1">
+                                                                                                <span className="h-1 w-1 rounded-full bg-emerald-500" />
+                                                                                                <span className="truncate text-[8px] text-emerald-700 font-medium max-w-[150px]" title={s.materialDesc}>{s.materialDesc}</span>
+                                                                                                <span className="text-[7px] text-emerald-500 font-bold">({s.totalQty})</span>
+                                                                                            </div>
+                                                                                        ))}
+                                                                                        {item.matchedStock.length > 1 && (
+                                                                                            <span className="text-[7px] text-emerald-500">+{item.matchedStock.length - 1} lagi</span>
+                                                                                        )}
                                                                                     </div>
-                                                                                ))}
-                                                                                {item.matchedStock.length > 2 && (
-                                                                                    <span className="text-[8px] text-emerald-500">+{item.matchedStock.length - 2} lainnya</span>
+                                                                                ) : (
+                                                                                    <span className="text-[8px] text-slate-400 italic">—</span>
                                                                                 )}
-                                                                            </div>
-                                                                        ) : (
-                                                                            <span className="text-[9px] text-slate-400 italic">Tidak ada stok cocok</span>
-                                                                        )}
-                                                                    </td>
-                                                                </tr>
-                                                            ))}
-                                                        </tbody>
-                                                    </table>
+                                                                            </td>
+                                                                        </tr>
+                                                                    ))}
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                    ))}
                                                 </div>
                                             </div>
                                         </div>
