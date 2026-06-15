@@ -434,7 +434,7 @@ export async function seedRmiDashboardDefaults() {
                 { year: 2026, quarter: 1, naturalRubber: 2.15, syntheticRubber: 13500.0, carbonBlack: 1.55, steelCord: 1.15, freight: 3000.0, fxIndex: 98.4848, rmiValue: 433.003, remarks: "Q1 2026 Index" },
                 { year: 2025, quarter: 4, naturalRubber: 2.05, syntheticRubber: 13200.0, carbonBlack: 1.45, steelCord: 1.10, freight: 2800.0, fxIndex: 100.0, rmiValue: 385.5075, remarks: "Q4 2025 Index (Base Period)" },
                 { year: 2025, quarter: 3, naturalRubber: 1.95, syntheticRubber: 13000.0, carbonBlack: 1.35, steelCord: 1.05, freight: 2700.0, fxIndex: 98.7879, rmiValue: 375.3969, remarks: "Q3 2025 Index" },
-                { year: 2025, quarter: 2, naturalRubber: 1.85, syntheticRubber: 12800.0, carbonBlack: 1.25, steelCord: 1.00, rmiValue: 1.5075, freight: 2600.0, fxIndex: 97.5758, rmiValue: 365.2863, remarks: "Q2 2025 Index" },
+                { year: 2025, quarter: 2, naturalRubber: 1.85, syntheticRubber: 12800.0, carbonBlack: 1.25, steelCord: 1.00, freight: 2600.0, fxIndex: 97.5758, rmiValue: 365.2863, remarks: "Q2 2025 Index" },
             ]
             for (const r of defaultRmi) {
                 await db.insert(rmiRecords).values({
@@ -520,8 +520,9 @@ export async function seedRmiDashboardDefaults() {
                         rateMonth2: "17600.00",
                         rateMonth3: "17800.00",
                     })
-                    .where(eq(quarterlyExchangeRates.id, existingRateQ2[0].id))
             }
+        }
+
         return { success: true }
     } catch (error) {
         console.error("Error seeding RMI defaults:", error)
@@ -636,6 +637,118 @@ export async function syncRmiFromExternalApis(year: number, quarter: number) {
     } catch (error) {
         console.error("Error syncing RMI from API:", error)
         return { success: false, error: "Terjadi kesalahan internal saat sinkronisasi API" }
+    }
+}
+
+// Mengambil rincian data harga material & freight per bulan secara dinamis dari API eksternal
+export async function getExternalPricesForMonthlyCollapse() {
+    try {
+        await getAuthenticatedSession("rmi-dashboard", "view")
+
+        // 1. Fetch Material Price API
+        const materialRes = await fetch("https://ics.chitraparatama.com/product/api/apiconnect.php?function=get_material_price")
+        const materialJson = await materialRes.json()
+        if (materialJson.status !== "OK" || !Array.isArray(materialJson.result)) {
+            return { success: false, error: "Gagal mengambil data Material Price" }
+        }
+
+        // 2. Fetch Freight Price API
+        const freightRes = await fetch("https://ics.chitraparatama.com/product/api/apiconnect.php?function=get_freight_price")
+        const freightJson = await freightRes.json()
+        if (freightJson.status !== "OK" || !Array.isArray(freightJson.result)) {
+            return { success: false, error: "Gagal mengambil data Freight Price" }
+        }
+
+        // Gabungkan semua data mentah
+        const allMaterials = materialJson.result
+        const allFreights = freightJson.result
+
+        // Struktur data penampung: key = `${year}-Q${quarter}` -> array berisi 3 bulan
+        const monthlyAverages: Record<string, {
+            monthIndex: number;
+            monthName: string;
+            naturalRubber: number;
+            syntheticRubber: number;
+            carbonBlack: number;
+            steelCord: number;
+            freight: number;
+        }[]> = {}
+
+        // Helper untuk parse tanggal dan tentukan quarter serta nama bulan
+        const getMonthName = (monthNum: number) => {
+            const names = [
+                "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+                "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+            ]
+            return names[monthNum - 1] || ""
+        }
+
+        // Kita ingin menghasilkan data bulanan dari tahun 2025 sampai tahun sekarang
+        const currentYear = new Date().getFullYear()
+        for (let y = 2025; y <= currentYear + 1; y++) {
+            for (let q = 1; q <= 4; q++) {
+                const qKey = `${y}-Q${q}`
+                const startMonth = (q - 1) * 3 + 1 // 1, 4, 7, 10
+                
+                const monthsInQuarter = [startMonth, startMonth + 1, startMonth + 2]
+                
+                const qDetails = monthsInQuarter.map(m => {
+                    const startStr = `${y}-${m.toString().padStart(2, "0")}-01`
+                    const endStr = `${y}-${m.toString().padStart(2, "0")}-31`
+
+                    // Filter data material & freight untuk bulan ini
+                    const filterByMonth = (list: any[], dateField: string = "price_date") => {
+                        return list.filter(item => {
+                            const date = item[dateField]
+                            return date && date >= startStr && date <= endStr
+                        })
+                    }
+
+                    const mMaterials = filterByMonth(allMaterials)
+                    const mFreights = filterByMonth(allFreights)
+
+                    const getAvg = (list: any[], name: string) => {
+                        const filtered = list.filter(item => item.material_name === name)
+                        if (filtered.length === 0) return 0
+                        const sum = filtered.reduce((acc, curr) => acc + parseFloat(curr.material_price || 0), 0)
+                        return sum / filtered.length
+                    }
+
+                    // Hitung rata-rata bulanan
+                    const rawRubber = getAvg(mMaterials, "Rubber")
+                    const nr = rawRubber > 0 ? rawRubber / 100 : 0
+                    
+                    const sr = getAvg(mMaterials, "Synthetic Rubber")
+                    const cb = getAvg(mMaterials, "Carbon Black (Europe)")
+                    
+                    const rawSteel = getAvg(mMaterials, "HRC Steel")
+                    const sc = rawSteel > 0 ? rawSteel / 1000 : 0
+                    
+                    const fr = getAvg(mFreights, "Drewry World Container Index")
+
+                    return {
+                        monthIndex: m,
+                        monthName: getMonthName(m),
+                        naturalRubber: parseFloat(nr.toFixed(4)),
+                        syntheticRubber: parseFloat(sr.toFixed(4)),
+                        carbonBlack: parseFloat(cb.toFixed(4)),
+                        steelCord: parseFloat(sc.toFixed(4)),
+                        freight: parseFloat(fr.toFixed(4))
+                    }
+                })
+
+                // Simpan jika ada minimal satu bulan yang memiliki data harga
+                const hasAnyData = qDetails.some(d => d.naturalRubber > 0 || d.syntheticRubber > 0 || d.freight > 0)
+                if (hasAnyData) {
+                    monthlyAverages[qKey] = qDetails
+                }
+            }
+        }
+
+        return { success: true, data: monthlyAverages }
+    } catch (error) {
+        console.error("Error generating monthly collapse data:", error)
+        return { success: false, error: "Gagal memuat detail bulanan" }
     }
 }
 

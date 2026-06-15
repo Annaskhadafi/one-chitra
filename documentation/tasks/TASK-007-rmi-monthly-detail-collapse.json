@@ -1,0 +1,12 @@
+{
+  "id": "TASK-007",
+  "status": "completed",
+  "priority": "P1",
+  "title": "Collapse Detail Bulanan di Tabel RMI",
+  "description": "Menambahkan fitur collapse di Tabel RMI untuk menampilkan rincian rata-rata bulanan (Bulan 1, Bulan 2, Bulan 3) untuk setiap material (Natural Rubber, Synthetic Rubber, Carbon Black, Steel Cord, Freight) secara dinamis menggunakan data dari API eksternal.",
+  "createdAt": "2026-06-15T06:00:00.000Z",
+  "updatedAt": "2026-06-15T06:00:00.222Z",
+  "startedAt": "2026-06-15T05:58:52.556Z",
+  "completedAt": "2026-06-15T06:00:00.222Z",
+  "completionDetails": "\\ Mengimplementasikan fitur collapse detail bulanan di tabel Indeks RMI untuk menampilkan rincian harga bulanan secara dinamis dari API eksternal.\\"
+}
