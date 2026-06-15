@@ -9,6 +9,7 @@ import { Bot, CalendarDays, Download, FileText, Loader2, RefreshCw, Sparkles, Ta
 import { toast } from "sonner"
 
 import { generateCompetitorMonthlyReportInsight } from "@/app/actions/competitor-new"
+import { getExternalPricesForMonthlyCollapse } from "@/app/actions/rmi-dashboard"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -798,7 +799,16 @@ export function MonthlyReportTab() {
     const [isAiLoading, setIsAiLoading] = useState(false)
     const [error, setError] = useState("")
     const [aiInsights, setAiInsights] = useState<string[]>([])
-    const slideRefs = useRef<Array<HTMLElement | null>>([])
+    const [rmiMonthlyData, setRmiMonthlyData] = useState<Record<string, {
+        monthIndex: number
+        monthName: string
+        naturalRubber: number
+        syntheticRubber: number
+        carbonBlack: number
+        steelCord: number
+        freight: number
+    }[]>>({})
+    const slideRefs = useRef<Array<HTMLElement | null>>([]);
 
     const loadData = async () => {
         setIsLoading(true)
@@ -816,6 +826,23 @@ export function MonthlyReportTab() {
             setError(caught instanceof Error ? caught.message : "Gagal memuat report")
         } finally {
             setIsLoading(false)
+        }
+        // Load RMI monthly data (non-blocking)
+        try {
+            const rmiRes = await getExternalPricesForMonthlyCollapse()
+            if (rmiRes.success && rmiRes.data) {
+                setRmiMonthlyData(rmiRes.data as Record<string, {
+                    monthIndex: number
+                    monthName: string
+                    naturalRubber: number
+                    syntheticRubber: number
+                    carbonBlack: number
+                    steelCord: number
+                    freight: number
+                }[]>)
+            }
+        } catch {
+            // RMI data is optional for this slide
         }
     }
 
@@ -1062,7 +1089,8 @@ export function MonthlyReportTab() {
     const activityChartSlide = activitySlide + activityTablePages.length
     const lostSaleSlide = activityChartSlide + activityChartPages.length
     const lostSaleChartSlide = lostSaleSlide + lostSaleTablePages.length
-    const closingSlide = lostSaleChartSlide + lostSaleChartPages.length
+    const rmiSummarySlide = lostSaleChartSlide + lostSaleChartPages.length
+    const closingSlide = rmiSummarySlide + 1
 
     return (
         <div className="space-y-5">
@@ -1365,6 +1393,210 @@ export function MonthlyReportTab() {
                                 <div className="grid h-[calc(100%-88px)] grid-cols-[1fr_1fr_0.72fr] gap-4"><div className="flex min-h-0 flex-col rounded-lg border bg-white p-3 shadow-sm"><p className="mb-2 text-sm font-black text-slate-900">Grafik Penyebab Lost Sale</p><div className="min-h-0 flex-1"><ResponsiveContainer width="100%" height="100%"><BarChart data={page.reasons.map((item) => ({ ...item, label: shortLabel(item.name, 24) }))} layout="vertical" margin={{ top: 8, right: 28, left: 8, bottom: 4 }}><CartesianGrid strokeDasharray="3 3" horizontal={false} /><XAxis type="number" allowDecimals={false} tick={{ fontSize: 10 }} /><YAxis type="category" dataKey="label" width={148} tick={{ fontSize: 10 }} /><Tooltip /><Bar dataKey="value" radius={[0, 6, 6, 0]} fill="#dc2626"><LabelList dataKey="value" position="right" style={{ fontSize: 11, fontWeight: 700 }} /></Bar></BarChart></ResponsiveContainer></div></div><div className="flex min-h-0 flex-col rounded-lg border bg-white p-3 shadow-sm"><p className="mb-2 text-sm font-black text-slate-900">Grafik Customer Lost Sale</p><div className="min-h-0 flex-1"><ResponsiveContainer width="100%" height="100%"><BarChart data={page.customers.map((item) => ({ ...item, label: shortLabel(item.name, 24) }))} layout="vertical" margin={{ top: 8, right: 28, left: 8, bottom: 4 }}><CartesianGrid strokeDasharray="3 3" horizontal={false} /><XAxis type="number" allowDecimals={false} tick={{ fontSize: 10 }} /><YAxis type="category" dataKey="label" width={148} tick={{ fontSize: 10 }} /><Tooltip /><Bar dataKey="value" radius={[0, 6, 6, 0]} fill="#0f4c81"><LabelList dataKey="value" position="right" style={{ fontSize: 11, fontWeight: 700 }} /></Bar></BarChart></ResponsiveContainer></div></div><div className="rounded-lg border border-orange-100 bg-orange-50 p-3 shadow-sm"><p className="text-sm font-black text-orange-900">Priority Follow Up</p><div className="mt-2 space-y-2">{page.actions.map((item, index) => <div key={`${item}-${pageIndex}-${index}`} className="rounded-md bg-white/85 p-2 text-[10px] font-semibold leading-snug text-slate-700 shadow-sm"><span className="mr-1 font-black text-orange-700">{(pageIndex * 4) + index + 1}.</span>{item}</div>)}</div></div></div>
                             </Slide>
                         )),
+                        <Slide key="rmi-summary" eyebrow={`Slide ${rmiSummarySlide} - RMI Summary`} title={`Raw Material Index — ${monthLabel(month)}`}>
+                            {(() => {
+                                // Konstanta dasar Q4 2025 untuk hitung indeks
+                                const RMI_BASES = { nr: 2.05, sr: 13200.0, cb: 1.45, sc: 1.10, fr: 2800.0 }
+                                const RMI_WEIGHTS = { nr: 0.35, sr: 0.20, cb: 0.20, sc: 0.15, fr: 0.05 }
+
+                                // Ambil data bulanan untuk chart tren (semua data tersedia)
+                                const chartRows: { label: string; nr: number; sr: number; cb: number; sc: number; fr: number; rmi: number; sortKey: number }[] = []
+                                const getShortMonth = (mi: number) => ["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Agt","Sep","Okt","Nov","Des"][mi - 1] || ""
+
+                                Object.keys(rmiMonthlyData).forEach(qKey => {
+                                    const [y, qp] = qKey.split("-Q").map(Number)
+                                    if (y < 2025 || (y === 2025 && qp < 4)) return
+                                    const details = rmiMonthlyData[qKey] || []
+                                    details.forEach(m => {
+                                        const idxNR = m.naturalRubber > 0 ? (m.naturalRubber / RMI_BASES.nr) * 100 : 0
+                                        const idxSR = m.syntheticRubber > 0 ? (m.syntheticRubber / RMI_BASES.sr) * 100 : 0
+                                        const idxCB = m.carbonBlack > 0 ? (m.carbonBlack / RMI_BASES.cb) * 100 : 0
+                                        const idxSC = m.steelCord > 0 ? (m.steelCord / RMI_BASES.sc) * 100 : 0
+                                        const idxFR = m.freight > 0 ? (m.freight / RMI_BASES.fr) * 100 : 0
+                                        const rmi = (idxNR > 0 || idxSR > 0) ? (idxNR * RMI_WEIGHTS.nr) + (idxSR * RMI_WEIGHTS.sr) + (idxCB * RMI_WEIGHTS.cb) + (idxSC * RMI_WEIGHTS.sc) + (idxFR * RMI_WEIGHTS.fr) : 0
+                                        chartRows.push({
+                                            sortKey: y * 100 + m.monthIndex,
+                                            label: `${getShortMonth(m.monthIndex)} '${String(y).slice(-2)}`,
+                                            nr: parseFloat(idxNR.toFixed(1)),
+                                            sr: parseFloat(idxSR.toFixed(1)),
+                                            cb: parseFloat(idxCB.toFixed(1)),
+                                            sc: parseFloat(idxSC.toFixed(1)),
+                                            fr: parseFloat(idxFR.toFixed(1)),
+                                            rmi: rmi > 0 ? parseFloat(rmi.toFixed(1)) : 0,
+                                        })
+                                    })
+                                })
+                                chartRows.sort((a, b) => a.sortKey - b.sortKey)
+
+                                // Cari data bulan yang di-filter (month = "yyyy-MM")
+                                const [filterYear, filterMonth] = month.split("-").map(Number)
+                                let currentMonthData: typeof chartRows[0] | undefined
+                                Object.keys(rmiMonthlyData).forEach(qKey => {
+                                    const [y] = qKey.split("-Q").map(Number)
+                                    if (y !== filterYear) return
+                                    const details = rmiMonthlyData[qKey] || []
+                                    const found = details.find(d => d.monthIndex === filterMonth)
+                                    if (found) {
+                                        const idxNR = found.naturalRubber > 0 ? (found.naturalRubber / RMI_BASES.nr) * 100 : 0
+                                        const idxSR = found.syntheticRubber > 0 ? (found.syntheticRubber / RMI_BASES.sr) * 100 : 0
+                                        const idxCB = found.carbonBlack > 0 ? (found.carbonBlack / RMI_BASES.cb) * 100 : 0
+                                        const idxSC = found.steelCord > 0 ? (found.steelCord / RMI_BASES.sc) * 100 : 0
+                                        const idxFR = found.freight > 0 ? (found.freight / RMI_BASES.fr) * 100 : 0
+                                        const rmi = (idxNR > 0 || idxSR > 0) ? (idxNR * RMI_WEIGHTS.nr) + (idxSR * RMI_WEIGHTS.sr) + (idxCB * RMI_WEIGHTS.cb) + (idxSC * RMI_WEIGHTS.sc) + (idxFR * RMI_WEIGHTS.fr) : 0
+                                        currentMonthData = {
+                                            sortKey: y * 100 + found.monthIndex,
+                                            label: monthLabel(month),
+                                            nr: parseFloat(idxNR.toFixed(1)),
+                                            sr: parseFloat(idxSR.toFixed(1)),
+                                            cb: parseFloat(idxCB.toFixed(1)),
+                                            sc: parseFloat(idxSC.toFixed(1)),
+                                            fr: parseFloat(idxFR.toFixed(1)),
+                                            rmi: rmi > 0 ? parseFloat(rmi.toFixed(1)) : 0,
+                                        }
+                                    }
+                                })
+
+                                // Tabel komponen material bulan ini
+                                const materialMap: Record<string, { key: keyof typeof chartRows[0]; label: string; unit: string; baseVal: number; weight: number; color: string }> = {
+                                    nr: { key: "nr", label: "Natural Rubber", unit: "USD/kg", baseVal: RMI_BASES.nr, weight: RMI_WEIGHTS.nr, color: BAR_COLORS[0] },
+                                    sr: { key: "sr", label: "Synthetic Rubber", unit: "CNY/T", baseVal: RMI_BASES.sr, weight: RMI_WEIGHTS.sr, color: BAR_COLORS[1] },
+                                    cb: { key: "cb", label: "Carbon Black", unit: "USD/kg", baseVal: RMI_BASES.cb, weight: RMI_WEIGHTS.cb, color: BAR_COLORS[2] },
+                                    sc: { key: "sc", label: "Steel Cord", unit: "USD/kg", baseVal: RMI_BASES.sc, weight: RMI_WEIGHTS.sc, color: BAR_COLORS[3] },
+                                    fr: { key: "fr", label: "Freight (Drewry)", unit: "USD/40ft", baseVal: RMI_BASES.fr, weight: RMI_WEIGHTS.fr, color: BAR_COLORS[4] },
+                                }
+
+                                // Cari raw price dari rmiMonthlyData untuk tabel
+                                let rawCurrentMonth: { naturalRubber: number; syntheticRubber: number; carbonBlack: number; steelCord: number; freight: number } | undefined
+                                Object.keys(rmiMonthlyData).forEach(qKey => {
+                                    const [y] = qKey.split("-Q").map(Number)
+                                    if (y !== filterYear) return
+                                    const details = rmiMonthlyData[qKey] || []
+                                    const found = details.find(d => d.monthIndex === filterMonth)
+                                    if (found) rawCurrentMonth = found
+                                })
+
+                                const pieData = Object.values(materialMap).map(m => ({
+                                    name: m.label,
+                                    value: Math.round(m.weight * 100),
+                                    color: m.color
+                                }))
+
+                                const hasData = chartRows.length > 0
+
+                                return (
+                                    <div className="grid h-[calc(100%-88px)] grid-rows-[auto_1fr] gap-3">
+                                        {/* Top: KPI cards untuk setiap material */}
+                                        <div className="grid grid-cols-5 gap-2">
+                                            {Object.entries(materialMap).map(([mk, mat]) => {
+                                                const idxVal = currentMonthData ? (currentMonthData[mat.key] as number) : null
+                                                const rawVal = rawCurrentMonth ? ({
+                                                    nr: rawCurrentMonth.naturalRubber,
+                                                    sr: rawCurrentMonth.syntheticRubber,
+                                                    cb: rawCurrentMonth.carbonBlack,
+                                                    sc: rawCurrentMonth.steelCord,
+                                                    fr: rawCurrentMonth.freight,
+                                                }[mk]) : null
+                                                const trend = idxVal !== null ? (idxVal > 100 ? "up" : idxVal < 100 ? "down" : "flat") : "flat"
+                                                const trendColor = trend === "up" ? "text-red-600" : trend === "down" ? "text-emerald-600" : "text-slate-500"
+                                                const arrow = trend === "up" ? "▲" : trend === "down" ? "▼" : "→"
+                                                return (
+                                                    <div key={mk} className="rounded-lg border bg-white p-2.5 shadow-sm">
+                                                        <div className="flex items-start gap-1.5">
+                                                            <span className="mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: mat.color }} />
+                                                            <div className="min-w-0">
+                                                                <p className="truncate text-[9px] font-bold uppercase tracking-wide text-slate-500">{mat.label}</p>
+                                                                <p className="text-[9px] text-slate-400">{mat.unit} · Bobot {Math.round(mat.weight * 100)}%</p>
+                                                            </div>
+                                                        </div>
+                                                        {idxVal !== null && idxVal > 0 ? (
+                                                            <>
+                                                                <p className={`mt-1.5 text-lg font-black leading-none ${trendColor}`}>{idxVal.toFixed(1)}<span className="ml-1 text-[10px]">idx</span></p>
+                                                                <p className="text-[9px] text-slate-500">{arrow} vs base Q4 2025 (100)</p>
+                                                                {rawVal !== null && rawVal !== undefined && rawVal > 0 && (
+                                                                    <p className="mt-1 text-[9px] font-semibold text-slate-600">{rawVal.toFixed(rawVal < 100 ? 2 : 0)} {mat.unit}</p>
+                                                                )}
+                                                            </>
+                                                        ) : (
+                                                            <p className="mt-1.5 text-[10px] text-slate-400">Belum ada data</p>
+                                                        )}
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
+
+                                        {/* Bottom: Grafik tren indeks + mini overview */}
+                                        <div className="grid min-h-0 grid-cols-[1fr_200px] gap-3">
+                                            {/* Grafik tren RMI indeks per komponen */}
+                                            <div className="rounded-lg border bg-white p-3 shadow-sm">
+                                                <div className="mb-2 flex items-center justify-between">
+                                                    <div>
+                                                        <p className="text-xs font-black text-slate-900">Tren Indeks Harga RMI per Komponen</p>
+                                                        <p className="text-[10px] text-slate-500">Indeks berbasis Q4 2025 = 100. Sumber: API ICS Chitra Paratama.</p>
+                                                    </div>
+                                                    <Badge className="bg-[#0f4c81] text-[10px] text-white">RMI Index</Badge>
+                                                </div>
+                                                {hasData ? (
+                                                    <ResponsiveContainer width="100%" height={280}>
+                                                        <LineChart data={chartRows} margin={{ top: 12, right: 16, left: 0, bottom: 4 }}>
+                                                            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                                            <XAxis dataKey="label" tick={{ fontSize: 9 }} angle={-25} textAnchor="end" height={40} />
+                                                            <YAxis width={44} tick={{ fontSize: 9 }} domain={["auto", "auto"]} unit=" idx" />
+                                                            <Tooltip formatter={(v, n) => [`${Number(v).toFixed(1)} idx`, n]} />
+                                                            <Legend wrapperStyle={{ fontSize: 10 }} />
+                                                            <ReferenceLine y={100} stroke="#94a3b8" strokeDasharray="5 3" label={{ value: "Base 100", position: "insideTopRight", fontSize: 9, fill: "#64748b" }} />
+                                                            <Line type="monotone" dataKey="nr" name="Natural Rubber" stroke={BAR_COLORS[0]} strokeWidth={2} dot={{ r: 2.5 }} connectNulls />
+                                                            <Line type="monotone" dataKey="sr" name="Synthetic Rubber" stroke={BAR_COLORS[1]} strokeWidth={2} dot={{ r: 2.5 }} connectNulls />
+                                                            <Line type="monotone" dataKey="cb" name="Carbon Black" stroke={BAR_COLORS[2]} strokeWidth={2} dot={{ r: 2.5 }} connectNulls />
+                                                            <Line type="monotone" dataKey="sc" name="Steel Cord" stroke={BAR_COLORS[3]} strokeWidth={2} dot={{ r: 2.5 }} connectNulls />
+                                                            <Line type="monotone" dataKey="fr" name="Freight" stroke={BAR_COLORS[4]} strokeWidth={2} dot={{ r: 2.5 }} connectNulls />
+                                                            <Line type="monotone" dataKey="rmi" name="RMI Composite" stroke="#0f4c81" strokeWidth={2.8} dot={{ r: 3 }} strokeDasharray="6 3" connectNulls />
+                                                        </LineChart>
+                                                    </ResponsiveContainer>
+                                                ) : (
+                                                    <EmptySlideState message="Belum ada data RMI bulanan (loading...)" />
+                                                )}
+                                            </div>
+
+                                            {/* Panel kanan: Bobot komponen + RMI composite bulan ini */}
+                                            <div className="flex flex-col gap-2">
+                                                <div className="rounded-lg border bg-white p-3 shadow-sm">
+                                                    <p className="mb-2 text-[10px] font-black uppercase tracking-wide text-slate-600">Komposisi Bobot RMI</p>
+                                                    <div className="h-[130px]">
+                                                        <ResponsiveContainer width="100%" height="100%">
+                                                            <PieChart>
+                                                                <Pie data={pieData} dataKey="value" nameKey="name" innerRadius={30} outerRadius={50} paddingAngle={2}>
+                                                                    {pieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                                                                </Pie>
+                                                                <Tooltip formatter={(v, n) => [`${v}%`, n]} />
+                                                            </PieChart>
+                                                        </ResponsiveContainer>
+                                                    </div>
+                                                    <div className="space-y-1">
+                                                        {pieData.map(p => (
+                                                            <div key={p.name} className="flex items-center justify-between text-[9px] text-slate-600">
+                                                                <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: p.color }} />{p.name.split(" ")[0]}</span>
+                                                                <b>{p.value}%</b>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                                {currentMonthData && currentMonthData.rmi > 0 && (
+                                                    <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 shadow-sm">
+                                                        <p className="text-[10px] font-bold text-blue-700">RMI Composite</p>
+                                                        <p className="text-[10px] text-blue-600">{monthLabel(month)}</p>
+                                                        <p className="mt-1.5 text-3xl font-black text-[#0f4c81]">{currentMonthData.rmi.toFixed(1)}</p>
+                                                        <p className="text-[9px] text-blue-600">vs base 100 (Q4 2025)</p>
+                                                        <div className="mt-2 rounded bg-white/80 px-2 py-1 text-[9px] text-blue-800">
+                                                            {currentMonthData.rmi > 100 ? "▲ RMI naik dari basis" : currentMonthData.rmi < 100 ? "▼ RMI turun dari basis" : "→ RMI stabil"}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )
+                            })()}
+                        </Slide>,
                         <Slide key="thanks" eyebrow={`Slide ${closingSlide} - Closing`} title="Thank You / Closing">
                             <div className="flex h-[calc(100%-88px)] flex-col items-center justify-center rounded-lg bg-[#0f4c81] text-center text-white">
                                 <Image src="/cp_logo_alpha.png" alt="Chitra Paratama" width={190} height={80} className="mb-8 h-20 w-auto rounded bg-white/95 p-3" />
