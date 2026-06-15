@@ -10,6 +10,8 @@ export const rmiRecords = pgTable("rmi_records", {
     syntheticRubber: numeric("synthetic_rubber", { precision: 14, scale: 4 }).notNull().default("0"),
     carbonBlack: numeric("carbon_black", { precision: 14, scale: 4 }).notNull().default("0"),
     steelCord: numeric("steel_cord", { precision: 14, scale: 4 }).notNull().default("0"),
+    freight: numeric("freight", { precision: 14, scale: 4 }).notNull().default("0"),
+    fxIndex: numeric("fx_index", { precision: 14, scale: 4 }).notNull().default("0"),
     rmiValue: numeric("rmi_value", { precision: 14, scale: 4 }).notNull().default("0"),
     source: varchar("source", { length: 255 }), // Sumber data RMI (e.g. API, Manual, IRSG)
     remarks: text("remarks"),

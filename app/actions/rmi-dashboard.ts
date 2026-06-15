@@ -15,6 +15,8 @@ const rmiRecordSchema = z.object({
     syntheticRubber: z.number().min(0),
     carbonBlack: z.number().min(0),
     steelCord: z.number().min(0),
+    freight: z.number().min(0).optional().default(0),
+    fxIndex: z.number().min(0).optional().default(0),
     source: z.string().max(255).optional().nullable(),
     remarks: z.string().optional().nullable(),
 })
@@ -43,6 +45,8 @@ async function ensureRmiTables() {
             "synthetic_rubber" numeric(14, 4) DEFAULT '0' NOT NULL,
             "carbon_black" numeric(14, 4) DEFAULT '0' NOT NULL,
             "steel_cord" numeric(14, 4) DEFAULT '0' NOT NULL,
+            "freight" numeric(14, 4) DEFAULT '0' NOT NULL,
+            "fx_index" numeric(14, 4) DEFAULT '0' NOT NULL,
             "rmi_value" numeric(14, 4) DEFAULT '0' NOT NULL,
             "source" varchar(255),
             "remarks" text,
@@ -77,17 +81,19 @@ async function ensureRmiTables() {
         ADD COLUMN IF NOT EXISTS "rate_month_3" numeric(14, 2) DEFAULT '0' NOT NULL;
     `)
 
-    // Tambahkan kolom source ke rmi_records jika belum ada
+    // Tambahkan kolom source, freight, fx_index ke rmi_records jika belum ada
     await db.execute(sql`
         ALTER TABLE "rmi_records"
-        ADD COLUMN IF NOT EXISTS "source" varchar(255);
+        ADD COLUMN IF NOT EXISTS "source" varchar(255),
+        ADD COLUMN IF NOT EXISTS "freight" numeric(14, 4) DEFAULT '0' NOT NULL,
+        ADD COLUMN IF NOT EXISTS "fx_index" numeric(14, 4) DEFAULT '0' NOT NULL;
     `)
 }
 
-// Menghitung nilai RMI berdasarkan formula bobot default:
-// Natural Rubber (35%), Synthetic Rubber (25%), Carbon Black (20%), Steel Cord (20%)
-function calculateRmiValue(nr: number, sr: number, cb: number, sc: number): number {
-    return (nr * 0.35) + (sr * 0.25) + (cb * 0.20) + (sc * 0.20)
+// Menghitung nilai RMI berdasarkan formula bobot baru:
+// Natural Rubber (35%), Synthetic Rubber (20%), Carbon Black (20%), Steel Cord (15%), Freight (5%), FX Index (5%)
+function calculateRmiValue(nr: number, sr: number, cb: number, sc: number, fr: number = 0, fx: number = 0): number {
+    return (nr * 0.35) + (sr * 0.20) + (cb * 0.20) + (sc * 0.15) + (fr * 0.05) + (fx * 0.05)
 }
 
 // -------------------------------------------------------------
@@ -148,7 +154,9 @@ export async function createRmiRecord(data: RmiRecordInput) {
             parsed.naturalRubber,
             parsed.syntheticRubber,
             parsed.carbonBlack,
-            parsed.steelCord
+            parsed.steelCord,
+            parsed.freight ?? 0,
+            parsed.fxIndex ?? 0
         )
 
         const [created] = await db
@@ -160,6 +168,8 @@ export async function createRmiRecord(data: RmiRecordInput) {
                 syntheticRubber: parsed.syntheticRubber.toString(),
                 carbonBlack: parsed.carbonBlack.toString(),
                 steelCord: parsed.steelCord.toString(),
+                freight: (parsed.freight ?? 0).toString(),
+                fxIndex: (parsed.fxIndex ?? 0).toString(),
                 rmiValue: rmiValue.toString(),
                 source: parsed.source || null,
                 remarks: parsed.remarks,
@@ -200,7 +210,9 @@ export async function updateRmiRecord(id: number, data: RmiRecordInput) {
             parsed.naturalRubber,
             parsed.syntheticRubber,
             parsed.carbonBlack,
-            parsed.steelCord
+            parsed.steelCord,
+            parsed.freight ?? 0,
+            parsed.fxIndex ?? 0
         )
 
         const [updated] = await db
@@ -212,6 +224,8 @@ export async function updateRmiRecord(id: number, data: RmiRecordInput) {
                 syntheticRubber: parsed.syntheticRubber.toString(),
                 carbonBlack: parsed.carbonBlack.toString(),
                 steelCord: parsed.steelCord.toString(),
+                freight: (parsed.freight ?? 0).toString(),
+                fxIndex: (parsed.fxIndex ?? 0).toString(),
                 rmiValue: rmiValue.toString(),
                 source: parsed.source || null,
                 remarks: parsed.remarks,
@@ -416,11 +430,11 @@ export async function seedRmiDashboardDefaults() {
         // Seed data jika kosong
         if (rmiCountVal === 0) {
             const defaultRmi = [
-                { year: 2026, quarter: 2, naturalRubber: 2.25, syntheticRubber: 1.95, carbonBlack: 1.40, steelCord: 1.20, rmiValue: 1.795, remarks: "Q2 2026 Index (Quarter Berjalan)" },
-                { year: 2026, quarter: 1, naturalRubber: 2.15, syntheticRubber: 1.85, carbonBlack: 1.35, steelCord: 1.15, rmiValue: 1.745, remarks: "Q1 2026 Index" },
-                { year: 2025, quarter: 4, naturalRubber: 2.05, syntheticRubber: 1.75, carbonBlack: 1.30, steelCord: 1.10, rmiValue: 1.6625, remarks: "Q4 2025 Index" },
-                { year: 2025, quarter: 3, naturalRubber: 1.95, syntheticRubber: 1.65, carbonBlack: 1.25, steelCord: 1.05, rmiValue: 1.580, remarks: "Q3 2025 Index" },
-                { year: 2025, quarter: 2, naturalRubber: 1.85, syntheticRubber: 1.60, carbonBlack: 1.20, steelCord: 1.00, rmiValue: 1.5075, remarks: "Q2 2025 Index" },
+                { year: 2026, quarter: 2, naturalRubber: 2.244, syntheticRubber: 13708.3, carbonBlack: 1.66, steelCord: 1.202, freight: 3549.0, fxIndex: 106.6667, rmiValue: 531.0253, remarks: "Q2 2026 Index (Quarter Berjalan)" },
+                { year: 2026, quarter: 1, naturalRubber: 2.15, syntheticRubber: 13500.0, carbonBlack: 1.55, steelCord: 1.15, freight: 3000.0, fxIndex: 98.4848, rmiValue: 433.003, remarks: "Q1 2026 Index" },
+                { year: 2025, quarter: 4, naturalRubber: 2.05, syntheticRubber: 13200.0, carbonBlack: 1.45, steelCord: 1.10, freight: 2800.0, fxIndex: 100.0, rmiValue: 385.5075, remarks: "Q4 2025 Index (Base Period)" },
+                { year: 2025, quarter: 3, naturalRubber: 1.95, syntheticRubber: 13000.0, carbonBlack: 1.35, steelCord: 1.05, freight: 2700.0, fxIndex: 98.7879, rmiValue: 375.3969, remarks: "Q3 2025 Index" },
+                { year: 2025, quarter: 2, naturalRubber: 1.85, syntheticRubber: 12800.0, carbonBlack: 1.25, steelCord: 1.00, rmiValue: 1.5075, freight: 2600.0, fxIndex: 97.5758, rmiValue: 365.2863, remarks: "Q2 2025 Index" },
             ]
             for (const r of defaultRmi) {
                 await db.insert(rmiRecords).values({
@@ -430,6 +444,8 @@ export async function seedRmiDashboardDefaults() {
                     syntheticRubber: r.syntheticRubber.toString(),
                     carbonBlack: r.carbonBlack.toString(),
                     steelCord: r.steelCord.toString(),
+                    freight: r.freight.toString(),
+                    fxIndex: r.fxIndex.toString(),
                     rmiValue: r.rmiValue.toString(),
                     remarks: r.remarks,
                 })
@@ -446,11 +462,13 @@ export async function seedRmiDashboardDefaults() {
                 await db.insert(rmiRecords).values({
                     year: 2026,
                     quarter: 2,
-                    naturalRubber: "2.25",
-                    syntheticRubber: "1.95",
-                    carbonBlack: "1.40",
-                    steelCord: "1.20",
-                    rmiValue: "1.795",
+                    naturalRubber: "2.244",
+                    syntheticRubber: "13708.3",
+                    carbonBlack: "1.66",
+                    steelCord: "1.202",
+                    freight: "3549.0",
+                    fxIndex: "106.6667",
+                    rmiValue: "531.0253",
                     remarks: "Q2 2026 Index (Quarter Berjalan)",
                 })
             }
@@ -504,11 +522,120 @@ export async function seedRmiDashboardDefaults() {
                     })
                     .where(eq(quarterlyExchangeRates.id, existingRateQ2[0].id))
             }
-        }
-
         return { success: true }
     } catch (error) {
         console.error("Error seeding RMI defaults:", error)
         return { success: false }
     }
 }
+
+// Action untuk sinkronisasi data dari API eksternal ke database
+export async function syncRmiFromExternalApis(year: number, quarter: number) {
+    try {
+        await getAuthenticatedSession("rmi-dashboard", "create")
+        await ensureRmiTables()
+
+        // 1. Fetch Material Price API
+        const materialRes = await fetch("https://ics.chitraparatama.com/product/api/apiconnect.php?function=get_material_price")
+        const materialJson = await materialRes.json()
+        if (materialJson.status !== "OK" || !Array.isArray(materialJson.result)) {
+            return { success: false, error: "Gagal mengambil data Material Price dari API" }
+        }
+
+        // 2. Fetch Freight Price API
+        const freightRes = await fetch("https://ics.chitraparatama.com/product/api/apiconnect.php?function=get_freight_price")
+        const freightJson = await freightRes.json()
+        if (freightJson.status !== "OK" || !Array.isArray(freightJson.result)) {
+            return { success: false, error: "Gagal mengambil data Freight Price dari API" }
+        }
+
+        // Tentukan range tanggal untuk kuartal yang dipilih
+        // Format tanggal dari API: YYYY-MM-DD
+        const startMonth = (quarter - 1) * 3 + 1
+        const endMonth = quarter * 3
+        const startDateStr = `${year}-${startMonth.toString().padStart(2, "0")}-01`
+        const endDateStr = `${year}-${endMonth.toString().padStart(2, "0")}-31` // Sederhana saja untuk pembanding string tanggal
+
+        // Helper filter data berdasarkan kuartal atau fallback ke semua data jika kosong
+        const filterByQuarter = (list: any[], dateField: string = "price_date") => {
+            const filtered = list.filter(item => {
+                const date = item[dateField]
+                return date && date >= startDateStr && date <= endDateStr
+            })
+            return filtered.length > 0 ? filtered : list // Fallback ke semua data (terbaru) jika tidak ada data spesifik kuartal tersebut
+        };
+
+        const qMaterials = filterByQuarter(materialJson.result)
+        const qFreights = filterByQuarter(freightJson.result)
+
+        // Hitung rata-rata harga untuk setiap material
+        const getAveragePrice = (list: any[], name: string) => {
+            const filtered = list.filter(item => item.material_name === name)
+            if (filtered.length === 0) return 0
+            const sum = filtered.reduce((acc, curr) => acc + parseFloat(curr.material_price || 0), 0)
+            return sum / filtered.length
+        };
+
+        // Konversi dan rata-rata
+        // Rubber -> USD Cents, dibagi 100 menjadi USD/Kg
+        const rawRubber = getAveragePrice(qMaterials, "Rubber")
+        const naturalRubberVal = rawRubber / 100
+
+        // Synthetic Rubber -> CNY/T
+        const syntheticRubberVal = getAveragePrice(qMaterials, "Synthetic Rubber")
+
+        // Carbon Black -> USD/Kg
+        const carbonBlackVal = getAveragePrice(qMaterials, "Carbon Black (Europe)")
+
+        // HRC Steel -> USD/T, dibagi 1000 menjadi USD/Kg
+        const rawSteel = getAveragePrice(qMaterials, "HRC Steel")
+        const steelCordVal = rawSteel / 1000
+
+        // Drewry World Container Index -> USD/40ft
+        const freightVal = getAveragePrice(qFreights, "Drewry World Container Index")
+
+        // Ambil FX Rate untuk kuartal berjalan dari database
+        const rateRecord = await db
+            .select()
+            .from(quarterlyExchangeRates)
+            .where(and(eq(quarterlyExchangeRates.year, year), eq(quarterlyExchangeRates.quarter, quarter)))
+            .limit(1)
+
+        // Kurs base Q4 2025 default 16500
+        const baseRate = 16500
+        const currentRate = rateRecord.length > 0 ? parseFloat(rateRecord[0].averageRate) : 16500
+        // FX Index = (Kurs saat ini / Kurs Base) * 100
+        const fxIndexVal = (currentRate / baseRate) * 100
+
+        // Hitung RMI value
+        const rmiValue = calculateRmiValue(
+            naturalRubberVal,
+            syntheticRubberVal,
+            carbonBlackVal,
+            steelCordVal,
+            freightVal,
+            fxIndexVal
+        )
+
+        return {
+            success: true,
+            data: {
+                year,
+                quarter,
+                naturalRubber: parseFloat(naturalRubberVal.toFixed(4)),
+                syntheticRubber: parseFloat(syntheticRubberVal.toFixed(4)),
+                carbonBlack: parseFloat(carbonBlackVal.toFixed(4)),
+                steelCord: parseFloat(steelCordVal.toFixed(4)),
+                freight: parseFloat(freightVal.toFixed(4)),
+                fxIndex: parseFloat(fxIndexVal.toFixed(4)),
+                rmiValue: parseFloat(rmiValue.toFixed(4)),
+                source: "API ICS (Auto)",
+                remarks: `Disinkronkan otomatis dari API ICS pada ${new Date().toLocaleDateString("id-ID")}`
+            }
+        }
+    } catch (error) {
+        console.error("Error syncing RMI from API:", error)
+        return { success: false, error: "Terjadi kesalahan internal saat sinkronisasi API" }
+    }
+}
+

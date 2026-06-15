@@ -90,6 +90,7 @@ import {
     createQuarterlyRate, 
     updateQuarterlyRate, 
     deleteQuarterlyRate,
+    syncRmiFromExternalApis,
     RmiRecordInput,
     QuarterlyRateInput
 } from "@/app/actions/rmi-dashboard"
@@ -102,6 +103,8 @@ interface RmiRecord {
     syntheticRubber: string
     carbonBlack: string
     steelCord: string
+    freight: string
+    fxIndex: string
     rmiValue: string
     source: string | null
     remarks: string | null
@@ -169,6 +172,8 @@ export function RmiDashboardClient({
     const [syntheticRubber, setSyntheticRubber] = useState<number>(1.8)
     const [carbonBlack, setCarbonBlack] = useState<number>(1.3)
     const [steelCord, setSteelCord] = useState<number>(1.1)
+    const [freight, setFreight] = useState<number>(3000)
+    const [fxIndex, setFxIndex] = useState<number>(100)
     const [rmiRemarks, setRmiRemarks] = useState("")
     const [rmiSource, setRmiSource] = useState("")
 
@@ -357,6 +362,8 @@ export function RmiDashboardClient({
                 syntheticRubber: parseFloat(r.syntheticRubber),
                 carbonBlack: parseFloat(r.carbonBlack),
                 steelCord: parseFloat(r.steelCord),
+                freight: parseFloat(r.freight || "0"),
+                fxIndex: parseFloat(r.fxIndex || "0"),
                 rmiValue: parseFloat(r.rmiValue),
                 rate: 0
             })
@@ -374,6 +381,8 @@ export function RmiDashboardClient({
                     syntheticRubber: 0,
                     carbonBlack: 0,
                     steelCord: 0,
+                    freight: 0,
+                    fxIndex: 0,
                     rmiValue: 0,
                     rate: parseFloat(r.averageRate)
                 })
@@ -420,6 +429,33 @@ export function RmiDashboardClient({
         ]
         : [0, 0]
 
+    const [isSyncing, setIsSyncing] = useState(false)
+
+    const handleSyncRmiFromApi = async () => {
+        setIsSyncing(true)
+        try {
+            const res = await syncRmiFromExternalApis(Number(rmiYear), Number(rmiQuarter))
+            if (res.success && res.data) {
+                setNaturalRubber(res.data.naturalRubber)
+                setSyntheticRubber(res.data.syntheticRubber)
+                setCarbonBlack(res.data.carbonBlack)
+                setSteelCord(res.data.steelCord)
+                setFreight(res.data.freight)
+                setFxIndex(res.data.fxIndex)
+                setRmiSource(res.data.source)
+                setRmiRemarks(res.data.remarks)
+                toast.success(`Berhasil sinkronisasi data API untuk ${rmiYear} Q${rmiQuarter}!`)
+            } else {
+                toast.error(res.error || "Gagal sinkronisasi data dari API")
+            }
+        } catch (error) {
+            console.error(error)
+            toast.error("Terjadi kesalahan saat memproses API")
+        } finally {
+            setIsSyncing(false)
+        }
+    }
+
     // Handler RMI Dialog Submit
     const handleRmiSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -430,6 +466,8 @@ export function RmiDashboardClient({
             syntheticRubber: Number(syntheticRubber),
             carbonBlack: Number(carbonBlack),
             steelCord: Number(steelCord),
+            freight: Number(freight),
+            fxIndex: Number(fxIndex),
             source: rmiSource || null,
             remarks: rmiRemarks || null
         }
@@ -524,6 +562,8 @@ export function RmiDashboardClient({
         setSyntheticRubber(1.8)
         setCarbonBlack(1.3)
         setSteelCord(1.1)
+        setFreight(3000)
+        setFxIndex(100)
         setRmiSource("")
         setRmiRemarks("")
         setShowRmiDialog(true)
@@ -538,6 +578,8 @@ export function RmiDashboardClient({
         setSyntheticRubber(parseFloat(r.syntheticRubber))
         setCarbonBlack(parseFloat(r.carbonBlack))
         setSteelCord(parseFloat(r.steelCord))
+        setFreight(parseFloat(r.freight || "0"))
+        setFxIndex(parseFloat(r.fxIndex || "0"))
         setRmiSource(r.source || "")
         setRmiRemarks(r.remarks || "")
         setShowRmiDialog(true)
@@ -591,7 +633,7 @@ export function RmiDashboardClient({
 
     // Export CSV Data RMI
     const exportRmiToCsv = () => {
-        const headers = ["Tahun", "Kuartal", "Natural Rubber (USD/kg)", "Synthetic Rubber (USD/kg)", "Carbon Black (USD/kg)", "Steel Cord (USD/kg)", "RMI Value", "Source", "Keterangan"]
+        const headers = ["Tahun", "Kuartal", "Natural Rubber (USD/kg)", "Synthetic Rubber (USD/kg)", "Carbon Black (USD/kg)", "Steel Cord (USD/kg)", "Freight (USD/40ft)", "USD/IDR FX Index", "RMI Value", "Source", "Keterangan"]
         const csvRows = [headers]
 
         rmiRecords.forEach(r => {
@@ -602,6 +644,8 @@ export function RmiDashboardClient({
                 r.syntheticRubber,
                 r.carbonBlack,
                 r.steelCord,
+                r.freight || "0",
+                r.fxIndex || "0",
                 r.rmiValue,
                 r.source || "",
                 r.remarks || ""
@@ -712,6 +756,7 @@ export function RmiDashboardClient({
                                         <Line type="monotone" dataKey="syntheticRubber" name="Synthetic Rubber" stroke="#f59e0b" strokeWidth={1.5} dot={{ r: 4 }} />
                                         <Line type="monotone" dataKey="carbonBlack" name="Carbon Black" stroke="#3b82f6" strokeWidth={1.5} dot={{ r: 4 }} />
                                         <Line type="monotone" dataKey="steelCord" name="Steel Cord" stroke="#8b5cf6" strokeWidth={1.5} dot={{ r: 4 }} />
+                                        <Line type="monotone" dataKey="freight" name="Freight" stroke="#ec4899" strokeWidth={1.5} dot={{ r: 4 }} />
                                     </ComposedChart>
                                 </ResponsiveContainer>
                             </div>
@@ -1066,6 +1111,8 @@ export function RmiDashboardClient({
                                                 <TableHead>Synthetic Rubber</TableHead>
                                                 <TableHead>Carbon Black</TableHead>
                                                 <TableHead>Steel Cord</TableHead>
+                                                <TableHead>Freight</TableHead>
+                                                <TableHead>FX Index</TableHead>
                                                 <TableHead className="font-extrabold text-indigo-600">Total RMI Value</TableHead>
                                                 <TableHead>Source</TableHead>
                                                 <TableHead>Remarks</TableHead>
@@ -1076,7 +1123,7 @@ export function RmiDashboardClient({
                                             {rmiVirtualizer.getVirtualItems().length > 0 ? (
                                                 <>
                                                     <TableRow style={{ height: `${rmiBefore}px` }} className="border-none">
-                                                        <TableCell colSpan={9} className="p-0" />
+                                                        <TableCell colSpan={11} className="p-0" />
                                                     </TableRow>
                                                     {rmiVirtualizer.getVirtualItems().map((virtualRow) => {
                                                         const r = rmiRecords[virtualRow.index]
@@ -1087,6 +1134,8 @@ export function RmiDashboardClient({
                                                                 <TableCell>{parseFloat(r.syntheticRubber).toFixed(4)}</TableCell>
                                                                 <TableCell>{parseFloat(r.carbonBlack).toFixed(4)}</TableCell>
                                                                 <TableCell>{parseFloat(r.steelCord).toFixed(4)}</TableCell>
+                                                                <TableCell>{parseFloat(r.freight || "0").toFixed(2)}</TableCell>
+                                                                <TableCell>{parseFloat(r.fxIndex || "0").toFixed(2)}%</TableCell>
                                                                 <TableCell className="font-extrabold text-indigo-600">{parseFloat(r.rmiValue).toFixed(4)}</TableCell>
                                                                 <TableCell>
                                                                     {r.source ? (
@@ -1116,12 +1165,12 @@ export function RmiDashboardClient({
                                                         )
                                                     })}
                                                     <TableRow style={{ height: `${rmiAfter}px` }} className="border-none">
-                                                        <TableCell colSpan={9} className="p-0" />
+                                                        <TableCell colSpan={11} className="p-0" />
                                                     </TableRow>
                                                 </>
                                             ) : (
                                                 <TableRow>
-                                                    <TableCell colSpan={9} className="h-24 text-center">Data RMI kosong.</TableCell>
+                                                    <TableCell colSpan={11} className="h-24 text-center">Data RMI kosong.</TableCell>
                                                 </TableRow>
                                             )}
                                         </TableBody>
@@ -1314,8 +1363,8 @@ export function RmiDashboardClient({
                         </DialogDescription>
                     </DialogHeader>
                     <form onSubmit={handleRmiSubmit} className="space-y-4 pt-2">
-                        <div className="grid grid-cols-2 gap-3">
-                            <div className="space-y-1.5">
+                        <div className="flex items-end justify-between grid grid-cols-3 gap-3">
+                            <div className="space-y-1.5 col-span-1">
                                 <Label htmlFor="year">Tahun</Label>
                                 <Input 
                                     id="year" 
@@ -1325,7 +1374,7 @@ export function RmiDashboardClient({
                                     required 
                                 />
                             </div>
-                            <div className="space-y-1.5">
+                            <div className="space-y-1.5 col-span-1">
                                 <Label htmlFor="quarter">Kuartal</Label>
                                 <Select value={rmiQuarter.toString()} onValueChange={(v) => setRmiQuarter(Number(v))}>
                                     <SelectTrigger>
@@ -1338,6 +1387,17 @@ export function RmiDashboardClient({
                                         <SelectItem value="4">Q4</SelectItem>
                                     </SelectContent>
                                 </Select>
+                            </div>
+                            <div className="col-span-1 pb-0.5">
+                                <Button 
+                                    type="button" 
+                                    onClick={handleSyncRmiFromApi} 
+                                    disabled={isSyncing}
+                                    variant="secondary"
+                                    className="w-full text-xs font-semibold gap-1.5 border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 h-9"
+                                >
+                                    {isSyncing ? "Menyinkronkan..." : "Sync dari API"}
+                                </Button>
                             </div>
                         </div>
 
@@ -1383,6 +1443,28 @@ export function RmiDashboardClient({
                                     step="0.0001" 
                                     value={steelCord} 
                                     onChange={(e) => setSteelCord(Number(e.target.value))} 
+                                    required 
+                                />
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label htmlFor="freight">Freight (USD)</Label>
+                                <Input 
+                                    id="freight" 
+                                    type="number" 
+                                    step="0.01" 
+                                    value={freight} 
+                                    onChange={(e) => setFreight(Number(e.target.value))} 
+                                    required 
+                                />
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label htmlFor="fxIndex">FX Index (%)</Label>
+                                <Input 
+                                    id="fxIndex" 
+                                    type="number" 
+                                    step="0.01" 
+                                    value={fxIndex} 
+                                    onChange={(e) => setFxIndex(Number(e.target.value))} 
                                     required 
                                 />
                             </div>

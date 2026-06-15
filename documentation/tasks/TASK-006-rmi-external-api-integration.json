@@ -1,0 +1,12 @@
+{
+  "id": "TASK-006",
+  "status": "completed",
+  "priority": "P0",
+  "title": "Integrasi API Material & Freight untuk Dashboard RMI",
+  "description": "Mengintegrasikan API harga material (Natural Rubber, Synthetic Rubber, Carbon Black, Steel Cord) dan API harga Freight dari ICS Chitra Paratama ke RMI Dashboard, serta menghitung RMI menggunakan formula bobot baru: NR 35%, SR 20%, CB 20%, SC 15%, Freight 5%, USD/IDR FX Index 5%.",
+  "createdAt": "2026-06-15T05:53:00.000Z",
+  "updatedAt": "2026-06-15T05:56:29.515Z",
+  "startedAt": "2026-06-15T05:52:33.485Z",
+  "completedAt": "2026-06-15T05:56:29.515Z",
+  "completionDetails": "\\ Integrasi API Material Price dan Freight Price serta pembobotan baru RMI dan update UI RMI Dashboard\\"
+}
