@@ -10,6 +10,7 @@ import { toast } from "sonner"
 
 import { generateCompetitorMonthlyReportInsight } from "@/app/actions/competitor-new"
 import { getExternalPricesForMonthlyCollapse, getRmiWeights, getLostSaleStockMatch } from "@/app/actions/rmi-dashboard"
+
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -925,6 +926,7 @@ export function MonthlyReportTab() {
         } catch {
             // Lost sale data is optional
         }
+
     }
 
     useEffect(() => {
@@ -1650,7 +1652,7 @@ export function MonthlyReportTab() {
                                                         </div>
                                                         {idxVal !== null && idxVal > 0 ? (
                                                             <>
-                                                                <p className={`mt-1.5 text-lg font-black leading-none ${trendColor}`}>{idxVal.toFixed(1)}<span className="ml-1 text-[10px]">%</span></p>
+                                                                <p className={`mt-1.5 text-lg font-black leading-none ${trendColor}`}>{idxVal.toFixed(1)}</p>
                                                                 <p className="text-[9px] text-slate-500">{arrow} vs base Q4 2025 (100)</p>
                                                                 {rawVal !== null && rawVal !== undefined && rawVal > 0 && (
                                                                     <p className="mt-1 text-[9px] font-semibold text-slate-600">{rawVal.toFixed(rawVal < 100 ? 2 : 0)} {mat.unit}</p>
@@ -1680,8 +1682,8 @@ export function MonthlyReportTab() {
                                                         <LineChart data={chartRows} margin={{ top: 12, right: 16, left: 0, bottom: 4 }}>
                                                             <CartesianGrid strokeDasharray="3 3" vertical={false} />
                                                             <XAxis dataKey="label" tick={{ fontSize: 9 }} angle={-25} textAnchor="end" height={40} />
-                                                            <YAxis width={44} tick={{ fontSize: 9 }} domain={["auto", "auto"]} unit="%" />
-                                                            <Tooltip formatter={(v, n) => [`${Number(v).toFixed(1)}%`, n]} />
+                                                            <YAxis width={44} tick={{ fontSize: 9 }} domain={["auto", "auto"]} />
+                                                            <Tooltip formatter={(v, n) => [`${Number(v).toFixed(2)}`, n]} />
                                                             <Legend wrapperStyle={{ fontSize: 10 }} />
                                                             <ReferenceLine y={100} stroke="#94a3b8" strokeDasharray="5 3" label={{ value: "Base 100", position: "insideTopRight", fontSize: 9, fill: "#64748b" }} />
                                                             <Line type="monotone" dataKey="nr" name="Natural Rubber" stroke={BAR_COLORS[0]} strokeWidth={2} dot={{ r: 2.5 }} connectNulls />
@@ -1752,7 +1754,7 @@ export function MonthlyReportTab() {
                             const CAT_COLORS: Record<string, string> = { TYRE: "#0f4c81", ACC: "#f97316", PART: "#16a34a", OTHER: "#6b7280" }
 
                             return (
-                                <Slide key={`lost-stock-${pageIndex}`} eyebrow={`Slide ${slideNum} — Top Customer Lost Sale${lostStockPages.length > 1 ? ` (${pageIndex + 1}/${lostStockPages.length})` : ''}`} title={`Top Customer — Lost Sale Value — ${monthLabel(month)}`}>
+                                <Slide key={`lost-stock-${pageIndex}`} eyebrow={`Slide ${slideNum} — Top Customer By Quotation Expired${lostStockPages.length > 1 ? ` (${pageIndex + 1}/${lostStockPages.length})` : ''}`} title={`Top Customer By Quotation Expired- ${monthLabel(month)}`}>
                                     <div className="flex h-[calc(100%-88px)] flex-col gap-2 overflow-hidden">
                                         {/* KPI Row */}
                                         {isFirstPage && (
@@ -1819,7 +1821,7 @@ export function MonthlyReportTab() {
                                                                     <th className="pb-0.5 font-medium text-slate-500 text-center">Qty</th>
                                                                     <th className="pb-0.5 font-medium text-slate-500 text-right">Value</th>
                                                                     <th className="pb-0.5 font-medium text-slate-500">Status</th>
-                                                                    <th className="pb-0.5 font-medium text-emerald-600">Stok</th>
+                                                                    <th className="pb-0.5 font-medium text-emerald-600">Stock Ready</th>
                                                                 </tr>
                                                             </thead>
                                                             <tbody>
@@ -1843,10 +1845,11 @@ export function MonthlyReportTab() {
                                                                         </td>
                                                                         <td className="py-0.5">
                                                                             {item.hasMatch ? (
-                                                                                <span className="flex items-center gap-0.5">
+                                                                                <div className="flex items-center gap-0.5">
                                                                                     <span className="h-1 w-1 rounded-full bg-emerald-500" />
-                                                                                    <span className="truncate text-[7px] text-emerald-700 font-medium max-w-[100px]">{item.matchedStock[0]?.materialDesc}</span>
-                                                                                </span>
+                                                                                    <span className="truncate text-[7px] text-emerald-700 font-medium max-w-[80px]">{item.matchedStock[0]?.materialDesc}</span>
+                                                                                    <span className="text-[6px] font-bold text-emerald-600 whitespace-nowrap">({item.matchedStock[0]?.totalQty} pcs)</span>
+                                                                                </div>
                                                                             ) : <span className="text-slate-300">—</span>}
                                                                         </td>
                                                                     </tr>
