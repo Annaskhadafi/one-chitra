@@ -23,7 +23,8 @@ import {
     AlertCircle,
     BookOpen,
     ChevronRight,
-    ChevronDown
+    ChevronDown,
+    ChevronsUpDown
 } from "lucide-react"
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -41,6 +42,8 @@ import {
     DialogTitle, 
     DialogTrigger 
 } from "@/components/ui/dialog"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { 
     Select, 
     SelectContent, 
@@ -100,6 +103,7 @@ interface RmiRecord {
     carbonBlack: string
     steelCord: string
     rmiValue: string
+    source: string | null
     remarks: string | null
     createdAt: Date
     updatedAt: Date
@@ -118,16 +122,26 @@ interface QuarterlyRate {
     updatedAt: Date
 }
 
+interface SapTireProduct {
+    materialNo: string
+    materialDesc: string
+    totalQty: number
+    totalValue: number
+    currency: string
+}
+
 interface RmiDashboardClientProps {
     initialRmiRecords: any[]
     initialQuarterlyRates: any[]
     realtimeRate: number
+    sapTires: SapTireProduct[]
 }
 
 export function RmiDashboardClient({ 
     initialRmiRecords, 
     initialQuarterlyRates,
-    realtimeRate 
+    realtimeRate,
+    sapTires = []
 }: RmiDashboardClientProps) {
     const { hasResourcePermission } = usePermissions()
     const canCreate = hasResourcePermission("rmi-dashboard", "create")
@@ -156,6 +170,7 @@ export function RmiDashboardClient({
     const [carbonBlack, setCarbonBlack] = useState<number>(1.3)
     const [steelCord, setSteelCord] = useState<number>(1.1)
     const [rmiRemarks, setRmiRemarks] = useState("")
+    const [rmiSource, setRmiSource] = useState("")
 
     // Rate Form Fields
     const [rateYear, setRateYear] = useState<number>(new Date().getFullYear())
@@ -171,11 +186,50 @@ export function RmiDashboardClient({
 
     // Simulator States
     const [basePrice, setBasePrice] = useState<number>(10000000) // Default 10 juta IDR
+    const [basePriceDisplay, setBasePriceDisplay] = useState<string>("10.000.000")
     const [selectedBaseQuarter, setSelectedBaseQuarter] = useState<string>("")
     const [selectedEvalQuarter, setSelectedEvalQuarter] = useState<string>("")
     const [weightRmi, setWeightRmi] = useState<number>(95) // Bobot RMI %
     const [weightFx, setWeightFx] = useState<number>(5)    // Bobot FX %
     const [simulatedRate, setSimulatedRate] = useState<number>(realtimeRate) // Kurs Tengah Saat Ini (diambil dari API Kurs)
+
+    // SAP Stocks Selection State
+    const [selectedSapTireNo, setSelectedSapTireNo] = useState<string>("")
+    const [openTireSelector, setOpenTireSelector] = useState<boolean>(false)
+    const [selectedTireUsdPrice, setSelectedTireUsdPrice] = useState<number | null>(null)
+    const [selectedTireCurrency, setSelectedTireCurrency] = useState<string>("USD")
+
+    // Handler for Tire Selection
+    const handleTireSelect = (materialNo: string) => {
+        setSelectedSapTireNo(materialNo)
+        setOpenTireSelector(false)
+
+        const tire = sapTires.find(t => t.materialNo === materialNo)
+        if (tire && tire.totalQty > 0) {
+            const priceUSD = tire.totalValue / tire.totalQty
+            setSelectedTireUsdPrice(priceUSD)
+            setSelectedTireCurrency(tire.currency)
+
+            const priceIDR = tire.currency === "USD" ? (priceUSD * simulatedRate) : priceUSD
+            const rounded = Math.round(priceIDR)
+            setBasePrice(rounded)
+            setBasePriceDisplay(rounded.toLocaleString("id-ID"))
+            toast.success(`Ban dipilih: ${tire.materialDesc}`)
+        } else {
+            setSelectedTireUsdPrice(null)
+            toast.error("Gagal memproses data ban terpilih")
+        }
+    }
+
+    // Auto update basePrice when simulatedRate changes
+    React.useEffect(() => {
+        if (selectedTireUsdPrice !== null) {
+            const priceIDR = selectedTireCurrency === "USD" ? (selectedTireUsdPrice * simulatedRate) : selectedTireUsdPrice
+            const rounded = Math.round(priceIDR)
+            setBasePrice(rounded)
+            setBasePriceDisplay(rounded.toLocaleString("id-ID"))
+        }
+    }, [simulatedRate, selectedTireUsdPrice, selectedTireCurrency])
 
     // Inisialisasi simulator quarters
     React.useEffect(() => {
@@ -376,6 +430,7 @@ export function RmiDashboardClient({
             syntheticRubber: Number(syntheticRubber),
             carbonBlack: Number(carbonBlack),
             steelCord: Number(steelCord),
+            source: rmiSource || null,
             remarks: rmiRemarks || null
         }
 
@@ -469,6 +524,7 @@ export function RmiDashboardClient({
         setSyntheticRubber(1.8)
         setCarbonBlack(1.3)
         setSteelCord(1.1)
+        setRmiSource("")
         setRmiRemarks("")
         setShowRmiDialog(true)
     }
@@ -482,6 +538,7 @@ export function RmiDashboardClient({
         setSyntheticRubber(parseFloat(r.syntheticRubber))
         setCarbonBlack(parseFloat(r.carbonBlack))
         setSteelCord(parseFloat(r.steelCord))
+        setRmiSource(r.source || "")
         setRmiRemarks(r.remarks || "")
         setShowRmiDialog(true)
     }
@@ -534,7 +591,7 @@ export function RmiDashboardClient({
 
     // Export CSV Data RMI
     const exportRmiToCsv = () => {
-        const headers = ["Tahun", "Kuartal", "Natural Rubber (USD/kg)", "Synthetic Rubber (USD/kg)", "Carbon Black (USD/kg)", "Steel Cord (USD/kg)", "RMI Value", "Keterangan"]
+        const headers = ["Tahun", "Kuartal", "Natural Rubber (USD/kg)", "Synthetic Rubber (USD/kg)", "Carbon Black (USD/kg)", "Steel Cord (USD/kg)", "RMI Value", "Source", "Keterangan"]
         const csvRows = [headers]
 
         rmiRecords.forEach(r => {
@@ -546,6 +603,7 @@ export function RmiDashboardClient({
                 r.carbonBlack,
                 r.steelCord,
                 r.rmiValue,
+                r.source || "",
                 r.remarks || ""
             ])
         })
@@ -715,20 +773,94 @@ export function RmiDashboardClient({
                         </CardHeader>
                         
                         <CardContent className="space-y-5 pt-6 flex-1">
+                            {/* Pilih Produk Ban (Stok SAP) */}
+                            <div className="space-y-2">
+                                <Label className="text-slate-700 font-semibold flex items-center justify-between">
+                                    <span>Pilih Produk Ban (Stok SAP)</span>
+                                    <span className="text-xs text-slate-400 font-normal">Ready Stock Only</span>
+                                </Label>
+                                <Popover open={openTireSelector} onOpenChange={setOpenTireSelector}>
+                                    <PopoverTrigger asChild>
+                                        <Button
+                                            variant="outline"
+                                            role="combobox"
+                                            aria-expanded={openTireSelector}
+                                            className="w-full justify-between text-left font-normal border-slate-200 bg-white hover:bg-slate-50 text-slate-700 h-10 px-3"
+                                        >
+                                            <span className="truncate max-w-[220px]">
+                                                {selectedSapTireNo
+                                                    ? sapTires.find((t) => t.materialNo === selectedSapTireNo)?.materialDesc
+                                                    : "Pilih ban..."}
+                                            </span>
+                                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-[320px] p-0" align="start">
+                                        <Command>
+                                            <CommandInput placeholder="Cari deskripsi ban..." />
+                                            <CommandList className="max-h-[220px] scrollbar-thin">
+                                                <CommandEmpty>Ban tidak ditemukan.</CommandEmpty>
+                                                <CommandGroup>
+                                                    {sapTires.map((t) => (
+                                                        <CommandItem
+                                                            key={`tire-opt-${t.materialNo}`}
+                                                            value={t.materialDesc}
+                                                            onSelect={() => handleTireSelect(t.materialNo)}
+                                                            className="text-xs cursor-pointer py-2"
+                                                        >
+                                                            <Check
+                                                                className={`mr-2 h-3.5 w-3.5 text-indigo-600 shrink-0 ${
+                                                                    selectedSapTireNo === t.materialNo ? "opacity-100" : "opacity-0"
+                                                                }`}
+                                                            />
+                                                            <div className="flex flex-col min-w-0">
+                                                                <span className="font-semibold text-slate-700 truncate" title={t.materialDesc}>
+                                                                    {t.materialDesc}
+                                                                </span>
+                                                                <span className="text-[10px] text-slate-400">
+                                                                    Stok: {t.totalQty} | Price: {t.currency} {(t.totalValue / t.totalQty).toLocaleString("id-ID", { maximumFractionDigits: 2 })}
+                                                                </span>
+                                                            </div>
+                                                        </CommandItem>
+                                                    ))}
+                                                </CommandGroup>
+                                            </CommandList>
+                                        </Command>
+                                    </PopoverContent>
+                                </Popover>
+                            </div>
+
                             {/* Input Base Price */}
                             <div className="space-y-2">
                                 <Label htmlFor="basePrice" className="text-slate-700 font-semibold flex items-center justify-between">
-                                    <span>Base Price Ban (Tire)</span>
-                                    <span className="text-xs text-slate-400 font-normal">Harga dasar saat ini</span>
+                                    <span>Base Price Ban (Tire IDR)</span>
+                                    <span className="text-xs text-slate-400 font-normal">Harga dasar Rupiah terkonversi</span>
                                 </Label>
                                 <div className="relative">
-                                    <DollarSign className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                                    <span className="absolute left-3 top-2.5 text-sm font-semibold text-slate-400">Rp</span>
                                     <Input
                                         id="basePrice"
-                                        type="number"
-                                        className="pl-8 text-lg font-bold border-slate-200 focus:border-indigo-500"
-                                        value={basePrice}
-                                        onChange={(e) => setBasePrice(Math.max(0, Number(e.target.value)))}
+                                        type="text"
+                                        inputMode="numeric"
+                                        className="pl-8 text-base font-bold border-slate-200 focus:border-indigo-500"
+                                        value={basePriceDisplay}
+                                        onChange={(e) => {
+                                            // Hapus semua karakter non-digit
+                                            const raw = e.target.value.replace(/[^0-9]/g, "")
+                                            const num = raw === "" ? 0 : Math.max(0, parseInt(raw, 10))
+                                            setBasePrice(num)
+                                            setBasePriceDisplay(raw === "" ? "" : num.toLocaleString("id-ID"))
+                                            // Reset selected USD price jika user mengetik manual harga IDR baru
+                                            setSelectedTireUsdPrice(null)
+                                        }}
+                                        onBlur={() => {
+                                            // Pastikan display terformat saat field ditinggalkan
+                                            if (basePriceDisplay === "" || basePriceDisplay === "0") {
+                                                setBasePriceDisplay("0")
+                                            } else {
+                                                setBasePriceDisplay(basePrice.toLocaleString("id-ID"))
+                                            }
+                                        }}
                                     />
                                 </div>
                             </div>
@@ -935,6 +1067,7 @@ export function RmiDashboardClient({
                                                 <TableHead>Carbon Black</TableHead>
                                                 <TableHead>Steel Cord</TableHead>
                                                 <TableHead className="font-extrabold text-indigo-600">Total RMI Value</TableHead>
+                                                <TableHead>Source</TableHead>
                                                 <TableHead>Remarks</TableHead>
                                                 {(canEdit || canDelete) && <TableHead className="text-right">Aksi</TableHead>}
                                             </TableRow>
@@ -943,7 +1076,7 @@ export function RmiDashboardClient({
                                             {rmiVirtualizer.getVirtualItems().length > 0 ? (
                                                 <>
                                                     <TableRow style={{ height: `${rmiBefore}px` }} className="border-none">
-                                                        <TableCell colSpan={8} className="p-0" />
+                                                        <TableCell colSpan={9} className="p-0" />
                                                     </TableRow>
                                                     {rmiVirtualizer.getVirtualItems().map((virtualRow) => {
                                                         const r = rmiRecords[virtualRow.index]
@@ -955,6 +1088,13 @@ export function RmiDashboardClient({
                                                                 <TableCell>{parseFloat(r.carbonBlack).toFixed(4)}</TableCell>
                                                                 <TableCell>{parseFloat(r.steelCord).toFixed(4)}</TableCell>
                                                                 <TableCell className="font-extrabold text-indigo-600">{parseFloat(r.rmiValue).toFixed(4)}</TableCell>
+                                                                <TableCell>
+                                                                    {r.source ? (
+                                                                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100">
+                                                                            {r.source}
+                                                                        </span>
+                                                                    ) : <span className="text-slate-400">-</span>}
+                                                                </TableCell>
                                                                 <TableCell className="text-slate-500 max-w-xs truncate">{r.remarks || "-"}</TableCell>
                                                                 {(canEdit || canDelete) && (
                                                                     <TableCell className="text-right">
@@ -976,12 +1116,12 @@ export function RmiDashboardClient({
                                                         )
                                                     })}
                                                     <TableRow style={{ height: `${rmiAfter}px` }} className="border-none">
-                                                        <TableCell colSpan={8} className="p-0" />
+                                                        <TableCell colSpan={9} className="p-0" />
                                                     </TableRow>
                                                 </>
                                             ) : (
                                                 <TableRow>
-                                                    <TableCell colSpan={8} className="h-24 text-center">Data RMI kosong.</TableCell>
+                                                    <TableCell colSpan={9} className="h-24 text-center">Data RMI kosong.</TableCell>
                                                 </TableRow>
                                             )}
                                         </TableBody>
@@ -1248,14 +1388,25 @@ export function RmiDashboardClient({
                             </div>
                         </div>
 
-                        <div className="space-y-1.5 border-t border-slate-100 pt-3">
-                            <Label htmlFor="remarks">Keterangan / Memo</Label>
-                            <Input 
-                                id="remarks" 
-                                value={rmiRemarks} 
-                                onChange={(e) => setRmiRemarks(e.target.value)} 
-                                placeholder="Contoh: Indeks Q4 2025 (Base Period)" 
-                            />
+                        <div className="grid grid-cols-2 gap-3 border-t border-slate-100 pt-3">
+                            <div className="space-y-1.5">
+                                <Label htmlFor="rmiSource">Source</Label>
+                                <Input 
+                                    id="rmiSource" 
+                                    value={rmiSource} 
+                                    onChange={(e) => setRmiSource(e.target.value)} 
+                                    placeholder="Contoh: IRSG, API, Manual" 
+                                />
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label htmlFor="remarks">Keterangan / Memo</Label>
+                                <Input 
+                                    id="remarks" 
+                                    value={rmiRemarks} 
+                                    onChange={(e) => setRmiRemarks(e.target.value)} 
+                                    placeholder="Contoh: Indeks Q4 2025 (Base Period)" 
+                                />
+                            </div>
                         </div>
 
                         <DialogFooter className="pt-4 border-t border-slate-100">

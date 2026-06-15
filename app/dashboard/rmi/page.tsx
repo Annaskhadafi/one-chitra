@@ -1,5 +1,5 @@
 import { Suspense } from "react"
-import { getRmiRecords, getQuarterlyExchangeRates, getExchangeRateDependencies, seedRmiDashboardDefaults } from "@/app/actions/rmi-dashboard"
+import { getRmiRecords, getQuarterlyExchangeRates, getExchangeRateDependencies, seedRmiDashboardDefaults, getSapTireProducts } from "@/app/actions/rmi-dashboard"
 import { RmiDashboardClient } from "./_components/rmi-dashboard-client"
 import { Loader2 } from "lucide-react"
 
@@ -15,15 +15,17 @@ export default async function RmiDashboardPage() {
     await seedRmiDashboardDefaults()
 
     // Ambil data awal dari database
-    const [rmiRes, rateRes, fxDep] = await Promise.all([
+    const [rmiRes, rateRes, fxDep, tireRes] = await Promise.all([
         getRmiRecords(),
         getQuarterlyExchangeRates(),
-        getExchangeRateDependencies()
+        getExchangeRateDependencies(),
+        getSapTireProducts()
     ])
 
     const rmiRecordsData = rmiRes.success && rmiRes.data ? rmiRes.data : []
     const quarterlyRatesData = rateRes.success && rateRes.data ? rateRes.data : []
     const realtimeRate = fxDep.success && fxDep.rate ? fxDep.rate : 17981 // default ke nilai tengah real
+    const sapTiresData = tireRes.success && tireRes.data ? tireRes.data : []
 
     return (
         <div className="flex-1 space-y-4 p-6 md:p-8 pt-6 min-h-screen bg-slate-50/40">
@@ -37,6 +39,7 @@ export default async function RmiDashboardPage() {
                     initialRmiRecords={rmiRecordsData} 
                     initialQuarterlyRates={quarterlyRatesData}
                     realtimeRate={realtimeRate}
+                    sapTires={sapTiresData}
                 />
             </Suspense>
         </div>

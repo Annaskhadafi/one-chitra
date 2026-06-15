@@ -15,6 +15,7 @@ const rmiRecordSchema = z.object({
     syntheticRubber: z.number().min(0),
     carbonBlack: z.number().min(0),
     steelCord: z.number().min(0),
+    source: z.string().max(255).optional().nullable(),
     remarks: z.string().optional().nullable(),
 })
 
@@ -43,6 +44,7 @@ async function ensureRmiTables() {
             "carbon_black" numeric(14, 4) DEFAULT '0' NOT NULL,
             "steel_cord" numeric(14, 4) DEFAULT '0' NOT NULL,
             "rmi_value" numeric(14, 4) DEFAULT '0' NOT NULL,
+            "source" varchar(255),
             "remarks" text,
             "created_by" text,
             "created_at" timestamp DEFAULT now() NOT NULL,
@@ -73,6 +75,12 @@ async function ensureRmiTables() {
         ADD COLUMN IF NOT EXISTS "rate_month_1" numeric(14, 2) DEFAULT '0' NOT NULL,
         ADD COLUMN IF NOT EXISTS "rate_month_2" numeric(14, 2) DEFAULT '0' NOT NULL,
         ADD COLUMN IF NOT EXISTS "rate_month_3" numeric(14, 2) DEFAULT '0' NOT NULL;
+    `)
+
+    // Tambahkan kolom source ke rmi_records jika belum ada
+    await db.execute(sql`
+        ALTER TABLE "rmi_records"
+        ADD COLUMN IF NOT EXISTS "source" varchar(255);
     `)
 }
 
@@ -153,6 +161,7 @@ export async function createRmiRecord(data: RmiRecordInput) {
                 carbonBlack: parsed.carbonBlack.toString(),
                 steelCord: parsed.steelCord.toString(),
                 rmiValue: rmiValue.toString(),
+                source: parsed.source || null,
                 remarks: parsed.remarks,
                 createdBy: session.user.id,
             })
@@ -204,6 +213,7 @@ export async function updateRmiRecord(id: number, data: RmiRecordInput) {
                 carbonBlack: parsed.carbonBlack.toString(),
                 steelCord: parsed.steelCord.toString(),
                 rmiValue: rmiValue.toString(),
+                source: parsed.source || null,
                 remarks: parsed.remarks,
                 updatedAt: new Date(),
             })
@@ -333,6 +343,45 @@ export async function updateQuarterlyRate(id: number, data: QuarterlyRateInput) 
     } catch (error) {
         console.error("Error updating quarterly exchange rate:", error)
         return { success: false, error: "Gagal memperbarui data Kurs" }
+    }
+}
+
+export async function getSapTireProducts() {
+    try {
+        await getAuthenticatedSession("rmi-dashboard", "view")
+        
+        // Query zmc9_stock_sap di-JOIN dengan tabel products untuk filter berdasarkan
+        // category = 'TYRE' (kategori resmi ban), bukan filter nama material.
+        // Ini memastikan hanya ban asli yang muncul, bukan aksesori seperti sensor/valve/handler.
+        // Filter: total_stock > 0 (ready stock), deduplikasi per material_no.
+        const result = await db.execute(sql`
+            SELECT 
+                z.material_no as "materialNo", 
+                MAX(z.material_desc) as "materialDesc", 
+                SUM(CAST(z.total_stock AS numeric)) as "totalQty", 
+                SUM(CAST(z.value_stock AS numeric)) as "totalValue",
+                MAX(z.currency) as currency
+            FROM public.zmc9_stock_sap z
+            INNER JOIN public.products p 
+                ON p.material_number = z.material_no
+                AND UPPER(p.category) = 'TYRE'
+            GROUP BY z.material_no
+            HAVING SUM(CAST(z.total_stock AS numeric)) > 0
+            ORDER BY MAX(z.material_desc) ASC
+        `)
+
+        const tires = result.rows.map(r => ({
+            materialNo: String(r.materialNo || ""),
+            materialDesc: String(r.materialDesc || ""),
+            totalQty: Number(r.totalQty || 0),
+            totalValue: Number(r.totalValue || 0),
+            currency: String(r.currency || "USD")
+        }))
+
+        return { success: true, data: tires }
+    } catch (error) {
+        console.error("Error fetching SAP tire products:", error)
+        return { success: false, error: "Gagal memuat produk ban SAP" }
     }
 }
 

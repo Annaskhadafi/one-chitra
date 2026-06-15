@@ -11,6 +11,7 @@ export const rmiRecords = pgTable("rmi_records", {
     carbonBlack: numeric("carbon_black", { precision: 14, scale: 4 }).notNull().default("0"),
     steelCord: numeric("steel_cord", { precision: 14, scale: 4 }).notNull().default("0"),
     rmiValue: numeric("rmi_value", { precision: 14, scale: 4 }).notNull().default("0"),
+    source: varchar("source", { length: 255 }), // Sumber data RMI (e.g. API, Manual, IRSG)
     remarks: text("remarks"),
     createdBy: text("created_by").references(() => user.id),
     createdAt: timestamp("created_at").defaultNow().notNull(),
