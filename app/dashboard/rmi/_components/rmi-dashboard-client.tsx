@@ -261,6 +261,21 @@ export function RmiDashboardClient({
         }
     }, [rmiRecords])
 
+    // Load data detail bulanan secara otomatis untuk grafik bulanan
+    React.useEffect(() => {
+        const loadMonthlyDetails = async () => {
+            try {
+                const res = await getExternalPricesForMonthlyCollapse()
+                if (res.success && res.data) {
+                    setRmiMonthlyDetails(res.data)
+                }
+            } catch (err) {
+                console.error("Gagal memuat data detail bulanan awal", err)
+            }
+        }
+        loadMonthlyDetails()
+    }, [])
+
     // Auto calculate average rate based on rateMonth1, rateMonth2, rateMonth3
     React.useEffect(() => {
         const avg = (rateMonth1 + rateMonth2 + rateMonth3) / 3
@@ -351,54 +366,89 @@ export function RmiDashboardClient({
         }
     }, [selectedBaseQuarter, selectedEvalQuarter, weightRmi, weightFx, simulatedRate, basePrice, rmiRecords, quarterlyRates])
 
-    // Data untuk Chart Recharts
+    // Data untuk Chart Recharts (Bulanan)
     const chartData = useMemo(() => {
-        // Gabungkan RMI dan Rate per Quarter
-        const dataMap = new Map<string, any>()
+        const list: any[] = []
 
-        rmiRecords.forEach(r => {
-            const key = `${r.year}-Q${r.quarter}`
-            dataMap.set(key, {
-                key,
-                quarterLabel: `Q${r.quarter} ${r.year}`,
-                naturalRubber: parseFloat(r.naturalRubber),
-                syntheticRubber: parseFloat(r.syntheticRubber),
-                carbonBlack: parseFloat(r.carbonBlack),
-                steelCord: parseFloat(r.steelCord),
-                freight: parseFloat(r.freight || "0"),
-                fxIndex: parseFloat(r.fxIndex || "0"),
-                rmiValue: parseFloat(r.rmiValue),
-                rate: 0
-            })
-        })
+        // Konstanta dasar Q4 2025 untuk hitung indeks bulanan
+        const bases = {
+            nr: 2.05,
+            sr: 13200.0,
+            cb: 1.45,
+            sc: 1.10,
+            fr: 2800.0,
+            fx: 16500.0
+        }
 
-        quarterlyRates.forEach(r => {
-            const key = `${r.year}-Q${r.quarter}`
-            if (dataMap.has(key)) {
-                dataMap.get(key).rate = parseFloat(r.averageRate)
-            } else {
-                dataMap.set(key, {
-                    key,
-                    quarterLabel: `Q${r.quarter} ${r.year}`,
-                    naturalRubber: 0,
-                    syntheticRubber: 0,
-                    carbonBlack: 0,
-                    steelCord: 0,
-                    freight: 0,
-                    fxIndex: 0,
-                    rmiValue: 0,
-                    rate: parseFloat(r.averageRate)
-                })
+        // Singkatan nama bulan
+        const getShortMonthName = (monthIndex: number) => {
+            const names = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agt", "Sep", "Okt", "Nov", "Des"]
+            return names[monthIndex - 1] || ""
+        }
+
+        Object.keys(rmiMonthlyDetails).forEach(qKey => {
+            const [year, qPart] = qKey.split("-Q").map(Number)
+            
+            // Filter: Hanya tampilkan data mulai dari Q4 2025
+            if (year < 2025 || (year === 2025 && qPart < 4)) {
+                return
             }
+
+            const details = rmiMonthlyDetails[qKey] || []
+
+            // Ambil kurs tengah rata-rata kuartal ini dari database
+            const qRateObj = quarterlyRates.find(r => r.year === year && r.quarter === qPart)
+            const qRateVal = qRateObj ? parseFloat(qRateObj.averageRate) : 16500
+
+            details.forEach((m: any) => {
+                // Konversi nominal material ke Indeks (%)
+                const idxNR = m.naturalRubber > 0 ? (m.naturalRubber / bases.nr) * 100 : 0
+                const idxSR = m.syntheticRubber > 0 ? (m.syntheticRubber / bases.sr) * 100 : 0
+                const idxCB = m.carbonBlack > 0 ? (m.carbonBlack / bases.cb) * 100 : 0
+                const idxSC = m.steelCord > 0 ? (m.steelCord / bases.sc) * 100 : 0
+                const idxFR = m.freight > 0 ? (m.freight / bases.fr) * 100 : 0
+                
+                // Gunakan rate bulanan spesifik jika ada (misal rateMonth1, dst), jika tidak gunakan rata-rata kuartal
+                let currentMonthRate = qRateVal
+                if (qRateObj) {
+                    const mOffset = (m.monthIndex - 1) % 3 // 0, 1, 2
+                    const monthlyRatesArray = [
+                        parseFloat(qRateObj.rateMonth1 || "0"),
+                        parseFloat(qRateObj.rateMonth2 || "0"),
+                        parseFloat(qRateObj.rateMonth3 || "0")
+                    ]
+                    const specificRate = monthlyRatesArray[mOffset]
+                    if (specificRate > 0) {
+                        currentMonthRate = specificRate
+                    }
+                }
+
+                const idxFX = (currentMonthRate / bases.fx) * 100
+
+                // Hitung RMI bulanan: sum(bobot * indeks)
+                let rmiVal = 0
+                if (idxNR > 0 || idxSR > 0 || idxCB > 0 || idxSC > 0) {
+                    rmiVal = (idxNR * 0.35) + (idxSR * 0.20) + (idxCB * 0.20) + (idxSC * 0.15) + (idxFR * 0.05) + (idxFX * 0.05)
+                }
+
+                list.push({
+                    sortKey: year * 100 + m.monthIndex,
+                    monthLabel: `${getShortMonthName(m.monthIndex)} '${String(year).slice(-2)}`,
+                    naturalRubber: parseFloat(idxNR.toFixed(2)),
+                    syntheticRubber: parseFloat(idxSR.toFixed(2)),
+                    carbonBlack: parseFloat(idxCB.toFixed(2)),
+                    steelCord: parseFloat(idxSC.toFixed(2)),
+                    freight: parseFloat(idxFR.toFixed(2)),
+                    fxIndex: parseFloat(idxFX.toFixed(2)),
+                    rmiValue: rmiVal > 0 ? parseFloat(rmiVal.toFixed(2)) : 0,
+                    rate: currentMonthRate
+                })
+            })
         })
 
-        return Array.from(dataMap.values())
-            .sort((a, b) => {
-                const [aY, aQ] = a.key.split("-Q").map(Number)
-                const [bY, bQ] = b.key.split("-Q").map(Number)
-                return aY !== bY ? aY - bY : aQ - bQ
-            })
-    }, [rmiRecords, quarterlyRates])
+        // Urutkan berdasarkan waktu (sortKey)
+        return list.sort((a, b) => a.sortKey - b.sortKey)
+    }, [rmiMonthlyDetails, quarterlyRates])
 
     // Virtualization setup
     const rmiParentRef = useRef<HTMLDivElement>(null)
@@ -759,7 +809,7 @@ export function RmiDashboardClient({
                             <div className="flex items-center justify-between">
                                 <div>
                                     <CardTitle className="text-lg text-slate-800">Tren Komponen RMI (Raw Material Index)</CardTitle>
-                                    <CardDescription>Grafik historis harga bahan baku ban per kuartal (Natural Rubber, Synthetic Rubber, dll.) dalam USD</CardDescription>
+                                    <CardDescription>Grafik historis persentase indeks bahan baku ban per bulan (Basis: Q4 2025 = 100%)</CardDescription>
                                 </div>
                                 <BarChart2 className="h-5 w-5 text-indigo-600" />
                             </div>
@@ -769,8 +819,8 @@ export function RmiDashboardClient({
                                 <ResponsiveContainer width="100%" height="100%">
                                     <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                                         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                                        <XAxis dataKey="quarterLabel" stroke="#000000" fontSize={11} tickLine={false} tick={{ fill: '#000000', fontWeight: 'bold' }} />
-                                        <YAxis stroke="#000000" fontSize={11} tickLine={false} tick={{ fill: '#000000', fontWeight: 'bold' }} label={{ value: "Indeks / USD per kg", angle: -90, position: "insideLeft", offset: 10, fill: "#000000", fontSize: 11, fontWeight: 'bold' }} />
+                                        <XAxis dataKey="monthLabel" stroke="#000000" fontSize={11} tickLine={false} tick={{ fill: '#000000', fontWeight: 'bold' }} />
+                                        <YAxis stroke="#000000" fontSize={11} tickLine={false} tick={{ fill: '#000000', fontWeight: 'bold' }} label={{ value: "Indeks Komoditas (%)", angle: -90, position: "insideLeft", offset: 10, fill: "#000000", fontSize: 11, fontWeight: 'bold' }} />
                                         <RechartsTooltip 
                                             contentStyle={{ backgroundColor: "#ffffff", borderRadius: "12px", border: "1px solid #e2e8f0", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.05)" }}
                                             labelClassName="font-bold text-slate-800"
@@ -1133,126 +1183,184 @@ export function RmiDashboardClient({
                             <div className="rounded-md border overflow-hidden">
                                 <div ref={rmiParentRef} className="overflow-auto h-[350px] relative scrollbar-thin scrollbar-thumb-accent">
                                     <Table>
-                                        <TableHeader className="sticky top-0 z-10 bg-background shadow-sm">
-                                            <TableRow>
-                                                <TableHead className="w-10"></TableHead>
-                                                <TableHead>Periode</TableHead>
-                                                <TableHead>Natural Rubber</TableHead>
-                                                <TableHead>Synthetic Rubber</TableHead>
-                                                <TableHead>Carbon Black</TableHead>
-                                                <TableHead>Steel Cord</TableHead>
-                                                <TableHead>Freight</TableHead>
-                                                <TableHead>FX Index</TableHead>
-                                                <TableHead className="font-extrabold text-indigo-600">Total RMI Value</TableHead>
-                                                <TableHead>Source</TableHead>
-                                                <TableHead>Remarks</TableHead>
-                                                {(canEdit || canDelete) && <TableHead className="text-right">Aksi</TableHead>}
+                                        <TableHeader className="sticky top-0 z-10 bg-background shadow-sm text-center">
+                                            <TableRow className="border-b-0 hover:bg-transparent">
+                                                <TableHead className="w-10 border-r" rowSpan={2}></TableHead>
+                                                <TableHead className="border-r min-w-[120px]" rowSpan={2}>Periode</TableHead>
+                                                <TableHead className="border-r text-center font-bold text-slate-800 bg-emerald-50/50" colSpan={3}>Natural Rubber</TableHead>
+                                                <TableHead className="border-r text-center font-bold text-slate-800 bg-amber-50/50" colSpan={3}>Synthetic Rubber</TableHead>
+                                                <TableHead className="border-r text-center font-bold text-slate-800 bg-blue-50/50" colSpan={3}>Carbon Black</TableHead>
+                                                <TableHead className="border-r text-center font-bold text-slate-800 bg-violet-50/50" colSpan={3}>Steel Cord</TableHead>
+                                                <TableHead className="border-r text-center font-bold text-slate-800 bg-pink-50/50" colSpan={3}>Freight</TableHead>
+                                                <TableHead className="border-r" rowSpan={2}>FX Index</TableHead>
+                                                <TableHead className="border-r font-extrabold text-indigo-600 bg-indigo-50/30" rowSpan={2}>Total RMI Value</TableHead>
+                                                {(canEdit || canDelete) && <TableHead className="text-right" rowSpan={2}>Aksi</TableHead>}
+                                            </TableRow>
+                                            <TableRow className="hover:bg-transparent text-[10px]">
+                                                {/* Natural Rubber */}
+                                                <TableHead className="text-center font-medium bg-emerald-50/20">Value</TableHead>
+                                                <TableHead className="text-center font-medium bg-emerald-50/20">OUM</TableHead>
+                                                <TableHead className="text-center font-medium bg-emerald-50/20 border-r">Source</TableHead>
+                                                {/* Synthetic Rubber */}
+                                                <TableHead className="text-center font-medium bg-amber-50/20">Value</TableHead>
+                                                <TableHead className="text-center font-medium bg-amber-50/20">OUM</TableHead>
+                                                <TableHead className="text-center font-medium bg-amber-50/20 border-r">Source</TableHead>
+                                                {/* Carbon Black */}
+                                                <TableHead className="text-center font-medium bg-blue-50/20">Value</TableHead>
+                                                <TableHead className="text-center font-medium bg-blue-50/20">OUM</TableHead>
+                                                <TableHead className="text-center font-medium bg-blue-50/20 border-r">Source</TableHead>
+                                                {/* Steel Cord */}
+                                                <TableHead className="text-center font-medium bg-violet-50/20">Value</TableHead>
+                                                <TableHead className="text-center font-medium bg-violet-50/20">OUM</TableHead>
+                                                <TableHead className="text-center font-medium bg-violet-50/20 border-r">Source</TableHead>
+                                                {/* Freight */}
+                                                <TableHead className="text-center font-medium bg-pink-50/20">Value</TableHead>
+                                                <TableHead className="text-center font-medium bg-pink-50/20">OUM</TableHead>
+                                                <TableHead className="text-center font-medium bg-pink-50/20 border-r">Source</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
                                             {rmiVirtualizer.getVirtualItems().length > 0 ? (
                                                 <>
-                                                    <TableRow style={{ height: `${rmiBefore}px` }} className="border-none">
-                                                        <TableCell colSpan={12} className="p-0" />
-                                                    </TableRow>
-                                                    {rmiVirtualizer.getVirtualItems().map((virtualRow) => {
-                                                        const r = rmiRecords[virtualRow.index]
-                                                        const key = `${r.year}-Q${r.quarter}`
-                                                        const isExpanded = expandedRmiIds.has(r.id)
-                                                        const details = rmiMonthlyDetails[key] || []
-
-                                                        return (
-                                                            <React.Fragment key={`rmi-group-${r.id}`}>
-                                                                <TableRow 
-                                                                    className="hover:bg-slate-50/50 cursor-pointer transition-colors"
-                                                                    onClick={() => toggleRmiExpand(r)}
-                                                                >
-                                                                    <TableCell 
-                                                                        className="p-2 text-center"
-                                                                        onClick={(e) => { e.stopPropagation(); toggleRmiExpand(r); }}
-                                                                    >
-                                                                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0 hover:bg-slate-100">
-                                                                            {isExpanded ? (
-                                                                                <ChevronDown className="h-4 w-4 text-indigo-600" />
-                                                                            ) : (
-                                                                                <ChevronRight className="h-4 w-4 text-slate-400" />
-                                                                            )}
-                                                                        </Button>
-                                                                    </TableCell>
-                                                                    <TableCell className="font-semibold">{formatQuarterLabel(r.year, r.quarter)}</TableCell>
-                                                                    <TableCell>{parseFloat(r.naturalRubber).toFixed(4)}</TableCell>
-                                                                    <TableCell>{parseFloat(r.syntheticRubber).toFixed(4)}</TableCell>
-                                                                    <TableCell>{parseFloat(r.carbonBlack).toFixed(4)}</TableCell>
-                                                                    <TableCell>{parseFloat(r.steelCord).toFixed(4)}</TableCell>
-                                                                    <TableCell>{parseFloat(r.freight || "0").toFixed(2)}</TableCell>
-                                                                    <TableCell>{parseFloat(r.fxIndex || "0").toFixed(2)}%</TableCell>
-                                                                    <TableCell className="font-extrabold text-indigo-600">{parseFloat(r.rmiValue).toFixed(4)}</TableCell>
-                                                                    <TableCell>
-                                                                        {r.source ? (
-                                                                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100">
-                                                                                {r.source}
-                                                                            </span>
-                                                                        ) : <span className="text-slate-400">-</span>}
-                                                                    </TableCell>
-                                                                    <TableCell className="text-slate-500 max-w-xs truncate">{r.remarks || "-"}</TableCell>
-                                                                    {(canEdit || canDelete) && (
-                                                                        <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                                                                            <div className="flex justify-end gap-1.5">
-                                                                                {canEdit && (
-                                                                                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => openEditRmi(r)}>
-                                                                                        <Edit className="h-3.5 w-3.5 text-slate-500 hover:text-indigo-600" />
-                                                                                    </Button>
-                                                                                )}
-                                                                                {canDelete && (
-                                                                                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => handleRmiDelete(r.id)}>
-                                                                                        <Trash2 className="h-3.5 w-3.5 text-slate-500 hover:text-rose-600" />
-                                                                                    </Button>
-                                                                                )}
-                                                                            </div>
-                                                                        </TableCell>
-                                                                    )}
-                                                                </TableRow>
-                                                                {isExpanded && (
-                                                                    <>
-                                                                        {details.length > 0 ? (
-                                                                            details.map((m: any, idx: number) => (
-                                                                                <TableRow key={`rmi-sub-${r.id}-${idx}`} className="bg-slate-50/40 border-l-2 border-l-indigo-500">
-                                                                                    <TableCell />
-                                                                                    <TableCell className="pl-6 text-xs font-medium text-slate-500 flex items-center gap-1.5">
-                                                                                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
-                                                                                        {m.monthName}
-                                                                                    </TableCell>
-                                                                                    <TableCell className="text-xs text-slate-600">{m.naturalRubber > 0 ? m.naturalRubber.toFixed(4) : "-"}</TableCell>
-                                                                                    <TableCell className="text-xs text-slate-600">{m.syntheticRubber > 0 ? m.syntheticRubber.toLocaleString("id-ID") : "-"}</TableCell>
-                                                                                    <TableCell className="text-xs text-slate-600">{m.carbonBlack > 0 ? m.carbonBlack.toFixed(4) : "-"}</TableCell>
-                                                                                    <TableCell className="text-xs text-slate-600">{m.steelCord > 0 ? m.steelCord.toFixed(4) : "-"}</TableCell>
-                                                                                    <TableCell className="text-xs text-slate-600">{m.freight > 0 ? m.freight.toLocaleString("id-ID") : "-"}</TableCell>
-                                                                                    <TableCell className="text-xs text-slate-400">-</TableCell>
-                                                                                    <TableCell className="text-xs text-slate-400">-</TableCell>
-                                                                                    <TableCell className="text-xs text-slate-400">-</TableCell>
-                                                                                    <TableCell className="text-xs text-slate-500 italic" colSpan={2}>Rata-rata Bulanan API</TableCell>
-                                                                                </TableRow>
-                                                                            ))
-                                                                        ) : (
-                                                                            <TableRow className="bg-slate-50/40">
-                                                                                <TableCell />
-                                                                                <TableCell colSpan={11} className="text-xs text-slate-400 italic py-2">
-                                                                                    Memuat detail bulanan dari API...
-                                                                                </TableCell>
-                                                                            </TableRow>
-                                                                        )}
-                                                                    </>
-                                                                )}
-                                                            </React.Fragment>
-                                                        )
-                                                    })}
-                                                    <TableRow style={{ height: `${rmiAfter}px` }} className="border-none">
-                                                        <TableCell colSpan={12} className="p-0" />
-                                                    </TableRow>
+                                                     <TableRow style={{ height: `${rmiBefore}px` }} className="border-none">
+                                                         <TableCell colSpan={20} className="p-0" />
+                                                     </TableRow>
+                                                     {rmiVirtualizer.getVirtualItems().map((virtualRow) => {
+                                                         const r = rmiRecords[virtualRow.index]
+                                                         const key = `${r.year}-Q${r.quarter}`
+                                                         const isExpanded = expandedRmiIds.has(r.id)
+                                                         const details = rmiMonthlyDetails[key] || []
+                                                         
+                                                         // Tentukan label source spesifik
+                                                         const rubberSrc = r.source === "API ICS (Auto)" ? "Rubber" : (r.source ? r.source.replace("API ICS (", "").replace(")", "") : "Manual")
+                                                         const synthSrc = r.source === "API ICS (Auto)" ? "Synthetic Rubber" : (r.source ? r.source.replace("API ICS (", "").replace(")", "") : "Manual")
+                                                         const carbonSrc = r.source === "API ICS (Auto)" ? "CB Europe" : (r.source ? r.source.replace("API ICS (", "").replace(")", "") : "Manual")
+                                                         const steelSrc = r.source === "API ICS (Auto)" ? "HRC Steel" : (r.source ? r.source.replace("API ICS (", "").replace(")", "") : "Manual")
+                                                         const freightSrc = r.source === "API ICS (Auto)" ? "Drewry Index" : (r.source ? r.source.replace("API ICS (", "").replace(")", "") : "Manual")
+ 
+                                                         return (
+                                                             <React.Fragment key={`rmi-group-${r.id}`}>
+                                                                 <TableRow 
+                                                                     className="hover:bg-slate-50/50 cursor-pointer transition-colors"
+                                                                     onClick={() => toggleRmiExpand(r)}
+                                                                 >
+                                                                     <TableCell 
+                                                                         className="p-2 text-center"
+                                                                         onClick={(e) => { e.stopPropagation(); toggleRmiExpand(r); }}
+                                                                     >
+                                                                         <Button variant="ghost" size="sm" className="h-6 w-6 p-0 hover:bg-slate-100">
+                                                                             {isExpanded ? (
+                                                                                 <ChevronDown className="h-4 w-4 text-indigo-600" />
+                                                                             ) : (
+                                                                                 <ChevronRight className="h-4 w-4 text-slate-400" />
+                                                                             )}
+                                                                         </Button>
+                                                                     </TableCell>
+                                                                     <TableCell className="font-semibold">{formatQuarterLabel(r.year, r.quarter)}</TableCell>
+                                                                     
+                                                                     {/* Natural Rubber */}
+                                                                     <TableCell>{parseFloat(r.naturalRubber).toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</TableCell>
+                                                                     <TableCell className="text-xs text-slate-500 italic">USD/kg</TableCell>
+                                                                     <TableCell className="text-[10px] text-slate-500">{rubberSrc}</TableCell>
+                                                                     
+                                                                     {/* Synthetic Rubber */}
+                                                                     <TableCell>{parseFloat(r.syntheticRubber).toLocaleString("id-ID", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</TableCell>
+                                                                     <TableCell className="text-xs text-slate-500 italic">CNY/T</TableCell>
+                                                                     <TableCell className="text-[10px] text-slate-500">{synthSrc}</TableCell>
+                                                                     
+                                                                     {/* Carbon Black */}
+                                                                     <TableCell>{parseFloat(r.carbonBlack).toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</TableCell>
+                                                                     <TableCell className="text-xs text-slate-500 italic">USD/kg</TableCell>
+                                                                     <TableCell className="text-[10px] text-slate-500">{carbonSrc}</TableCell>
+                                                                     
+                                                                     {/* Steel Cord */}
+                                                                     <TableCell>{parseFloat(r.steelCord).toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</TableCell>
+                                                                     <TableCell className="text-xs text-slate-500 italic">USD/kg</TableCell>
+                                                                     <TableCell className="text-[10px] text-slate-500">{steelSrc}</TableCell>
+                                                                     
+                                                                     {/* Freight */}
+                                                                     <TableCell>{parseFloat(r.freight || "0").toLocaleString("id-ID", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</TableCell>
+                                                                     <TableCell className="text-xs text-slate-500 italic">USD/40ft</TableCell>
+                                                                     <TableCell className="text-[10px] text-slate-500">{freightSrc}</TableCell>
+                                                                     
+                                                                     <TableCell>{parseFloat(r.fxIndex || "0").toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%</TableCell>
+                                                                     <TableCell className="font-extrabold text-indigo-600">{parseFloat(r.rmiValue).toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                                                                     {(canEdit || canDelete) && (
+                                                                         <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                                                                             <div className="flex justify-end gap-1.5">
+                                                                                 {canEdit && (
+                                                                                     <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => openEditRmi(r)}>
+                                                                                         <Edit className="h-3.5 w-3.5 text-slate-500 hover:text-indigo-600" />
+                                                                                     </Button>
+                                                                                 )}
+                                                                                 {canDelete && (
+                                                                                     <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => handleRmiDelete(r.id)}>
+                                                                                         <Trash2 className="h-3.5 w-3.5 text-slate-500 hover:text-rose-600" />
+                                                                                     </Button>
+                                                                                 )}
+                                                                             </div>
+                                                                         </TableCell>
+                                                                     )}
+                                                                 </TableRow>
+                                                                 {isExpanded && (
+                                                                     <>
+                                                                         {details.length > 0 ? (
+                                                                             details.map((m: any, idx: number) => (
+                                                                                 <TableRow key={`rmi-sub-${r.id}-${idx}`} className="bg-slate-50/40 border-l-2 border-l-indigo-500">
+                                                                                     <TableCell />
+                                                                                     <TableCell className="pl-6 text-xs font-medium text-slate-500 flex items-center gap-1.5">
+                                                                                         <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                                                                                         {m.monthName}
+                                                                                     </TableCell>
+                                                                                     {/* Natural Rubber */}
+                                                                                     <TableCell className="text-xs text-slate-600">{m.naturalRubber > 0 ? m.naturalRubber.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 4 }) : "-"}</TableCell>
+                                                                                     <TableCell className="text-xs text-slate-400 italic">USD/kg</TableCell>
+                                                                                     <TableCell className="text-[10px] text-slate-400">Rubber</TableCell>
+                                                                                     
+                                                                                     {/* Synthetic Rubber */}
+                                                                                     <TableCell className="text-xs text-slate-600">{m.syntheticRubber > 0 ? m.syntheticRubber.toLocaleString("id-ID", { minimumFractionDigits: 0, maximumFractionDigits: 2 }) : "-"}</TableCell>
+                                                                                     <TableCell className="text-xs text-slate-400 italic">CNY/T</TableCell>
+                                                                                     <TableCell className="text-[10px] text-slate-400">Synthetic Rubber</TableCell>
+                                                                                     
+                                                                                     {/* Carbon Black */}
+                                                                                     <TableCell className="text-xs text-slate-600">{m.carbonBlack > 0 ? m.carbonBlack.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 4 }) : "-"}</TableCell>
+                                                                                     <TableCell className="text-xs text-slate-400 italic">USD/kg</TableCell>
+                                                                                     <TableCell className="text-[10px] text-slate-400">CB Europe</TableCell>
+                                                                                     
+                                                                                     {/* Steel Cord */}
+                                                                                     <TableCell className="text-xs text-slate-600">{m.steelCord > 0 ? m.steelCord.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 4 }) : "-"}</TableCell>
+                                                                                     <TableCell className="text-xs text-slate-400 italic">USD/kg</TableCell>
+                                                                                     <TableCell className="text-[10px] text-slate-400">HRC Steel</TableCell>
+                                                                                     
+                                                                                     {/* Freight */}
+                                                                                     <TableCell className="text-xs text-slate-600">{m.freight > 0 ? m.freight.toLocaleString("id-ID", { minimumFractionDigits: 0, maximumFractionDigits: 2 }) : "-"}</TableCell>
+                                                                                     <TableCell className="text-xs text-slate-400 italic">USD/40ft</TableCell>
+                                                                                     <TableCell className="text-[10px] text-slate-400">Drewry Index</TableCell>
+                                                                                     
+                                                                                     <TableCell className="text-xs text-slate-400">-</TableCell>
+                                                                                     <TableCell className="text-xs text-slate-500 italic" colSpan={2}>Rata-rata Bulanan API</TableCell>
+                                                                                 </TableRow>
+                                                                             ))
+                                                                         ) : (
+                                                                             <TableRow className="bg-slate-50/40">
+                                                                                 <TableCell />
+                                                                                 <TableCell colSpan={19} className="text-xs text-slate-400 italic py-2">
+                                                                                     Memuat detail bulanan dari API...
+                                                                                 </TableCell>
+                                                                             </TableRow>
+                                                                         )}
+                                                                     </>
+                                                                 )}
+                                                             </React.Fragment>
+                                                         )
+                                                     })}
+                                                     <TableRow style={{ height: `${rmiAfter}px` }} className="border-none">
+                                                         <TableCell colSpan={20} className="p-0" />
+                                                     </TableRow>
                                                 </>
                                             ) : (
                                                 <TableRow>
-                                                    <TableCell colSpan={12} className="h-24 text-center">Data RMI kosong.</TableCell>
+                                                    <TableCell colSpan={22} className="h-24 text-center">Data RMI kosong.</TableCell>
                                                 </TableRow>
                                             )}
                                         </TableBody>
