@@ -844,10 +844,18 @@ export function MonthlyReportTab() {
             }>
             hasMatch: boolean
         }>
+        topCustomers: Array<{
+            customerName: string
+            totalValue: number
+            totalQty: number
+            itemCount: number
+            categories: Record<string, { value: number; qty: number; count: number }>
+        }>
         readyStockCount: number
         totalLost: number
         totalMatched: number
         totalUnmatched: number
+        totalValue: number
     } | null>(null)
     const slideRefs = useRef<Array<HTMLElement | null>>([]);
 
@@ -1164,33 +1172,47 @@ export function MonthlyReportTab() {
     const lostSaleChartSlide = lostSaleSlide + lostSaleTablePages.length
     const rmiSummarySlide = lostSaleChartSlide + lostSaleChartPages.length
 
-    // Lost Sale + Stock Match: Group by Customer, max 2 slides
+    // Lost Sale + Stock Match: Top 5 Customers with Category Breakdown, max 2 slides
     const lostStockItems = (lostSaleStockData?.lostItems ?? []).filter((l: any) => {
         const [fy, fm] = month.split("-").map(Number)
         const d = new Date(l.date)
         return d.getFullYear() === fy && (d.getMonth() + 1) === fm
     })
 
-    // Group by customer
-    const customerMap: Record<string, { customerName: string; items: typeof lostStockItems; totalMatched: number; totalUnmatched: number }> = {}
+    // Filter topCustomers by current month
+    const monthTopCustomers = (lostSaleStockData?.topCustomers ?? []).filter((c: any) => {
+        // Check if any of customer's items are in current month
+        return lostStockItems.some((item: any) => item.customerName === c.customerName)
+    })
+
+    // Re-calculate top 5 from month items
+    const customerMap: Record<string, { customerName: string; totalValue: number; totalQty: number; itemCount: number; categories: Record<string, { value: number; qty: number; count: number }> }> = {}
     lostStockItems.forEach((item: any) => {
         const name = item.customerName || "Unknown"
-        if (!customerMap[name]) customerMap[name] = { customerName: name, items: [], totalMatched: 0, totalUnmatched: 0 }
-        customerMap[name].items.push(item)
-        if (item.hasMatch) customerMap[name].totalMatched++
-        else customerMap[name].totalUnmatched++
+        if (!customerMap[name]) customerMap[name] = { customerName: name, totalValue: 0, totalQty: 0, itemCount: 0, categories: {} }
+        const val = Number(item.unitPrice || 0) * item.quantity
+        const cat = (item.category || "OTHER").toUpperCase()
+        customerMap[name].totalValue += val
+        customerMap[name].totalQty += item.quantity
+        customerMap[name].itemCount += 1
+        if (!customerMap[name].categories[cat]) customerMap[name].categories[cat] = { value: 0, qty: 0, count: 0 }
+        customerMap[name].categories[cat].value += val
+        customerMap[name].categories[cat].qty += item.quantity
+        customerMap[name].categories[cat].count += 1
     })
-    const customerGroups = Object.values(customerMap).sort((a, b) => b.items.length - a.items.length)
+    const topCustSorted = Object.values(customerMap).sort((a, b) => b.totalValue - a.totalValue)
+    const top5Customers = topCustSorted.slice(0, 5)
+    const restCustomers = topCustSorted.slice(5)
 
-    // Split into max 2 slides (first half + second half)
+    // Split into max 2 slides
     const MAX_SLIDES = 2
-    const lostStockPages: typeof customerGroups[] = []
-    if (customerGroups.length <= MAX_SLIDES) {
-        customerGroups.forEach(g => lostStockPages.push([g]))
+    const lostStockPages: typeof topCustSorted[][] = []
+    if (top5Customers.length <= 3) {
+        lostStockPages.push(top5Customers)
+        if (restCustomers.length > 0) lostStockPages.push(restCustomers)
     } else {
-        const half = Math.ceil(customerGroups.length / MAX_SLIDES)
-        lostStockPages.push(customerGroups.slice(0, half))
-        lostStockPages.push(customerGroups.slice(half))
+        lostStockPages.push(top5Customers.slice(0, 3))
+        lostStockPages.push(top5Customers.slice(3))
     }
     if (lostStockPages.length === 0) lostStockPages.push([])
 
@@ -1715,172 +1737,138 @@ export function MonthlyReportTab() {
                                 )
                             })()}
                         </Slide>,
-                        ...lostStockPages.map((pageGroups, pageIndex) => {
+                        ...lostStockPages.map((pageCustomers, pageIndex) => {
                             const lsData = lostSaleStockData
                             const totalLost = lsData?.totalLost ?? 0
                             const totalMatched = lsData?.totalMatched ?? 0
-                            const totalUnmatched = lsData?.totalUnmatched ?? 0
+                            const totalValue = lsData?.totalValue ?? 0
                             const readyStockCount = lsData?.readyStockCount ?? 0
                             const allMonthItems = lostStockItems
                             const monthMatched = allMonthItems.filter((i: any) => i.hasMatch).length
-                            const monthUnmatched = allMonthItems.length - monthMatched
                             const isFirstPage = pageIndex === 0
-
-                            // Status distribution (all month items)
-                            const statusDist: Record<string, number> = {}
-                            allMonthItems.forEach((i: any) => {
-                                statusDist[i.status] = (statusDist[i.status] || 0) + 1
-                            })
-                            const statusData = Object.entries(statusDist).map(([name, value]) => ({ name, value }))
-
-                            const STATUS_COLORS: Record<string, string> = { rejected: "#dc2626", expired: "#f97316", cancelled: "#6b7280", lost: "#7c3aed", converted: "#16a34a", approved: "#16a34a" }
                             const slideNum = lostStockSlideStart + pageIndex
 
-                            // Count items in this page
-                            const pageCount = pageGroups.reduce((sum, g) => sum + g.items.length, 0)
-                            const groupCount = pageGroups.length
+                            const STATUS_COLORS: Record<string, string> = { rejected: "#dc2626", expired: "#f97316", cancelled: "#6b7280", lost: "#7c3aed", converted: "#16a34a", approved: "#16a34a" }
+                            const CAT_COLORS: Record<string, string> = { TYRE: "#0f4c81", ACC: "#f97316", PART: "#16a34a", OTHER: "#6b7280" }
 
                             return (
-                                <Slide key={`lost-stock-${pageIndex}`} eyebrow={`Slide ${slideNum} - Lost Sale per Customer${lostStockPages.length > 1 ? ` (${pageIndex + 1}/${lostStockPages.length})` : ''}`} title={`Lost Sale per Customer — ${monthLabel(month)}${lostStockPages.length > 1 ? ` [${pageIndex + 1}/${lostStockPages.length}]` : ''}`}>
+                                <Slide key={`lost-stock-${pageIndex}`} eyebrow={`Slide ${slideNum} — Top Customer Lost Sale${lostStockPages.length > 1 ? ` (${pageIndex + 1}/${lostStockPages.length})` : ''}`} title={`Top Customer — Lost Sale Value — ${monthLabel(month)}`}>
                                     <div className="grid h-[calc(100%-88px)] grid-rows-[auto_1fr] gap-3">
-                                        {/* KPI Row - only on first page */}
+                                        {/* KPI Row */}
                                         {isFirstPage && (
-                                            <div className="grid grid-cols-5 gap-2">
+                                            <div className="grid grid-cols-4 gap-2">
                                                 <div className="rounded-lg border bg-white p-3 shadow-sm">
-                                                    <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Total Lost</p>
+                                                    <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Total Lost Items</p>
                                                     <p className="text-2xl font-black text-red-600">{allMonthItems.length}</p>
-                                                    <p className="text-[9px] text-slate-400">{totalLost} total keseluruhan</p>
+                                                    <p className="text-[9px] text-slate-400">{topCustSorted.length} customer</p>
+                                                </div>
+                                                <div className="rounded-lg border bg-white p-3 shadow-sm">
+                                                    <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Total Value Lost</p>
+                                                    <p className="text-2xl font-black text-red-600">${totalValue.toLocaleString("en-US", { maximumFractionDigits: 0 })}</p>
+                                                    <p className="text-[9px] text-slate-400">nilai quotation hilang</p>
                                                 </div>
                                                 <div className="rounded-lg border bg-white p-3 shadow-sm">
                                                     <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Bisa Dipulihkan</p>
                                                     <p className="text-2xl font-black text-emerald-600">{monthMatched}</p>
-                                                    <p className="text-[9px] text-slate-400">cocok dengan stok ready</p>
+                                                    <p className="text-[9px] text-slate-400">item cocok dengan stok</p>
                                                 </div>
                                                 <div className="rounded-lg border bg-white p-3 shadow-sm">
-                                                    <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Belum Cocok</p>
-                                                    <p className="text-2xl font-black text-amber-600">{monthUnmatched}</p>
-                                                    <p className="text-[9px] text-slate-400">perlu cari alternatif</p>
-                                                </div>
-                                                <div className="rounded-lg border bg-white p-3 shadow-sm">
-                                                    <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Ready Stock Items</p>
+                                                    <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Ready Stock</p>
                                                     <p className="text-2xl font-black text-[#0f4c81]">{readyStockCount}</p>
-                                                    <p className="text-[9px] text-slate-400">item tersedia di SAP</p>
-                                                </div>
-                                                <div className="rounded-lg border bg-white p-3 shadow-sm">
-                                                    <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Recovery Rate</p>
-                                                    <p className={`text-2xl font-black ${allMonthItems.length > 0 && (monthMatched / allMonthItems.length) > 0.5 ? "text-emerald-600" : "text-amber-600"}`}>
-                                                        {allMonthItems.length > 0 ? Math.round((monthMatched / allMonthItems.length) * 100) : 0}%
-                                                    </p>
-                                                    <p className="text-[9px] text-slate-400">persentase match</p>
+                                                    <p className="text-[9px] text-slate-400">item tersedia SAP</p>
                                                 </div>
                                             </div>
                                         )}
 
-                                        {/* Content: Status (first page) + Customer Groups */}
-                                        <div className={`grid ${isFirstPage ? 'grid-cols-[0.8fr_1.2fr]' : 'grid-cols-1'} gap-3`}>
-                                            {/* Left: Status Distribution (first page only) */}
-                                            {isFirstPage && (
-                                                <div className="flex min-h-0 flex-col gap-3">
-                                                    <div className="flex-1 rounded-lg border bg-white p-3 shadow-sm">
-                                                        <p className="mb-1 text-sm font-black text-slate-900">Distribusi Status</p>
-                                                        <div className="mt-2 flex flex-wrap gap-2">
-                                                            {statusData.map(s => (
-                                                                <div key={s.name} className="flex items-center gap-2 rounded-md border px-3 py-1.5">
-                                                                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: STATUS_COLORS[s.name] || "#94a3b8" }} />
-                                                                    <span className="text-xs font-semibold text-slate-700 capitalize">{s.name}</span>
-                                                                    <span className="text-xs font-bold" style={{ color: STATUS_COLORS[s.name] || "#334155" }}>{s.value}</span>
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                    <div className="flex-[2] rounded-lg border bg-white p-3 shadow-sm overflow-auto">
-                                                        <p className="mb-1 text-sm font-black text-slate-900">Ringkasan per Customer</p>
-                                                        <p className="mb-2 text-[10px] text-slate-400">{customerGroups.length} customer memiliki lost sale</p>
-                                                        <div className="space-y-1.5">
-                                                            {customerGroups.map((g, idx) => (
-                                                                <div key={idx} className="flex items-center gap-2 rounded-md bg-slate-50 px-2.5 py-1.5">
-                                                                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-200 text-[9px] font-bold text-slate-600">{idx + 1}</span>
-                                                                    <span className="min-w-0 flex-1 truncate text-[10px] font-semibold text-slate-700">{g.customerName}</span>
-                                                                    <span className="text-[10px] font-bold text-slate-500">{g.items.length} item</span>
-                                                                    <span className={`shrink-0 rounded px-1.5 py-0.5 text-[8px] font-bold ${g.totalMatched > 0 ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-600"}`}>
-                                                                        {g.totalMatched > 0 ? `${g.totalMatched} STOK` : "NO STOK"}
-                                                                    </span>
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            )}
+                                        {/* Customer Cards */}
+                                        <div className="min-h-0 overflow-auto">
+                                            <div className="grid grid-cols-1 gap-3">
+                                                {pageCustomers.map((cust, ci) => {
+                                                    const custItems = lostStockItems.filter((i: any) => i.customerName === cust.customerName)
+                                                    const matchedCount = custItems.filter((i: any) => i.hasMatch).length
+                                                    const cats = Object.entries(cust.categories).sort(([, a], [, b]) => b.value - a.value)
+                                                    const rank = pageIndex * 3 + ci + 1
 
-                                            {/* Right/Full: Customer Groups with Items */}
-                                            <div className="flex min-h-0 flex-col rounded-lg border bg-white p-3 shadow-sm overflow-auto">
-                                                <div className="mb-2 flex items-center justify-between">
-                                                    <div>
-                                                        <p className="text-sm font-black text-slate-900">
-                                                            {isFirstPage ? "Detail Lost Sale per Customer" : `Lanjutan — Customer (${pageIndex + 1}/${lostStockPages.length})`}
-                                                        </p>
-                                                        <p className="text-[10px] text-slate-400">{groupCount} customer, {pageCount} item</p>
-                                                    </div>
-                                                    {isFirstPage && <span className="rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">{monthMatched} match</span>}
-                                                </div>
-                                                <div className="min-h-0 flex-1 space-y-3 overflow-auto">
-                                                    {pageGroups.map((group, gi) => (
-                                                        <div key={gi} className="rounded-lg border border-slate-100 bg-slate-50/50 p-2.5">
-                                                            <div className="mb-1.5 flex items-center justify-between">
-                                                                <div className="flex items-center gap-2">
-                                                                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#0f4c81] text-[9px] font-bold text-white">{gi + 1}</span>
-                                                                    <span className="text-xs font-black text-slate-900">{group.customerName}</span>
+                                                    return (
+                                                        <div key={ci} className="rounded-lg border bg-white p-3 shadow-sm">
+                                                            {/* Customer Header */}
+                                                            <div className="mb-2 flex items-center justify-between">
+                                                                <div className="flex items-center gap-2.5">
+                                                                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#0f4c81] text-[11px] font-black text-white">{rank}</span>
+                                                                    <div>
+                                                                        <p className="text-sm font-black text-slate-900">{cust.customerName}</p>
+                                                                        <p className="text-[10px] text-slate-400">{cust.itemCount} item · {cust.totalQty} pcs</p>
+                                                                    </div>
                                                                 </div>
-                                                                <div className="flex items-center gap-1.5">
-                                                                    <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[8px] font-bold text-slate-600">{group.items.length} item</span>
-                                                                    {group.totalMatched > 0 && <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[8px] font-bold text-emerald-700">{group.totalMatched} cocok</span>}
-                                                                    {group.totalUnmatched > 0 && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[8px] font-bold text-amber-700">{group.totalUnmatched} belum</span>}
+                                                                <div className="text-right">
+                                                                    <p className="text-lg font-black text-slate-900">${cust.totalValue.toLocaleString("en-US", { maximumFractionDigits: 0 })}</p>
+                                                                    {matchedCount > 0 && <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[8px] font-bold text-emerald-700">{matchedCount} cocok stok</span>}
                                                                 </div>
                                                             </div>
-                                                            <table className="w-full text-left text-[9px]">
-                                                                <thead>
-                                                                    <tr className="border-b border-slate-200">
-                                                                        <th className="pb-1 font-medium text-slate-500">Produk</th>
-                                                                        <th className="pb-1 font-medium text-slate-500 text-center">Qty</th>
-                                                                        <th className="pb-1 font-medium text-slate-500">Status</th>
-                                                                        <th className="pb-1 font-medium text-emerald-600">Stok Ready</th>
-                                                                    </tr>
-                                                                </thead>
-                                                                <tbody>
-                                                                    {group.items.map((item: any, ii: number) => (
-                                                                        <tr key={ii} className="border-b border-slate-100 last:border-0">
-                                                                            <td className="py-1 font-medium text-slate-700 max-w-[160px] truncate" title={item.productName}>{item.productName}</td>
-                                                                            <td className="py-1 text-center font-mono font-bold text-slate-700">{item.quantity}</td>
-                                                                            <td className="py-1">
-                                                                                <span className="rounded px-1 py-0.5 text-[7px] font-bold capitalize" style={{ backgroundColor: (STATUS_COLORS[item.status] || "#94a3b8") + "20", color: STATUS_COLORS[item.status] || "#334155" }}>
-                                                                                    {item.status}
-                                                                                </span>
-                                                                            </td>
-                                                                            <td className="py-1">
-                                                                                {item.hasMatch ? (
-                                                                                    <div className="space-y-0.5">
-                                                                                        {item.matchedStock.slice(0, 1).map((s: any, si: number) => (
-                                                                                            <div key={si} className="flex items-center gap-1">
-                                                                                                <span className="h-1 w-1 rounded-full bg-emerald-500" />
-                                                                                                <span className="truncate text-[8px] text-emerald-700 font-medium max-w-[150px]" title={s.materialDesc}>{s.materialDesc}</span>
-                                                                                                <span className="text-[7px] text-emerald-500 font-bold">({s.totalQty})</span>
-                                                                                            </div>
-                                                                                        ))}
-                                                                                        {item.matchedStock.length > 1 && (
-                                                                                            <span className="text-[7px] text-emerald-500">+{item.matchedStock.length - 1} lagi</span>
-                                                                                        )}
-                                                                                    </div>
-                                                                                ) : (
-                                                                                    <span className="text-[8px] text-slate-400 italic">—</span>
-                                                                                )}
-                                                                            </td>
+
+                                                            {/* Category Breakdown */}
+                                                            <div className="flex gap-2">
+                                                                {cats.map(([cat, data]) => (
+                                                                    <div key={cat} className="flex items-center gap-1.5 rounded-md border px-2.5 py-1.5" style={{ borderColor: (CAT_COLORS[cat] || "#94a3b8") + "40" }}>
+                                                                        <span className="h-2 w-2 rounded-full" style={{ backgroundColor: CAT_COLORS[cat] || "#94a3b8" }} />
+                                                                        <span className="text-[10px] font-bold text-slate-700">{cat}</span>
+                                                                        <span className="text-[10px] font-black" style={{ color: CAT_COLORS[cat] || "#334155" }}>${data.value.toLocaleString("en-US", { maximumFractionDigits: 0 })}</span>
+                                                                        <span className="text-[8px] text-slate-400">({data.count} item)</span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+
+                                                            {/* Items Table */}
+                                                            <div className="mt-2 overflow-auto">
+                                                                <table className="w-full text-left text-[9px]">
+                                                                    <thead>
+                                                                        <tr className="border-b border-slate-200">
+                                                                            <th className="pb-1 font-medium text-slate-500">Produk</th>
+                                                                            <th className="pb-1 font-medium text-slate-500">Kategori</th>
+                                                                            <th className="pb-1 font-medium text-slate-500 text-center">Qty</th>
+                                                                            <th className="pb-1 font-medium text-slate-500 text-right">Value</th>
+                                                                            <th className="pb-1 font-medium text-slate-500">Status</th>
+                                                                            <th className="pb-1 font-medium text-emerald-600">Stok Ready</th>
                                                                         </tr>
-                                                                    ))}
-                                                                </tbody>
-                                                            </table>
+                                                                    </thead>
+                                                                    <tbody>
+                                                                        {custItems.map((item: any, ii: number) => {
+                                                                            const up = Number(item.unitPrice || 0)
+                                                                            const tv = up * item.quantity
+                                                                            return (
+                                                                            <tr key={ii} className="border-b border-slate-100 last:border-0">
+                                                                                <td className="py-1 font-medium text-slate-700 max-w-[150px] truncate" title={item.productName}>{item.productName}</td>
+                                                                                <td className="py-1">
+                                                                                    <span className="rounded px-1 py-0.5 text-[7px] font-bold" style={{ backgroundColor: (CAT_COLORS[(item.category || "OTHER").toUpperCase()] || "#94a3b8") + "20", color: CAT_COLORS[(item.category || "OTHER").toUpperCase()] || "#334155" }}>
+                                                                                        {(item.category || "OTHER").toUpperCase()}
+                                                                                    </span>
+                                                                                </td>
+                                                                                <td className="py-1 text-center font-mono font-bold text-slate-700">{item.quantity}</td>
+                                                                                <td className="py-1 text-right font-mono font-bold text-slate-700">${tv.toLocaleString("en-US", { maximumFractionDigits: 0 })}</td>
+                                                                                <td className="py-1">
+                                                                                    <span className="rounded px-1 py-0.5 text-[7px] font-bold capitalize" style={{ backgroundColor: (STATUS_COLORS[item.status] || "#94a3b8") + "20", color: STATUS_COLORS[item.status] || "#334155" }}>
+                                                                                        {item.status}
+                                                                                    </span>
+                                                                                </td>
+                                                                                <td className="py-1">
+                                                                                    {item.hasMatch ? (
+                                                                                        <div className="flex items-center gap-1">
+                                                                                            <span className="h-1 w-1 rounded-full bg-emerald-500" />
+                                                                                            <span className="truncate text-[8px] text-emerald-700 font-medium max-w-[120px]" title={item.matchedStock[0]?.materialDesc}>{item.matchedStock[0]?.materialDesc}</span>
+                                                                                        </div>
+                                                                                    ) : (
+                                                                                        <span className="text-[8px] text-slate-400 italic">—</span>
+                                                                                    )}
+                                                                                </td>
+                                                                            </tr>
+                                                                            )
+                                                                        })}
+                                                                    </tbody>
+                                                                </table>
+                                                            </div>
                                                         </div>
-                                                    ))}
-                                                </div>
+                                                    )
+                                                })}
                                             </div>
                                         </div>
                                     </div>

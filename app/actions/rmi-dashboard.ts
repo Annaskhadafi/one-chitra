@@ -1115,19 +1115,58 @@ export async function getLostSaleStockMatch() {
             })
         ).filter(Boolean)
 
-        // 6. Summary stats
+        // Sort by value (highest first)
+        lostItems.sort((a: any, b: any) => {
+            const valA = Number(a.unitPrice || 0) * a.quantity
+            const valB = Number(b.unitPrice || 0) * b.quantity
+            return valB - valA
+        })
+
+        // 6. Customer Summary with Category Breakdown
+        const customerSummary: Record<string, {
+            customerName: string
+            totalValue: number
+            totalQty: number
+            itemCount: number
+            categories: Record<string, { value: number; qty: number; count: number }>
+        }> = {}
+        lostItems.forEach((item: any) => {
+            const name = item.customerName || "Unknown"
+            if (!customerSummary[name]) {
+                customerSummary[name] = { customerName: name, totalValue: 0, totalQty: 0, itemCount: 0, categories: {} }
+            }
+            const val = Number(item.unitPrice || 0) * item.quantity
+            const cat = (item.category || "OTHER").toUpperCase()
+            customerSummary[name].totalValue += val
+            customerSummary[name].totalQty += item.quantity
+            customerSummary[name].itemCount += 1
+            if (!customerSummary[name].categories[cat]) {
+                customerSummary[name].categories[cat] = { value: 0, qty: 0, count: 0 }
+            }
+            customerSummary[name].categories[cat].value += val
+            customerSummary[name].categories[cat].qty += item.quantity
+            customerSummary[name].categories[cat].count += 1
+        })
+        const topCustomers = Object.values(customerSummary)
+            .sort((a, b) => b.totalValue - a.totalValue)
+            .slice(0, 10)
+
+        // 7. Summary stats
         const totalLost = lostItems.length
         const totalMatched = lostItems.filter(i => i.hasMatch).length
         const totalUnmatched = totalLost - totalMatched
+        const totalValue = lostItems.reduce((sum: number, i: any) => sum + Number(i.unitPrice || 0) * i.quantity, 0)
 
         return {
             success: true,
             data: {
                 lostItems,
+                topCustomers,
                 readyStockCount: readyStock.length,
                 totalLost,
                 totalMatched,
                 totalUnmatched,
+                totalValue,
             }
         }
     } catch (error) {
