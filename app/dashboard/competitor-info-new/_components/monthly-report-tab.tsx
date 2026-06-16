@@ -4,12 +4,15 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import Image from "next/image"
 import Papa from "papaparse"
 import { format } from "date-fns"
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, LabelList, Legend, Line, LineChart, Pie, PieChart, ReferenceLine, ResponsiveContainer, Sankey, Tooltip, XAxis, YAxis } from "recharts"
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, ComposedChart, LabelList, Legend, Line, LineChart, Pie, PieChart, ReferenceLine, ResponsiveContainer, Sankey, Tooltip, XAxis, YAxis } from "recharts"
 import { Bot, CalendarDays, Download, FileText, Loader2, RefreshCw, Sparkles, Target, Trophy, Users } from "lucide-react"
 import { toast } from "sonner"
 
 import { generateCompetitorMonthlyReportInsight } from "@/app/actions/competitor-new"
 import { getExternalPricesForMonthlyCollapse, getRmiWeights, getLostSaleStockMatch } from "@/app/actions/rmi-dashboard"
+import { getSlowMovingDashboardData, SlowMovingDashboardResult } from "@/app/actions/slow-moving-dashboard"
+import { getA2RCompetitionData } from "@/app/actions/a2r-competition"
+import { getProcurementNextAnalytics } from "@/app/actions/procurement-next"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -190,6 +193,10 @@ function formatMoney(value: number) {
     return `Rp ${value.toLocaleString("id-ID")}`
 }
 
+function formatUSD(value: number) {
+    return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(value)
+}
+
 function currentMonthKey() {
     const today = new Date()
     return format(new Date(today.getFullYear(), today.getMonth() - 1, 1), "yyyy-MM")
@@ -233,6 +240,31 @@ function sizeSegment(size: string, price: number) {
 
 function formatPercent(value: number) {
     return `${value.toLocaleString("id-ID", { maximumFractionDigits: 1 })}%`
+}
+
+function formatCurrency(value: number) {
+    return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(value)
+}
+
+function formatNumber(value: number) {
+    return new Intl.NumberFormat("id-ID").format(value)
+}
+
+function formatCompactCurrency(value: number) {
+    if (!value) return ""
+    return new Intl.NumberFormat("id-ID", { notation: "compact", style: "currency", currency: "IDR", maximumFractionDigits: 1 }).format(value)
+}
+
+function formatCompactQty(value: number) {
+    if (!value) return ""
+    return new Intl.NumberFormat("id-ID", { notation: "compact", maximumFractionDigits: 1 }).format(value)
+}
+
+function formatRupiahAxis(value: number) {
+    const formatter = new Intl.NumberFormat("id-ID", { minimumFractionDigits: 0, maximumFractionDigits: 1 })
+    if (Math.abs(value) >= 1_000_000_000) return `Rp ${formatter.format(value / 1_000_000_000)} Miliar`
+    if (Math.abs(value) >= 1_000_000) return `Rp ${formatter.format(value / 1_000_000)} Juta`
+    return formatCurrency(value)
 }
 
 function medianPriceByBrand(records: PriceRecord[], targetSize: string) {
@@ -858,6 +890,9 @@ export function MonthlyReportTab() {
         totalUnmatched: number
         totalValue: number
     } | null>(null)
+    const [slowMovingData, setSlowMovingData] = useState<SlowMovingDashboardResult | null>(null)
+    const [a2rData, setA2RData] = useState<any>(null)
+    const [procurementData, setProcurementData] = useState<any>(null)
     const slideRefs = useRef<Array<HTMLElement | null>>([]);
 
     const loadData = async () => {
@@ -926,11 +961,79 @@ export function MonthlyReportTab() {
         } catch {
             // Lost sale data is optional
         }
+        // Load Slow Moving data (non-blocking)
+        try {
+            const smData = await getSlowMovingDashboardData(["2025", "2026"], "ALL", "ALL", month)
+            setSlowMovingData(smData)
+        } catch (e) {
+            console.error("Slow moving data load failed:", e)
+        }
+        // Load A2R Competition data for current month (non-blocking)
+        try {
+            const [yearStr, monthStr] = month.split("-")
+            const a2rData = await getA2RCompetitionData({ year: parseInt(yearStr), months: [monthStr] })
+            if (a2rData?.success && a2rData.data) {
+                setA2RData(a2rData.data)
+            }
+        } catch (e) {
+            console.error("A2R Competition data load failed:", e)
+        }
 
     }
 
     useEffect(() => {
         void Promise.resolve().then(loadData)
+    }, [])
+
+    // Re-fetch slow moving data when month changes
+    useEffect(() => {
+        if (!month) return
+        let cancelled = false
+        void (async () => {
+            try {
+                const smData = await getSlowMovingDashboardData(["2025", "2026"], "ALL", "ALL", month)
+                if (!cancelled) setSlowMovingData(smData)
+            } catch {
+                // optional
+            }
+        })()
+        return () => { cancelled = true }
+    }, [month])
+
+    // Re-fetch A2R Competition data when month changes
+    useEffect(() => {
+        if (!month) return
+        let cancelled = false
+        void (async () => {
+            try {
+                const [yearStr, monthStr] = month.split("-")
+                const a2rData = await getA2RCompetitionData({ year: parseInt(yearStr), months: [monthStr] })
+                if (!cancelled && a2rData?.success && a2rData.data) {
+                    setA2RData(a2rData.data)
+                }
+            } catch {
+                // optional
+            }
+        })()
+        return () => { cancelled = true }
+    }, [month])
+
+    // Fetch Procurement data on mount
+    useEffect(() => {
+        let cancelled = false
+        void (async () => {
+            try {
+                console.log("[Procurement] fetching...")
+                const res = await getProcurementNextAnalytics({ horizonMonths: 6, chartGranularity: "monthly", forecastingAlgorithm: "moving_average" })
+                console.log("[Procurement] result:", res?.success, res?.data?.items?.length)
+                if (!cancelled && res?.success && res.data) {
+                    setProcurementData(res.data)
+                }
+            } catch (e) {
+                console.error("[Procurement] error:", e)
+            }
+        })()
+        return () => { cancelled = true }
     }, [])
 
     const report = useMemo(() => {
@@ -1220,7 +1323,12 @@ export function MonthlyReportTab() {
 
     const lostStockSlideStart = rmiSummarySlide + 1
     const quotationSlide = lostStockSlideStart + lostStockPages.length
-    const closingSlide = quotationSlide + 1
+    const slowMovingChartSlide = quotationSlide + 1
+    const slowMovingTableSlide = slowMovingChartSlide + 1
+    const a2rSlide = slowMovingTableSlide + 1
+    const procurementChartSlide = a2rSlide + 1
+    const procurementTopSlide = procurementChartSlide + 1
+    const closingSlide = procurementTopSlide + 1
 
     return (
         <div className="space-y-5">
@@ -1296,7 +1404,7 @@ export function MonthlyReportTab() {
                                         <div className="h-12 w-px bg-slate-300" />
                                         <div>
                                             <p className="text-xs font-black uppercase tracking-[0.28em] text-[#0f4c81]">BIMA</p>
-                                            <p className="text-sm font-semibold text-slate-500">Business Intelligence Market Analysis</p>
+                                            <p className="text-sm font-semibold text-slate-500">Business Innovation & Marketing</p>
                                         </div>
                                     </div>
                                     <div className="max-w-[690px]">
@@ -1304,6 +1412,7 @@ export function MonthlyReportTab() {
                                         <h2 className="max-w-[680px] text-[58px] font-black leading-[0.98] tracking-tight text-slate-950 text-balance">Monthly Competitor Dashboard</h2>
                                         <p className="mt-3 text-[42px] font-black leading-none text-[#0f4c81]">{monthLabel(month)}</p>
                                         <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-600 text-pretty">Dashboard BIMA untuk membaca price intelligence, aktivitas kompetitor, customer-supplier mapping, dan indikasi risiko market bulanan.</p>
+                                        <p className="mt-3 text-sm font-semibold text-slate-500">Compile by: <span className="font-black text-[#0f4c81]">Mochamad Annas Khadafi</span></p>
                                     </div>
                                     <div className="grid grid-cols-3 gap-3">
                                         <MetricTile icon={FileText} label="Price" value={report.prices.length} note="competitor price data" />
@@ -1868,6 +1977,462 @@ export function MonthlyReportTab() {
                                 </Slide>
                             )
                         }),
+                        <Slide key="slow-moving-chart" eyebrow={`Slide ${slowMovingChartSlide} - Slow Moving Report`} title="Slow Moving Report — Dashboard">
+                            <div className="grid h-[calc(100%-88px)] grid-rows-[auto_1fr] gap-2 overflow-hidden">
+                                {/* KPI Summary - compact */}
+                                <div className="grid grid-cols-4 gap-2">
+                                    <div className="rounded-lg border border-blue-200 bg-gradient-to-br from-blue-50 to-blue-100/50 px-3 py-2 shadow-sm">
+                                        <p className="text-[9px] font-bold uppercase tracking-wide text-blue-700">Total Revenue</p>
+                                        <p className="text-lg font-black text-blue-950">{slowMovingData ? formatMoney(slowMovingData.summary.totalAmount) : "-"}</p>
+                                    </div>
+                                    <div className="rounded-lg border border-emerald-200 bg-gradient-to-br from-emerald-50 to-emerald-100/50 px-3 py-2 shadow-sm">
+                                        <p className="text-[9px] font-bold uppercase tracking-wide text-emerald-700">Total Qty Terjual</p>
+                                        <p className="text-lg font-black text-emerald-950">{slowMovingData ? `${slowMovingData.summary.totalQty.toLocaleString("id-ID")} pcs` : "-"}</p>
+                                    </div>
+                                    <div className="rounded-lg border border-purple-200 bg-gradient-to-br from-purple-50 to-purple-100/50 px-3 py-2 shadow-sm">
+                                        <p className="text-[9px] font-bold uppercase tracking-wide text-purple-700">Salesman Terlibat</p>
+                                        <p className="text-lg font-black text-purple-950">{slowMovingData?.topSalesman?.length || 0}</p>
+                                    </div>
+                                    <div className="rounded-lg border border-amber-200 bg-gradient-to-br from-amber-50 to-amber-100/50 px-3 py-2 shadow-sm">
+                                        <p className="text-[9px] font-bold uppercase tracking-wide text-amber-700">Pelanggan Aktif</p>
+                                        <p className="text-lg font-black text-amber-950">{slowMovingData?.topCustomers?.length || 0}</p>
+                                    </div>
+                                </div>
+
+                                {/* Charts Row */}
+                                <div className="grid min-h-0 grid-cols-[1.2fr_0.8fr] gap-2">
+                                    {/* YoY Trend Composed Chart */}
+                                    <div className="flex min-h-0 flex-col rounded-lg border bg-white p-2 shadow-sm">
+                                        <div className="mb-1">
+                                            <p className="text-xs font-black text-slate-900">Tren Penjualan YoY</p>
+                                            <p className="text-[9px] text-slate-500">Revenue (Bar) & Qty (Line) antar tahun</p>
+                                        </div>
+                                        <div className="min-h-0 flex-1">
+                                            {slowMovingData && slowMovingData.monthlyTrend.length > 0 ? (() => {
+                                                const selectedYearList = ["2025", "2026"]
+                                                const yoyMap = new Map<string, any>()
+                                                const months = ["01","02","03","04","05","06","07","08","09","10","11","12"]
+                                                months.forEach(m => yoyMap.set(m, { month: m }))
+                                                slowMovingData.monthlyTrend.forEach(item => {
+                                                    const [yr, mo] = item.period.split("-")
+                                                    if (yr && mo) {
+                                                        const mData = yoyMap.get(mo)
+                                                        if (mData) {
+                                                            mData[`qty_${yr}`] = item.qty
+                                                            mData[`amount_${yr}`] = item.amount
+                                                        }
+                                                    }
+                                                })
+                                                const trendDataLocal = Array.from(yoyMap.values())
+                                                const BAR_COLORS_LOCAL = ['#3b82f6','#f59e0b','#10b981','#8b5cf6']
+                                                const LINE_COLORS_LOCAL = ['#1d4ed8','#d97706','#047857','#6d28d9']
+                                                return (
+                                                    <ResponsiveContainer width="100%" height="100%">
+                                                        <ComposedChart data={trendDataLocal} margin={{ top: 8, right: 50, bottom: 0, left: 0 }}>
+                                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                                                            <XAxis dataKey="month" tickFormatter={(v) => { const m = ["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Ags","Sep","Okt","Nov","Des"]; return m[parseInt(v)-1] || v }} tick={{ fontSize: 9, fill: '#64748b' }} tickLine={false} axisLine={{ stroke: '#cbd5e1' }} />
+                                                            <YAxis yAxisId="left" orientation="left" tickFormatter={(value) => formatNumber(value)} tick={{ fontSize: 8, fill: '#64748b' }} axisLine={false} tickLine={false} width={50} />
+                                                            <YAxis yAxisId="right" orientation="right" tickFormatter={formatRupiahAxis} tick={{ fontSize: 8, fill: '#1e3a8a', fontWeight: 600 }} width={80} axisLine={{ stroke: '#bfdbfe' }} tickLine={false} />
+                                                            <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} formatter={(value: number, name: string) => { if (name.startsWith("Revenue")) return [formatCurrency(value), name]; return [formatNumber(value), name] }} labelFormatter={(label) => { const m = ["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Ags","Sep","Okt","Nov","Des"]; return m[parseInt(label)-1] || label }} />
+                                                            <Legend wrapperStyle={{ fontSize: 9 }} />
+                                                            {selectedYearList.map((year, idx) => (
+                                                                <Bar key={`bar-${year}`} yAxisId="right" dataKey={`amount_${year}`} name={`Revenue ${year}`} fill={BAR_COLORS_LOCAL[idx % BAR_COLORS_LOCAL.length]} radius={[3, 3, 0, 0]} maxBarSize={22}>
+                                                                    <LabelList dataKey={`amount_${year}`} position="top" formatter={formatCompactCurrency} style={{ fontSize: 7, fill: '#64748b' }} />
+                                                                </Bar>
+                                                            ))}
+                                                            {selectedYearList.map((year, idx) => (
+                                                                <Line key={`line-${year}`} yAxisId="left" type="monotone" dataKey={`qty_${year}`} name={`Qty ${year}`} stroke={LINE_COLORS_LOCAL[idx % LINE_COLORS_LOCAL.length]} strokeWidth={2} dot={{ r: 2, fill: LINE_COLORS_LOCAL[idx % LINE_COLORS_LOCAL.length], strokeWidth: 1.5, stroke: '#fff' }} />
+                                                            ))}
+                                                        </ComposedChart>
+                                                    </ResponsiveContainer>
+                                                )
+                                            })() : <EmptySlideState message="Memuat data slow moving..." />}
+                                        </div>
+                                    </div>
+
+                                    {/* Right: Top Salesman + Top Customers */}
+                                    <div className="grid min-h-0 grid-rows-[1fr_1fr] gap-2">
+                                        <div className="flex min-h-0 flex-col rounded-lg border bg-white p-2 shadow-sm">
+                                            <p className="mb-1 text-[11px] font-black text-slate-900">Top Salesman</p>
+                                            <div className="min-h-0 flex-1">
+                                                {slowMovingData?.topSalesman?.length ? (
+                                                    <ResponsiveContainer width="100%" height="100%">
+                                                        <BarChart data={slowMovingData.topSalesman.slice(0, 5)} layout="vertical" margin={{ top: 2, right: 28, left: 2, bottom: 2 }}>
+                                                            <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f1f5f9" />
+                                                            <XAxis type="number" hide />
+                                                            <YAxis dataKey="salesman" type="category" axisLine={false} tickLine={false} tick={{ fill: '#334155', fontSize: 8 }} width={90} />
+                                                            <Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} formatter={(value: number) => formatCurrency(value)} />
+                                                            <Bar dataKey="amount" name="Revenue" radius={[0, 3, 3, 0]}>
+                                                                <LabelList dataKey="amount" position="right" formatter={formatCompactCurrency} style={{ fontSize: 7, fill: '#64748b' }} />
+                                                                {slowMovingData.topSalesman.slice(0, 5).map((_, index) => <Cell key={index} fill={BAR_COLORS[index % BAR_COLORS.length]} />)}
+                                                            </Bar>
+                                                        </BarChart>
+                                                    </ResponsiveContainer>
+                                                ) : <EmptySlideState message="Tidak ada data salesman." />}
+                                            </div>
+                                        </div>
+                                        <div className="flex min-h-0 flex-col rounded-lg border bg-white p-2 shadow-sm">
+                                            <p className="mb-1 text-[11px] font-black text-slate-900">Top Pelanggan</p>
+                                            <div className="min-h-0 flex-1">
+                                                {slowMovingData?.topCustomers?.length ? (
+                                                    <ResponsiveContainer width="100%" height="100%">
+                                                        <PieChart>
+                                                            <Pie data={slowMovingData.topCustomers.slice(0, 5)} cx="50%" cy="50%" innerRadius={28} outerRadius={55} paddingAngle={2} dataKey="amount" nameKey="customerName" label={({ name, percent }) => { const n = String(name || "?"); const t = n.length > 10 ? n.slice(0, 10) + "..." : n; return `${t} ${(percent * 100).toFixed(0)}%` }} labelLine={false}>
+                                                                {slowMovingData.topCustomers.slice(0, 5).map((_, index) => <Cell key={index} fill={BAR_COLORS[(index + 3) % BAR_COLORS.length]} />)}
+                                                            </Pie>
+                                                            <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} formatter={(value: number) => formatCurrency(value)} />
+                                                        </PieChart>
+                                                    </ResponsiveContainer>
+                                                ) : <EmptySlideState message="Tidak ada data pelanggan." />}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </Slide>,
+                        <Slide key="slow-moving-table" eyebrow={`Slide ${slowMovingTableSlide} - Slow Moving Report`} title="Slow Moving Report — Detail Data">
+                            <div className="grid h-[calc(100%-88px)] grid-cols-[1fr_1fr] gap-2 overflow-hidden">
+                                {/* Left: Watch Products (high stock, low sales) + Summary */}
+                                <div className="flex min-h-0 flex-col gap-2">
+                                    <div className="flex min-h-0 flex-1 flex-col rounded-lg border border-red-200 bg-red-50/50 p-2 shadow-sm">
+                                        <div className="mb-1">
+                                            <p className="text-xs font-black text-red-900">Watch Products — High Stock, Low Sales</p>
+                                            <p className="text-[9px] text-red-600">Top 11 produk dengan stock tersisa terbesar yang perlu dijual</p>
+                                        </div>
+                                        <div className="min-h-0 flex-1 overflow-auto">
+                                            <ReportTable>
+                                                <thead>
+                                                    <tr>
+                                                        <TableHeadCell className="bg-red-600">No</TableHeadCell>
+                                                        <TableHeadCell className="bg-red-600">Product</TableHeadCell>
+                                                        <TableHeadCell className="bg-red-600 text-right">Stock Awal</TableHeadCell>
+                                                        <TableHeadCell className="bg-red-600 text-right">Terjual</TableHeadCell>
+                                                        <TableHeadCell className="bg-red-600 text-right">Stock Curr</TableHeadCell>
+                                                        <TableHeadCell className="bg-red-600 text-right">Valuation</TableHeadCell>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {slowMovingData?.watchProducts?.length ? slowMovingData.watchProducts.filter(wp => wp.remainingStock > 0).map((wp, idx) => {
+                                                        const isWarning = wp.remainingStock > 0 && wp.remainingStock >= wp.initialStock * 0.5
+                                                        return (
+                                                        <tr key={wp.materialKey} className={isWarning ? "bg-red-50" : ""}>
+                                                            <TableCellCompact className="font-bold">{idx + 1}</TableCellCompact>
+                                                            <TableCellCompact>
+                                                                <div className="max-w-[140px]">
+                                                                    <p className="font-semibold text-[9px] leading-tight truncate" title={wp.materialKey}>{wp.materialKey}</p>
+                                                                    <p className="text-[8px] text-slate-500 truncate" title={wp.description}>{wp.description}</p>
+                                                                </div>
+                                                            </TableCellCompact>
+                                                            <TableCellCompact className="text-right tabular-nums">{wp.initialStock.toLocaleString("id-ID")}</TableCellCompact>
+                                                            <TableCellCompact className="text-right tabular-nums text-emerald-700">{wp.totalSold.toLocaleString("id-ID")}</TableCellCompact>
+                                                            <TableCellCompact className="text-right tabular-nums font-black">{wp.remainingStock.toLocaleString("id-ID")}</TableCellCompact>
+                                                            <TableCellCompact className={`text-right font-black tabular-nums ${isWarning ? "text-red-700" : ""}`}>{formatUSD(wp.remainingValue)}</TableCellCompact>
+                                                        </tr>
+                                                        )
+                                                    }) : <tr><TableCellCompact colSpan={6} className="text-center text-red-400">Memuat data...</TableCellCompact></tr>}
+                                                </tbody>
+                                            </ReportTable>
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <div className="rounded-lg border border-blue-200 bg-blue-50 p-2 shadow-sm">
+                                            <p className="text-[8px] font-bold uppercase tracking-wide text-blue-600">Total Valuation Slow Moving</p>
+                                            <p className="text-sm font-black text-blue-900">{slowMovingData ? formatMoney(slowMovingData.summary.totalAmount) : "-"}</p>
+                                        </div>
+                                        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-2 shadow-sm">
+                                            <p className="text-[8px] font-bold uppercase tracking-wide text-emerald-600">Total Qty</p>
+                                            <p className="text-sm font-black text-emerald-900">{slowMovingData ? `${slowMovingData.summary.totalQty.toLocaleString("id-ID")} pcs` : "-"}</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Right: Tire Sold in Month (full height) */}
+                                <div className="flex min-h-0 flex-col gap-2">
+                                    <div className="flex min-h-0 flex-1 flex-col rounded-lg border border-orange-200 bg-orange-50/50 p-2 shadow-sm">
+                                        <div className="mb-1">
+                                            <p className="text-xs font-black text-orange-900">Tire Sold — {monthLabel(month)}</p>
+                                            <p className="text-[9px] text-orange-600">Penjualan slow moving di bulan terfilter</p>
+                                        </div>
+                                        <div className="min-h-0 flex-1 overflow-auto">
+                                            <ReportTable>
+                                                <thead>
+                                                    <tr>
+                                                        <TableHeadCell className="bg-orange-500">No</TableHeadCell>
+                                                        <TableHeadCell className="bg-orange-500">Product Name</TableHeadCell>
+                                                        <TableHeadCell className="bg-orange-500">Tire Size</TableHeadCell>
+                                                        <TableHeadCell className="bg-orange-500">Sales</TableHeadCell>
+                                                        <TableHeadCell className="bg-orange-500 text-right">Qty</TableHeadCell>
+                                                        <TableHeadCell className="bg-orange-500 text-right">Revenue</TableHeadCell>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {slowMovingData?.monthlyTireDetail?.length ? slowMovingData.monthlyTireDetail.map((ts, idx) => (
+                                                        <tr key={`${ts.productName}-${ts.salesman}-${idx}`}>
+                                                            <TableCellCompact className="font-bold">{idx + 1}</TableCellCompact>
+                                                            <TableCellCompact className="font-semibold max-w-[160px] truncate" title={ts.productName}>{ts.productName}</TableCellCompact>
+                                                            <TableCellCompact>{ts.tireSize}</TableCellCompact>
+                                                            <TableCellCompact className="text-[9px]">{ts.salesman}</TableCellCompact>
+                                                            <TableCellCompact className="text-right tabular-nums">{ts.qty.toLocaleString("id-ID")}</TableCellCompact>
+                                                            <TableCellCompact className="text-right font-black tabular-nums">{formatMoney(ts.amount)}</TableCellCompact>
+                                                        </tr>
+                                                    )) : <tr><TableCellCompact colSpan={6} className="text-center text-orange-400">Tidak ada penjualan di bulan ini</TableCellCompact></tr>}
+                                                </tbody>
+                                            </ReportTable>
+                                        </div>
+                                    </div>
+
+                                    <div className="rounded-lg border-l-4 border-[#f97316] bg-white px-2 py-1.5 text-[10px] font-semibold leading-snug text-slate-700 shadow-sm">
+                                        Slow moving inventory perlu dipantau berkala untuk strategi promosi & clearance.
+                                    </div>
+                                </div>
+                            </div>
+                        </Slide>,
+                        <Slide key="a2r-competition" eyebrow={`Slide ${a2rSlide} - A2R Competition`} title={`A2R Competition — ${monthLabel(month)}`}>
+                            <div className="grid h-[calc(100%-88px)] grid-rows-[auto_1fr_auto] gap-2 overflow-hidden">
+                                {/* Top: Grand Champion + Monthly Leader */}
+                                <div className="grid grid-cols-[1fr_1fr] gap-2">
+                                    {/* Grand Champion */}
+                                    {a2rData?.grandChampion && (() => {
+                                        const gc = a2rData.grandChampion
+                                        const ml = a2rData?.monthlyLeaders?.[0]?.leader
+                                        const isSame = ml && gc.salesman === ml.salesman
+                                        return (
+                                            <div className="rounded-lg bg-gradient-to-r from-amber-50 to-orange-100 border border-amber-300 p-3 shadow-sm flex items-center gap-3">
+                                                <div className="rounded-full bg-amber-400 p-2.5 shadow-md">
+                                                    <Trophy className="h-6 w-6 text-white" />
+                                                </div>
+                                                <div>
+                                                    <p className="text-[9px] font-bold uppercase tracking-wide text-amber-700">Grand Champion {isSame ? `& ${a2rData.monthlyLeaders[0].periodLabel}` : ""}</p>
+                                                    <p className="text-lg font-black text-amber-950">{gc.salesman}</p>
+                                                    <p className="text-[10px] text-amber-700">{gc.totalPoints.toLocaleString("id-ID")} pts · {formatCurrency(gc.revenueActual)} revenue{isSame ? ` · Juara ${a2rData.monthlyLeaders[0].periodLabel}` : ""}</p>
+                                                </div>
+                                            </div>
+                                        )
+                                    })()}
+                                    {/* Monthly Leader (only if different from Grand Champion) */}
+                                    {a2rData?.monthlyLeaders?.[0]?.leader && a2rData.grandChampion && a2rData.monthlyLeaders[0].leader.salesman !== a2rData.grandChampion.salesman && (
+                                        <div className="rounded-lg bg-gradient-to-r from-blue-50 to-indigo-100 border border-blue-200 p-3 shadow-sm flex items-center gap-3">
+                                            <div className="rounded-full bg-blue-500 p-2.5 shadow-md">
+                                                <Target className="h-6 w-6 text-white" />
+                                            </div>
+                                            <div>
+                                                <p className="text-[9px] font-bold uppercase tracking-wide text-blue-700">{a2rData.monthlyLeaders[0].periodLabel}</p>
+                                                <p className="text-lg font-black text-blue-950">{a2rData.monthlyLeaders[0].leader.salesman}</p>
+                                                <p className="text-[10px] text-blue-700">{a2rData.monthlyLeaders[0].leader.totalPoints.toLocaleString("id-ID")} pts</p>
+                                            </div>
+                                        </div>
+                                    )}
+                                    {/* If same person, show scoring summary instead */}
+                                    {a2rData?.monthlyLeaders?.[0]?.leader && a2rData.grandChampion && a2rData.monthlyLeaders[0].leader.salesman === a2rData.grandChampion.salesman && a2rData.summary && (
+                                        <div className="rounded-lg bg-gradient-to-r from-emerald-50 to-teal-100 border border-emerald-200 p-3 shadow-sm flex items-center gap-3">
+                                            <div className="rounded-full bg-emerald-500 p-2.5 shadow-md">
+                                                <Sparkles className="h-6 w-6 text-white" />
+                                            </div>
+                                            <div>
+                                                <p className="text-[9px] font-bold uppercase tracking-wide text-emerald-700">Summary</p>
+                                                <p className="text-lg font-black text-emerald-950">{a2rData.summary.activeSalesmen} Salesman</p>
+                                                <p className="text-[10px] text-emerald-700">{formatCompactCurrency(a2rData.summary.totalRevenue)} revenue · {(a2rData.summary.achievementPct || 0).toFixed(0)}% achievement</p>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Middle: Ranking Table */}
+                                <div className="min-h-0 rounded-lg border bg-white p-2 shadow-sm">
+                                    <p className="mb-1 text-xs font-black text-slate-900">Ranking Salesman — {monthLabel(month)}</p>
+                                    <div className="min-h-0 h-[calc(100%-24px)] overflow-auto">
+                                        <ReportTable>
+                                            <thead>
+                                                <tr>
+                                                    <TableHeadCell className="bg-[#0f4c81]">Rank</TableHeadCell>
+                                                    <TableHeadCell className="bg-[#0f4c81]">Salesman</TableHeadCell>
+                                                    <TableHeadCell className="bg-[#0f4c81] text-right">Revenue</TableHeadCell>
+                                                    <TableHeadCell className="bg-[#0f4c81] text-right">Target</TableHeadCell>
+                                                    <TableHeadCell className="bg-[#0f4c81] text-right">Achieve</TableHeadCell>
+                                                    <TableHeadCell className="bg-[#0f4c81] text-right">R49</TableHeadCell>
+                                                    <TableHeadCell className="bg-[#0f4c81] text-right">Cosm</TableHeadCell>
+                                                    <TableHeadCell className="bg-[#0f4c81] text-right">Inv</TableHeadCell>
+                                                    <TableHeadCell className="bg-[#0f4c81] text-right">SM</TableHeadCell>
+                                                    <TableHeadCell className="bg-[#0f4c81] text-right">Total Pts</TableHeadCell>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {a2rData?.rows?.length ? a2rData.rows.slice(0, 10).map((row: any, idx: number) => (
+                                                    <tr key={row.salesman} className={idx === 0 ? "bg-amber-50" : idx === 1 ? "bg-slate-50" : ""}>
+                                                        <TableCellCompact>
+                                                            <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-black ${idx === 0 ? "bg-amber-400 text-white" : idx === 1 ? "bg-slate-300 text-white" : "bg-slate-200 text-slate-600"}`}>{idx + 1}</span>
+                                                        </TableCellCompact>
+                                                        <TableCellCompact className="font-semibold max-w-[120px] truncate" title={row.salesman}>{row.salesman}</TableCellCompact>
+                                                        <TableCellCompact className="text-right tabular-nums text-[10px]">{formatCompactCurrency(row.revenueActual)}</TableCellCompact>
+                                                        <TableCellCompact className="text-right tabular-nums text-[10px]">{formatCompactCurrency(row.revenueTarget)}</TableCellCompact>
+                                                        <TableCellCompact className={`text-right tabular-nums font-black text-[10px] ${(row.achievementPct || 0) >= 100 ? "text-emerald-600" : "text-orange-600"}`}>{(row.achievementPct || 0).toFixed(0)}%</TableCellCompact>
+                                                        <TableCellCompact className="text-right tabular-nums">{Math.round(row.r49Points || 0)}</TableCellCompact>
+                                                        <TableCellCompact className="text-right tabular-nums">{Math.round(row.cosmeticPoints || 0)}</TableCellCompact>
+                                                        <TableCellCompact className="text-right tabular-nums">{Math.round(row.inventoryPoints || 0)}</TableCellCompact>
+                                                        <TableCellCompact className="text-right tabular-nums">{Math.round(row.slowMovingPoints || 0)}</TableCellCompact>
+                                                        <TableCellCompact className="text-right font-black tabular-nums text-[#0f4c81]">{Math.round(row.totalPoints || 0)}</TableCellCompact>
+                                                    </tr>
+                                                )) : <tr><TableCellCompact colSpan={10} className="text-center text-slate-400">Loading A2R Competition data...</TableCellCompact></tr>}
+                                            </tbody>
+                                        </ReportTable>
+                                    </div>
+                                </div>
+
+                                {/* Bottom: Scoring Rules */}
+                                <div className="grid grid-cols-5 gap-1.5">
+                                    <div className="rounded-md border border-slate-200 bg-white p-1.5 shadow-sm text-center">
+                                        <p className="text-[8px] font-black text-slate-900 mb-0.5">Target Revenue</p>
+                                        <p className="text-[7px] leading-tight text-slate-500">Poin = achievement %, cap 120</p>
+                                    </div>
+                                    <div className="rounded-md border border-slate-200 bg-white p-1.5 shadow-sm text-center">
+                                        <p className="text-[8px] font-black text-slate-900 mb-0.5">27.00R49</p>
+                                        <p className="text-[7px] leading-tight text-slate-500">Harga satuan = revenue/qty, &gt;= Rp 215jt/tire = 100 poin per customer</p>
+                                    </div>
+                                    <div className="rounded-md border border-slate-200 bg-white p-1.5 shadow-sm text-center">
+                                        <p className="text-[8px] font-black text-slate-900 mb-0.5">Cosmetic Tire</p>
+                                        <p className="text-[7px] leading-tight text-slate-500">Match material + serial delivery = 50 poin per customer</p>
+                                    </div>
+                                    <div className="rounded-md border border-slate-200 bg-white p-1.5 shadow-sm text-center">
+                                        <p className="text-[8px] font-black text-slate-900 mb-0.5">Existing Inventory</p>
+                                        <p className="text-[7px] leading-tight text-slate-500">Non slow moving, non-R49 = 10 poin per material</p>
+                                    </div>
+                                    <div className="rounded-md border border-slate-200 bg-white p-1.5 shadow-sm text-center">
+                                        <p className="text-[8px] font-black text-slate-900 mb-0.5">Slow Moving</p>
+                                        <p className="text-[7px] leading-tight text-slate-500">Material slow moving = 20 poin per material</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </Slide>,
+                        <Slide key="procurement-chart" eyebrow={`Slide ${procurementChartSlide} - Order Fulfillment`} title="Order Fulfillment — Forecast & Urgency">
+                            <div className="grid h-[calc(100%-88px)] grid-cols-[1.4fr_0.6fr] gap-3 overflow-hidden">
+                                {/* Left: Forecast Trend Chart */}
+                                <div className="flex min-h-0 flex-col rounded-lg border bg-white p-3 shadow-sm">
+                                    <div className="mb-2">
+                                        <p className="text-xs font-black text-slate-900">Demand Forecast Trend</p>
+                                        <p className="text-[9px] text-slate-500">Actual sales, predicted lost sales, projected stock, forecast demand</p>
+                                    </div>
+                                    <div className="min-h-0 flex-1">
+                                        {procurementData?.charts?.forecastTrend?.length ? (
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                <ComposedChart data={procurementData.charts.forecastTrend} margin={{ top: 8, right: 50, bottom: 4, left: 0 }}>
+                                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                                                    <XAxis dataKey="label" tick={{ fontSize: 9, fill: '#64748b' }} tickLine={false} axisLine={{ stroke: '#cbd5e1' }} />
+                                                    <YAxis yAxisId="left" orientation="left" tick={{ fontSize: 9, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                                                    <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 9, fill: '#7c3aed', fontWeight: 600 }} width={60} axisLine={false} tickLine={false} />
+                                                    <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontSize: 10 }} />
+                                                    <Legend wrapperStyle={{ fontSize: 10 }} />
+                                                    <Bar yAxisId="left" dataKey="actualSales" name="Actual Sales" fill="#10b981" radius={[3, 3, 0, 0]} maxBarSize={20} />
+                                                    <Bar yAxisId="left" dataKey="predictedLostSales" name="Predicted Lost" fill="#f87171" radius={[3, 3, 0, 0]} maxBarSize={20} />
+                                                    <Line yAxisId="right" type="monotone" dataKey="projectedStock" name="Projected Stock" stroke="#8b5cf6" strokeWidth={2} dot={{ r: 2 }} />
+                                                    <Line yAxisId="left" type="monotone" dataKey="forecastSales" name="Forecast Demand" stroke="#06b6d4" strokeWidth={2} strokeDasharray="5 3" dot={{ r: 2 }} />
+                                                </ComposedChart>
+                                            </ResponsiveContainer>
+                                        ) : <EmptySlideState message="Memuat data forecast..." />}
+                                    </div>
+                                    {procurementData?.summary && (
+                                        <div className="mt-2 flex flex-wrap gap-2">
+                                            <span className="rounded-md bg-red-50 px-2 py-0.5 text-[8px] font-bold text-red-700 border border-red-200">Urgent: {procurementData.summary.urgentItems} items</span>
+                                            <span className="rounded-md bg-amber-50 px-2 py-0.5 text-[8px] font-bold text-amber-700 border border-amber-200">Soon: {procurementData.summary.soonItems} items</span>
+                                            <span className="rounded-md bg-sky-50 px-2 py-0.5 text-[8px] font-bold text-sky-700 border border-sky-200">Watch: {procurementData.summary.watchItems} items</span>
+                                            <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-[8px] font-bold text-emerald-700 border border-emerald-200">Healthy: {procurementData.summary.healthyItems} items</span>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Right: Urgency Breakdown Pie + Category Risk */}
+                                <div className="flex min-h-0 flex-col gap-2">
+                                    {/* Urgency Pie */}
+                                    <div className="flex min-h-0 flex-1 flex-col rounded-lg border bg-white p-2 shadow-sm">
+                                        <p className="mb-1 text-[10px] font-black text-slate-900 text-center">Urgency Mix</p>
+                                        <div className="min-h-0 flex-1">
+                                            {procurementData?.charts?.urgencyBreakdown?.length ? (
+                                                <ResponsiveContainer width="100%" height="100%">
+                                                    <PieChart>
+                                                        <Pie data={procurementData.charts.urgencyBreakdown} cx="50%" cy="50%" innerRadius={30} outerRadius={55} paddingAngle={2} dataKey="value" nameKey="name" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
+                                                            {procurementData.charts.urgencyBreakdown.map((entry: any, index: number) => (
+                                                                <Cell key={index} fill={entry.fill || BAR_COLORS[index % BAR_COLORS.length]} />
+                                                            ))}
+                                                        </Pie>
+                                                        <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontSize: 10 }} />
+                                                    </PieChart>
+                                                </ResponsiveContainer>
+                                            ) : <EmptySlideState message="Loading..." />}
+                                        </div>
+                                    </div>
+
+                                    {/* Category Risk */}
+                                    <div className="flex min-h-0 flex-1 flex-col rounded-lg border bg-white p-2 shadow-sm">
+                                        <p className="mb-1 text-[10px] font-black text-slate-900">Risk by Category</p>
+                                        <div className="min-h-0 flex-1">
+                                            {procurementData?.charts?.categoryRisk?.length ? (
+                                                <ResponsiveContainer width="100%" height="100%">
+                                                    <BarChart data={procurementData.charts.categoryRisk.slice(0, 6)} layout="vertical" margin={{ top: 4, right: 24, left: 4, bottom: 4 }}>
+                                                        <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                                                        <XAxis type="number" tick={{ fontSize: 8 }} />
+                                                        <YAxis type="category" dataKey="category" tick={{ fontSize: 8 }} width={70} />
+                                                        <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontSize: 9 }} />
+                                                        <Bar dataKey="urgent" stackId="a" fill="#ef4444" radius={[0, 0, 0, 0]} />
+                                                        <Bar dataKey="soon" stackId="a" fill="#f59e0b" radius={[0, 0, 0, 0]} />
+                                                        <Bar dataKey="watch" stackId="a" fill="#0ea5e9" radius={[0, 0, 0, 0]} />
+                                                        <Bar dataKey="healthy" stackId="a" fill="#22c55e" radius={[0, 3, 3, 0]} />
+                                                    </BarChart>
+                                                </ResponsiveContainer>
+                                            ) : <EmptySlideState message="Loading..." />}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </Slide>,
+                        <Slide key="procurement-top" eyebrow={`Slide ${procurementTopSlide} - Order Fulfillment`} title="Top 15 Urgent — Segera Diorder">
+                            <div className="h-[calc(100%-88px)] overflow-hidden rounded-lg border bg-white p-3 shadow-sm">
+                                <div className="mb-2 flex items-center justify-between gap-3">
+                                    <div>
+                                        <p className="text-sm font-black text-slate-900">Produk Urgent — Perlu Segera Diorder</p>
+                                        <p className="text-[10px] text-slate-500">Diurutkan berdasarkan recommended qty terbesar (stock tidak cukup untuk {procurementData?.filters?.horizonMonths || 6} bulan ke depan)</p>
+                                    </div>
+                                    {procurementData?.summary && (
+                                        <div className="flex gap-2">
+                                            <span className="rounded-md bg-red-50 px-2 py-0.5 text-[9px] font-bold text-red-700 border border-red-200">Total Order Qty: {procurementData.summary.totalRecommendedQty.toLocaleString("id-ID")}</span>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="min-h-0 h-[calc(100%-48px)] overflow-auto">
+                                    <ReportTable>
+                                        <thead>
+                                            <tr>
+                                                <TableHeadCell className="bg-red-600">No</TableHeadCell>
+                                                <TableHeadCell className="bg-red-600">Material</TableHeadCell>
+                                                <TableHeadCell className="bg-red-600">Description</TableHeadCell>
+                                                <TableHeadCell className="bg-red-600 text-right">Stock</TableHeadCell>
+                                                <TableHeadCell className="bg-red-600 text-right">Min Stock</TableHeadCell>
+                                                <TableHeadCell className="bg-red-600 text-right">Sold 60D</TableHeadCell>
+                                                <TableHeadCell className="bg-red-600 text-right">Monthly Avg</TableHeadCell>
+                                                <TableHeadCell className="bg-red-600 text-right">Days Cover</TableHeadCell>
+                                                <TableHeadCell className="bg-red-600 text-right">Order Qty</TableHeadCell>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {procurementData?.items?.filter((item: any) => item.priority === "urgent").slice(0, 15).map((item: any, idx: number) => (
+                                                <tr key={item.stockLevelId} className={idx < 3 ? "bg-red-50" : ""}>
+                                                    <TableCellCompact className="font-bold">{idx + 1}</TableCellCompact>
+                                                    <TableCellCompact className="font-semibold text-[9px] max-w-[100px] truncate" title={item.materialNumber}>{item.materialNumber}</TableCellCompact>
+                                                    <TableCellCompact className="text-[9px] max-w-[140px] truncate" title={item.description}>{item.description || "-"}</TableCellCompact>
+                                                    <TableCellCompact className="text-right tabular-nums font-black text-red-600">{item.currentStock}</TableCellCompact>
+                                                    <TableCellCompact className="text-right tabular-nums">{item.minStock}</TableCellCompact>
+                                                    <TableCellCompact className="text-right tabular-nums">{item.sold60d}</TableCellCompact>
+                                                    <TableCellCompact className="text-right tabular-nums">{item.monthlyAvg.toFixed(1)}</TableCellCompact>
+                                                    <TableCellCompact className="text-right tabular-nums font-black text-red-600">{item.daysCover60d !== null ? `${item.daysCover60d.toFixed(0)}d` : "-"}</TableCellCompact>
+                                                    <TableCellCompact className="text-right font-black tabular-nums text-[#0f4c81]">{item.recommendedQty.toLocaleString("id-ID")}</TableCellCompact>
+                                                </tr>
+                                            ))}
+                                            {(!procurementData?.items || procurementData.items.filter((item: any) => item.priority === "urgent").length === 0) && (
+                                                <tr><TableCellCompact colSpan={9} className="text-center text-slate-400">Memuat data procurement...</TableCellCompact></tr>
+                                            )}
+                                        </tbody>
+                                    </ReportTable>
+                                </div>
+                            </div>
+                        </Slide>,
                         <Slide key="thanks" eyebrow={`Slide ${closingSlide} - Closing`} title="Thank You / Closing">
                             <div className="flex h-[calc(100%-88px)] flex-col items-center justify-center rounded-lg bg-[#0f4c81] text-center text-white">
                                 <Image src="/cp_logo_alpha.png" alt="Chitra Paratama" width={190} height={80} className="mb-8 h-20 w-auto rounded bg-white/95 p-3" />

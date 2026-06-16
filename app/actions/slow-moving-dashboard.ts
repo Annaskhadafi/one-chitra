@@ -36,6 +36,24 @@ export type TireSizeData = {
     amount: number
 }
 
+export type MonthlyTireDetail = {
+    tireSize: string
+    productName: string
+    salesman: string
+    qty: number
+    amount: number
+}
+
+export type WatchProduct = {
+    materialKey: string
+    description: string
+    initialStock: number
+    totalSold: number
+    remainingStock: number
+    soldAmount: number
+    remainingValue: number
+}
+
 export type SlowMovingDashboardResult = {
     yearlyTrend: TrendData[]
     monthlyTrend: TrendData[]
@@ -43,6 +61,8 @@ export type SlowMovingDashboardResult = {
     topCustomers: CustomerData[]
     topCategories: CategoryData[]
     topTireSizes: TireSizeData[]
+    monthlyTireDetail: MonthlyTireDetail[]
+    watchProducts: WatchProduct[]
     summary: {
         totalQty: number
         totalAmount: number
@@ -52,31 +72,57 @@ export type SlowMovingDashboardResult = {
 export async function getSlowMovingDashboardData(
     selectedYears: string[] = ["2025", "2026"],
     selectedTireSize?: string,
-    selectedCategory?: string
+    selectedCategory?: string,
+    filterMonth?: string
 ): Promise<SlowMovingDashboardResult> {
-    await getAuthenticatedSession("marketing", "view")
+    const emptyResult: SlowMovingDashboardResult = {
+        yearlyTrend: [],
+        monthlyTrend: [],
+        topSalesman: [],
+        topCustomers: [],
+        topCategories: [],
+        topTireSizes: [],
+        monthlyTireDetail: [],
+        watchProducts: [],
+        summary: { totalQty: 0, totalAmount: 0 }
+    }
+
+    try {
+        await getAuthenticatedSession("marketing", "view")
+    } catch {
+        try {
+            await getAuthenticatedSession()
+        } catch {
+            return emptyResult
+        }
+    }
+
+    try {
+    // Ensure table exists
+    await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "slow_moving_products" (
+            "id" serial PRIMARY KEY NOT NULL,
+            "material_key" varchar(150) NOT NULL UNIQUE,
+            "material_number" varchar(150) NOT NULL,
+            "description" text,
+            "created_by" text REFERENCES "user"("id"),
+            "created_at" timestamp DEFAULT now() NOT NULL,
+            "updated_at" timestamp DEFAULT now() NOT NULL
+        )
+    `)
+    await db.execute(sql`ALTER TABLE "slow_moving_products" ADD COLUMN IF NOT EXISTS "initial_stock" integer DEFAULT 0 NOT NULL;`)
 
     // Get slow moving material keys
     const products = await db.execute(sql`SELECT material_key FROM slow_moving_products`)
     const keys = (products.rows as { material_key: string }[]).map(r => r.material_key)
     
-    if (keys.length === 0) {
-        return {
-            yearlyTrend: [],
-            monthlyTrend: [],
-            topSalesman: [],
-            topCustomers: [],
-            topCategories: [],
-            topTireSizes: [],
-            summary: { totalQty: 0, totalAmount: 0 }
-        }
-    }
-
     const upperKeys = keys.map(k => k.toUpperCase())
     const safeList = upperKeys.map(k => k.replace(/'/g, "''")).map(k => "'" + k + "'").join(",")
 
-    // Base conditions
-    const baseWhere = `billing_date IS NOT NULL AND (cancelled IS NULL OR cancelled = '') AND UPPER(TRIM(material_no)) = ANY(ARRAY[${safeList}])`
+    // Base conditions (only if we have product keys)
+    const baseWhere = keys.length > 0
+        ? `billing_date IS NOT NULL AND (cancelled IS NULL OR cancelled = '') AND UPPER(TRIM(material_no)) = ANY(ARRAY[${safeList}])`
+        : `billing_date IS NOT NULL AND (cancelled IS NULL OR cancelled = '')`
     
     // Extractor for Tire Size from material_description
     const TIRE_SIZE_EXTRACTOR = `COALESCE(
@@ -95,6 +141,48 @@ export async function getSlowMovingDashboardData(
         ${selectedTireSize && selectedTireSize !== "ALL" ? ` AND ${TIRE_SIZE_EXTRACTOR} = '${selectedTireSize.replace(/'/g, "''")}'` : ""}
         ${selectedCategory && selectedCategory !== "ALL" ? ` AND COALESCE(mat_grp_desc, 'UNKNOWN') = '${selectedCategory.replace(/'/g, "''")}'` : ""}
     `
+
+    // If no slow moving products, return early with empty result
+    if (keys.length === 0) {
+        // Still try to get monthly tire detail for the filtered month
+        let monthlyTireDetail: MonthlyTireDetail[] = []
+        if (filterMonth) {
+            try {
+                const monthCondition = ` AND TO_CHAR(billing_date, 'YYYY-MM') = '${filterMonth.replace(/'/g, "''")}'`
+                const monthlyTireResult = await db.execute(sql.raw(`
+                    SELECT 
+                        COALESCE(NULLIF(material_description, ''), material_no) AS product_name,
+                        ${TIRE_SIZE_EXTRACTOR} AS tireSize, 
+                        COALESCE(salesman, 'Unknown') AS sales,
+                        SUM(qty) AS total_qty, 
+                        SUM(${REVENUE_DOC_CURR_AMOUNT}) AS total_amount
+                    FROM sales_revenue_sap 
+                    WHERE ${baseWhere} ${monthCondition}
+                    GROUP BY COALESCE(NULLIF(material_description, ''), material_no), ${TIRE_SIZE_EXTRACTOR}, COALESCE(salesman, 'Unknown')
+                    ORDER BY SUM(${REVENUE_DOC_CURR_AMOUNT}) DESC
+                    LIMIT 15
+                `))
+                monthlyTireDetail = monthlyTireResult.rows.map(r => ({
+                    tireSize: String(r.tiresize),
+                    productName: String(r.product_name || "-"),
+                    salesman: String(r.sales || "-"),
+                    qty: Number(r.total_qty),
+                    amount: Number(r.total_amount)
+                }))
+            } catch {}
+        }
+        return {
+            yearlyTrend: [],
+            monthlyTrend: [],
+            topSalesman: [],
+            topCustomers: [],
+            topCategories: [],
+            topTireSizes: [],
+            monthlyTireDetail,
+            watchProducts: [],
+            summary: { totalQty: 0, totalAmount: 0 }
+        }
+    }
 
     // 1. Yearly Trend (Always get all years for high-level view)
     const yearlyTrendResult = await db.execute(sql.raw(`
@@ -181,6 +269,73 @@ export async function getSlowMovingDashboardData(
         LIMIT 10
     `))
 
+    // 8. Monthly Tire Detail (filtered by month if provided)
+    let monthlyTireDetail: MonthlyTireDetail[] = []
+    if (filterMonth) {
+        const monthCondition = ` AND TO_CHAR(billing_date, 'YYYY-MM') = '${filterMonth.replace(/'/g, "''")}'`
+        const monthlyTireResult = await db.execute(sql.raw(`
+            SELECT 
+                COALESCE(NULLIF(material_description, ''), material_no) AS product_name,
+                ${TIRE_SIZE_EXTRACTOR} AS tireSize, 
+                COALESCE(salesman, 'Unknown') AS sales,
+                SUM(qty) AS total_qty, 
+                SUM(${REVENUE_DOC_CURR_AMOUNT}) AS total_amount
+            FROM sales_revenue_sap 
+            WHERE ${baseWhere} ${filtersCondition} ${monthCondition}
+            GROUP BY COALESCE(NULLIF(material_description, ''), material_no), ${TIRE_SIZE_EXTRACTOR}, COALESCE(salesman, 'Unknown')
+            ORDER BY SUM(${REVENUE_DOC_CURR_AMOUNT}) DESC
+            LIMIT 15
+        `))
+        monthlyTireDetail = monthlyTireResult.rows.map(r => ({
+            tireSize: String(r.tiresize),
+            productName: String(r.product_name || "-"),
+            salesman: String(r.sales || "-"),
+            qty: Number(r.total_qty),
+            amount: Number(r.total_amount)
+        }))
+    }
+
+    // 9. Watch Products: high stock from SAP (top 8 by valuation)
+    let watchProducts: WatchProduct[] = []
+    try {
+        const watchResult = await db.execute(sql`
+            SELECT 
+                sm.material_key,
+                COALESCE(NULLIF(sm.description, ''), sm.material_number) AS description,
+                COALESCE(sm.initial_stock, 0) AS initial_stock,
+                COALESCE(sap.total_stock, 0) AS current_stock,
+                COALESCE(sap.total_value, 0) AS valuation
+            FROM slow_moving_products sm
+            LEFT JOIN (
+                SELECT 
+                    UPPER(TRIM(material_no)) AS mat_no,
+                    SUM(total_stock) AS total_stock,
+                    SUM(value_stock) AS total_value
+                FROM zmc9_stock_sap
+                GROUP BY UPPER(TRIM(material_no))
+            ) sap ON UPPER(TRIM(sm.material_key)) = sap.mat_no
+            WHERE sm.material_key IS NOT NULL
+            ORDER BY COALESCE(sap.total_value, 0) DESC
+            LIMIT 11
+        `)
+        watchProducts = watchResult.rows.map(r => {
+            const initialStock = Number(r.initial_stock) || 0
+            const currentStock = Number(r.current_stock) || 0
+            const valuation = Number(r.valuation) || 0
+            return {
+                materialKey: String(r.material_key || "Unknown"),
+                description: String(r.description || "-"),
+                initialStock,
+                totalSold: Math.max(0, initialStock - currentStock),
+                remainingStock: currentStock,
+                soldAmount: 0,
+                remainingValue: valuation
+            }
+        })
+    } catch (e) {
+        console.error("Watch products query error:", e)
+    }
+
     const mapRow = (r: any, nameField: string) => ({
         [nameField]: r.period || r[nameField],
         qty: Number(r.total_qty) || 0,
@@ -205,7 +360,13 @@ export async function getSlowMovingDashboardData(
             tireSize: String(r.tiresize),
             qty: Number(r.total_qty),
             amount: Number(r.total_amount)
-        }))
+        })),
+        monthlyTireDetail,
+        watchProducts
+    }
+    } catch (e) {
+        console.error("getSlowMovingDashboardData error:", e)
+        return emptyResult
     }
 }
 
