@@ -107,6 +107,34 @@ export async function getMaxHistoricalPrice(materialNo: string) {
     }
 }
 
+/**
+ * ===============================================================
+ * BUNDLING BUILDER — ENGINE KALKULASI (VERSI TERKOREKSI)
+ * ===============================================================
+ *
+ * FORMULA SUBSIDI SILANG (Cross-Subsidy Goal-Seek):
+ * 
+ * Asumsi Bisnis:
+ *   - Barang Primer: produk utama (ban, dsb.) yang dijual berkali-kali
+ *   - Barang Sekunder: produk promo (tube, flap, dsb.) — biaya tetap per-siklus promo
+ *
+ * Notasi:
+ *   P_rev = Revenue primer per set = Σ(primer.harga × primer.qty)
+ *   P_hpp = HPP primer per set     = Σ(primer.hpp × primer.qty)
+ *   S_rev = Revenue sekunder total  = Σ(sekunder.harga × sekunder.qty)
+ *   S_hpp = HPP sekunder total      = Σ(sekunder.hpp × sekunder.qty)
+ *   M     = target margin (desimal, contoh 0.20 untuk 20%)
+ *
+ * Goal-Seek: cari N bulat (jumlah set primer) sehingga:
+ *   margin = (N×P_rev + S_rev - N×P_hpp - S_hpp) / (N×P_rev + S_rev) ≥ M
+ *
+ * Diselesaikan secara langsung (tanpa loop):
+ *   N ≥ [S_hpp - (1-M)×S_rev] / [(1-M)×P_rev - P_hpp]
+ *
+ * Syarat: denominator > 0, artinya margin bawaan primer > M
+ *   i.e., (P_rev - P_hpp)/P_rev > M
+ * ===============================================================
+ */
 export async function calculateBundlingOptimization(data: BundlingRequest) {
     try {
         const session = await getAuthenticatedSession("bundling-calculator", "view")
@@ -120,72 +148,89 @@ export async function calculateBundlingOptimization(data: BundlingRequest) {
             return { success: false, error: "Minimal pilih 1 produk Primer (Ban dsb)." }
         }
 
-        // HPP Statis dari Produk Sekunder & Primer Asal
-        const totalSecondaryHpp = secondaries.reduce((sum, item) => sum + (item.hppIdr * item.quantity), 0)
-        const totalSecondaryRevenue = secondaries.reduce((sum, item) => sum + (item.regularPrice * item.quantity), 0)
+        const targetM = targetMarginPercentage / 100
 
-        const basePrimaryHpp = primaries.reduce((sum, item) => sum + (item.hppIdr * item.quantity), 0)
-        const basePrimaryRevenue = primaries.reduce((sum, item) => sum + (item.regularPrice * item.quantity), 0)
+        // ===========================================================
+        // BAGIAN 1: Metrik Per-Deal (1 Paket Bundling Lengkap)
+        // ===========================================================
+        const P_rev = primaries.reduce((s, i) => s + (i.regularPrice * i.quantity), 0)
+        const P_hpp = primaries.reduce((s, i) => s + (i.hppIdr * i.quantity), 0)
+        const S_rev = secondaries.reduce((s, i) => s + (i.regularPrice * i.quantity), 0)
+        const S_hpp = secondaries.reduce((s, i) => s + (i.hppIdr * i.quantity), 0)
 
-        // Kita asumsikan Qty produk sekunder tetap sebagai konstanta, dan rasio antar produk primer tetap.
-        // Goal Seek: cari multiplier `M` bulat sedemikian hingga:
-        // Margin% = ( (M * basePrimaryRev + totalSecRev) - (M * basePrimaryHpp + totalSecHpp) ) / (M * basePrimaryRev + totalSecRev) 
-        // Margin% >= targetMarginPercentage / 100
+        const revenuePerDeal = P_rev + S_rev
+        const hppPerDeal = P_hpp + S_hpp
+        const profitPerDeal = revenuePerDeal - hppPerDeal
+        const marginPerDeal = revenuePerDeal > 0 ? (profitPerDeal / revenuePerDeal) * 100 : 0
 
-        const marginDecimal = targetMarginPercentage / 100
+        // Margin bawaan primer (tanpa sekunder)
+        const primaryInherentMargin = P_rev > 0 ? ((P_rev - P_hpp) / P_rev) * 100 : 0
+        // Net biaya subsidi sekunder (HPP sekunder - harga jual sekunder)
+        const secSubsidy = S_hpp - S_rev
+
+        // ===========================================================
+        // BAGIAN 2: Cross-Subsidy Goal-Seek (Formula Langsung)
+        // ===========================================================
+        // denominator: (1 - M) * P_rev - P_hpp
+        const denominator = (1 - targetM) * P_rev - P_hpp
+        // numerator: S_hpp - (1 - M) * S_rev
+        const numerator = S_hpp - (1 - targetM) * S_rev
 
         let multiplier = 1
-        let finalPrimaryHpp = 0
-        let finalPrimaryRevenue = 0
+        let isAchievable = false
+        let status = ""
         let totalRevenue = 0
         let totalHpp = 0
-        let currentMarginDecimal = -1
 
-        // Loop pencarian (maksimal cap biar tidak infinite misal harga jual primer = HPP)
-        const maxIterations = 10000;
-
-        for (let m = 1; m <= maxIterations; m++) {
-            finalPrimaryHpp = basePrimaryHpp * m;
-            finalPrimaryRevenue = basePrimaryRevenue * m;
-
-            totalRevenue = finalPrimaryRevenue + totalSecondaryRevenue;
-            totalHpp = finalPrimaryHpp + totalSecondaryHpp;
-
-            if (totalRevenue > 0) {
-                currentMarginDecimal = (totalRevenue - totalHpp) / totalRevenue;
-                if (currentMarginDecimal >= marginDecimal) {
-                    multiplier = m;
-                    break;
-                }
-            }
-        }
-
-        let status = "";
-        let isAchievable = false;
-
-        if (multiplier === maxIterations && currentMarginDecimal < marginDecimal) {
-            status = `Mustahil mencapai target margin ${targetMarginPercentage}% karena selisih Harga Jual Primer dan HPP-nya tidak cukup untuk mensubsidi barang sekunder kapanpun. Coba naikkan harga jual primer.`;
-            isAchievable = false;
+        if (P_rev === 0) {
+            // Harga jual primer belum diisi
+            isAchievable = false
+            status = `Harga jual Primer masih 0. Isi harga jual terlebih dahulu agar perhitungan bisa dilakukan.`
+            totalRevenue = S_rev
+            totalHpp = P_hpp + S_hpp
+        } else if (denominator <= 0) {
+            // Margin bawaan primer ≤ target → tidak mungkin dicapai dengan subsidi silang
+            isAchievable = false
+            multiplier = 1
+            totalRevenue = P_rev + S_rev
+            totalHpp = P_hpp + S_hpp
+            status = `❌ Tidak Tercapai! Margin bawaan Primer (${primaryInherentMargin.toFixed(1)}%) lebih rendah atau sama dengan target ${targetMarginPercentage}%. ` +
+                `Naikkan Harga Jual Primer atau turunkan Target Margin.`
+        } else if (numerator <= 0) {
+            // Sekunder self-funding: harga jualnya sudah menutup HPP-nya, 1 set sudah cukup
+            isAchievable = true
+            multiplier = 1
+            totalRevenue = P_rev + S_rev
+            totalHpp = P_hpp + S_hpp
+            status = `✅ Cukup 1 Set Primer! Barang Sekunder sudah self-funding (harga jualnya menutup biaya HPP-nya). Tidak ada cross-subsidy yang diperlukan.`
         } else {
-            status = `Tercapai! Anda harus menjual barang Primer sebanyak ${multiplier}x lipat dari qty awal simulasi untuk menutupi biaya subsidi Sekunder dengan Margin bersih ${(currentMarginDecimal * 100).toFixed(2)}%.`;
-            isAchievable = true;
+            // Formula utama: N = ceil(numerator / denominator)
+            const rawN = numerator / denominator
+            multiplier = Math.ceil(rawN)
+            isAchievable = true
+            totalRevenue = multiplier * P_rev + S_rev
+            totalHpp = multiplier * P_hpp + S_hpp
+            const actualMargin = ((totalRevenue - totalHpp) / totalRevenue * 100)
+            const totalPrimaryQty = primaries.reduce((s, i) => s + (i.quantity * multiplier), 0)
+            status = `✅ Tercapai! Jual ${multiplier}× set Primer (${totalPrimaryQty} pcs total) agar margin ${actualMargin.toFixed(2)}% tercapai setelah menanggung biaya promo Sekunder.`
         }
-
-        const recommendedPrimaryQtyTotal = primaries.reduce((sum, i) => sum + (i.quantity * multiplier), 0)
 
         const finalMarginAmount = totalRevenue - totalHpp
         const finalMarginPercentage = totalRevenue > 0 ? (finalMarginAmount / totalRevenue) * 100 : 0
+        const recommendedPrimaryQtyTotal = primaries.reduce((s, i) => s + (i.quantity * multiplier), 0)
 
-        // --- Kalkulasi Min Qty Primer agar HPP Sekunder tertutup (Sekunder = GRATIS) ---
-        // Margin bersih per siklus primer = Revenue Primer - HPP Primer
-        const unitPrimaryMargin = basePrimaryRevenue - basePrimaryHpp
+        // ===========================================================
+        // BAGIAN 3: Break-Even — Primer Hanya Menutup HPP Sekunder
+        // ===========================================================
+        // Cari minimal N agar profit primer = HPP sekunder (break-even sekunder gratis)
+        const primaryMarginPerSet = P_rev - P_hpp
         let minMultiplierHppCover: number | null = null
         let minQtyHppCoverTotal: number | null = null
         let minQtyHppCoverPerProduct: Array<{ id: string; name: string; quantity: number }> | null = null
 
-        if (unitPrimaryMargin > 0 && totalSecondaryHpp > 0) {
-            minMultiplierHppCover = Math.ceil(totalSecondaryHpp / unitPrimaryMargin)
-            minQtyHppCoverTotal = primaries.reduce((sum, i) => sum + (i.quantity * minMultiplierHppCover!), 0)
+        if (primaryMarginPerSet > 0 && S_hpp > 0) {
+            minMultiplierHppCover = Math.ceil(S_hpp / primaryMarginPerSet)
+            minQtyHppCoverTotal = primaries.reduce((s, i) => s + (i.quantity * minMultiplierHppCover!), 0)
             minQtyHppCoverPerProduct = primaries.map(i => ({
                 id: i.id,
                 name: i.name,
@@ -193,20 +238,47 @@ export async function calculateBundlingOptimization(data: BundlingRequest) {
             }))
         }
 
-        // --- Validasi Harga Maks Sekunder ---
+        // ===========================================================
+        // BAGIAN 4: Analisis Harga Per-Item Primer
+        // ===========================================================
+        const primaryItemAnalysis = primaries.map(item => {
+            const itemRevenue = item.regularPrice * item.quantity
+            const itemHpp = item.hppIdr * item.quantity
+            const itemProfit = itemRevenue - itemHpp
+            const itemMargin = itemRevenue > 0 ? (itemProfit / itemRevenue) * 100 : 0
+            const isBelowHpp = item.regularPrice < item.hppIdr
+            return {
+                id: item.id,
+                name: item.name,
+                quantity: item.quantity,
+                regularPrice: item.regularPrice,
+                hppIdr: item.hppIdr,
+                itemRevenue,
+                itemHpp,
+                itemProfit,
+                itemMargin,
+                isBelowHpp,
+            }
+        })
+
+        // ===========================================================
+        // BAGIAN 5: Validasi Harga Maks Sekunder
+        // ===========================================================
         const secondaryPriceViolations = secondaries
             .filter(s => s.maxPriceSecondary != null && s.maxPriceSecondary > 0 && s.regularPrice > s.maxPriceSecondary)
             .map(s => ({ id: s.id, name: s.name, regularPrice: s.regularPrice, maxPriceSecondary: s.maxPriceSecondary! }))
 
+        // ===========================================================
         // Save to History
+        // ===========================================================
         const finalItemsToSave = [
             ...primaries.map(i => ({ ...i, quantity: i.quantity * multiplier })),
             ...secondaries
-        ];
+        ]
 
         const safeString = (val: number, decimals = 0) => {
-            if (isNaN(val) || !isFinite(val)) return "0";
-            return val.toFixed(decimals);
+            if (isNaN(val) || !isFinite(val)) return "0"
+            return val.toFixed(decimals)
         }
 
         await db.insert(bundlingHistories).values({
@@ -219,28 +291,47 @@ export async function calculateBundlingOptimization(data: BundlingRequest) {
             finalMarginPercentage: safeString(finalMarginPercentage, 2),
             status: status || "Selesai",
             createdById: session.user.id
-        });
+        })
 
         return {
             success: true,
             data: {
+                // === Core Goal-Seek Results ===
                 multiplier,
                 recommendedPrimaryQtyTotal,
+                isAchievable,
                 totalRevenue,
                 totalHpp,
-                competitorPriceIdr,
                 finalMarginAmount,
                 finalMarginPercentage,
                 status,
-                isAchievable,
-                requiredPrimaries: primaries.map(i => ({ ...i, quantity: i.quantity * multiplier })),
-                // HPP Cover (Free Secondary) analysis
-                totalSecondaryHpp,
-                unitPrimaryMargin,
+
+                // === Per-Deal Analysis (1 Bundle Lengkap) ===
+                revenuePerDeal,
+                hppPerDeal,
+                profitPerDeal,
+                marginPerDeal,
+                primaryRevPerDeal: P_rev,
+                primaryHppPerDeal: P_hpp,
+                secondaryRevPerDeal: S_rev,
+                secondaryHppPerDeal: S_hpp,
+                primaryInherentMargin,
+                secSubsidy,
+
+                // === Break-Even Analysis ===
+                totalSecondaryHpp: S_hpp,
+                unitPrimaryMargin: primaryMarginPerSet,
                 minMultiplierHppCover,
                 minQtyHppCoverTotal,
                 minQtyHppCoverPerProduct,
-                secondaryPriceViolations
+
+                // === Per-Item Analysis ===
+                primaryItemAnalysis,
+
+                // === Misc ===
+                competitorPriceIdr,
+                secondaryPriceViolations,
+                requiredPrimaries: primaries.map(i => ({ ...i, quantity: i.quantity * multiplier })),
             }
         }
     } catch (error: unknown) {
