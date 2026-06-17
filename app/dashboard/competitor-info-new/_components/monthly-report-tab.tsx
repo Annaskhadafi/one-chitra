@@ -13,6 +13,7 @@ import { getExternalPricesForMonthlyCollapse, getRmiWeights, getLostSaleStockMat
 import { getSlowMovingDashboardData, SlowMovingDashboardResult } from "@/app/actions/slow-moving-dashboard"
 import { getA2RCompetitionData } from "@/app/actions/a2r-competition"
 import { getProcurementNextAnalytics } from "@/app/actions/procurement-next"
+import { getFleetList } from "@/app/actions/fleet"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -893,6 +894,7 @@ export function MonthlyReportTab() {
     const [slowMovingData, setSlowMovingData] = useState<SlowMovingDashboardResult | null>(null)
     const [a2rData, setA2RData] = useState<any>(null)
     const [procurementData, setProcurementData] = useState<any>(null)
+    const [fleetData, setFleetData] = useState<any[]>([])
     const slideRefs = useRef<Array<HTMLElement | null>>([]);
 
     const loadData = async () => {
@@ -977,6 +979,15 @@ export function MonthlyReportTab() {
             }
         } catch (e) {
             console.error("A2R Competition data load failed:", e)
+        }
+        // Load Fleet List data (non-blocking)
+        try {
+            const result = await getFleetList()
+            if (result.success && Array.isArray(result.data)) {
+                setFleetData(result.data)
+            }
+        } catch (e) {
+            console.error("Fleet list data load failed:", e)
         }
 
     }
@@ -1328,7 +1339,8 @@ export function MonthlyReportTab() {
     const a2rSlide = slowMovingTableSlide + 1
     const procurementChartSlide = a2rSlide + 1
     const procurementTopSlide = procurementChartSlide + 1
-    const closingSlide = procurementTopSlide + 1
+    const fleetSlide = procurementTopSlide + 1
+    const closingSlide = procurementTopSlide + 2
 
     return (
         <div className="space-y-5">
@@ -2432,6 +2444,101 @@ export function MonthlyReportTab() {
                                     </ReportTable>
                                 </div>
                             </div>
+                        </Slide>,
+                        <Slide key="fleet-list" eyebrow={`Slide ${fleetSlide} - Fleet List`} title={`Fleet List Update — ${monthLabel(month)}`}>
+                            {(() => {
+                                const monthFleet = fleetData.filter((item: any) => {
+                                    if (!item.lastupdate) return false
+                                    const d = item.lastupdate
+                                    return d && d.startsWith(month)
+                                })
+                                const totalUnits = monthFleet.reduce((acc: number, item: any) => acc + (parseInt(item.unit_qty) || 0), 0)
+                                const totalTires = monthFleet.reduce((acc: number, item: any) => acc + (parseInt(item.totaltire) || 0), 0)
+                                const totalCustomers = new Set(monthFleet.map((item: any) => item.customer)).size
+                                const totalSites = new Set(monthFleet.map((item: any) => item.site)).size
+                                return (
+                                    <div className="grid h-[calc(100%-88px)] grid-rows-[auto_1fr] gap-3 overflow-hidden">
+                                        <div className="grid grid-cols-4 gap-2">
+                                            <div className="rounded-lg border border-blue-200 bg-gradient-to-br from-blue-50 to-blue-100/50 px-3 py-2 shadow-sm">
+                                                <p className="text-[9px] font-bold uppercase tracking-wide text-blue-700">Units Updated</p>
+                                                <p className="text-lg font-black text-blue-950">{totalUnits.toLocaleString()}</p>
+                                            </div>
+                                            <div className="rounded-lg border border-indigo-200 bg-gradient-to-br from-indigo-50 to-indigo-100/50 px-3 py-2 shadow-sm">
+                                                <p className="text-[9px] font-bold uppercase tracking-wide text-indigo-700">Total Tires</p>
+                                                <p className="text-lg font-black text-indigo-950">{totalTires.toLocaleString()}</p>
+                                            </div>
+                                            <div className="rounded-lg border border-emerald-200 bg-gradient-to-br from-emerald-50 to-emerald-100/50 px-3 py-2 shadow-sm">
+                                                <p className="text-[9px] font-bold uppercase tracking-wide text-emerald-700">Customers</p>
+                                                <p className="text-lg font-black text-emerald-950">{totalCustomers}</p>
+                                            </div>
+                                            <div className="rounded-lg border border-orange-200 bg-gradient-to-br from-orange-50 to-orange-100/50 px-3 py-2 shadow-sm">
+                                                <p className="text-[9px] font-bold uppercase tracking-wide text-orange-700">Sites</p>
+                                                <p className="text-lg font-black text-orange-950">{totalSites}</p>
+                                            </div>
+                                        </div>
+                                        <div className="min-h-0 overflow-hidden rounded-lg border bg-white p-3 shadow-sm">
+                                            <p className="mb-2 text-sm font-black text-slate-900">Fleet List — Updated {monthLabel(month)}</p>
+                                            {monthFleet.length > 0 ? (
+                                                <div className="h-[calc(100%-28px)] overflow-auto">
+                                                    <ReportTable>
+                                                        <colgroup>
+                                                            <col className="w-[16%]" />
+                                                            <col className="w-[10%]" />
+                                                            <col className="w-[10%]" />
+                                                            <col className="w-[12%]" />
+                                                            <col className="w-[10%]" />
+                                                            <col className="w-[10%]" />
+                                                            <col className="w-[10%]" />
+                                                            <col className="w-[8%]" />
+                                                            <col className="w-[8%]" />
+                                                            <col className="w-[6%]" />
+                                                        </colgroup>
+                                                        <thead>
+                                                            <tr>
+                                                                <TableHeadCell>Customer</TableHeadCell>
+                                                                <TableHeadCell>Site</TableHeadCell>
+                                                                <TableHeadCell>Status</TableHeadCell>
+                                                                <TableHeadCell>Location</TableHeadCell>
+                                                                <TableHeadCell>Manufacture</TableHeadCell>
+                                                                <TableHeadCell>Model</TableHeadCell>
+                                                                <TableHeadCell>Tire Size</TableHeadCell>
+                                                                <TableHeadCell className="text-right">Units</TableHeadCell>
+                                                                <TableHeadCell className="text-right">Tires</TableHeadCell>
+                                                                <TableHeadCell>Last Update</TableHeadCell>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {monthFleet.slice(0, 18).map((item: any, idx: number) => (
+                                                                <tr key={item.id_fleet_list || idx}>
+                                                                    <TableCellCompact className="font-semibold text-[10px] max-w-[120px] truncate" title={item.customer}>{item.customer}</TableCellCompact>
+                                                                    <TableCellCompact className="text-[10px]">{item.site}</TableCellCompact>
+                                                                    <TableCellCompact>
+                                                                        <span className={`inline-block rounded px-1 py-0.5 text-[8px] font-bold ${item.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>{item.status}</span>
+                                                                    </TableCellCompact>
+                                                                    <TableCellCompact className="text-[10px] max-w-[100px] truncate" title={item.location}>{item.location}</TableCellCompact>
+                                                                    <TableCellCompact className="text-[10px]">{item.unit_manufacture}</TableCellCompact>
+                                                                    <TableCellCompact className="text-[10px]">{item.model}</TableCellCompact>
+                                                                    <TableCellCompact className="text-[10px]">{item.tire_size}</TableCellCompact>
+                                                                    <TableCellCompact className="text-right tabular-nums text-[10px]">{item.unit_qty}</TableCellCompact>
+                                                                    <TableCellCompact className="text-right tabular-nums font-black text-[10px]">{item.totaltire}</TableCellCompact>
+                                                                    <TableCellCompact className="tabular-nums text-[9px]">{item.lastupdate}</TableCellCompact>
+                                                                </tr>
+                                                            ))}
+                                                            {monthFleet.length > 18 && (
+                                                                <tr><TableCellCompact colSpan={10} className="text-center text-[10px] text-slate-400">+{monthFleet.length - 18} more records</TableCellCompact></tr>
+                                                            )}
+                                                        </tbody>
+                                                    </ReportTable>
+                                                </div>
+                                            ) : (
+                                                <div className="flex h-[300px] items-center justify-center rounded-lg border border-dashed border-slate-300 bg-white text-sm text-slate-500">
+                                                    {fleetData.length === 0 ? "Memuat data fleet..." : "Tidak ada update fleet di bulan ini."}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )
+                            })()}
                         </Slide>,
                         <Slide key="thanks" eyebrow={`Slide ${closingSlide} - Closing`} title="Thank You / Closing">
                             <div className="flex h-[calc(100%-88px)] flex-col items-center justify-center rounded-lg bg-[#0f4c81] text-center text-white">

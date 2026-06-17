@@ -64,6 +64,7 @@ interface FleetItem {
     totaltire: string
     annual: string
     forecast: string
+    lastupdate: string
 }
 
 export function FleetListTable() {
@@ -151,6 +152,20 @@ export function FleetListTable() {
             accessorKey: "totaltire",
             header: () => <div className="text-right">Total Tire</div>,
             cell: ({ row }) => <div className="text-right">{row.original.totaltire}</div>,
+        },
+        {
+            accessorKey: "lastupdate",
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                    Last Update
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                </Button>
+            ),
+            cell: ({ row }) => {
+                const date = row.original.lastupdate
+                if (!date) return <span className="text-muted-foreground">-</span>
+                return <span className="tabular-nums">{date}</span>
+            },
         },
     ], [])
 

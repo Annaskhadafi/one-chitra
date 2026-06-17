@@ -47,6 +47,7 @@ interface FleetItem {
     unit_qty: string
     totaltire: string
     forecast: string
+    lastupdate: string
 }
 
 interface FleetChartsProps {
