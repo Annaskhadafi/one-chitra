@@ -361,8 +361,15 @@ export function BundlingCalculator({ products, usdRate }: BundlingCalculatorProp
 
     const PrimaryTableRows = () => (
         <tbody className="divide-y font-medium text-xs">
-            {isFetchingCompetitor && primaries.length === 0 && (
-                <tr><td colSpan={6} className="py-6 text-center"><Loader2 className="w-5 h-5 animate-spin mx-auto text-primary" /></td></tr>
+            {isFetchingCompetitor && (
+                <tr>
+                    <td colSpan={6} className="py-4 text-center bg-blue-500/5">
+                        <div className="flex items-center justify-center gap-2 text-blue-700 font-bold text-xs">
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span>Mengambil data harga histori & kompetitor...</span>
+                        </div>
+                    </td>
+                </tr>
             )}
             {primaries.map((item) => {
                 const itemMargin = item.regularPrice > 0 ? ((item.regularPrice - item.hppIdr) / item.regularPrice) * 100 : -100
@@ -457,6 +464,16 @@ export function BundlingCalculator({ products, usdRate }: BundlingCalculatorProp
 
     const SecondaryTableRows = () => (
         <tbody className="divide-y font-medium text-xs">
+            {isFetchingCompetitor && (
+                <tr>
+                    <td colSpan={6} className="py-4 text-center bg-amber-500/5">
+                        <div className="flex items-center justify-center gap-2 text-amber-700 font-bold text-xs">
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span>Mengambil data harga histori...</span>
+                        </div>
+                    </td>
+                </tr>
+            )}
             {secondaries.map((item) => {
                 const netSubsidy = (item.hppIdr - item.regularPrice) * item.quantity
                 const overMax = item.maxPriceSecondary && item.maxPriceSecondary > 0 && item.regularPrice > item.maxPriceSecondary
