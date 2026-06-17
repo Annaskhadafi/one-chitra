@@ -12,7 +12,7 @@ import {
     ChevronsUpDown, Loader2, Plus, Trash2, Calculator, TrendingUp, DollarSign,
     Target, Sparkles, Percent, Asterisk, Tag, AlertTriangle, Gift, Minus, Pencil,
     BarChart3, Info, Package, CheckCircle2, XCircle,
-    ShoppingCart, ChevronRight
+    ShoppingCart, ChevronRight, Download
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
@@ -887,7 +887,7 @@ export function BundlingCalculator({ products, usdRate }: BundlingCalculatorProp
                                     )}
 
                                     {/* ── F. Status Text ─────────────────────────── */}
-                                    <div className="px-6 py-5">
+                                    <div className="px-6 py-5 space-y-4">
                                         <div className={cn(
                                             "p-4 rounded-xl text-xs font-semibold leading-relaxed border-l-4",
                                             result.isAchievable
@@ -896,6 +896,15 @@ export function BundlingCalculator({ products, usdRate }: BundlingCalculatorProp
                                         )}>
                                             {result.status}
                                         </div>
+
+                                        <Button
+                                            onClick={() => window.print()}
+                                            variant="outline"
+                                            className="w-full font-bold border-2 border-indigo-500 hover:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 gap-2 h-11"
+                                        >
+                                            <Download className="w-4 h-4" />
+                                            Cetak Analisis (A4 PDF)
+                                        </Button>
                                     </div>
 
                                     {/* ── G. Secondary Price Violations ──────────── */}
@@ -947,6 +956,224 @@ export function BundlingCalculator({ products, usdRate }: BundlingCalculatorProp
 
                 </div>
             </div>
+
+            {/* ── printable area for A4 PDF ── */}
+            {result && (
+                <div id="bundling-print-area" className="hidden pdf-wrapper font-sans text-[10pt] leading-normal text-slate-800 p-8">
+                    <style dangerouslySetInnerHTML={{ __html: `
+                        @media print {
+                            body * {
+                                visibility: hidden;
+                            }
+                            #bundling-print-area, #bundling-print-area * {
+                                visibility: visible;
+                            }
+                            #bundling-print-area {
+                                position: absolute;
+                                left: 0;
+                                top: 0;
+                                width: 100%;
+                                display: block !important;
+                                padding: 0 !important;
+                                margin: 0 !important;
+                            }
+                            @page {
+                                size: A4;
+                                margin: 15mm 10mm 15mm 10mm;
+                            }
+                        }
+                    `}} />
+                    
+                    {/* Header */}
+                    <div className="border-b-2 border-slate-900 pb-4 mb-6 flex justify-between items-end">
+                        <div>
+                            <h1 className="text-xl font-extrabold uppercase tracking-tight text-slate-900">ONE CHITRA</h1>
+                            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Bundling Builder — Analisis Subsidi Silang</p>
+                        </div>
+                        <div className="text-right text-[9px] text-slate-500 font-medium">
+                            Tanggal: {new Date().toLocaleDateString("id-ID", { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                    </div>
+
+                    {/* Meta Parameter */}
+                    <div className="grid grid-cols-3 gap-4 bg-slate-50 border border-slate-200 rounded p-4 mb-6">
+                        <div>
+                            <span className="block text-[8px] font-black uppercase text-slate-400">Target Margin</span>
+                            <span className="text-sm font-bold text-slate-800">{targetMargin}%</span>
+                        </div>
+                        <div>
+                            <span className="block text-[8px] font-black uppercase text-slate-400">Harga Kompetitor</span>
+                            <span className="text-sm font-bold text-slate-800">{competitorPriceIdr !== "0" ? fmt(parseInt(competitorPriceIdr)) : "Tidak Diatur"}</span>
+                        </div>
+                        <div>
+                            <span className="block text-[8px] font-black uppercase text-slate-400">Kurs USD/IDR</span>
+                            <span className="text-sm font-bold text-slate-800">{fmt(usdRate)}</span>
+                        </div>
+                    </div>
+
+                    {/* Ringkasan Utama */}
+                    <div className="border border-slate-950 rounded overflow-hidden mb-6">
+                        <div className="bg-slate-900 text-white px-4 py-2 text-xs font-black uppercase tracking-wider text-center">
+                            Hasil Rekomendasi
+                        </div>
+                        <div className="p-4 grid grid-cols-2 gap-4 text-center divide-x divide-slate-200">
+                            <div>
+                                <span className="block text-[9px] font-black uppercase text-slate-500">Minimum Set Primer Harus Dijual</span>
+                                <span className="text-4xl font-black text-slate-900 block mt-1">{result.recommendedPrimaryQtyTotal} <span className="text-sm font-bold text-slate-500">pcs</span></span>
+                                <span className="text-[10px] text-slate-600 block mt-1">({result.multiplier}x kelipatan qty simulasi)</span>
+                            </div>
+                            <div className="flex flex-col justify-center items-center">
+                                <span className="block text-[9px] font-black uppercase text-slate-500">Status Pencapaian</span>
+                                <span className={cn("text-base font-extrabold uppercase mt-2 px-3 py-1 rounded-full text-xs", result.isAchievable ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800")}>
+                                    {result.isAchievable ? "✓ Target Tercapai" : "✗ Target Tidak Tercapai"}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Ringkasan Keuangan Skenario */}
+                    <div className="mb-6">
+                        <h2 className="text-[10px] font-black uppercase tracking-widest text-slate-900 mb-2">Ringkasan Keuangan Skenario</h2>
+                        <table className="w-full border-collapse border border-slate-200 text-xs">
+                            <tbody>
+                                <tr className="border-b border-slate-200 bg-slate-50">
+                                    <td className="p-2 font-bold text-slate-600">Total Revenue</td>
+                                    <td className="p-2 text-right font-black text-slate-900">{fmt(result.totalRevenue)}</td>
+                                </tr>
+                                <tr className="border-b border-slate-200">
+                                    <td className="p-2 font-bold text-slate-600">Total HPP (Primer + Sekunder)</td>
+                                    <td className="p-2 text-right font-black text-slate-900">{fmt(result.totalHpp)}</td>
+                                </tr>
+                                <tr className="bg-emerald-50">
+                                    <td className="p-2 font-black text-emerald-800">Margin Bersih</td>
+                                    <td className="p-2 text-right font-black text-emerald-800 text-sm">
+                                        {fmt(result.finalMarginAmount)} ({result.finalMarginPercentage.toFixed(2)}%)
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {/* Detail Barang Utama (Primer) */}
+                    <div className="mb-6">
+                        <h2 className="text-[10px] font-black uppercase tracking-widest text-slate-900 mb-2">Detail Barang Utama (Primer) - Qty Simulasi</h2>
+                        <table className="w-full border-collapse border border-slate-200 text-[9pt]">
+                            <thead>
+                                <tr className="bg-slate-100 border-b border-slate-300">
+                                    <th className="p-2 text-left font-black uppercase text-slate-600">Nama Produk</th>
+                                    <th className="p-2 text-center font-black uppercase text-slate-600">Qty</th>
+                                    <th className="p-2 text-right font-black uppercase text-slate-600">Harga Jual</th>
+                                    <th className="p-2 text-right font-black uppercase text-slate-600">HPP</th>
+                                    <th className="p-2 text-right font-black uppercase text-slate-600">Margin/pcs</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {primaries.map((p) => {
+                                    const marginPcs = p.regularPrice - p.hppIdr
+                                    const marginPct = p.regularPrice > 0 ? (marginPcs / p.regularPrice) * 100 : 0
+                                    return (
+                                        <tr key={p.id} className="border-b border-slate-200">
+                                            <td className="p-2 font-bold text-slate-800">{p.name}</td>
+                                            <td className="p-2 text-center font-bold text-slate-700">{p.quantity}</td>
+                                            <td className="p-2 text-right font-bold text-slate-800">{fmt(p.regularPrice)}</td>
+                                            <td className="p-2 text-right font-medium text-slate-500">{fmt(p.hppIdr)}</td>
+                                            <td className={cn("p-2 text-right font-bold", marginPcs >= 0 ? "text-emerald-700" : "text-rose-700")}>
+                                                {marginPct.toFixed(1)}%
+                                            </td>
+                                        </tr>
+                                    )
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {/* Detail Barang Pendamping (Sekunder) */}
+                    {secondaries.length > 0 && (
+                        <div className="mb-6">
+                            <h2 className="text-[10px] font-black uppercase tracking-widest text-slate-900 mb-2">Detail Barang Pendamping (Sekunder)</h2>
+                            <table className="w-full border-collapse border border-slate-200 text-[9pt]">
+                                <thead>
+                                    <tr className="bg-slate-100 border-b border-slate-300">
+                                        <th className="p-2 text-left font-black uppercase text-slate-600">Nama Produk</th>
+                                        <th className="p-2 text-center font-black uppercase text-slate-600">Qty</th>
+                                        <th className="p-2 text-right font-black uppercase text-slate-600">Harga Jual</th>
+                                        <th className="p-2 text-right font-black uppercase text-slate-600">HPP</th>
+                                        <th className="p-2 text-right font-black uppercase text-slate-600">Net Subsidi/pcs</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {secondaries.map((s) => {
+                                        const sub = s.hppIdr - s.regularPrice
+                                        return (
+                                            <tr key={s.id} className="border-b border-slate-200">
+                                                <td className="p-2 font-bold text-slate-800">{s.name}</td>
+                                                <td className="p-2 text-center font-bold text-slate-700">{s.quantity}</td>
+                                                <td className="p-2 text-right font-bold text-slate-800">{fmt(s.regularPrice)}</td>
+                                                <td className="p-2 text-right font-medium text-slate-500">{fmt(s.hppIdr)}</td>
+                                                <td className={cn("p-2 text-right font-bold", sub > 0 ? "text-amber-700" : "text-emerald-700")}>
+                                                    {fmt(sub)}
+                                                </td>
+                                            </tr>
+                                        )
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+
+                    {/* Analisis 1 Paket & Break Even */}
+                    <div className="grid grid-cols-2 gap-4 mb-6">
+                        <div className="border border-slate-200 rounded p-3">
+                            <h3 className="text-[9px] font-black uppercase text-slate-500 mb-2">Analisis Per-Deal</h3>
+                            <div className="space-y-1.5 text-xs">
+                                <div className="flex justify-between">
+                                    <span className="text-slate-500 font-medium">Revenue/Deal:</span>
+                                    <span className="font-bold text-slate-800">{fmt(result.revenuePerDeal)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-slate-500 font-medium">HPP/Deal:</span>
+                                    <span className="font-bold text-slate-800">{fmt(result.hppPerDeal)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-slate-500 font-medium">Profit/Deal:</span>
+                                    <span className="font-black text-emerald-700">{fmt(result.profitPerDeal)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-slate-500 font-medium">Margin/Deal:</span>
+                                    <span className="font-black text-emerald-700">{result.marginPerDeal?.toFixed(2)}%</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {result.minQtyHppCoverTotal != null && result.totalSecondaryHpp > 0 && (
+                            <div className="border border-slate-200 rounded p-3 bg-amber-50/50">
+                                <h3 className="text-[9px] font-black uppercase text-amber-800 mb-2">Break-Even (Sekunder Gratis)</h3>
+                                <div className="space-y-1 text-xs">
+                                    <div className="flex justify-between">
+                                        <span className="text-slate-500 font-medium">HPP Sekunder Gratis:</span>
+                                        <span className="font-bold text-slate-800">{fmt(result.totalSecondaryHpp)}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-slate-500 font-medium">Margin per Set Primer:</span>
+                                        <span className="font-bold text-slate-800">{fmt(result.unitPrimaryMargin)}</span>
+                                    </div>
+                                    <div className="flex justify-between pt-1 border-t border-amber-200 font-black text-amber-800">
+                                        <span>Min Primer Impas HPP:</span>
+                                        <span>{result.minQtyHppCoverTotal} pcs</span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Status & Kebijakan */}
+                    <div className="border-t border-slate-200 pt-4 text-[9px] text-slate-500 font-medium leading-relaxed">
+                        <div className="mb-2"><strong>Status Analisis:</strong> {result.status}</div>
+                        <div>* Dokumen ini digenerate secara otomatis melalui One Chitra Bundling Builder ML-based Simulation.</div>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }
+
