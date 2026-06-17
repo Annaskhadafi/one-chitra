@@ -1029,6 +1029,23 @@ export function MonthlyReportTab() {
         return () => { cancelled = true }
     }, [month])
 
+    // Re-fetch Fleet List data when month changes
+    useEffect(() => {
+        if (!month) return
+        let cancelled = false
+        void (async () => {
+            try {
+                const result = await getFleetList()
+                if (!cancelled && result.success && Array.isArray(result.data)) {
+                    setFleetData(result.data)
+                }
+            } catch {
+                // optional
+            }
+        })()
+        return () => { cancelled = true }
+    }, [month])
+
     // Fetch Procurement data on mount
     useEffect(() => {
         let cancelled = false
@@ -2445,22 +2462,22 @@ export function MonthlyReportTab() {
                                 </div>
                             </div>
                         </Slide>,
-                        <Slide key="fleet-list" eyebrow={`Slide ${fleetSlide} - Fleet List`} title={`Fleet List Update — ${monthLabel(month)}`}>
+                        <Slide key="fleet-list" eyebrow={`Slide ${fleetSlide} - Fleet List`} title={`Fleet List — ${monthLabel(month)}`}>
                             {(() => {
-                                const monthFleet = fleetData.filter((item: any) => {
-                                    if (!item.lastupdate) return false
-                                    const d = item.lastupdate
-                                    return d && d.startsWith(month)
+                                const sorted = [...fleetData].sort((a: any, b: any) => {
+                                    const da = a.lastupdate || ""
+                                    const db = b.lastupdate || ""
+                                    return db.localeCompare(da)
                                 })
-                                const totalUnits = monthFleet.reduce((acc: number, item: any) => acc + (parseInt(item.unit_qty) || 0), 0)
-                                const totalTires = monthFleet.reduce((acc: number, item: any) => acc + (parseInt(item.totaltire) || 0), 0)
-                                const totalCustomers = new Set(monthFleet.map((item: any) => item.customer)).size
-                                const totalSites = new Set(monthFleet.map((item: any) => item.site)).size
+                                const totalUnits = fleetData.reduce((acc: number, item: any) => acc + (parseInt(item.unit_qty) || 0), 0)
+                                const totalTires = fleetData.reduce((acc: number, item: any) => acc + (parseInt(item.totaltire) || 0), 0)
+                                const totalCustomers = new Set(fleetData.map((item: any) => item.customer)).size
+                                const totalSites = new Set(fleetData.map((item: any) => item.site)).size
                                 return (
                                     <div className="grid h-[calc(100%-88px)] grid-rows-[auto_1fr] gap-3 overflow-hidden">
                                         <div className="grid grid-cols-4 gap-2">
                                             <div className="rounded-lg border border-blue-200 bg-gradient-to-br from-blue-50 to-blue-100/50 px-3 py-2 shadow-sm">
-                                                <p className="text-[9px] font-bold uppercase tracking-wide text-blue-700">Units Updated</p>
+                                                <p className="text-[9px] font-bold uppercase tracking-wide text-blue-700">Total Units</p>
                                                 <p className="text-lg font-black text-blue-950">{totalUnits.toLocaleString()}</p>
                                             </div>
                                             <div className="rounded-lg border border-indigo-200 bg-gradient-to-br from-indigo-50 to-indigo-100/50 px-3 py-2 shadow-sm">
@@ -2477,8 +2494,8 @@ export function MonthlyReportTab() {
                                             </div>
                                         </div>
                                         <div className="min-h-0 overflow-hidden rounded-lg border bg-white p-3 shadow-sm">
-                                            <p className="mb-2 text-sm font-black text-slate-900">Fleet List — Updated {monthLabel(month)}</p>
-                                            {monthFleet.length > 0 ? (
+                                            <p className="mb-2 text-sm font-black text-slate-900">Fleet List — Terbaru</p>
+                                            {sorted.length > 0 ? (
                                                 <div className="h-[calc(100%-28px)] overflow-auto">
                                                     <ReportTable>
                                                         <colgroup>
@@ -2508,7 +2525,7 @@ export function MonthlyReportTab() {
                                                             </tr>
                                                         </thead>
                                                         <tbody>
-                                                            {monthFleet.slice(0, 18).map((item: any, idx: number) => (
+                                                            {sorted.slice(0, 18).map((item: any, idx: number) => (
                                                                 <tr key={item.id_fleet_list || idx}>
                                                                     <TableCellCompact className="font-semibold text-[10px] max-w-[120px] truncate" title={item.customer}>{item.customer}</TableCellCompact>
                                                                     <TableCellCompact className="text-[10px]">{item.site}</TableCellCompact>
@@ -2524,15 +2541,15 @@ export function MonthlyReportTab() {
                                                                     <TableCellCompact className="tabular-nums text-[9px]">{item.lastupdate}</TableCellCompact>
                                                                 </tr>
                                                             ))}
-                                                            {monthFleet.length > 18 && (
-                                                                <tr><TableCellCompact colSpan={10} className="text-center text-[10px] text-slate-400">+{monthFleet.length - 18} more records</TableCellCompact></tr>
+                                                            {sorted.length > 18 && (
+                                                                <tr><TableCellCompact colSpan={10} className="text-center text-[10px] text-slate-400">+{sorted.length - 18} more records</TableCellCompact></tr>
                                                             )}
                                                         </tbody>
                                                     </ReportTable>
                                                 </div>
                                             ) : (
                                                 <div className="flex h-[300px] items-center justify-center rounded-lg border border-dashed border-slate-300 bg-white text-sm text-slate-500">
-                                                    {fleetData.length === 0 ? "Memuat data fleet..." : "Tidak ada update fleet di bulan ini."}
+                                                    {fleetData.length === 0 ? "Memuat data fleet..." : "Tidak ada data fleet."}
                                                 </div>
                                             )}
                                         </div>
