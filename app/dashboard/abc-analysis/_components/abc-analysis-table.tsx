@@ -148,7 +148,7 @@ export function ABCAnalysisTable({ data }: ABCAnalysisTableProps) {
                                 </div>
                                 <p className="font-medium">
                                     {data.length === 0
-                                        ? "Belum ada data pergerakan stok"
+                                        ? "Belum ada data pergerakan stok untuk periode ini"
                                         : "Tidak ada hasil sesuai filter"}
                                 </p>
                             </div>
@@ -301,7 +301,7 @@ export function ABCAnalysisTable({ data }: ABCAnalysisTableProps) {
                                 <TableRow>
                                     <TableCell colSpan={11} className="text-center py-12 text-muted-foreground">
                                         {data.length === 0
-                                            ? "Belum ada data pergerakan stok dalam 12 bulan terakhir."
+                                            ? "Belum ada data pergerakan stok untuk periode ini."
                                             : "Tidak ada hasil sesuai filter."}
                                     </TableCell>
                                 </TableRow>

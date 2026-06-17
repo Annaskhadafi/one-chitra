@@ -1,9 +1,27 @@
+import { Suspense } from "react"
 import { getABCAnalysis } from "@/app/actions/abc-analysis"
 import { ABCAnalysisTable } from "./_components/abc-analysis-table"
 import { ABCDistributionChart } from "./_components/abc-distribution-chart"
+import { ABCAnalysisFilter } from "./_components/abc-analysis-filter"
 
-export default async function ABCAnalysisPage() {
-    const data = await getABCAnalysis(12)
+const MONTH_LABELS: Record<string, string> = {
+    "1": "1 Bulan Terakhir",
+    "3": "3 Bulan Terakhir",
+    "6": "6 Bulan Terakhir",
+    "12": "12 Bulan Terakhir",
+    "24": "24 Bulan Terakhir",
+}
+
+export default async function ABCAnalysisPage({
+    searchParams,
+}: {
+    searchParams: Promise<{ months?: string }>
+}) {
+    const params = await searchParams
+    const months = parseInt(params.months ?? "12", 10)
+    const validMonths = [1, 3, 6, 12, 24].includes(months) ? months : 12
+
+    const data = await getABCAnalysis(validMonths)
 
     const countA = data.filter((d) => d.abcClass === "A").length
     const countB = data.filter((d) => d.abcClass === "B").length
@@ -18,13 +36,18 @@ export default async function ABCAnalysisPage() {
                 <div className="flex items-center gap-2">
                     <h1 className="text-2xl font-bold tracking-tight">ABC Analysis</h1>
                     <span className="bg-violet-100 text-violet-700 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
-                        12 Bulan Terakhir
+                        {MONTH_LABELS[validMonths.toString()] ?? `${validMonths} Bulan Terakhir`}
                     </span>
                 </div>
                 <p className="text-muted-foreground">
                     Klasifikasi produk berdasarkan volume pergerakan stok. A = Fast movers (80%), B = Medium (15%), C = Slow movers (5%).
                 </p>
             </div>
+
+            {/* Filter Bulanan */}
+            <Suspense fallback={null}>
+                <ABCAnalysisFilter />
+            </Suspense>
 
             {/* Summary Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

@@ -45,7 +45,7 @@ export async function createVehicle(policeNumber: string, type: string) {
 
 export async function getFleetList() {
     try {
-        const response = await fetch("https://ics.chitraparatama.co.id/product/get_api.php?function=fleetlist", {
+        const response = await fetch("https://ics.chitraparatama.com/product/get_api.php?function=fleetlist", {
             cache: "no-store"
         });
         const result = await response.json();
