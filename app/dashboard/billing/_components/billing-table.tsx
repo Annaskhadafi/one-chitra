@@ -259,37 +259,54 @@ export function BillingTable({ data: initialData }: { data: BillingRecordDisplay
         refetch()
     }
 
-    const handleExport = () => {
-        const headers = ["Customer", "PO No", "PO Date", "Delivery No", "Material No", "Description", "Qty", "Price", "Amount"]
-        const csvData = table.getFilteredRowModel().rows.map(row => {
-            const d = row.original
-            return [
-                d.customer || "",
-                d.poNo || "",
-                d.datePo ? new Date(d.datePo).toLocaleDateString("id-ID") : "",
-                d.deliveryNumber || "",
-                d.materialNumber || "",
-                d.materialDescription || "",
-                d.qty || 0,
-                d.price || 0,
-                d.totalPriceIdr || 0
-            ]
-        })
+    const handleExport = async () => {
+        const toastId = toast.loading("Mengexport ke Excel...")
+        try {
+            const formatDate = (val: any) => {
+                if (!val) return ""
+                const date = new Date(val)
+                if (isNaN(date.getTime())) return ""
+                return date.toLocaleDateString("id-ID")
+            }
 
-        const csvContent = [
-            headers.join(","),
-            ...csvData.map(row => row.join(","))
-        ].join("\n")
+            const exportData = table.getFilteredRowModel().rows.map(row => {
+                const d = row.original
+                return {
+                    "Customer": d.customer || "",
+                    "PO No": d.poNo || "",
+                    "PO Date": formatDate(d.datePo),
+                    "SAP Invoice No": d.noInvSap || "",
+                    "SAP Invoice Date": formatDate(d.dateInvoice),
+                    "SAP Delivery No": d.nomorDoSap || "",
+                    "Delivery No": d.deliveryNumber || "",
+                    "Material No": d.materialNumber || "",
+                    "Description": d.materialDescription || "",
+                    "Qty": d.qty ? Number(d.qty) : 0,
+                    "Price": d.price ? Number(d.price) : 0,
+                    "Amount": d.totalPriceIdr ? Number(d.totalPriceIdr) : 0,
+                    "Actual No DO": d.actualNoDo || "",
+                    "Tgl DO/Faktur": formatDate(d.tglDoFaktur),
+                    "e-Faktur": d.eFaktur || "",
+                    "Send Invoice Date": formatDate(d.dateSendInvoice),
+                    "Mode Delivery": d.modeDelivery || "",
+                    "No Resi": d.noResi || "",
+                    "Status Delivery": d.statusDelivery || "",
+                    "Remarks": d.remaks || "",
+                    "Payment Type": d.paymentType || ""
+                }
+            })
 
-        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
-        const link = document.createElement("a")
-        const url = URL.createObjectURL(blob)
-        link.setAttribute("href", url)
-        link.setAttribute("download", `billing-${new Date().toISOString().slice(0, 10)}.csv`)
-        link.style.visibility = "hidden"
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
+            const XLSX = await import("xlsx")
+            const worksheet = XLSX.utils.json_to_sheet(exportData)
+            const workbook = XLSX.utils.book_new()
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Billing")
+            const dateStr = new Date().toISOString().slice(0, 10)
+            XLSX.writeFile(workbook, `billing-${dateStr}.xlsx`)
+            toast.success(`Export Excel berhasil: ${exportData.length} baris`, { id: toastId })
+        } catch (error) {
+            console.error("Failed to export billing:", error)
+            toast.error("Export Excel gagal", { id: toastId })
+        }
     }
 
     const normalizeSelection = React.useCallback((selection: SheetSelection | null) => {
@@ -806,7 +823,7 @@ export function BillingTable({ data: initialData }: { data: BillingRecordDisplay
                     <div className="flex items-center gap-2">
                         <Button variant="outline" onClick={handleExport} className="h-[36px]">
                             <Download className="mr-2 h-4 w-4" />
-                            Export CSV
+                            Export Excel
                         </Button>
                         <Button
                             variant="outline"
