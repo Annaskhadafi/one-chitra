@@ -714,7 +714,9 @@ export async function getA2RCompetitionData(rawFilters: z.input<typeof a2rCompet
         }
 
         const accumulator = ensureMonthlyAccumulator(row.period, salesman)
-        accumulator.revenueActual += Number(row.revenueInDocCurr || 0)
+        const rowRevenue = Number(row.revenueInDocCurr || 0)
+        const rowQty = rowRevenue < 0 ? -Math.abs(Number(row.qty || 0)) : Number(row.qty || 0)
+        accumulator.revenueActual += rowRevenue
 
         const materialKey = normalizeMaterialKey(row.materialNo)
         const category = materialCategoryMap.get(materialKey) || ""
@@ -741,8 +743,8 @@ export async function getA2RCompetitionData(rawFilters: z.input<typeof a2rCompet
                 materials: new Map(),
             }
 
-            customerBucket.revenue += Number(row.revenueInDocCurr || 0)
-            customerBucket.qty += Number(row.qty || 0)
+            customerBucket.revenue += rowRevenue
+            customerBucket.qty += rowQty
 
             if (materialKey) {
                 const materialBucket = customerBucket.materials.get(materialKey) || {
@@ -754,8 +756,8 @@ export async function getA2RCompetitionData(rawFilters: z.input<typeof a2rCompet
                     qty: 0,
                 }
 
-                materialBucket.revenue += Number(row.revenueInDocCurr || 0)
-                materialBucket.qty += Number(row.qty || 0)
+                materialBucket.revenue += rowRevenue
+                materialBucket.qty += rowQty
                 customerBucket.materials.set(materialKey, materialBucket)
             }
 
@@ -780,7 +782,7 @@ export async function getA2RCompetitionData(rawFilters: z.input<typeof a2rCompet
                     revenue: 0,
                 }
 
-                materialBucket.revenue += Number(row.revenueInDocCurr || 0)
+                materialBucket.revenue += rowRevenue
                 cosmeticBucket.materials.set(materialKey, materialBucket)
                 accumulator.cosmeticCustomerBuckets.set(customerKey, cosmeticBucket)
             }
@@ -925,8 +927,10 @@ export async function getA2RCompetitionData(rawFilters: z.input<typeof a2rCompet
             continue
         }
 
-        product.qty += Number(row.qty || 0)
-        product.revenue += Number(row.revenueInDocCurr || 0)
+        const rowRevenue = Number(row.revenueInDocCurr || 0)
+        const rowQty = rowRevenue < 0 ? -Math.abs(Number(row.qty || 0)) : Number(row.qty || 0)
+        product.qty += rowQty
+        product.revenue += rowRevenue
 
         if (row.customerName?.trim()) {
             product.customers.add(row.customerName.trim())
