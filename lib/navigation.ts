@@ -11,7 +11,6 @@ import {
     ClipboardList,
     Lock,
     Wrench,
-    IdCard,
     type LucideIcon
 } from "lucide-react"
 
@@ -172,6 +171,11 @@ export const navigationConfig: NavSection[] = [
                         title: "Stocks",
                         url: "/dashboard/stocks",
                         resource: "stocks",
+                    },
+                    {
+                        title: "RFID",
+                        url: "/dashboard/rfid",
+                        resource: "rfid",
                     },
                     {
                         title: "Stock Card",
