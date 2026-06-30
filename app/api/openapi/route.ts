@@ -16,7 +16,33 @@ const openApiDocument = {
     { url: "http://localhost:3000", description: "Local development" },
   ],
   paths: {
-      "/api/wip-repair": {
+      "/api/stocks": {
+      get: {
+        tags: ["Stocks"],
+        summary: "Get stock levels",
+        description: "Returns paginated stock levels with product and warehouse details. Same data displayed on the Stock Management dashboard page.",
+        security: [{ ApiKeyAuth: [] }],
+        parameters: [
+          { name: "category", in: "query", schema: { type: "string" }, description: "Filter by product category (e.g. TYRE)" },
+          { name: "warehouseType", in: "query", schema: { type: "string" }, description: "Filter by warehouse type" },
+          { name: "sloc", in: "query", schema: { type: "string" }, description: "Filter by SLoc code" },
+          { name: "search", in: "query", schema: { type: "string" }, description: "Search by material number, description, brand, or warehouse description" },
+          { name: "page", in: "query", schema: { type: "integer", default: 1 }, description: "Page number" },
+          { name: "limit", in: "query", schema: { type: "integer", default: 100, maximum: 1000 }, description: "Items per page" },
+        ],
+        responses: {
+          "200": {
+            description: "Stock levels data",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/StockListResponse" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/wip-repair": {
       get: {
         tags: ["WIP Repair"],
         summary: "Get WIP Repair Table records",
@@ -68,6 +94,64 @@ const openApiDocument = {
         properties: {
           count: { type: "integer", minimum: 0 },
           source: { type: "string" },
+        },
+      },
+      StockMeta: {
+        type: "object",
+        required: ["total", "page", "limit", "totalPages"],
+        properties: {
+          total: { type: "integer" },
+          page: { type: "integer" },
+          limit: { type: "integer" },
+          totalPages: { type: "integer" },
+        },
+      },
+      StockBooking: {
+        type: "object",
+        properties: {
+          id: { type: "integer" },
+          customerId: { type: "integer" },
+          customerName: { type: "string" },
+          customerCode: { type: "string" },
+          quantity: { type: "integer" },
+          remark: nullableString,
+        },
+      },
+      StockRecord: {
+        type: "object",
+        required: ["id", "plant", "category", "materialNumber", "totalStock", "minStock"],
+        properties: {
+          id: { type: "integer" },
+          plant: { type: "string" },
+          category: { type: "string" },
+          brand: nullableString,
+          materialNumber: { type: "string" },
+          materialNumberCk: nullableString,
+          oldMaterialNo: nullableString,
+          materialDescription: nullableString,
+          costSap: nullableString,
+          sloc: { type: "string" },
+          warehouseId: { type: "integer" },
+          warehouseSloc: { type: "string" },
+          warehouseDescription: nullableString,
+          warehouseType: nullableString,
+          totalStock: { type: "integer" },
+          minStock: { type: "integer" },
+          bookedStock: { type: "integer" },
+          draftBookedStock: { type: "integer" },
+          valuationValue: { type: "number" },
+          bookings: { type: "array", items: { $ref: "#/components/schemas/StockBooking" } },
+          createdAt: { type: "string", format: "date-time" },
+          updatedAt: { type: "string", format: "date-time" },
+        },
+      },
+      StockListResponse: {
+        type: "object",
+        required: ["status", "data", "meta"],
+        properties: {
+          status: { type: "string" },
+          data: { type: "array", items: { $ref: "#/components/schemas/StockRecord" } },
+          meta: { $ref: "#/components/schemas/StockMeta" },
         },
       },
       WipRepairListResponse: {
