@@ -1,6 +1,6 @@
 import "server-only"
 
-import { and, desc, eq } from "drizzle-orm"
+import { and, desc, eq, inArray } from "drizzle-orm"
 import { z } from "zod"
 
 import { db } from "@/db"
@@ -88,4 +88,36 @@ export async function saveRfidScanPayload(payload: unknown) {
     }))
 
     return db.insert(rfidScans).values(rows).returning()
+}
+
+export const deleteRfidScanPayloadSchema = z.object({
+    material: z.object({
+        plnt: requiredText,
+        material: requiredText,
+        sloc: requiredText,
+    }).optional(),
+    epcs: z.array(requiredText).min(1),
+})
+
+export type DeleteRfidScanPayload = z.input<typeof deleteRfidScanPayloadSchema>
+
+export function parseDeleteRfidScanPayload(payload: unknown) {
+    return deleteRfidScanPayloadSchema.parse(payload)
+}
+
+export async function deleteRfidScanPayload(payload: unknown) {
+    const parsed = parseDeleteRfidScanPayload(payload)
+
+    const conditions: ReturnType<typeof eq>[] = [inArray(rfidScans.epc, parsed.epcs)]
+
+    if (parsed.material) {
+        conditions.push(
+            eq(rfidScans.plant, parsed.material.plnt),
+            eq(rfidScans.materialNumber, parsed.material.material),
+            eq(rfidScans.sloc, parsed.material.sloc),
+        )
+    }
+
+    const deleted = await db.delete(rfidScans).where(and(...conditions)).returning()
+    return deleted
 }

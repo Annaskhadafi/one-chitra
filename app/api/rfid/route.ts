@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { ZodError } from "zod"
 
-import { saveRfidScanPayload } from "@/lib/rfid"
+import { deleteRfidScanPayload, saveRfidScanPayload } from "@/lib/rfid"
 
 export const dynamic = "force-dynamic"
 
@@ -47,6 +47,43 @@ export async function POST(req: NextRequest) {
             {
                 status: "ERROR",
                 message: "Failed to save RFID scan",
+            },
+            { status: 500 },
+        )
+    }
+}
+
+export async function DELETE(req: NextRequest) {
+    if (!isAuthorized(req)) {
+        return NextResponse.json({ status: "ERROR", message: "Unauthorized" }, { status: 401 })
+    }
+
+    try {
+        const body = await req.json()
+        const deleted = await deleteRfidScanPayload(body)
+
+        return NextResponse.json({
+            status: "OK",
+            count: deleted.length,
+            records: deleted,
+        })
+    } catch (error) {
+        if (error instanceof ZodError) {
+            return NextResponse.json(
+                {
+                    status: "ERROR",
+                    message: "Invalid delete payload",
+                    issues: error.issues,
+                },
+                { status: 400 },
+            )
+        }
+
+        console.error("Failed to delete RFID scan:", error)
+        return NextResponse.json(
+            {
+                status: "ERROR",
+                message: "Failed to delete RFID scan",
             },
             { status: 500 },
         )

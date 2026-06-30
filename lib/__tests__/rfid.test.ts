@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { parseRfidScanPayload } from "@/lib/rfid"
+import { parseDeleteRfidScanPayload, parseRfidScanPayload } from "@/lib/rfid"
 
 const payload = {
     material: {
@@ -55,5 +55,56 @@ describe("parseRfidScanPayload", () => {
         })
 
         expect(parsed.items[0].linked).toBe(false)
+    })
+})
+
+const deletePayload = {
+    material: {
+        plnt: "2001",
+        material: "110149C110",
+        sloc: "101",
+    },
+    epcs: ["E28011700000021B2F6D7DD6", "E280699500005012FAF7F4F9"],
+}
+
+describe("parseDeleteRfidScanPayload", () => {
+    it("accepts delete payload with material and epcs", () => {
+        const parsed = parseDeleteRfidScanPayload(deletePayload)
+
+        expect(parsed.epcs).toHaveLength(2)
+        expect(parsed.material!.material).toBe("110149C110")
+    })
+
+    it("accepts delete payload with epcs only (no material)", () => {
+        const parsed = parseDeleteRfidScanPayload({
+            epcs: ["E28011700000021B2F6D7DD6"],
+        })
+
+        expect(parsed.epcs).toHaveLength(1)
+        expect(parsed.material).toBeUndefined()
+    })
+
+    it("rejects empty epcs array", () => {
+        expect(() =>
+            parseDeleteRfidScanPayload({
+                ...deletePayload,
+                epcs: [],
+            }),
+        ).toThrow()
+    })
+
+    it("rejects epcs with empty string", () => {
+        expect(() =>
+            parseDeleteRfidScanPayload({
+                ...deletePayload,
+                epcs: [""],
+            }),
+        ).toThrow()
+    })
+
+    it("rejects missing epcs", () => {
+        expect(() =>
+            parseDeleteRfidScanPayload({}),
+        ).toThrow()
     })
 })
