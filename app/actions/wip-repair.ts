@@ -12,11 +12,11 @@ import { iw39PmoReportSap, salesRevenueSap } from "@/db/schema"
 import { inArray, sql, or } from "drizzle-orm"
 const WIP_REPAIR_API_URL =
   process.env.WIP_REPAIR_API_URL ??
-  "https://ics.chitraparatama.co.id/product/get_api.php?function=wo_repair"
+  "https://ics.chitraparatama.com/product/get_api.php?function=wo_repair"
 
 const WIP_REPAIR_WORK_ORDER_DETAIL_API_URL =
   process.env.WIP_REPAIR_WORK_ORDER_DETAIL_API_URL ??
-  "https://ics.chitraparatama.co.id/product/get_api.php?function=repair_work_order_detail_material"
+  "https://ics.chitraparatama.com/product/get_api.php?function=repair_work_order_detail_material"
 
 export async function getWipRepairData(): Promise<WipRepairRecord[]> {
   try {

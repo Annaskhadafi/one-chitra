@@ -66,7 +66,7 @@ export function StockSAPTable() {
     const { data = [], isLoading, refetch } = useQuery({
         queryKey: ["sap-inventory"],
         queryFn: async () => {
-            const response = await fetch("https://ics.chitraparatama.co.id/product/api/apiconnect.php?function=get_inventory");
+            const response = await fetch("https://ics.chitraparatama.com/product/api/apiconnect.php?function=get_inventory");
             const result = await response.json();
 
             if (result.status === "OK") {
