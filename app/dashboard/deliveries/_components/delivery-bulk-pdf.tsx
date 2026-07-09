@@ -186,7 +186,9 @@ function DeliverySingleView({ delivery, withBackground }: { delivery: DeliveryPd
         .join(" ")
     const address = delivery.shippingAddress || customerAddress
     const isCiptaKridatama = customer?.name?.toUpperCase()?.includes("CIPTA KRIDATAMA")
+    const isPetrosea = customer?.name?.toUpperCase()?.includes("PETROSEA")
     const printableItems = delivery.items.filter((item) => Number(item.deliveredQuantity) > 0)
+    const showCaiColumn = !isCiptaKridatama && !isPetrosea && printableItems.some((item) => item.product.category?.toUpperCase() !== "TYRE")
     const isExternalJne = delivery.isExternal && delivery.vendorName?.toUpperCase().includes("JNE")
 
     return (
@@ -318,6 +320,7 @@ function DeliverySingleView({ delivery, withBackground }: { delivery: DeliveryPd
                             <tr>
                                 <th className="col-item">Item</th>
                                 <th>Description</th>
+                                {showCaiColumn && <th className="col-part">CAI</th>}
                                 <th className="col-qty">Qty</th>
                                 <th className="col-part">Parts Number</th>
                             </tr>
@@ -377,12 +380,13 @@ function DeliverySingleView({ delivery, withBackground }: { delivery: DeliveryPd
                                     <tr>
                                         <td>{(idx + 1).toString().padStart(2, '0')}</td>
                                         <td style={{ textTransform: "uppercase" }}>{item.product.materialDescription}</td>
+                                        {showCaiColumn && <td className="col-part">{isTyre ? "-" : item.product.oldMaterialNo || "-"}</td>}
                                         <td className="col-qty">{item.deliveredQuantity}</td>
                                         <td className="col-part">{item.product.materialNumber}</td>
                                     </tr>
                                     {isTyre && (
                                         <tr>
-                                            <td colSpan={4} style={{ padding: "0 5px 15px 45px" }}>
+                                            <td colSpan={showCaiColumn ? 5 : 4} style={{ padding: "0 5px 15px 45px" }}>
                                                 <table className="serial-grid">
                                                     <thead>
                                                         <tr>

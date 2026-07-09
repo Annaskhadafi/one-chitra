@@ -212,6 +212,7 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
     const isCiptaKridatama = customer?.name?.toUpperCase()?.includes("CIPTA KRIDATAMA")
     const isPetrosea = customer?.name?.toUpperCase()?.includes("PETROSEA")
     const printableItems = delivery.items.filter((item) => Number(item.deliveredQuantity) > 0)
+    const showCaiColumn = !isCiptaKridatama && !isPetrosea && printableItems.some((item) => item.product.category?.toUpperCase() !== "TYRE")
     const isExternalJne = delivery.isExternal && delivery.vendorName?.toUpperCase().includes("JNE")
 
     useEffect(() => {
@@ -469,6 +470,7 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                                         <tr>
                                             <th className="col-item">Item</th>
                                             <th>Description</th>
+                                            {showCaiColumn && <th className="col-part">CAI</th>}
                                             <th className="col-qty">Qty</th>
                                             <th className="col-part">Parts Number</th>
                                         </tr>
@@ -477,7 +479,7 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                                 <tbody>
                                     {printableItems.length === 0 && (
                                         <tr>
-                                            <td colSpan={isCiptaKridatama || isPetrosea ? 6 : 4} style={{ textAlign: "center", padding: "16px 8px", fontWeight: 600 }}>
+                                            <td colSpan={isCiptaKridatama || isPetrosea ? 6 : showCaiColumn ? 5 : 4} style={{ textAlign: "center", padding: "16px 8px", fontWeight: 600 }}>
                                                 Tidak ada item terkirim (Qty 0 tidak ditampilkan)
                                             </td>
                                         </tr>
@@ -608,6 +610,11 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                                                             {item.product.materialDescription}
                                                         </div>
                                                     </td>
+                                                    {showCaiColumn && (
+                                                        <td className="col-part">
+                                                            {isTyre ? "-" : item.product.oldMaterialNo || "-"}
+                                                        </td>
+                                                    )}
                                                     <td className="col-qty">
                                                         {item.deliveredQuantity}
                                                     </td>
@@ -617,7 +624,7 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                                                 </tr>
                                                 {isTyre && (
                                                     <tr>
-                                                        <td colSpan={4} style={{ padding: "0 5px 15px 45px" }}>
+                                                        <td colSpan={showCaiColumn ? 5 : 4} style={{ padding: "0 5px 15px 45px" }}>
                                                             <table className="serial-grid">
                                                                 <thead>
                                                                     <tr>
