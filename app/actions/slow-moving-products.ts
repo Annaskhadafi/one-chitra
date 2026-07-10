@@ -155,9 +155,11 @@ export type MonthlySellingQty = {
     materialKey: string
     monthlyQty: Record<string, number>
     monthlyRevenue: Record<string, number>
+    monthlyProfitMargin: Record<string, number>
     details: SellingOutDetail[]
     totalQtySold: number
     totalRevenue: number
+    totalProfitMargin: number
 }
 
 export type SellingOutDetail = {
@@ -166,6 +168,7 @@ export type SellingOutDetail = {
     billingNo: string | null
     qty: number
     revenueInDocCurr: number
+    profitMargin: number
     total: number
     sales: string | null
     customer: string | null
@@ -179,37 +182,47 @@ export async function getSellingOutByMonth(materialKeys: string[]): Promise<Mont
 
     const monthlyResult = await db.execute(
         sql.raw(
-            "SELECT UPPER(TRIM(material_no)) AS material_key, TO_CHAR(billing_date, 'YYYY-MM') AS month, billing_date, billing_no, qty, revenue_in_doc_curr, salesman, customer_name FROM sales_revenue_sap WHERE billing_date IS NOT NULL AND (cancelled IS NULL OR cancelled = '') AND UPPER(TRIM(material_no)) = ANY(ARRAY[" + safeList + "]) ORDER BY UPPER(TRIM(material_no)), billing_date DESC, billing_no"
+            "SELECT UPPER(TRIM(material_no)) AS material_key, TO_CHAR(billing_date, 'YYYY-MM') AS month, billing_date, billing_no, qty, revenue_in_doc_curr, profit_margin, salesman, customer_name FROM sales_revenue_sap WHERE billing_date IS NOT NULL AND (cancelled IS NULL OR cancelled = '') AND UPPER(TRIM(material_no)) = ANY(ARRAY[" + safeList + "]) ORDER BY UPPER(TRIM(material_no)), billing_date DESC, billing_no"
         )
     )
 
     const monthlyMap = new Map<string, Record<string, number>>()
     const monthlyRevenueMap = new Map<string, Record<string, number>>()
-    const summaryMap = new Map<string, { totalQtySold: number; totalRevenue: number }>()
+    const monthlyMarginWeightMap = new Map<string, Record<string, number>>()
+    const monthlyMarginRevenueMap = new Map<string, Record<string, number>>()
+    const summaryMap = new Map<string, { totalQtySold: number; totalRevenue: number; marginWeight: number; marginRevenue: number }>()
     const detailMap = new Map<string, SellingOutDetail[]>()
-    for (const row of monthlyResult.rows as { material_key: string; month: string; billing_date: string | Date | null; billing_no: string | null; qty: string | number | null; revenue_in_doc_curr: string | number | null; salesman: string | null; customer_name: string | null }[]) {
+    for (const row of monthlyResult.rows as { material_key: string; month: string; billing_date: string | Date | null; billing_no: string | null; qty: string | number | null; revenue_in_doc_curr: string | number | null; profit_margin: string | number | null; salesman: string | null; customer_name: string | null }[]) {
         const key = row.material_key
         const qty = Number(row.qty) || 0
         const revenue = Number(row.revenue_in_doc_curr) || 0
+        const profitMargin = Number(row.profit_margin) || 0
         if (!monthlyMap.has(key)) monthlyMap.set(key, {})
         if (!monthlyRevenueMap.has(key)) monthlyRevenueMap.set(key, {})
+        if (!monthlyMarginWeightMap.has(key)) monthlyMarginWeightMap.set(key, {})
+        if (!monthlyMarginRevenueMap.has(key)) monthlyMarginRevenueMap.set(key, {})
         if (!detailMap.has(key)) detailMap.set(key, [])
         monthlyMap.get(key)![row.month] = (monthlyMap.get(key)![row.month] ?? 0) + qty
         monthlyRevenueMap.get(key)![row.month] = (monthlyRevenueMap.get(key)![row.month] ?? 0) + revenue
+        monthlyMarginWeightMap.get(key)![row.month] = (monthlyMarginWeightMap.get(key)![row.month] ?? 0) + revenue * profitMargin
+        monthlyMarginRevenueMap.get(key)![row.month] = (monthlyMarginRevenueMap.get(key)![row.month] ?? 0) + revenue
         detailMap.get(key)!.push({
             month: row.month,
             billingDate: row.billing_date instanceof Date ? row.billing_date.toISOString().slice(0, 10) : row.billing_date,
             billingNo: row.billing_no,
             qty,
             revenueInDocCurr: revenue,
+            profitMargin,
             total: revenue,
             sales: row.salesman,
             customer: row.customer_name,
         })
-        const current = summaryMap.get(key) ?? { totalQtySold: 0, totalRevenue: 0 }
+        const current = summaryMap.get(key) ?? { totalQtySold: 0, totalRevenue: 0, marginWeight: 0, marginRevenue: 0 }
         summaryMap.set(key, {
             totalQtySold: current.totalQtySold + qty,
             totalRevenue: current.totalRevenue + revenue,
+            marginWeight: current.marginWeight + revenue * profitMargin,
+            marginRevenue: current.marginRevenue + revenue,
         })
     }
 
@@ -217,8 +230,15 @@ export async function getSellingOutByMonth(materialKeys: string[]): Promise<Mont
         materialKey: k,
         monthlyQty: monthlyMap.get(k) ?? {},
         monthlyRevenue: monthlyRevenueMap.get(k) ?? {},
+        monthlyProfitMargin: Object.fromEntries(
+            Object.entries(monthlyMarginWeightMap.get(k) ?? {}).map(([month, weight]) => [
+                month,
+                weight / (monthlyMarginRevenueMap.get(k)?.[month] || 1),
+            ])
+        ),
         details: detailMap.get(k) ?? [],
         totalQtySold: summaryMap.get(k)?.totalQtySold ?? 0,
         totalRevenue: summaryMap.get(k)?.totalRevenue ?? 0,
+        totalProfitMargin: (summaryMap.get(k)?.marginWeight ?? 0) / (summaryMap.get(k)?.marginRevenue || 1),
     }))
 }

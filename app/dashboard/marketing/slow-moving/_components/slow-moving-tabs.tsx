@@ -4,14 +4,12 @@ import type { getCosmeticTires } from "@/app/actions/cosmetic-tires"
 import type { getProducts } from "@/app/actions/product"
 import type { getSlowMovingProducts } from "@/app/actions/slow-moving-products"
 import type { MonthlySellingQty } from "@/app/actions/slow-moving-products"
-import type { getStocks } from "@/app/actions/stock"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { CosmeticTireClient } from "./cosmetic-tire-client"
-import { SlowMovingClient } from "./slow-moving-client"
+import { SlowMovingClient, type SlowMovingStockRow } from "./slow-moving-client"
 import { SlowMovingDashboardClient } from "./slow-moving-dashboard-client"
 
-type StockRow = Awaited<ReturnType<typeof getStocks>>[number]
 type SavedSlowMovingProduct = Awaited<ReturnType<typeof getSlowMovingProducts>>[number]
 type CosmeticTireRow = Awaited<ReturnType<typeof getCosmeticTires>>[number]
 type ProductRow = Awaited<ReturnType<typeof getProducts>>[number]
@@ -24,7 +22,7 @@ export function SlowMovingTabs({
     products,
     sellingOutByMonth,
 }: {
-    stocks: StockRow[]
+    stocks: SlowMovingStockRow[]
     defaultRate: string
     savedProducts: SavedSlowMovingProduct[]
     cosmeticTires: CosmeticTireRow[]

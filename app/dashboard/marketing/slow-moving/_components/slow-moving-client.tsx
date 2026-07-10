@@ -8,7 +8,6 @@ import {
     updateSlowMovingProductInitialStock,
 } from "@/app/actions/slow-moving-products"
 import type { MonthlySellingQty, SellingOutDetail } from "@/app/actions/slow-moving-products"
-import type { getStocks } from "@/app/actions/stock"
 import { Box, ChevronRight, Download, Loader2, PackageSearch, RotateCcw, Search, Trash2, Upload, ArrowUpDown } from "lucide-react"
 import * as XLSX from "xlsx"
 import { toast } from "sonner"
@@ -27,7 +26,16 @@ import {
     TableRow,
 } from "@/components/ui/table"
 
-type StockRow = Awaited<ReturnType<typeof getStocks>>[number]
+export type SlowMovingStockRow = {
+    productId: number
+    totalStock: number
+    createdAt: Date | string | null
+    product?: {
+        materialNumber?: string | null
+        materialDescription?: string | null
+        costSap?: string | null
+    } | null
+}
 type SavedSlowMovingProduct = Awaited<ReturnType<typeof import("@/app/actions/slow-moving-products").getSlowMovingProducts>>[number]
 
 type ProductOption = {
@@ -56,16 +64,16 @@ function parseNumber(value: string | number | null | undefined) {
     return Number.isFinite(parsed) ? parsed : 0
 }
 
-function getMaterialKey(stock: StockRow) {
+function getMaterialKey(stock: SlowMovingStockRow) {
     const materialNumber = stock.product?.materialNumber?.trim()
     return materialNumber ? materialNumber.toUpperCase() : `PRODUCT-${stock.productId}`
 }
 
-function getMaterialNumber(stock: StockRow) {
+function getMaterialNumber(stock: SlowMovingStockRow) {
     return stock.product?.materialNumber?.trim() || `Product #${stock.productId}`
 }
 
-function getStockAgeDays(stock: StockRow) {
+function getStockAgeDays(stock: SlowMovingStockRow) {
     const createdAt = stock.createdAt ? new Date(stock.createdAt) : null
     if (!createdAt || Number.isNaN(createdAt.getTime())) return 0
     return Math.max(Math.floor((Date.now() - createdAt.getTime()) / DAY_IN_MS), 0)
@@ -84,6 +92,11 @@ function formatCurrency(value: number) {
     }).format(value)
 }
 
+function formatPercent(value: number) {
+    if (!value) return "-"
+    return `${new Intl.NumberFormat("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(value)}%`
+}
+
 function formatMonthLabel(yyyyMM: string) {
     const [year, month] = yyyyMM.split("-")
     const date = new Date(Number(year), Number(month) - 1, 1)
@@ -97,7 +110,7 @@ function buildYearMonths(year: string) {
     return Array.from({ length: monthCount }, (_, index) => `${year}-${String(index + 1).padStart(2, "0")}`)
 }
 
-function buildProductOptions(stocks: StockRow[]) {
+function buildProductOptions(stocks: SlowMovingStockRow[]) {
     const grouped = new Map<string, ProductOption>()
     for (const stock of stocks) {
         const key = getMaterialKey(stock)
@@ -121,7 +134,7 @@ function buildProductOptions(stocks: StockRow[]) {
     )
 }
 
-function buildSlowMovingRow(stocks: StockRow[], option: ProductOption, manualRate: string, initialStock: number): SlowMovingRow {
+function buildSlowMovingRow(stocks: SlowMovingStockRow[], option: ProductOption, manualRate: string, initialStock: number): SlowMovingRow {
     const relatedStocks = stocks.filter((stock) => getMaterialKey(stock) === option.key)
     let totalValue = 0
     let allQty = 0
@@ -166,6 +179,13 @@ function sumByMonths(values: Record<string, number> | undefined, months: string[
     return months.reduce((total, month) => total + (values?.[month] ?? 0), 0)
 }
 
+function getWeightedProfitMargin(entry: MonthlySellingQty | undefined, months: string[]) {
+    if (!entry) return 0
+    const revenue = sumByMonths(entry.monthlyRevenue, months)
+    if (!revenue) return 0
+    return months.reduce((total, month) => total + (entry.monthlyRevenue[month] ?? 0) * (entry.monthlyProfitMargin[month] ?? 0), 0) / revenue
+}
+
 function filterDetailsByMonths(details: SellingOutDetail[] | undefined, months: string[]) {
     const monthSet = new Set(months)
     return (details ?? []).filter((detail) => monthSet.has(detail.month))
@@ -185,7 +205,7 @@ export function SlowMovingClient({
     showHeader = true,
     sellingOutByMonth = [],
 }: {
-    stocks: StockRow[]
+    stocks: SlowMovingStockRow[]
     defaultRate?: string
     savedProducts?: SavedSlowMovingProduct[]
     showHeader?: boolean
@@ -245,15 +265,9 @@ export function SlowMovingClient({
     const allMonths = React.useMemo(() => getMonthsForYears(selectedYears), [selectedYears])
 
     const sellingMap = React.useMemo(() => {
-        const map = new Map<string, { monthlyQty: Record<string, number>; monthlyRevenue: Record<string, number>; details: SellingOutDetail[]; totalQtySold: number; totalRevenue: number }>()
+        const map = new Map<string, MonthlySellingQty>()
         for (const item of sellingOutByMonth) {
-            map.set(item.materialKey, {
-                monthlyQty: item.monthlyQty,
-                monthlyRevenue: item.monthlyRevenue,
-                details: item.details,
-                totalQtySold: item.totalQtySold,
-                totalRevenue: item.totalRevenue,
-            })
+            map.set(item.materialKey, item)
         }
         return map
     }, [sellingOutByMonth])
@@ -266,8 +280,11 @@ export function SlowMovingClient({
                 acc.initialStock += row.initialStock
                 acc.totalValue += row.totalValue
                 const entry = sellingMap.get(row.key)
+                const revenue = sumByMonths(entry?.monthlyRevenue, allMonths)
+                const margin = getWeightedProfitMargin(entry, allMonths)
                 acc.totalQtySold += sumByMonths(entry?.monthlyQty, allMonths)
-                acc.totalRevenue += sumByMonths(entry?.monthlyRevenue, allMonths)
+                acc.totalRevenue += revenue
+                acc.marginWeight += revenue * margin
                 const monthlyQty = entry?.monthlyQty ?? {}
                 for (const [month, qty] of Object.entries(monthlyQty)) {
                     if (allMonths.includes(month)) {
@@ -276,9 +293,9 @@ export function SlowMovingClient({
                 }
                 return acc
             },
-            { totalQty: 0, initialStock: 0, totalValue: 0, totalQtySold: 0, totalRevenue: 0 }
+            { totalQty: 0, initialStock: 0, totalValue: 0, totalQtySold: 0, totalRevenue: 0, marginWeight: 0, moreThan366Qty: 0 }
         )
-        return { ...base, monthlyTotals }
+        return { ...base, profitMargin: base.totalRevenue ? base.marginWeight / base.totalRevenue : 0, monthlyTotals }
     }, [allMonths, reportRows, sellingMap])
 
     const selectedKeySet = React.useMemo(() => new Set(selectedKeys), [selectedKeys])
@@ -372,6 +389,7 @@ export function SlowMovingClient({
             const sellingEntry = sellingMap.get(row.key)
             const totalQtySold = sumByMonths(sellingEntry?.monthlyQty, allMonths)
             const totalRevenue = sumByMonths(sellingEntry?.monthlyRevenue, allMonths)
+            const profitMargin = getWeightedProfitMargin(sellingEntry, allMonths)
             const monthlyQty = sellingEntry?.monthlyQty ?? {}
             const sellOutPct = row.initialStock > 0 ? ((totalQtySold / row.initialStock) * 100).toFixed(1) + "%" : "-"
             const base: Record<string, unknown> = {
@@ -384,6 +402,7 @@ export function SlowMovingClient({
                 "Total Value": Math.round(row.totalValue),
                 "Total Terjual": totalQtySold,
                 "Revenue Terjual": Math.round(totalRevenue),
+                "Profit Margin": profitMargin,
                 "% Sell Out": sellOutPct,
             }
             for (const month of allMonths) {
@@ -415,6 +434,7 @@ export function SlowMovingClient({
             { wch: 15 }, // Total Value
             { wch: 15 }, // Total Terjual
             { wch: 18 }, // Revenue Terjual
+            { wch: 15 }, // Profit Margin
             { wch: 12 }, // % Sell Out
         ]
         for (let i = 0; i < allMonths.length; i++) {
@@ -429,7 +449,7 @@ export function SlowMovingClient({
     }
 
     const totalMonthCols = allMonths.length
-    const totalCols = 12 + totalMonthCols
+    const totalCols = 13 + totalMonthCols
 
     return (
         <div className={showHeader ? "flex min-h-screen flex-1 flex-col gap-6 bg-white p-4 text-zinc-950 md:p-8 lg:p-10" : "flex flex-col gap-6"}>
@@ -620,7 +640,7 @@ export function SlowMovingClient({
 
             <div className="overflow-hidden rounded-md border bg-card">
                 <div className="overflow-x-auto">
-                    <Table className="border-collapse" style={{ minWidth: `${980 + totalMonthCols * 100}px` }}>
+                    <Table className="border-collapse" style={{ minWidth: `${1100 + totalMonthCols * 100}px` }}>
                         <TableHeader>
                             <TableRow className="bg-muted/50">
                                 <TableHead className="h-10 w-12 text-center"></TableHead>
@@ -652,6 +672,7 @@ export function SlowMovingClient({
                                 ))}
                                 <TableHead className="h-10 text-right text-emerald-700">Total Terjual</TableHead>
                                 <TableHead className="h-10 text-right text-emerald-700">Revenue Terjual</TableHead>
+                                <TableHead className="h-10 text-right text-emerald-700">Profit Margin</TableHead>
                                 <TableHead className="h-10 text-right text-orange-700">% Sell Out</TableHead>
                                 <TableHead className="h-10 text-right">Aksi</TableHead>
                             </TableRow>
@@ -669,6 +690,7 @@ export function SlowMovingClient({
                                     const monthlyQty = sellingEntry?.monthlyQty ?? {}
                                     const totalQtySold = sumByMonths(sellingEntry?.monthlyQty, allMonths)
                                     const totalRevenue = sumByMonths(sellingEntry?.monthlyRevenue, allMonths)
+                                    const profitMargin = getWeightedProfitMargin(sellingEntry, allMonths)
                                     const sellOutPct = row.initialStock > 0 ? (totalQtySold / row.initialStock) * 100 : 0
                                     const details = filterDetailsByMonths(sellingEntry?.details, allMonths)
                                     const isExpanded = expandedKeys.includes(row.key)
@@ -717,6 +739,7 @@ export function SlowMovingClient({
                                                 ))}
                                                 <TableCell className="text-right font-mono text-emerald-700">{formatQty(totalQtySold)}</TableCell>
                                                 <TableCell className="text-right font-mono text-emerald-700">{formatCurrency(totalRevenue)}</TableCell>
+                                                <TableCell className="text-right font-mono text-emerald-700">{formatPercent(profitMargin)}</TableCell>
                                                 <TableCell className="text-right font-mono text-orange-700 font-semibold">
                                                     {sellOutPct > 0 ? sellOutPct.toFixed(1) + "%" : "-"}
                                                 </TableCell>
@@ -746,13 +769,14 @@ export function SlowMovingClient({
                                                                 <span>{details.length} transaksi sesuai filter tahun</span>
                                                             </div>
                                                             <div className="overflow-x-auto rounded-md border bg-white">
-                                                                <table className="w-full min-w-[820px] text-sm">
+                                                                <table className="w-full min-w-[920px] text-sm">
                                                                     <thead className="bg-muted/60 text-xs uppercase tracking-wide text-muted-foreground">
                                                                         <tr>
                                                                             <th className="px-3 py-2 text-left">Tanggal</th>
                                                                             <th className="px-3 py-2 text-left">Billing</th>
                                                                             <th className="px-3 py-2 text-right">Qty</th>
                                                                             <th className="px-3 py-2 text-right">Revenue Docc Curr</th>
+                                                                            <th className="px-3 py-2 text-right">Profit Margin</th>
                                                                             <th className="px-3 py-2 text-right">Total</th>
                                                                             <th className="px-3 py-2 text-left">Sales</th>
                                                                             <th className="px-3 py-2 text-left">Customer</th>
@@ -761,7 +785,7 @@ export function SlowMovingClient({
                                                                     <tbody>
                                                                         {details.length === 0 ? (
                                                                             <tr>
-                                                                                <td colSpan={7} className="px-3 py-6 text-center text-muted-foreground">
+                                                                                <td colSpan={8} className="px-3 py-6 text-center text-muted-foreground">
                                                                                     Tidak ada detail transaksi untuk filter tahun ini.
                                                                                 </td>
                                                                             </tr>
@@ -772,6 +796,7 @@ export function SlowMovingClient({
                                                                                     <td className="px-3 py-2 font-mono">{detail.billingNo || "-"}</td>
                                                                                     <td className="px-3 py-2 text-right font-mono">{formatQty(detail.qty)}</td>
                                                                                     <td className="px-3 py-2 text-right font-mono">{formatCurrency(detail.revenueInDocCurr)}</td>
+                                                                                    <td className="px-3 py-2 text-right font-mono">{formatPercent(detail.profitMargin)}</td>
                                                                                     <td className="px-3 py-2 text-right font-mono font-semibold">{formatCurrency(detail.total)}</td>
                                                                                     <td className="px-3 py-2">{detail.sales || "-"}</td>
                                                                                     <td className="px-3 py-2">{detail.customer || "-"}</td>
@@ -806,6 +831,7 @@ export function SlowMovingClient({
                                     ))}
                                     <td className="px-4 text-right font-mono text-sm text-emerald-700">{formatQty(stats.totalQtySold)}</td>
                                     <td className="px-4 text-right font-mono text-sm text-emerald-700">{formatCurrency(stats.totalRevenue)}</td>
+                                    <td className="px-4 text-right font-mono text-sm text-emerald-700">{formatPercent(stats.profitMargin)}</td>
                                     <td className="px-4 text-right font-mono text-sm text-orange-700 font-semibold">
                                         {stats.initialStock > 0 ? ((stats.totalQtySold / stats.initialStock) * 100).toFixed(1) + "%" : "-"}
                                     </td>
