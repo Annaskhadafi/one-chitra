@@ -1,0 +1,12 @@
+{
+  "id": "TASK-012",
+  "status": "completed",
+  "priority": "P1",
+  "title": "Tambahkan P&L Monitoring di Marketing",
+  "description": "Membuat menu baru P&L Monitoring di grup Marketing untuk memonitor kategori produk dengan profit_margin negatif dari sales_revenue_sap, dengan filter tahun, bulan, dan customer serta tampilan tabel pivot customer/type/month.",
+  "createdAt": "2026-07-13T00:00:00.000Z",
+  "updatedAt": "2026-07-13T02:19:37.890Z",
+  "startedAt": "2026-07-13T02:11:21.027Z",
+  "completedAt": "2026-07-13T02:19:37.890Z",
+  "completionDetails": "Menambahkan halaman P&L Monitoring di Marketing dengan query profit_margin negatif, filter tahun/bulan/customer, tabel pivot customer/type/bulan, menu sidebar, dokumentasi halaman, dan test pivot minus-only."
+}

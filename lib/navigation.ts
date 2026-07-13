@@ -294,6 +294,11 @@ export const navigationConfig: NavSection[] = [
                         resource: "marketing",
                     },
                     {
+                        title: "P&L Monitoring",
+                        url: "/dashboard/marketing/pnl-monitoring",
+                        resource: "marketing",
+                    },
+                    {
                         title: "A2R Competition",
                         url: "/dashboard/sales-dashboard/a2r-competition",
                         resource: "sales-dashboard",

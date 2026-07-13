@@ -1,0 +1,12 @@
+{
+  "id": "TASK-014",
+  "status": "completed",
+  "priority": "P1",
+  "title": "Minimal filter, total row, dan chart P&L Monitoring",
+  "description": "Merapikan filter P&L Monitoring agar minimalis dan collapsed, menambahkan total row di bawah tabel, serta menampilkan grafik bulanan untuk data minus profit.",
+  "createdAt": "2026-07-13T00:00:00.000Z",
+  "updatedAt": "2026-07-13T02:37:01.251Z",
+  "startedAt": "2026-07-13T02:31:30.687Z",
+  "completedAt": "2026-07-13T02:37:01.251Z",
+  "completionDetails": "Membuat grafik dan ringkasan bulanan collapse default tertutup, chart full width dengan label angka, serta menyembunyikan bulan yang belum punya data pada ringkasan."
+}

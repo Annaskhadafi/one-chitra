@@ -1,0 +1,12 @@
+{
+  "id": "TASK-013",
+  "status": "completed",
+  "priority": "P1",
+  "title": "Multi-select filter dan export P&L Monitoring",
+  "description": "Mengubah filter customer P&L Monitoring menjadi multi-select berdasarkan nama customer di sales_revenue_sap dan menambahkan export Excel serta PDF untuk data hasil filter.",
+  "createdAt": "2026-07-13T00:00:00.000Z",
+  "updatedAt": "2026-07-13T02:29:54.255Z",
+  "startedAt": "2026-07-13T02:26:27.439Z",
+  "completedAt": "2026-07-13T02:29:54.255Z",
+  "completionDetails": "Mengubah filter customer P&L Monitoring menjadi multi-select berbasis customer SAP dan menambahkan export Excel serta PDF dari hasil filter yang tampil."
+}
