@@ -6,6 +6,15 @@ import { sql } from "drizzle-orm"
 import { buildPnlMonitoringRows } from "./pnl-monitoring-utils"
 
 const PROFIT_MARGIN_EXPR = "COALESCE(NULLIF(profit_margin, 'NaN'::float8), 0)"
+const NON_CANCELLED_REVENUE_CONDITION = `
+          AND COALESCE(UPPER(TRIM(c)), '') <> 'X'
+          AND NOT EXISTS (
+              SELECT 1
+              FROM sales_revenue_sap cancelled_invoice
+              WHERE COALESCE(UPPER(TRIM(cancelled_invoice.c)), '') = 'X'
+                AND NULLIF(TRIM(cancelled_invoice.cancelled), '') IS NOT NULL
+                AND UPPER(TRIM(cancelled_invoice.cancelled)) = UPPER(TRIM(sales_revenue_sap.billing_no))
+          )`
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"]
 
 export type PnlMonitoringFilters = {
@@ -85,6 +94,7 @@ const buildQuery = (year: string, month: string, customers: string[]) => {
         FROM sales_revenue_sap
         WHERE billing_date IS NOT NULL
           AND ${PROFIT_MARGIN_EXPR} < 0
+          ${NON_CANCELLED_REVENUE_CONDITION}
           AND TO_CHAR(billing_date, 'YYYY') = '${year.replace(/'/g, "''")}'
           ${monthCondition}
           ${customerCondition}
@@ -102,6 +112,7 @@ export async function getPnlMonitoringBootstrap() {
         FROM sales_revenue_sap
         WHERE billing_date IS NOT NULL
           AND ${PROFIT_MARGIN_EXPR} < 0
+          ${NON_CANCELLED_REVENUE_CONDITION}
         ORDER BY year DESC
     `))
     const customersResult = await db.execute(sql.raw(`
@@ -109,6 +120,7 @@ export async function getPnlMonitoringBootstrap() {
         FROM sales_revenue_sap
         WHERE billing_date IS NOT NULL
           AND ${PROFIT_MARGIN_EXPR} < 0
+          ${NON_CANCELLED_REVENUE_CONDITION}
         ORDER BY customer_name
     `))
 
@@ -146,6 +158,7 @@ export async function getPnlMonitoringData(filters: PnlMonitoringFilters): Promi
             FROM sales_revenue_sap
             WHERE billing_date IS NOT NULL
               AND ${PROFIT_MARGIN_EXPR} < 0
+              ${NON_CANCELLED_REVENUE_CONDITION}
             ORDER BY year DESC
         `)),
         db.execute(sql.raw(`
@@ -153,6 +166,7 @@ export async function getPnlMonitoringData(filters: PnlMonitoringFilters): Promi
             FROM sales_revenue_sap
             WHERE billing_date IS NOT NULL
               AND ${PROFIT_MARGIN_EXPR} < 0
+              ${NON_CANCELLED_REVENUE_CONDITION}
               ${month === "ALL" ? "" : ` AND EXTRACT(MONTH FROM billing_date)::int <= ${Number(month)}`}
               AND TO_CHAR(billing_date, 'YYYY') = '${year.replace(/'/g, "''")}'
             ORDER BY customer_name

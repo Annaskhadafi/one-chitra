@@ -81,6 +81,7 @@ export function PnlMonitoringClient({
     const [year, setYear] = useState(initialData.appliedFilters.year || initialYear)
     const [month, setMonth] = useState(initialData.appliedFilters.month || "ALL")
     const [selectedCustomers, setSelectedCustomers] = useState<string[]>(initialData.appliedFilters.customers || [])
+    const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc")
     const [customerSearch, setCustomerSearch] = useState("")
     const [isChartOpen, setIsChartOpen] = useState(false)
     const [isSummaryOpen, setIsSummaryOpen] = useState(false)
@@ -132,9 +133,17 @@ export function PnlMonitoringClient({
         setSelectedCustomers([])
     }
 
+    const sortedRows = useMemo(() => {
+        return [...data.rows].sort((left, right) => {
+            const totalDiff = left.totalLoss - right.totalLoss
+            if (totalDiff !== 0) return sortDirection === "asc" ? totalDiff : -totalDiff
+            return left.customerName.localeCompare(right.customerName) || left.type.localeCompare(right.type)
+        })
+    }, [data.rows, sortDirection])
+
     const groupedRows = (() => {
         const groups = new Map<string, typeof data.rows>()
-        for (const row of data.rows) {
+        for (const row of sortedRows) {
             const list = groups.get(row.customerName) ?? []
             list.push(row)
             groups.set(row.customerName, list)
@@ -330,6 +339,17 @@ export function PnlMonitoringClient({
                                             </SelectItem>
                                         ))}
                                         </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="w-[180px]">
+                                <Select value={sortDirection} onValueChange={(value) => setSortDirection(value as "asc" | "desc")}>
+                                    <SelectTrigger className="bg-white">
+                                        <SelectValue placeholder="Urutan total" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="asc">ASC: loss terbesar</SelectItem>
+                                        <SelectItem value="desc">DESC: loss terkecil</SelectItem>
+                                    </SelectContent>
                                 </Select>
                             </div>
                             <div className="w-full min-w-[280px] lg:w-[320px]">

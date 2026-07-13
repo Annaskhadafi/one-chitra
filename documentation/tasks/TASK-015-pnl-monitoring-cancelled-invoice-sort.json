@@ -1,0 +1,12 @@
+{
+  "id": "TASK-015",
+  "status": "completed",
+  "priority": "P1",
+  "title": "P&L Monitoring sorting dan invoice cancel",
+  "description": "Menambahkan pilihan urutan ASC/DESC pada tabel P&L Monitoring dan mengecualikan invoice yang saling membatalkan berdasarkan kolom c serta cancelled di sales_revenue_sap.",
+  "createdAt": "2026-07-13T00:00:00.000Z",
+  "updatedAt": "2026-07-13T07:47:10.055Z",
+  "startedAt": "2026-07-13T07:46:02.737Z",
+  "completedAt": "2026-07-13T07:47:10.055Z",
+  "completionDetails": "Menambahkan sorting ASC/DESC berdasarkan total loss dan mengecualikan invoice cancel beserta invoice pasangannya dari query P&L Monitoring."
+}
