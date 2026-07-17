@@ -7,14 +7,7 @@ import { buildPnlMonitoringRows } from "./pnl-monitoring-utils"
 
 const PROFIT_MARGIN_EXPR = "COALESCE(NULLIF(profit_margin, 'NaN'::float8), 0)"
 const NON_CANCELLED_REVENUE_CONDITION = `
-          AND COALESCE(UPPER(TRIM(c)), '') <> 'X'
-          AND NOT EXISTS (
-              SELECT 1
-              FROM sales_revenue_sap cancelled_invoice
-              WHERE COALESCE(UPPER(TRIM(cancelled_invoice.c)), '') = 'X'
-                AND NULLIF(TRIM(cancelled_invoice.cancelled), '') IS NOT NULL
-                AND UPPER(TRIM(cancelled_invoice.cancelled)) = UPPER(TRIM(sales_revenue_sap.billing_no))
-          )`
+          AND NULLIF(TRIM(cancelled), '') IS NULL`
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"]
 
 export type PnlMonitoringFilters = {
