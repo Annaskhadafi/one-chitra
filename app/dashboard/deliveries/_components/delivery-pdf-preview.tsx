@@ -180,7 +180,7 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                     .pdf-wrapper .signature-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; font-size: 9pt; gap: 0; border-collapse: collapse; }
                     .pdf-wrapper .sig-box { display: flex; flex-direction: column; height: 180px; text-align: center; border: 0px solid transparent; padding: 5px; }
                     .pdf-wrapper .sig-label { margin-bottom: 5px; font-weight: normal; }
-                    .pdf-wrapper .sig-name { font-weight: normal; margin-bottom: 0px; }
+                    .pdf-wrapper .sig-name { font-weight: normal; margin-bottom: 0px; font-size: 14pt; }
                     .pdf-wrapper .sig-placeholder { margin-top: auto; font-size: 8pt; }
                     .pdf-wrapper .sig-bottom-name { margin-top: 5px; }
                     @media print {
@@ -358,7 +358,7 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                             .pdf-wrapper .signature-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; font-size: 9pt; gap: 0; border-collapse: collapse; }
                             .pdf-wrapper .sig-box { display: flex; flex-direction: column; height: 180px; text-align: center; border: 0px solid transparent; padding: 5px; }
                             .pdf-wrapper .sig-label { margin-bottom: 5px; font-weight: normal; }
-                            .pdf-wrapper .sig-name { font-weight: normal; margin-bottom: 0px; }
+                            .pdf-wrapper .sig-name { font-weight: normal; margin-bottom: 0px; font-size: 14pt; }
                             .pdf-wrapper .sig-placeholder { margin-top: auto; font-size: 8pt; }
                             .pdf-wrapper .sig-bottom-name { margin-top: 5px; }
 
@@ -425,7 +425,7 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                                         <div className="do-row">
                                             <div className="do-label">Customer PO No</div>
                                             <div className="do-separator">:</div>
-                                            <div className="do-value">{delivery.salesOrder?.customerPo || "-"}</div>
+                                            <div className="do-value" style={{ fontSize: "15pt" }}>{delivery.salesOrder?.customerPo || "-"}</div>
                                         </div>
                                         <div className="do-row">
                                             <div className="do-label">Customer PO Date</div>

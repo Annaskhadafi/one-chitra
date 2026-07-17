@@ -245,7 +245,7 @@ function DeliverySingleView({ delivery, withBackground }: { delivery: DeliveryPd
                 .pdf-page .signature-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; font-size: 9pt; gap: 0; border-collapse: collapse; }
                 .pdf-page .sig-box { display: flex; flex-direction: column; height: 180px; text-align: center; padding: 5px; }
                 .pdf-page .sig-label { margin-bottom: 5px; font-weight: normal; }
-                .pdf-page .sig-name { font-weight: normal; margin-bottom: 0px; }
+                .pdf-page .sig-name { font-weight: normal; margin-bottom: 0px; font-size: 14pt; }
                 .pdf-page .sig-placeholder { margin-top: auto; font-size: 8pt; }
                 .pdf-page .sig-bottom-name { margin-top: 5px; }
                 `
@@ -289,7 +289,7 @@ function DeliverySingleView({ delivery, withBackground }: { delivery: DeliveryPd
                             <div className="do-row">
                                 <div className="do-label">Customer PO No</div>
                                 <div className="do-separator">:</div>
-                                <div className="do-value">{delivery.salesOrder?.customerPo || "-"}</div>
+                                <div className="do-value" style={{ fontSize: "15pt" }}>{delivery.salesOrder?.customerPo || "-"}</div>
                             </div>
                             <div className="do-row">
                                 <div className="do-label">Customer PO Date</div>
