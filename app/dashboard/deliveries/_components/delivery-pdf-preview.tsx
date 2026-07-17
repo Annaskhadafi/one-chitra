@@ -423,12 +423,12 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                                             <div className="do-value">{formatDate(delivery.deliveryDate || delivery.scheduledDate)}</div>
                                         </div>
                                         <div className="do-row">
-                                            <div className="do-label">Customer PO No</div>
+                                            <div className="do-label">Customer PO</div>
                                             <div className="do-separator">:</div>
                                             <div className="do-value">{delivery.salesOrder?.customerPo || "-"}</div>
                                         </div>
                                         <div className="do-row">
-                                            <div className="do-label">Customer PO Date</div>
+                                            <div className="do-label">PO Date</div>
                                             <div className="do-separator">:</div>
                                             <div className="do-value">{formatDate(delivery.salesOrder?.poReceive)}</div>
                                         </div>
