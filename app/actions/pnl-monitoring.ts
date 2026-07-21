@@ -114,11 +114,16 @@ const buildDetailCondition = (filters: PnlMonitoringFilters) => {
           ${buildCustomerCondition(filters.customers)}`
 }
 
-export async function getPnlMonitoringDetailData(filters: PnlMonitoringFilters, requestedPage = 1) {
+export async function getPnlMonitoringDetailData(
+    filters: PnlMonitoringFilters,
+    requestedPage = 1,
+    requestedPageSize: 100 | "ALL" = 100,
+) {
     await getAuthenticatedSession("marketing", "view")
 
     const pageSize = 100
-    const page = Number.isFinite(requestedPage) ? Math.max(1, Math.floor(requestedPage)) : 1
+    const showAll = requestedPageSize === "ALL"
+    const page = showAll ? 1 : Number.isFinite(requestedPage) ? Math.max(1, Math.floor(requestedPage)) : 1
     const condition = buildDetailCondition(filters)
     const [countResult, dataResult] = await Promise.all([
         db.execute(sql.raw(`SELECT COUNT(*)::int AS total_count FROM sales_revenue_sap ${condition}`)),
@@ -126,7 +131,7 @@ export async function getPnlMonitoringDetailData(filters: PnlMonitoringFilters, 
             SELECT * FROM sales_revenue_sap
             ${condition}
             ORDER BY billing_date DESC NULLS LAST, sales_rev_id DESC
-            LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}
+            ${showAll ? "" : `LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}`}
         `)),
     ])
     const totalCount = Number((countResult.rows[0] as { total_count?: number } | undefined)?.total_count ?? 0)
@@ -135,9 +140,9 @@ export async function getPnlMonitoringDetailData(filters: PnlMonitoringFilters, 
         columns: DETAIL_COLUMNS,
         rows: dataResult.rows as Record<string, unknown>[],
         page,
-        pageSize,
+        pageSize: showAll ? "ALL" : pageSize,
         totalCount,
-        totalPages: Math.max(1, Math.ceil(totalCount / pageSize)),
+        totalPages: showAll ? 1 : Math.max(1, Math.ceil(totalCount / pageSize)),
     }
 }
 

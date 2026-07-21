@@ -9,6 +9,13 @@ describe("buildPnlMonitoringRows", () => {
         expect(source).toContain("AND COALESCE(UPPER(TRIM(c)), '') <> 'X'")
     })
 
+    it("supports showing every detail row without pagination", () => {
+        const source = readFileSync("app/actions/pnl-monitoring.ts", "utf8")
+
+        expect(source).toContain('const showAll = requestedPageSize === "ALL"')
+        expect(source).toContain('showAll ? "" : `LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}`')
+    })
+
     it("keeps only grouped rows with negative total and pivots month values", () => {
         const months = [
             { key: "01", label: "Jan" },

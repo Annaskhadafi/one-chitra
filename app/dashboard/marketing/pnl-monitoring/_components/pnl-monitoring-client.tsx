@@ -99,6 +99,7 @@ export function PnlMonitoringClient({
     const [isSummaryOpen, setIsSummaryOpen] = useState(false)
     const [activeTab, setActiveTab] = useState("monitoring")
     const [detailPage, setDetailPage] = useState(1)
+    const [detailPageSize, setDetailPageSize] = useState<"100" | "ALL">("100")
     const [detailData, setDetailData] = useState<Awaited<ReturnType<typeof getPnlMonitoringDetailData>> | null>(null)
     const [isDetailLoading, setIsDetailLoading] = useState(false)
     const [isDetailExporting, setIsDetailExporting] = useState(false)
@@ -141,7 +142,11 @@ export function PnlMonitoringClient({
 
         let active = true
         setIsDetailLoading(true)
-        void getPnlMonitoringDetailData({ year, month, customers: selectedCustomers }, detailPage)
+        void getPnlMonitoringDetailData(
+            { year, month, customers: selectedCustomers },
+            detailPage,
+            detailPageSize === "ALL" ? "ALL" : 100,
+        )
             .then((next) => {
                 if (active) setDetailData(next)
             })
@@ -152,7 +157,7 @@ export function PnlMonitoringClient({
         return () => {
             active = false
         }
-    }, [activeTab, detailPage, month, selectedCustomers, year])
+    }, [activeTab, detailPage, detailPageSize, month, selectedCustomers, year])
 
     const filteredCustomers = useMemo(() => {
         const keyword = customerSearch.trim().toLowerCase()
@@ -697,19 +702,36 @@ export function PnlMonitoringClient({
                                 <div>
                                     <h2 className="font-semibold text-slate-900">sales_revenue_sap</h2>
                                     <p className="text-sm text-slate-500">
-                                        {detailData?.totalCount ?? 0} baris sesuai filter monitoring, 100 baris per halaman.
+                                        {detailData?.totalCount ?? 0} baris sesuai filter monitoring.
                                     </p>
                                 </div>
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    onClick={handleDetailExport}
-                                    disabled={isDetailExporting || !detailData?.totalCount}
-                                    className="bg-white"
-                                >
-                                    {isDetailExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
-                                    Export Excel
-                                </Button>
+                                <div className="flex items-center gap-2">
+                                    <Select
+                                        value={detailPageSize}
+                                        onValueChange={(value: "100" | "ALL") => {
+                                            setDetailPage(1)
+                                            setDetailPageSize(value)
+                                        }}
+                                    >
+                                        <SelectTrigger className="w-[145px] bg-white">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="100">100 baris</SelectItem>
+                                            <SelectItem value="ALL">Semua baris</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={handleDetailExport}
+                                        disabled={isDetailExporting || !detailData?.totalCount}
+                                        className="bg-white"
+                                    >
+                                        {isDetailExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+                                        Export Excel
+                                    </Button>
+                                </div>
                             </div>
 
                             {isDetailLoading ? (
@@ -748,16 +770,18 @@ export function PnlMonitoringClient({
                                     </div>
                                     <div className="flex items-center justify-between gap-3">
                                         <p className="text-sm text-slate-500">
-                                            Halaman {detailData.page} dari {detailData.totalPages}
+                                            {detailPageSize === "ALL"
+                                                ? `Menampilkan semua ${detailData.totalCount} baris`
+                                                : `Halaman ${detailData.page} dari ${detailData.totalPages}`}
                                         </p>
-                                        <div className="flex gap-2">
+                                        {detailPageSize !== "ALL" ? <div className="flex gap-2">
                                             <Button variant="outline" size="sm" onClick={() => setDetailPage((page) => page - 1)} disabled={detailData.page <= 1}>
                                                 Sebelumnya
                                             </Button>
                                             <Button variant="outline" size="sm" onClick={() => setDetailPage((page) => page + 1)} disabled={detailData.page >= detailData.totalPages}>
                                                 Berikutnya
                                             </Button>
-                                        </div>
+                                        </div> : null}
                                     </div>
                                 </>
                             )}
