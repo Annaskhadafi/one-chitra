@@ -411,7 +411,7 @@ export function PnlMonitoringClient({
                             </div>
                             <div className="w-full min-w-[280px] lg:w-[320px]">
                                 <div className="mb-2 flex items-center justify-between gap-3">
-                                    <label className="text-sm font-medium text-slate-700">Customer</label>
+                                    <label className="text-sm font-medium text-slate-700">Nama Customer</label>
                                     <Button type="button" variant="ghost" size="sm" onClick={clearCustomers} className="h-8 px-2 text-slate-500">
                                         <RotateCcw className="mr-2 h-3.5 w-3.5" />
                                         Reset

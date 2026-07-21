@@ -8,6 +8,7 @@ import { buildPnlMonitoringRows } from "./pnl-monitoring-utils"
 
 const PROFIT_MARGIN_EXPR = "COALESCE(NULLIF(profit_margin, 'NaN'::float8), 0)"
 const NON_CANCELLED_REVENUE_CONDITION = `
+          AND COALESCE(UPPER(TRIM(c)), '') <> 'X'
           AND NULLIF(TRIM(cancelled), '') IS NULL`
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"]
 const DETAIL_COLUMNS = Object.values(getTableColumns(salesRevenueSap)).map((column) => column.name)

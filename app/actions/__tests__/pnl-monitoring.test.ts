@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest"
+import { readFileSync } from "node:fs"
 import { buildPnlMonitoringRows } from "@/app/actions/pnl-monitoring-utils"
 
 describe("buildPnlMonitoringRows", () => {
+    it("excludes rows marked X in column c from P&L and detail queries", () => {
+        const source = readFileSync("app/actions/pnl-monitoring.ts", "utf8")
+
+        expect(source).toContain("AND COALESCE(UPPER(TRIM(c)), '') <> 'X'")
+    })
+
     it("keeps only grouped rows with negative total and pivots month values", () => {
         const months = [
             { key: "01", label: "Jan" },
