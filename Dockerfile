@@ -66,7 +66,7 @@ RUN adduser --system --uid 1001 nextjs
 RUN mkdir -p /app/uploads /app/.config /app/.cache && chown -R nextjs:nodejs /app/uploads /app/.config /app/.cache
 
 # Copy built files
-COPY --from=builder /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
@@ -76,9 +76,6 @@ COPY --from=builder --chown=nextjs:nodejs /app/db ./db
 COPY --from=builder --chown=nextjs:nodejs /app/drizzle ./drizzle
 COPY --from=builder --chown=nextjs:nodejs /app/drizzle.config.ts ./drizzle.config.ts
 COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
-
-# Ensure correct permissions for the whole app folder
-RUN chown -R nextjs:nodejs /app
 
 USER nextjs
 
