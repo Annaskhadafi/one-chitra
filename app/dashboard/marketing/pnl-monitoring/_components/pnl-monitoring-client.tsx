@@ -2,7 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import * as XLSX from "xlsx"
-import { getPnlMonitoringData, type PnlMonitoringResult } from "@/app/actions/pnl-monitoring"
+import {
+    getPnlMonitoringData,
+    getPnlMonitoringDetailData,
+    getPnlMonitoringDetailExport,
+    type PnlMonitoringResult,
+} from "@/app/actions/pnl-monitoring"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -13,6 +18,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { AlertTriangle, BarChart3, Check, ChevronDown, ChevronUp, Download, FileText, Loader2, RotateCcw, TrendingDown, Users, Rows3 } from "lucide-react"
 import { Bar, CartesianGrid, ComposedChart, LabelList, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 
@@ -67,6 +73,12 @@ const formatCompactCurrency = (value: number) => {
     return formatCurrency(value)
 }
 
+const formatDetailValue = (value: unknown) => {
+    if (value == null) return ""
+    if (value instanceof Date) return value.toISOString()
+    return String(value)
+}
+
 export function PnlMonitoringClient({
     initialData,
     availableYears,
@@ -85,6 +97,11 @@ export function PnlMonitoringClient({
     const [customerSearch, setCustomerSearch] = useState("")
     const [isChartOpen, setIsChartOpen] = useState(false)
     const [isSummaryOpen, setIsSummaryOpen] = useState(false)
+    const [activeTab, setActiveTab] = useState("monitoring")
+    const [detailPage, setDetailPage] = useState(1)
+    const [detailData, setDetailData] = useState<Awaited<ReturnType<typeof getPnlMonitoringDetailData>> | null>(null)
+    const [isDetailLoading, setIsDetailLoading] = useState(false)
+    const [isDetailExporting, setIsDetailExporting] = useState(false)
     const didMountRef = useRef(false)
 
     useEffect(() => {
@@ -114,6 +131,28 @@ export function PnlMonitoringClient({
             window.clearTimeout(timer)
         }
     }, [year, month, selectedCustomers])
+
+    useEffect(() => {
+        setDetailPage(1)
+    }, [year, month, selectedCustomers])
+
+    useEffect(() => {
+        if (activeTab !== "details") return
+
+        let active = true
+        setIsDetailLoading(true)
+        void getPnlMonitoringDetailData({ year, month, customers: selectedCustomers }, detailPage)
+            .then((next) => {
+                if (active) setDetailData(next)
+            })
+            .finally(() => {
+                if (active) setIsDetailLoading(false)
+            })
+
+        return () => {
+            active = false
+        }
+    }, [activeTab, detailPage, month, selectedCustomers, year])
 
     const filteredCustomers = useMemo(() => {
         const keyword = customerSearch.trim().toLowerCase()
@@ -242,6 +281,24 @@ export function PnlMonitoringClient({
         })
 
         doc.save(`pnl-monitoring-${new Date().toISOString().slice(0, 10)}.pdf`)
+    }
+
+    const handleDetailExport = async () => {
+        setIsDetailExporting(true)
+        try {
+            const detailExport = await getPnlMonitoringDetailExport({ year, month, customers: selectedCustomers })
+            if (detailExport.rows.length === 0) return
+            const worksheet = XLSX.utils.aoa_to_sheet([
+                detailExport.columns,
+                ...detailExport.rows.map((row) => detailExport.columns.map((column) => formatDetailValue(row[column]))),
+            ])
+            worksheet["!cols"] = detailExport.columns.map(() => ({ wch: 18 }))
+            const workbook = XLSX.utils.book_new()
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Sales Revenue SAP")
+            XLSX.writeFile(workbook, `sales-revenue-sap-${year}-${month.toLowerCase()}.xlsx`)
+        } finally {
+            setIsDetailExporting(false)
+        }
     }
 
     const monthlyChartData = monthlyTotals.map((item) => ({
@@ -421,7 +478,7 @@ export function PnlMonitoringClient({
                                     </PopoverContent>
                                 </Popover>
                             </div>
-                            <div className="flex items-center gap-2">
+                            {activeTab === "monitoring" ? <div className="flex items-center gap-2">
                                 <Button type="button" variant="outline" onClick={handleExportExcel} disabled={!hasRows} className="bg-white">
                                     <Download className="mr-2 h-4 w-4" />
                                     Excel
@@ -430,7 +487,7 @@ export function PnlMonitoringClient({
                                     <FileText className="mr-2 h-4 w-4" />
                                     PDF
                                 </Button>
-                            </div>
+                            </div> : null}
                         </div>
                     </div>
                     {isLoading && (
@@ -439,7 +496,15 @@ export function PnlMonitoringClient({
                         </div>
                     )}
                 </CardHeader>
-                <CardContent className="space-y-6 p-4 md:p-6">
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-0">
+                    <div className="border-b border-slate-100 px-4 py-3 md:px-6">
+                        <TabsList>
+                            <TabsTrigger value="monitoring">Monitoring</TabsTrigger>
+                            <TabsTrigger value="details">Detail Data Table</TabsTrigger>
+                        </TabsList>
+                    </div>
+                    <TabsContent value="monitoring" className="mt-0">
+                        <CardContent className="space-y-6 p-4 md:p-6">
                     <div className="flex flex-wrap items-center gap-2">
                         <Badge variant="outline" className="border-rose-200 text-rose-700">
                             {data.summary.typeCount} type minus
@@ -624,7 +689,81 @@ export function PnlMonitoringClient({
                             </Table>
                         </div>
                     )}
-                </CardContent>
+                        </CardContent>
+                    </TabsContent>
+                    <TabsContent value="details" className="mt-0">
+                        <CardContent className="space-y-4 p-4 md:p-6">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                <div>
+                                    <h2 className="font-semibold text-slate-900">sales_revenue_sap</h2>
+                                    <p className="text-sm text-slate-500">
+                                        {detailData?.totalCount ?? 0} baris sesuai filter monitoring, 100 baris per halaman.
+                                    </p>
+                                </div>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={handleDetailExport}
+                                    disabled={isDetailExporting || !detailData?.totalCount}
+                                    className="bg-white"
+                                >
+                                    {isDetailExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+                                    Export Excel
+                                </Button>
+                            </div>
+
+                            {isDetailLoading ? (
+                                <div className="flex min-h-[280px] items-center justify-center gap-2 text-sm text-slate-500">
+                                    <Loader2 className="h-4 w-4 animate-spin" /> Memperbarui detail data...
+                                </div>
+                            ) : !detailData?.rows.length ? (
+                                <div className="flex min-h-[280px] items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 text-sm text-slate-500">
+                                    Tidak ada detail data untuk filter ini.
+                                </div>
+                            ) : (
+                                <>
+                                    <div className="max-h-[620px] overflow-auto rounded-xl border border-slate-200">
+                                        <Table>
+                                            <TableHeader className="sticky top-0 z-10 bg-slate-50">
+                                                <TableRow>
+                                                    {detailData.columns.map((column) => (
+                                                        <TableHead key={column} className="whitespace-nowrap font-semibold">
+                                                            {column}
+                                                        </TableHead>
+                                                    ))}
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {detailData.rows.map((row, rowIndex) => (
+                                                    <TableRow key={String(row.sales_rev_id ?? rowIndex)}>
+                                                        {detailData.columns.map((column) => (
+                                                            <TableCell key={column} className="max-w-[320px] whitespace-nowrap">
+                                                                {formatDetailValue(row[column]) || "-"}
+                                                            </TableCell>
+                                                        ))}
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                    </div>
+                                    <div className="flex items-center justify-between gap-3">
+                                        <p className="text-sm text-slate-500">
+                                            Halaman {detailData.page} dari {detailData.totalPages}
+                                        </p>
+                                        <div className="flex gap-2">
+                                            <Button variant="outline" size="sm" onClick={() => setDetailPage((page) => page - 1)} disabled={detailData.page <= 1}>
+                                                Sebelumnya
+                                            </Button>
+                                            <Button variant="outline" size="sm" onClick={() => setDetailPage((page) => page + 1)} disabled={detailData.page >= detailData.totalPages}>
+                                                Berikutnya
+                                            </Button>
+                                        </div>
+                                    </div>
+                                </>
+                            )}
+                        </CardContent>
+                    </TabsContent>
+                </Tabs>
             </Card>
         </div>
     )

@@ -1,14 +1,16 @@
 "use server"
 
 import { db } from "@/db"
+import { salesRevenueSap } from "@/db/schema/sap"
 import { getAuthenticatedSession } from "@/lib/rbac"
-import { sql } from "drizzle-orm"
+import { getTableColumns, sql } from "drizzle-orm"
 import { buildPnlMonitoringRows } from "./pnl-monitoring-utils"
 
 const PROFIT_MARGIN_EXPR = "COALESCE(NULLIF(profit_margin, 'NaN'::float8), 0)"
 const NON_CANCELLED_REVENUE_CONDITION = `
           AND NULLIF(TRIM(cancelled), '') IS NULL`
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"]
+const DETAIL_COLUMNS = Object.values(getTableColumns(salesRevenueSap)).map((column) => column.name)
 
 export type PnlMonitoringFilters = {
     year: string
@@ -95,6 +97,62 @@ const buildQuery = (year: string, month: string, customers: string[]) => {
         HAVING SUM(${PROFIT_MARGIN_EXPR}) < 0
         ORDER BY 1, 2, 3
     `)
+}
+
+const buildDetailCondition = (filters: PnlMonitoringFilters) => {
+    const year = normalizeYear(filters.year)
+    const month = normalizeMonth(filters.month)
+    const monthCondition = month === "ALL" ? "" : ` AND EXTRACT(MONTH FROM billing_date)::int <= ${Number(month)}`
+
+    return `
+        WHERE billing_date IS NOT NULL
+          AND ${PROFIT_MARGIN_EXPR} < 0
+          ${NON_CANCELLED_REVENUE_CONDITION}
+          AND TO_CHAR(billing_date, 'YYYY') = '${year.replace(/'/g, "''")}'
+          ${monthCondition}
+          ${buildCustomerCondition(filters.customers)}`
+}
+
+export async function getPnlMonitoringDetailData(filters: PnlMonitoringFilters, requestedPage = 1) {
+    await getAuthenticatedSession("marketing", "view")
+
+    const pageSize = 100
+    const page = Number.isFinite(requestedPage) ? Math.max(1, Math.floor(requestedPage)) : 1
+    const condition = buildDetailCondition(filters)
+    const [countResult, dataResult] = await Promise.all([
+        db.execute(sql.raw(`SELECT COUNT(*)::int AS total_count FROM sales_revenue_sap ${condition}`)),
+        db.execute(sql.raw(`
+            SELECT * FROM sales_revenue_sap
+            ${condition}
+            ORDER BY billing_date DESC NULLS LAST, sales_rev_id DESC
+            LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}
+        `)),
+    ])
+    const totalCount = Number((countResult.rows[0] as { total_count?: number } | undefined)?.total_count ?? 0)
+
+    return {
+        columns: DETAIL_COLUMNS,
+        rows: dataResult.rows as Record<string, unknown>[],
+        page,
+        pageSize,
+        totalCount,
+        totalPages: Math.max(1, Math.ceil(totalCount / pageSize)),
+    }
+}
+
+export async function getPnlMonitoringDetailExport(filters: PnlMonitoringFilters) {
+    await getAuthenticatedSession("marketing", "view")
+
+    const dataResult = await db.execute(sql.raw(`
+        SELECT * FROM sales_revenue_sap
+        ${buildDetailCondition(filters)}
+        ORDER BY billing_date DESC NULLS LAST, sales_rev_id DESC
+    `))
+
+    return {
+        columns: DETAIL_COLUMNS,
+        rows: dataResult.rows as Record<string, unknown>[],
+    }
 }
 
 export async function getPnlMonitoringBootstrap() {
