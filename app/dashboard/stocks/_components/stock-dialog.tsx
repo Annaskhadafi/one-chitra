@@ -52,6 +52,78 @@ import {
 
 type StockFormValues = z.infer<typeof stockSchema>
 
+function CustomerCombobox({
+    value,
+    onChange,
+    customers,
+    disabled,
+}: {
+    value: number
+    onChange: (val: number) => void
+    customers: { id: number; customerCode: string; name: string }[]
+    disabled?: boolean
+}) {
+    const [open, setOpen] = useState(false)
+    const selectedCustomer = customers.find((c) => c.id === value)
+
+    return (
+        <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+                <FormControl>
+                    <Button
+                        type="button"
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={open}
+                        disabled={disabled}
+                        className={cn(
+                            "h-10 w-full justify-between font-normal text-left truncate",
+                            !selectedCustomer && "text-muted-foreground"
+                        )}
+                    >
+                        <span className="truncate min-w-0 flex-1">
+                            {selectedCustomer
+                                ? `${selectedCustomer.customerCode} - ${selectedCustomer.name}`
+                                : "Pilih customer"}
+                        </span>
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                </FormControl>
+            </PopoverTrigger>
+            <PopoverContent className="w-[--radix-popover-trigger-width] min-w-[280px] p-0" align="start">
+                <Command>
+                    <CommandInput placeholder="Cari nama customer..." />
+                    <CommandList>
+                        <CommandEmpty>Customer tidak ditemukan.</CommandEmpty>
+                        <CommandGroup>
+                            {customers.map((customer) => (
+                                <CommandItem
+                                    key={customer.id}
+                                    value={`${customer.customerCode} ${customer.name}`}
+                                    onSelect={() => {
+                                        onChange(customer.id)
+                                        setOpen(false)
+                                    }}
+                                >
+                                    <Check
+                                        className={cn(
+                                            "mr-2 h-4 w-4 shrink-0",
+                                            customer.id === value ? "opacity-100" : "opacity-0"
+                                        )}
+                                    />
+                                    <span className="truncate">
+                                        {customer.customerCode} - {customer.name}
+                                    </span>
+                                </CommandItem>
+                            ))}
+                        </CommandGroup>
+                    </CommandList>
+                </Command>
+            </PopoverContent>
+        </Popover>
+    )
+}
+
 interface StockDialogProps {
     stock?: {
         id: number
@@ -378,26 +450,14 @@ export function StockDialog({ stock, products, customers, warehouses, trigger, o
                                                 control={form.control}
                                                 name={`stockBookings.${index}.customerId`}
                                                 render={({ field: customerField }) => (
-                                                    <FormItem>
-                                                        <FormLabel>Customer</FormLabel>
-                                                        <Select
-                                                            onValueChange={(value) => customerField.onChange(Number(value))}
-                                                            value={customerField.value ? customerField.value.toString() : undefined}
+                                                    <FormItem className="flex flex-col">
+                                                        <FormLabel className="mb-1">Customer</FormLabel>
+                                                        <CustomerCombobox
+                                                            value={customerField.value}
+                                                            onChange={customerField.onChange}
+                                                            customers={customers}
                                                             disabled={isLoading}
-                                                        >
-                                                            <FormControl>
-                                                                <SelectTrigger>
-                                                                    <SelectValue placeholder="Pilih customer" />
-                                                                </SelectTrigger>
-                                                            </FormControl>
-                                                            <SelectContent>
-                                                                {customers.map((customer) => (
-                                                                    <SelectItem key={customer.id} value={customer.id.toString()}>
-                                                                        {customer.customerCode} - {customer.name}
-                                                                    </SelectItem>
-                                                                ))}
-                                                            </SelectContent>
-                                                        </Select>
+                                                        />
                                                         <FormMessage />
                                                     </FormItem>
                                                 )}

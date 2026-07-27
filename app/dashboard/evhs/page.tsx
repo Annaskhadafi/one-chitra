@@ -103,7 +103,7 @@ export default async function EvhsPage({ searchParams }: { searchParams: Promise
                         <CardHeader>
                             <CardTitle>Ringkasan Stock EVHS CK</CardTitle>
                             <CardDescription>
-                                Rekap stock EVHS yang sudah terekam di tracking saat ini, termasuk indikasi kelengkapan SN.
+                                Perhitungan rekonsil stok EVHS (Stok Masuk, Stok Available, dan Stok Terpakai) yang terpisah dari data Stok Actual di menu Inventory.
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="px-3 pb-4 pt-0 sm:px-6 sm:pb-6">
@@ -115,7 +115,7 @@ export default async function EvhsPage({ searchParams }: { searchParams: Promise
                         <CardHeader>
                             <CardTitle>Stock All VHS</CardTitle>
                             <CardDescription>
-                                Sinkronisasi stok lama dari inventory lokal untuk warehouse VHS CK, lengkap dengan detail SN/usage TYRE.
+                                Data Stok Local (stok fisik aktual dari Inventory) yang ditampilkan terpisah bersisian dengan data perhitungan Available EVHS (rekonsil).
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="px-3 pb-4 pt-0 sm:px-6 sm:pb-6">

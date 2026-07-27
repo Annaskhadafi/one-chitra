@@ -98,9 +98,14 @@ async function syncChatSchema() {
     `)
 }
 
+let isChatSchemaSynced = false
+
 export async function ensureChatSchema() {
+    if (isChatSchemaSynced) return
     if (!ensureChatSchemaPromise) {
-        ensureChatSchemaPromise = syncChatSchema().catch((error) => {
+        ensureChatSchemaPromise = syncChatSchema().then(() => {
+            isChatSchemaSynced = true
+        }).catch((error) => {
             ensureChatSchemaPromise = null
             throw error
         })

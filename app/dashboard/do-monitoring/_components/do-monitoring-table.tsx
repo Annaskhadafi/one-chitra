@@ -917,6 +917,7 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
             "Driver / Forwarder",
             "Shipment Type",
             "Plat Kendaraan",
+            "No. Resi",
             "Customer",
             "Material Number",
             "Material Description",
@@ -941,6 +942,7 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
                 getShipmentParty(d),
                 getShipmentPartyType(d),
                 d.vehicleNumber || "",
+                d.awbNumber || "",
                 d.salesOrder?.customer?.name || "",
             ]
 

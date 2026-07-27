@@ -46,10 +46,7 @@ export async function proxy(request: NextRequest) {
         forwardedHeaders.set("x-pathname", pathname)
 
         const port = process.env.PORT ?? "3000"
-        const envBaseURL = process.env.BETTER_AUTH_URL ?? process.env.NEXT_PUBLIC_BETTER_AUTH_URL
-        const internalBaseURL = envBaseURL
-            ? (envBaseURL.startsWith("http") ? envBaseURL : `https://${envBaseURL}`)
-            : `http://localhost:${port}`
+        const internalBaseURL = process.env.INTERNAL_URL ?? `http://127.0.0.1:${port}`
 
         const { data: session } = await betterFetch<Session>("/api/auth/get-session", {
             baseURL: internalBaseURL,
