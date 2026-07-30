@@ -1,17 +1,10 @@
 import { format } from "date-fns"
 import { Link2, Package, RadioTower, Signal } from "lucide-react"
 
-import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from "@/components/ui/table"
 import { getRfidScanRows } from "@/lib/rfid"
+
+import { RfidTableClient } from "./_components/rfid-table-client"
 
 export const dynamic = "force-dynamic"
 
@@ -28,7 +21,7 @@ export default async function RfidPage() {
             <div className="flex flex-col gap-1">
                 <h1 className="text-balance text-2xl font-bold tracking-tight">RFID</h1>
                 <p className="text-pretty text-muted-foreground">
-                    Data scan RFID material dari handheld.
+                    Data scan RFID material dari handheld, kelola dan pantau keterhubungan data stok.
                 </p>
             </div>
 
@@ -71,67 +64,7 @@ export default async function RfidPage() {
                 </Card>
             </div>
 
-            <Card>
-                <CardHeader>
-                    <CardTitle>Data RFID</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="overflow-x-auto">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Created At</TableHead>
-                                    <TableHead>Material</TableHead>
-                                    <TableHead>Description</TableHead>
-                                    <TableHead>SLoc</TableHead>
-                                    <TableHead>SN</TableHead>
-                                    <TableHead>EPC</TableHead>
-                                    <TableHead>RSSI</TableHead>
-                                    <TableHead>Status</TableHead>
-                                    <TableHead className="text-right">Act Stock</TableHead>
-                                    <TableHead>Created By</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {rows.length === 0 ? (
-                                    <TableRow>
-                                        <TableCell colSpan={10} className="h-24 text-center text-muted-foreground">
-                                            Belum ada data RFID.
-                                        </TableCell>
-                                    </TableRow>
-                                ) : (
-                                    rows.map((row) => (
-                                        <TableRow key={row.id}>
-                                            <TableCell className="tabular-nums">{formatDate(row.scannedAt)}</TableCell>
-                                            <TableCell>
-                                                <div className="font-medium">{row.materialNumber ?? "-"}</div>
-                                                <div className="text-xs text-muted-foreground">{row.category ?? "-"}</div>
-                                            </TableCell>
-                                            <TableCell className="max-w-[280px] truncate" title={row.materialDescription ?? undefined}>
-                                                {row.materialDescription ?? "-"}
-                                            </TableCell>
-                                            <TableCell>
-                                                <div className="font-medium tabular-nums">{row.sloc ?? "-"}</div>
-                                                <div className="text-xs text-muted-foreground">{row.slocDescription ?? "-"}</div>
-                                            </TableCell>
-                                            <TableCell className="font-medium tabular-nums">{row.serialNumber ?? "-"}</TableCell>
-                                            <TableCell className="font-mono text-xs">{row.epc ?? row.tagId}</TableCell>
-                                            <TableCell className="tabular-nums">{row.rssi ?? "-"}</TableCell>
-                                            <TableCell>
-                                                <Badge variant={row.linked ? "success" : "secondary"}>
-                                                    {row.linked ? "Linked" : "Unlinked"}
-                                                </Badge>
-                                            </TableCell>
-                                            <TableCell className="text-right tabular-nums">{row.actStock ?? "-"}</TableCell>
-                                            <TableCell>{row.createdBy ?? "-"}</TableCell>
-                                        </TableRow>
-                                    ))
-                                )}
-                            </TableBody>
-                        </Table>
-                    </div>
-                </CardContent>
-            </Card>
+            <RfidTableClient initialRows={rows} />
         </div>
     )
 }
