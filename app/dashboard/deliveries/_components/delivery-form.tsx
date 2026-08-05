@@ -61,7 +61,7 @@ import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
 import { ArrowLeft, Save, ChevronsUpDown, Check, Package, Truck, MapPin, CheckCircle2, AlertTriangle, XCircle, Plus, Info, Eye, X, Search, Loader2, RefreshCcw, BarChart3, TrendingDown, AlertCircle, Copy, ClipboardPaste, RadioTower } from "lucide-react"
 import Link from "next/link"
-import { cn } from "@/lib/utils"
+import { cn, formatCurrency } from "@/lib/utils"
 import type { Product, Warehouse, Customer } from "@/lib/types"
 import { formatWarehouseLabel } from "@/lib/sloc"
 import { isUploadImageFile, resolveUploadDocumentUrl } from "@/lib/upload-url"
@@ -2344,7 +2344,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSale
                                             <div className="flex flex-col items-end gap-1">
                                                 <Label className="text-sm font-semibold text-muted-foreground">Total Operational Cost</Label>
                                                 <div className="text-xl font-bold">
-                                                    {new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR" }).format(totalInternalCost)}
+                                                    {formatCurrency(totalInternalCost)}
                                                 </div>
                                             </div>
                                         </div>
