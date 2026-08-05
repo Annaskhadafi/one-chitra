@@ -22,6 +22,8 @@ export type RfidRow = {
     epc?: string | null
     rssi?: string | null
     linked: boolean
+    status?: "Masuk" | "Keluar"
+    doNumber?: string | null
     plant?: string | null
     category?: string | null
     materialNumber?: string | null
@@ -74,9 +76,19 @@ export function RfidDetailDialog({
                                 Detail RFID Scan #{data.id}
                             </DialogTitle>
                         </div>
-                        <Badge variant={data.linked ? "success" : "secondary"} className="text-xs px-3 py-1">
-                            {data.linked ? "Linked" : "Unlinked"}
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                            <Badge variant={data.status === "Keluar" ? "outline" : "default"} className={data.status === "Keluar" ? "bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800 font-semibold" : "bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800 font-semibold"}>
+                                Status: {data.status || "Masuk"}
+                            </Badge>
+                            {data.doNumber ? (
+                                <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800 font-mono">
+                                    DO: {data.doNumber}
+                                </Badge>
+                            ) : null}
+                            <Badge variant={data.linked ? "success" : "secondary"} className="text-xs px-3 py-1">
+                                {data.linked ? "Linked" : "Unlinked"}
+                            </Badge>
+                        </div>
                     </div>
                     <DialogDescription className="text-xs text-muted-foreground">
                         Informasi lengkap scan RFID dan perataan data material.

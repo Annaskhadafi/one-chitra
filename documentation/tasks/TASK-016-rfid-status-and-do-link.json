@@ -1,0 +1,12 @@
+{
+  "id": "TASK-016",
+  "status": "completed",
+  "priority": "P0",
+  "title": "Integrasi RFID Status (Masuk/Keluar), DO Link, dan Copy SN RFID di Form DO",
+  "description": "Menambahkan kolom Status (Masuk/Keluar) dan DO Link pada tabel RFID, mengintegrasikan API /api/rfid?status=masuk|keluar, menambahkan tombol Copy SN RFID di Form DO untuk barang kategory TYRE dengan RFID status Keluar & DO Link kosong, serta memperbarui DO Link pada RFID saat DO disimpan.",
+  "createdAt": "2026-08-05T09:50:00.000Z",
+  "startedAt": "2026-08-05T01:54:35.933Z",
+  "updatedAt": "2026-08-05T03:48:58.869Z",
+  "completedAt": "2026-08-05T03:48:58.869Z",
+  "completionDetails": "Menambahkan Kolom Status (Masuk/Keluar), Kolom DO Link di tabel RFID, endpoint /api/rfid?status=masuk|keluar, tombol Copy SN RFID di Form DO, dan auto link DO pada RFID"
+}

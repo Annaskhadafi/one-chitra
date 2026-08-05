@@ -20,7 +20,8 @@ export const rfidScans = pgTable("rfid_scans", {
     createdBy: varchar("created_by", { length: 100 }),
     productId: integer("product_id").references(() => products.id),
     warehouseId: integer("warehouse_id").references(() => warehouses.id),
-    scanType: varchar("scan_type", { length: 10 }), // 'INBOUND' or 'OUTBOUND'
+    scanType: varchar("scan_type", { length: 20 }), // 'INBOUND' / 'OUTBOUND' or 'MASUK' / 'KELUAR'
+    doNumber: varchar("do_number", { length: 100 }),
     userId: varchar("user_id").references(() => user.id),
     scannedAt: timestamp("scanned_at").defaultNow().notNull(),
 });

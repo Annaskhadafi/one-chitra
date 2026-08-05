@@ -52,6 +52,7 @@ export function RfidFormDialog({
     const [slocDescription, setSlocDescription] = useState("")
     const [actStock, setActStock] = useState<string>("")
     const [createdBy, setCreatedBy] = useState("")
+    const [status, setStatus] = useState<"Masuk" | "Keluar">("Masuk")
 
     useEffect(() => {
         if (open) {
@@ -61,6 +62,7 @@ export function RfidFormDialog({
                 setEpc(initialData.epc || initialData.tagId || "")
                 setRssi(initialData.rssi || "")
                 setLinked(Boolean(initialData.linked))
+                setStatus(initialData.status === "Keluar" ? "Keluar" : "Masuk")
                 setPlant(initialData.plant || "")
                 setCategory(initialData.category || "")
                 setMaterialNumber(initialData.materialNumber || "")
@@ -76,6 +78,7 @@ export function RfidFormDialog({
                 setEpc("")
                 setRssi("")
                 setLinked(false)
+                setStatus("Masuk")
                 setPlant("")
                 setCategory("")
                 setMaterialNumber("")
@@ -104,6 +107,7 @@ export function RfidFormDialog({
             epc: epc.trim() || tagId.trim(),
             rssi: rssi.trim() || undefined,
             linked,
+            scanType: status === "Keluar" ? "OUTBOUND" : "INBOUND",
             plant: plant.trim() || undefined,
             category: category.trim() || undefined,
             materialNumber: materialNumber.trim() || undefined,
@@ -186,7 +190,7 @@ export function RfidFormDialog({
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div className="space-y-1.5">
                                 <Label htmlFor="rssi">RSSI (dBm)</Label>
                                 <Input
@@ -195,6 +199,21 @@ export function RfidFormDialog({
                                     value={rssi}
                                     onChange={(e) => setRssi(e.target.value)}
                                 />
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label htmlFor="status">Status Scan</Label>
+                                <Select
+                                    value={status}
+                                    onValueChange={(val: "Masuk" | "Keluar") => setStatus(val)}
+                                >
+                                    <SelectTrigger id="status" className={status === "Keluar" ? "border-amber-400 font-semibold text-amber-700 bg-amber-50/50 dark:bg-amber-950/30 dark:text-amber-400" : "border-emerald-400 font-semibold text-emerald-700 bg-emerald-50/50 dark:bg-emerald-950/30 dark:text-emerald-400"}>
+                                        <SelectValue placeholder="Pilih Status Scan" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="Masuk">Masuk (Inbound)</SelectItem>
+                                        <SelectItem value="Keluar">Keluar (Outbound)</SelectItem>
+                                    </SelectContent>
+                                </Select>
                             </div>
                             <div className="space-y-1.5">
                                 <Label htmlFor="linked">Status Link Material</Label>

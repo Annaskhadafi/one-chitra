@@ -2,9 +2,11 @@
 
 import { useMemo, useState } from "react"
 import { format } from "date-fns"
+import Link from "next/link"
 import {
     Check,
     Download,
+    ExternalLink,
     Eye,
     Filter,
     Pencil,
@@ -75,7 +77,7 @@ export function RfidTableClient({ initialRows }: RfidTableClientProps) {
 
     const [rows, setRows] = useState<RfidRow[]>(initialRows)
     const [searchQuery, setSearchQuery] = useState("")
-    const [statusFilter, setStatusFilter] = useState<"all" | "linked" | "unlinked">("all")
+    const [statusFilter, setStatusFilter] = useState<"all" | "masuk" | "keluar" | "linked" | "unlinked">("all")
     const [selectedIds, setSelectedIds] = useState<number[]>([])
 
     // Dialog States
@@ -100,7 +102,9 @@ export function RfidTableClient({ initialRows }: RfidTableClientProps) {
     // Filter Logic
     const filteredRows = useMemo(() => {
         return rows.filter((row) => {
-            // Filter by status
+            const rowStatus = row.status || (row.scanType?.toLowerCase().includes("keluar") || row.scanType?.toLowerCase().includes("outbound") ? "Keluar" : "Masuk")
+            if (statusFilter === "masuk" && rowStatus !== "Masuk") return false
+            if (statusFilter === "keluar" && rowStatus !== "Keluar") return false
             if (statusFilter === "linked" && !row.linked) return false
             if (statusFilter === "unlinked" && row.linked) return false
 
@@ -111,6 +115,7 @@ export function RfidTableClient({ initialRows }: RfidTableClientProps) {
                 row.epc?.toLowerCase().includes(q) ||
                 row.tagId?.toLowerCase().includes(q) ||
                 row.serialNumber?.toLowerCase().includes(q) ||
+                row.doNumber?.toLowerCase().includes(q) ||
                 row.materialNumber?.toLowerCase().includes(q) ||
                 row.materialDescription?.toLowerCase().includes(q) ||
                 row.sloc?.toLowerCase().includes(q) ||
@@ -166,6 +171,33 @@ export function RfidTableClient({ initialRows }: RfidTableClientProps) {
         }
     }
 
+    // Quick Inline ScanType Status Change Handler (Masuk / Keluar)
+    const handleToggleScanTypeStatus = async (row: RfidRow, newStatus: "Masuk" | "Keluar") => {
+        if (!canEdit) {
+            toast.error("Anda tidak memiliki izin untuk mengedit data RFID")
+            return
+        }
+
+        setTogglingId(row.id)
+        try {
+            const { updateRfidScanTypeAction } = await import("@/app/actions/rfid")
+            const res = await updateRfidScanTypeAction(row.id, newStatus)
+            if (res.success) {
+                toast.success(`Status Pergerakan RFID #${row.id} diperbarui menjadi ${newStatus}`)
+                setRows((prev) =>
+                    prev.map((r) => (r.id === row.id ? { ...r, status: newStatus, scanType: newStatus === "Keluar" ? "OUTBOUND" : "INBOUND" } : r))
+                )
+            } else {
+                toast.error(res.error || "Gagal memperbarui status pergerakan RFID")
+            }
+        } catch (err) {
+            console.error(err)
+            toast.error("Terjadi kesalahan sistem")
+        } finally {
+            setTogglingId(null)
+        }
+    }
+
     // CSV Export Handler
     const handleExportCSV = () => {
         if (filteredRows.length === 0) {
@@ -179,7 +211,9 @@ export function RfidTableClient({ initialRows }: RfidTableClientProps) {
             "Tag ID / EPC",
             "Serial Number",
             "RSSI",
-            "Status",
+            "Status (Masuk/Keluar)",
+            "DO Link",
+            "Keterhubungan",
             "Material Number",
             "Material Description",
             "Category",
@@ -199,6 +233,8 @@ export function RfidTableClient({ initialRows }: RfidTableClientProps) {
                     `"${r.epc || r.tagId || ""}"`,
                     `"${r.serialNumber || ""}"`,
                     `"${r.rssi || ""}"`,
+                    `"${r.status || (r.scanType?.toLowerCase().includes("keluar") ? "Keluar" : "Masuk")}"`,
+                    `"${r.doNumber || ""}"`,
                     `"${r.linked ? "Linked" : "Unlinked"}"`,
                     `"${r.materialNumber || ""}"`,
                     `"${(r.materialDescription || "").replace(/"/g, '""')}"`,
@@ -285,13 +321,15 @@ export function RfidTableClient({ initialRows }: RfidTableClientProps) {
                         <Filter className="size-4 text-muted-foreground hidden sm:inline-block" />
                         <Select
                             value={statusFilter}
-                            onValueChange={(val) => setStatusFilter(val as "all" | "linked" | "unlinked")}
+                            onValueChange={(val) => setStatusFilter(val as any)}
                         >
-                            <SelectTrigger className="w-full sm:w-[160px]">
+                            <SelectTrigger className="w-full sm:w-[170px]">
                                 <SelectValue placeholder="Filter Status" />
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="all">Semua Status</SelectItem>
+                                <SelectItem value="masuk">Status: Masuk</SelectItem>
+                                <SelectItem value="keluar">Status: Keluar</SelectItem>
                                 <SelectItem value="linked">Linked Only</SelectItem>
                                 <SelectItem value="unlinked">Unlinked Only</SelectItem>
                             </SelectContent>
@@ -320,6 +358,8 @@ export function RfidTableClient({ initialRows }: RfidTableClientProps) {
                                 <TableHead>EPC / Tag ID</TableHead>
                                 <TableHead>RSSI</TableHead>
                                 <TableHead>Status</TableHead>
+                                <TableHead>DO Link</TableHead>
+                                <TableHead>Keterhubungan</TableHead>
                                 <TableHead className="text-right">Act Stock</TableHead>
                                 <TableHead>Created By</TableHead>
                                 <TableHead className="text-right pr-6">Aksi</TableHead>
@@ -328,12 +368,14 @@ export function RfidTableClient({ initialRows }: RfidTableClientProps) {
                         <TableBody>
                             {filteredRows.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={12} className="h-32 text-center text-muted-foreground">
+                                    <TableCell colSpan={13} className="h-32 text-center text-muted-foreground">
                                         Tidak ada data RFID yang sesuai filter.
                                     </TableCell>
                                 </TableRow>
                             ) : (
-                                filteredRows.map((row) => (
+                                filteredRows.map((row) => {
+                                    const itemStatus = row.status || (row.scanType?.toLowerCase().includes("keluar") || row.scanType?.toLowerCase().includes("outbound") ? "Keluar" : "Masuk")
+                                    return (
                                     <TableRow key={row.id} className={selectedIds.includes(row.id) ? "bg-muted/50" : ""}>
                                         <TableCell className="text-center">
                                             <Checkbox
@@ -363,6 +405,79 @@ export function RfidTableClient({ initialRows }: RfidTableClientProps) {
                                             {row.epc ?? row.tagId}
                                         </TableCell>
                                         <TableCell className="tabular-nums text-xs">{row.rssi ?? "-"}</TableCell>
+                                        <TableCell>
+                                            {canEdit ? (
+                                                <Popover>
+                                                    <PopoverTrigger asChild>
+                                                        <button
+                                                            type="button"
+                                                            disabled={togglingId === row.id}
+                                                            className="cursor-pointer focus:outline-none transition-transform active:scale-95"
+                                                        >
+                                                            <Badge
+                                                                variant="outline"
+                                                                className={
+                                                                    itemStatus === "Keluar"
+                                                                        ? "bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950/50 dark:text-amber-300 font-semibold hover:bg-amber-100"
+                                                                        : "bg-emerald-50 text-emerald-800 border-emerald-300 dark:bg-emerald-950/50 dark:text-emerald-300 font-semibold hover:bg-emerald-100"
+                                                                }
+                                                            >
+                                                                {itemStatus}
+                                                            </Badge>
+                                                        </button>
+                                                    </PopoverTrigger>
+                                                    <PopoverContent className="w-44 p-2" align="start">
+                                                        <div className="text-xs font-semibold text-muted-foreground px-2 py-1">
+                                                            Ubah Status Pergerakan
+                                                        </div>
+                                                        <div className="space-y-1 mt-1">
+                                                            <Button
+                                                                variant={itemStatus === "Masuk" ? "secondary" : "ghost"}
+                                                                size="sm"
+                                                                onClick={() => handleToggleScanTypeStatus(row, "Masuk")}
+                                                                className="w-full justify-between text-xs h-8 text-emerald-700 dark:text-emerald-400 font-semibold"
+                                                            >
+                                                                <span>Masuk (Inbound)</span>
+                                                                {itemStatus === "Masuk" && <Check className="size-3 text-emerald-600" />}
+                                                            </Button>
+                                                            <Button
+                                                                variant={itemStatus === "Keluar" ? "secondary" : "ghost"}
+                                                                size="sm"
+                                                                onClick={() => handleToggleScanTypeStatus(row, "Keluar")}
+                                                                className="w-full justify-between text-xs h-8 text-amber-700 dark:text-amber-400 font-semibold"
+                                                            >
+                                                                <span>Keluar (Outbound)</span>
+                                                                {itemStatus === "Keluar" && <Check className="size-3 text-amber-600" />}
+                                                            </Button>
+                                                        </div>
+                                                    </PopoverContent>
+                                                </Popover>
+                                            ) : (
+                                                <Badge
+                                                    variant="outline"
+                                                    className={
+                                                        itemStatus === "Keluar"
+                                                            ? "bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950/50 dark:text-amber-300 font-semibold"
+                                                            : "bg-emerald-50 text-emerald-800 border-emerald-300 dark:bg-emerald-950/50 dark:text-emerald-300 font-semibold"
+                                                    }
+                                                >
+                                                    {itemStatus}
+                                                </Badge>
+                                            )}
+                                        </TableCell>
+                                        <TableCell>
+                                            {row.doNumber ? (
+                                                <Link
+                                                    href={`/dashboard/deliveries?search=${encodeURIComponent(row.doNumber)}`}
+                                                    className="inline-flex items-center gap-1 text-xs font-mono font-semibold text-blue-600 dark:text-blue-400 hover:underline bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 rounded border border-blue-200 dark:border-blue-800"
+                                                >
+                                                    <ExternalLink className="size-3" />
+                                                    {row.doNumber}
+                                                </Link>
+                                            ) : (
+                                                <span className="text-muted-foreground text-xs">-</span>
+                                            )}
+                                        </TableCell>
                                         <TableCell>
                                             {/* Interactive Inline Status Toggle via Popover */}
                                             {canEdit ? (
@@ -468,8 +583,9 @@ export function RfidTableClient({ initialRows }: RfidTableClientProps) {
                                                 )}
                                             </div>
                                         </TableCell>
-                                    </TableRow>
-                                ))
+                                     </TableRow>
+                                    )
+                                })
                             )}
                         </TableBody>
                     </Table>

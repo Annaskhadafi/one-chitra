@@ -7,7 +7,7 @@ import { eq, inArray } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 
-export const rfidScanFormSchema = z.object({
+const rfidScanFormSchema = z.object({
     tagId: z.string().trim().min(1, "Tag ID wajib diisi"),
     serialNumber: z.string().trim().optional(),
     epc: z.string().trim().optional(),
@@ -21,6 +21,7 @@ export const rfidScanFormSchema = z.object({
     slocDescription: z.string().trim().optional(),
     actStock: z.coerce.number().int().optional().nullable(),
     createdBy: z.string().trim().optional(),
+    scanType: z.string().trim().optional(),
 })
 
 export type RfidScanFormInput = z.infer<typeof rfidScanFormSchema>
@@ -46,6 +47,7 @@ export async function createRfidScanAction(data: RfidScanFormInput) {
             slocDescription: parsed.slocDescription || null,
             actStock: parsed.actStock ?? null,
             createdBy: parsed.createdBy || userName,
+            scanType: parsed.scanType || "INBOUND",
             userId: session.user.id,
             scannedAt: new Date(),
         }).returning()
@@ -90,6 +92,7 @@ export async function updateRfidScanAction(id: number, data: Partial<RfidScanFor
                 slocDescription: parsed.slocDescription !== undefined ? (parsed.slocDescription || null) : existing.slocDescription,
                 actStock: parsed.actStock !== undefined ? parsed.actStock : existing.actStock,
                 createdBy: parsed.createdBy !== undefined ? (parsed.createdBy || null) : existing.createdBy,
+                scanType: parsed.scanType !== undefined ? (parsed.scanType || "INBOUND") : existing.scanType,
             })
             .where(eq(rfidScans.id, id))
             .returning()
@@ -101,6 +104,28 @@ export async function updateRfidScanAction(id: number, data: Partial<RfidScanFor
         return {
             success: false,
             error: error instanceof Error ? error.message : "Gagal memperbarui data RFID",
+        }
+    }
+}
+
+export async function updateRfidScanTypeAction(id: number, status: "Masuk" | "Keluar") {
+    try {
+        await getAuthenticatedSession("rfid", "edit")
+
+        const dbScanType = status === "Keluar" ? "OUTBOUND" : "INBOUND"
+
+        const [updated] = await db.update(rfidScans)
+            .set({ scanType: dbScanType })
+            .where(eq(rfidScans.id, id))
+            .returning()
+
+        revalidatePath("/dashboard/rfid")
+        return { success: true, data: updated }
+    } catch (error) {
+        console.error("Gagal mengubah status scan RFID:", error)
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Gagal mengubah status scan RFID",
         }
     }
 }
@@ -150,23 +175,54 @@ export async function deleteRfidScanAction(id: number) {
 
 export async function bulkDeleteRfidScansAction(ids: number[]) {
     try {
-        await getAuthenticatedSession("rfid", "delete")
-
         if (!ids || ids.length === 0) {
-            return { success: false, error: "Pilih minimal satu data RFID untuk dihapus" }
+            return { success: false, error: "Tidak ada data RFID yang dipilih untuk dihapus" }
         }
 
-        const deleted = await db.delete(rfidScans)
+        await getAuthenticatedSession("rfid", "delete")
+
+        const deletedRows = await db.delete(rfidScans)
             .where(inArray(rfidScans.id, ids))
             .returning()
 
         revalidatePath("/dashboard/rfid")
-        return { success: true, count: deleted.length }
+        return { success: true, count: deletedRows.length }
     } catch (error) {
-        console.error("Gagal menghapus beberapa RFID scan:", error)
+        console.error("Gagal menghapus data RFID massal:", error)
         return {
             success: false,
-            error: error instanceof Error ? error.message : "Gagal menghapus data RFID",
+            error: error instanceof Error ? error.message : "Gagal menghapus data RFID massal",
         }
     }
 }
+
+export async function getAvailableKeluarRfidScansAction(query?: { materialNumber?: string; materialDescription?: string } | string) {
+    try {
+        const { getAvailableKeluarRfidScans } = await import("@/lib/rfid")
+        const rows = await getAvailableKeluarRfidScans(query)
+        return { success: true, data: rows }
+    } catch (error) {
+        console.error("Gagal mengambil data RFID keluar:", error)
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Gagal mengambil data RFID keluar",
+            data: [],
+        }
+    }
+}
+
+export async function linkRfidScansToDeliveryAction(doNumber: string, serialNumbers: string[]) {
+    try {
+        const { linkRfidScansToDelivery } = await import("@/lib/rfid")
+        const updated = await linkRfidScansToDelivery(doNumber, serialNumbers)
+        revalidatePath("/dashboard/rfid")
+        return { success: true, count: updated.length }
+    } catch (error) {
+        console.error("Gagal menghubungkan RFID ke DO:", error)
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Gagal menghubungkan RFID ke DO",
+        }
+    }
+}
+

@@ -1,0 +1,12 @@
+{
+  "id": "TASK-018",
+  "status": "completed",
+  "priority": "P1",
+  "title": "Edit Status RFID (Masuk/Keluar) & Interactive Popup Modal Copy SN RFID di DO Form",
+  "description": "Menambahkan opsi ubah Status (Masuk/Keluar) di Modal Edit RFID & Inline Table Badge, serta membuat Popup Modal Pemilihan SN RFID di Delivery Order Form berdasarkan kecocokan Material Number / Description dengan fasilitas multi-select dan button Input ke DO.",
+  "createdAt": "2026-08-05T12:12:00.000Z",
+  "startedAt": "2026-08-05T04:13:07.284Z",
+  "updatedAt": "2026-08-05T04:22:29.730Z",
+  "completedAt": "2026-08-05T04:22:29.730Z",
+  "completionDetails": "Menambahkan opsi ubah Status (Masuk/Keluar) di Modal Edit & Popover Tabel RFID, serta membuat Interactive Popup Modal Copy SN RFID di Form DO dengan fitur pencocokan material, filter, checkbox multi-select, dan button Input ke DO"
+}

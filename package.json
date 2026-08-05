@@ -29,6 +29,8 @@
     "db:seed": "npx tsx db/seed.ts",
     "db:clear": "npx tsx db/clear.ts",
     "db:migrate:ai-forecast": "npx tsx db/migrate-ai-forecast.ts",
+    "db:backup": "npx tsx scripts/backup-db.ts",
+    "db:restore": "npx tsx scripts/restore-db.ts",
     "kill:dev": "node kill-ports.js",
     "db:reset": "drizzle-kit drop && drizzle-kit push",
     "docker:build": "docker build -t codeguide-starter-fullstack .",

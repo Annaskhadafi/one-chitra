@@ -896,7 +896,20 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
 
         if (result.success) {
             await recordActivity({ action: "CREATE", tableName: "deliveries", recordId: result.id.toString(), description: `Membuat Delivery baru ${deliveryNumber}` });
-        await notifyCreatedDelivery(result.id)
+            await notifyCreatedDelivery(result.id)
+
+            const allSerialNumbers = (data.items || [])
+                .flatMap((item) => item.serialNumbers || [])
+                .filter((sn): sn is string => Boolean(sn && sn.trim()))
+
+            if (allSerialNumbers.length > 0) {
+                try {
+                    const { linkRfidScansToDelivery } = await import("@/lib/rfid")
+                    await linkRfidScansToDelivery(deliveryNumber, allSerialNumbers)
+                } catch (err) {
+                    console.error("Failed to link RFID scans on create delivery:", err)
+                }
+            }
         }
 
         if (result.success && result.deliveredNotificationIds.length > 0) {
@@ -1187,6 +1200,22 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
         }
 
         await recordActivity({ action: "UPDATE", tableName: "deliveries", recordId: id.toString(), description: `Memperbarui Delivery ${result.loggedDeliveryNumber || id}` });
+
+        const currentDeliveryNumber = result.loggedDeliveryNumber || data.deliveryNumber || null
+        if (currentDeliveryNumber) {
+            const allSerialNumbers = (data.items || [])
+                .flatMap((item) => item.serialNumbers || [])
+                .filter((sn): sn is string => Boolean(sn && sn.trim()))
+
+            if (allSerialNumbers.length > 0) {
+                try {
+                    const { linkRfidScansToDelivery } = await import("@/lib/rfid")
+                    await linkRfidScansToDelivery(currentDeliveryNumber, allSerialNumbers)
+                } catch (err) {
+                    console.error("Failed to link RFID scans on update delivery:", err)
+                }
+            }
+        }
 
         return { success: true }
     } catch (error) {

@@ -40,6 +40,7 @@ import {
     DialogDescription,
     DialogFooter,
 } from "@/components/ui/dialog"
+import { RfidSelectionModal, AvailableRfidItem } from "./rfid-selection-modal"
 import {
     Card,
     CardContent,
@@ -58,7 +59,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
-import { ArrowLeft, Save, ChevronsUpDown, Check, Package, Truck, MapPin, CheckCircle2, AlertTriangle, XCircle, Plus, Info, Eye, X, Search, Loader2, RefreshCcw, BarChart3, TrendingDown, AlertCircle, Copy, ClipboardPaste } from "lucide-react"
+import { ArrowLeft, Save, ChevronsUpDown, Check, Package, Truck, MapPin, CheckCircle2, AlertTriangle, XCircle, Plus, Info, Eye, X, Search, Loader2, RefreshCcw, BarChart3, TrendingDown, AlertCircle, Copy, ClipboardPaste, RadioTower } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 import type { Product, Warehouse, Customer } from "@/lib/types"
@@ -343,6 +344,23 @@ export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSale
         return dexlite + bio + toll + parking + meals + maintenance + others + rapidTest + ferry + portal + washing + escort
     }, [costGasolineDexlite, costGasolineBio, costToll, costParking, costMeals, costMaintenance, costOthers, costRapidTest, costFerry, costPortal, costWashing, costEscort])
 
+    // RFID Selection Modal State
+    const [rfidModalState, setRfidModalState] = useState<{
+        open: boolean
+        itemIdx: number
+        productName: string
+        materialNumber?: string
+        requiredQuantity: number
+        availableItems: AvailableRfidItem[]
+    }>({
+        open: false,
+        itemIdx: -1,
+        productName: "",
+        materialNumber: "",
+        requiredQuantity: 0,
+        availableItems: [],
+    })
+
     // Items
     const [items, setItems] = useState<DeliveryFormItem[]>(() => {
         if (initialData?.items) {
@@ -467,31 +485,8 @@ export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSale
         setDraftHydrated(true)
     }, [defaultSalesOrderId, isEdit])
 
-    useEffect(() => {
-        if (isEdit || !draftHydrated || generatedDeliveryNumber) {
-            return
-        }
-
-        let cancelled = false
-
-        const loadDeliveryNumber = async () => {
-            try {
-                const num = await generateDeliveryNumber()
-
-                if (!cancelled) {
-                    setGeneratedDeliveryNumber(current => current || num)
-                }
-            } catch (error) {
-                console.error("Failed to generate delivery number:", error)
-            }
-        }
-
-        loadDeliveryNumber()
-
-        return () => {
-            cancelled = true
-        }
-    }, [draftHydrated, generatedDeliveryNumber, isEdit])
+    // DO Number is automatically generated on server during form submission to prevent sequence burning
+    /* useEffect removed to ensure DO numbers are only assigned upon actual database save */
 
     useEffect(() => {
         if (isEdit || typeof window === "undefined" || !draftHydrated) {
@@ -798,6 +793,60 @@ export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSale
             toast.error("Gagal paste SN. Pastikan Anda memberi izin akses Clipboard ke browser.")
         }
     }, [])
+
+    const [loadingRfidIdx, setLoadingRfidIdx] = useState<number | null>(null)
+
+    const handleCopyRfidSN = useCallback(async (idx: number, requiredQty: number, materialNumber?: string) => {
+        if (requiredQty <= 0) return
+        setLoadingRfidIdx(idx)
+        try {
+            const targetItem = items[idx]
+            const productName = targetItem?.productName || "Product"
+            const { getAvailableKeluarRfidScansAction } = await import("@/app/actions/rfid")
+
+            const res = await getAvailableKeluarRfidScansAction({
+                materialNumber: materialNumber || undefined,
+                materialDescription: productName || undefined,
+            })
+            const candidateRows = res.success && res.data ? res.data : []
+
+            setRfidModalState({
+                open: true,
+                itemIdx: idx,
+                productName,
+                materialNumber: materialNumber || undefined,
+                requiredQuantity: requiredQty,
+                availableItems: candidateRows,
+            })
+        } catch (err) {
+            console.error("RFID Copy Error:", err)
+            toast.error("Gagal mengambil data Serial Number RFID")
+        } finally {
+            setLoadingRfidIdx(null)
+        }
+    }, [items])
+
+    const handleConfirmRfidSelection = useCallback((selectedSerials: string[]) => {
+        const { itemIdx } = rfidModalState
+        if (itemIdx < 0) return
+
+        let insertedCount = 0
+        setItems((prev) =>
+            prev.map((item, idx) => {
+                if (idx !== itemIdx) return item
+                const newSNs = [...item.serialNumbers]
+                for (let i = 0; i < item.deliveredQuantity; i++) {
+                    if (i < selectedSerials.length) {
+                        newSNs[i] = selectedSerials[i]
+                        insertedCount++
+                    }
+                }
+                return { ...item, serialNumbers: newSNs }
+            })
+        )
+
+        toast.success(`Berhasil menginput ${insertedCount} Serial Number RFID ke DO`, { duration: 4000 })
+    }, [rfidModalState])
 
     // Check stock
     const handleCheckStock = useCallback(async () => {
@@ -1251,10 +1300,10 @@ export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSale
                                     <div className="space-y-2">
                                         <Label className="text-sm font-medium">Delivery Order Number</Label>
                                         <Input
-                                            value={generatedDeliveryNumber}
+                                            value={generatedDeliveryNumber || (isEdit ? initialData?.deliveryNumber || "" : "")}
                                             readOnly
                                             className="h-11 bg-slate-50 dark:bg-slate-900 border-dashed font-mono font-medium text-blue-700 dark:text-blue-400"
-                                            placeholder="Generating..."
+                                            placeholder={isEdit ? "Loading..." : "Otomatis dibuat saat disimpan"}
                                         />
                                     </div>
                                     <div className="space-y-2">
@@ -1571,6 +1620,22 @@ export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSale
                                                                 </Label>
                                                                 
                                                                 <div className="flex flex-wrap items-center gap-2">
+                                                                    <Button
+                                                                        type="button"
+                                                                        variant="outline"
+                                                                        size="sm"
+                                                                        disabled={loadingRfidIdx === idx}
+                                                                        onClick={() => handleCopyRfidSN(idx, item.deliveredQuantity, selectedSO?.items.find(i => i.id === item.salesOrderItemId)?.product?.materialNumber)}
+                                                                        className="h-8 text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:hover:bg-emerald-900/50 dark:border-emerald-900 dark:text-emerald-400 font-semibold shadow-sm"
+                                                                    >
+                                                                        {loadingRfidIdx === idx ? (
+                                                                            <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                                                                        ) : (
+                                                                            <RadioTower className="h-3.5 w-3.5 mr-1.5" />
+                                                                        )}
+                                                                        Copy SN RFID
+                                                                    </Button>
+
                                                                     <Button
                                                                         type="button"
                                                                         variant="outline"
@@ -2741,6 +2806,17 @@ export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSale
                     </Button>
                 </div>
             </div>
-        </div >
+            {/* Rfid Selection Modal */}
+            <RfidSelectionModal
+                open={rfidModalState.open}
+                onOpenChange={(open) => setRfidModalState((prev) => ({ ...prev, open }))}
+                productName={rfidModalState.productName}
+                materialNumber={rfidModalState.materialNumber}
+                requiredQuantity={rfidModalState.requiredQuantity}
+                availableItems={rfidModalState.availableItems}
+                loading={loadingRfidIdx !== null}
+                onConfirmSelection={handleConfirmRfidSelection}
+            />
+        </div>
     )
 }
