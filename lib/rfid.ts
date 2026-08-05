@@ -11,6 +11,8 @@ const flexibleString = z.preprocess((val) => {
     return String(val).trim()
 }, z.string())
 
+const requiredText = flexibleString
+
 const flexibleStringOrNull = z.preprocess((val) => {
     if (val === null || val === undefined) return null
     const str = String(val).trim()
