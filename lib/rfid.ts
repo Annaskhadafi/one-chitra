@@ -193,101 +193,104 @@ export async function linkRfidScansToDelivery(doNumber: string, serialNumbers: s
 
 export async function saveRfidScanPayload(payload: unknown, overrideStatus?: string) {
     const parsed = parseRfidScanPayload(payload)
-    const product = await db.query.products.findFirst({
-        columns: { id: true },
-        where: and(
-            eq(products.materialNumber, parsed.material.material),
-            eq(products.sloc, parsed.material.sloc),
-        ),
-    })
-    const warehouse = await db.query.warehouses.findFirst({
-        columns: { id: true },
-        where: eq(warehouses.sloc, parsed.material.sloc),
-    })
 
-    const rootScanType = overrideStatus || parsed.scanType || parsed.status || "INBOUND"
-
-    const results = []
-
-    // Fetch existing RFID scan rows for case-insensitive matching
-    const allExistingScans = await db.query.rfidScans.findMany({
-        orderBy: [desc(rfidScans.id)],
-    })
-
-    for (const item of parsed.items) {
-        const itemScanType = overrideStatus || item.scanType || item.status || rootScanType
-        const normalizedScanType = itemScanType.toLowerCase().includes("keluar") || itemScanType.toLowerCase().includes("outbound")
-            ? "OUTBOUND"
-            : "INBOUND"
-
-        const itemEpcUpper = item.epc?.trim().toUpperCase()
-        const itemSnUpper = item.sn?.trim().toUpperCase()
-
-        // Find existing scan record by matching EPC, Tag ID, or Serial Number
-        const existing = allExistingScans.find((row) => {
-            const rowEpc = row.epc?.trim().toUpperCase()
-            const rowTag = row.tagId?.trim().toUpperCase()
-            const rowSn = row.serialNumber?.trim().toUpperCase()
-
-            const epcMatch = itemEpcUpper && (rowEpc === itemEpcUpper || rowTag === itemEpcUpper)
-            const snMatch = itemSnUpper && (rowSn === itemSnUpper || rowEpc === itemSnUpper)
-            return Boolean(epcMatch || snMatch)
+    return db.transaction(async (tx) => {
+        const product = await tx.query.products.findFirst({
+            columns: { id: true },
+            where: and(
+                eq(products.materialNumber, parsed.material.material),
+                eq(products.sloc, parsed.material.sloc),
+            ),
+        })
+        const warehouse = await tx.query.warehouses.findFirst({
+            columns: { id: true },
+            where: eq(warehouses.sloc, parsed.material.sloc),
         })
 
-        if (existing) {
-            // Update existing scan record so status immediately changes (e.g. Masuk -> Keluar)
-            const [updated] = await db
-                .update(rfidScans)
-                .set({
-                    scanType: normalizedScanType,
-                    scannedAt: parsed.createdAt,
-                    rssi: item.rssi || existing.rssi,
-                    linked: item.linked ?? existing.linked,
-                    plant: parsed.material.plnt || existing.plant,
-                    category: parsed.material.category ?? existing.category,
-                    materialNumber: parsed.material.material || existing.materialNumber,
-                    materialDescription: parsed.material.description ?? existing.materialDescription,
-                    sloc: parsed.material.sloc || existing.sloc,
-                    slocDescription: parsed.material.slocDescription ?? existing.slocDescription,
-                    actStock: parsed.material.actStock ?? existing.actStock,
-                    createdBy: parsed.createdBy || existing.createdBy,
-                    productId: product?.id ?? existing.productId,
-                    warehouseId: warehouse?.id ?? existing.warehouseId,
-                })
-                .where(eq(rfidScans.id, existing.id))
-                .returning()
+        const rootScanType = overrideStatus || parsed.scanType || parsed.status || "INBOUND"
 
-            results.push(updated)
-        } else {
-            // Insert new scan record
-            const [inserted] = await db
-                .insert(rfidScans)
-                .values({
-                    tagId: item.epc,
-                    serialNumber: item.sn,
-                    epc: item.epc,
-                    rssi: item.rssi,
-                    linked: item.linked,
-                    plant: parsed.material.plnt,
-                    category: parsed.material.category,
-                    materialNumber: parsed.material.material,
-                    materialDescription: parsed.material.description,
-                    sloc: parsed.material.sloc,
-                    slocDescription: parsed.material.slocDescription,
-                    actStock: parsed.material.actStock,
-                    createdBy: parsed.createdBy,
-                    productId: product?.id,
-                    warehouseId: warehouse?.id,
-                    scanType: normalizedScanType,
-                    scannedAt: parsed.createdAt,
-                })
-                .returning()
+        const results = []
 
-            results.push(inserted)
+        // Fetch existing RFID scan rows for case-insensitive matching
+        const allExistingScans = await tx.query.rfidScans.findMany({
+            orderBy: [desc(rfidScans.id)],
+        })
+
+        for (const item of parsed.items) {
+            const itemScanType = overrideStatus || item.scanType || item.status || rootScanType
+            const normalizedScanType = itemScanType.toLowerCase().includes("keluar") || itemScanType.toLowerCase().includes("outbound")
+                ? "OUTBOUND"
+                : "INBOUND"
+
+            const itemEpcUpper = item.epc?.trim().toUpperCase()
+            const itemSnUpper = item.sn?.trim().toUpperCase()
+
+            // Find existing scan record by matching EPC, Tag ID, or Serial Number
+            const existing = allExistingScans.find((row) => {
+                const rowEpc = row.epc?.trim().toUpperCase()
+                const rowTag = row.tagId?.trim().toUpperCase()
+                const rowSn = row.serialNumber?.trim().toUpperCase()
+
+                const epcMatch = itemEpcUpper && (rowEpc === itemEpcUpper || rowTag === itemEpcUpper)
+                const snMatch = itemSnUpper && (rowSn === itemSnUpper || rowEpc === itemSnUpper)
+                return Boolean(epcMatch || snMatch)
+            })
+
+            if (existing) {
+                // Update existing scan record so status immediately changes (e.g. Masuk -> Keluar)
+                const [updated] = await tx
+                    .update(rfidScans)
+                    .set({
+                        scanType: normalizedScanType,
+                        scannedAt: parsed.createdAt,
+                        rssi: item.rssi || existing.rssi,
+                        linked: item.linked ?? existing.linked,
+                        plant: parsed.material.plnt || existing.plant,
+                        category: parsed.material.category ?? existing.category,
+                        materialNumber: parsed.material.material || existing.materialNumber,
+                        materialDescription: parsed.material.description ?? existing.materialDescription,
+                        sloc: parsed.material.sloc || existing.sloc,
+                        slocDescription: parsed.material.slocDescription ?? existing.slocDescription,
+                        actStock: parsed.material.actStock ?? existing.actStock,
+                        createdBy: parsed.createdBy || existing.createdBy,
+                        productId: product?.id ?? existing.productId,
+                        warehouseId: warehouse?.id ?? existing.warehouseId,
+                    })
+                    .where(eq(rfidScans.id, existing.id))
+                    .returning()
+
+                results.push(updated)
+            } else {
+                // Insert new scan record
+                const [inserted] = await tx
+                    .insert(rfidScans)
+                    .values({
+                        tagId: item.epc,
+                        serialNumber: item.sn,
+                        epc: item.epc,
+                        rssi: item.rssi,
+                        linked: item.linked,
+                        plant: parsed.material.plnt,
+                        category: parsed.material.category,
+                        materialNumber: parsed.material.material,
+                        materialDescription: parsed.material.description,
+                        sloc: parsed.material.sloc,
+                        slocDescription: parsed.material.slocDescription,
+                        actStock: parsed.material.actStock,
+                        createdBy: parsed.createdBy,
+                        productId: product?.id,
+                        warehouseId: warehouse?.id,
+                        scanType: normalizedScanType,
+                        scannedAt: parsed.createdAt,
+                    })
+                    .returning()
+
+                results.push(inserted)
+            }
         }
-    }
 
-    return results
+        return results
+    })
 }
 
 export const deleteRfidScanPayloadSchema = z.object({
