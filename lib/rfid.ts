@@ -191,7 +191,7 @@ export async function linkRfidScansToDelivery(doNumber: string, serialNumbers: s
         .returning()
 }
 
-export async function saveRfidScanPayload(payload: unknown) {
+export async function saveRfidScanPayload(payload: unknown, overrideStatus?: string) {
     const parsed = parseRfidScanPayload(payload)
     const product = await db.query.products.findFirst({
         columns: { id: true },
@@ -205,33 +205,37 @@ export async function saveRfidScanPayload(payload: unknown) {
         where: eq(warehouses.sloc, parsed.material.sloc),
     })
 
-    const rootScanType = parsed.scanType || parsed.status || "INBOUND"
+    const rootScanType = overrideStatus || parsed.scanType || parsed.status || "INBOUND"
 
     const results = []
 
+    // Fetch existing RFID scan rows for case-insensitive matching
+    const allExistingScans = await db.query.rfidScans.findMany({
+        orderBy: [desc(rfidScans.id)],
+    })
+
     for (const item of parsed.items) {
-        const itemScanType = item.scanType || item.status || rootScanType
+        const itemScanType = overrideStatus || item.scanType || item.status || rootScanType
         const normalizedScanType = itemScanType.toLowerCase().includes("keluar") || itemScanType.toLowerCase().includes("outbound")
             ? "OUTBOUND"
             : "INBOUND"
 
-        // Find existing record by EPC or Serial Number
-        const existing = await db.query.rfidScans.findFirst({
-            where: (scans, { or, eq }) => {
-                const conds = []
-                if (item.epc && item.epc.trim()) {
-                    conds.push(eq(scans.epc, item.epc.trim()))
-                    conds.push(eq(scans.tagId, item.epc.trim()))
-                }
-                if (item.sn && item.sn.trim()) {
-                    conds.push(eq(scans.serialNumber, item.sn.trim()))
-                }
-                return conds.length > 0 ? or(...conds) : undefined
-            },
+        const itemEpcUpper = item.epc?.trim().toUpperCase()
+        const itemSnUpper = item.sn?.trim().toUpperCase()
+
+        // Find existing scan record by matching EPC, Tag ID, or Serial Number
+        const existing = allExistingScans.find((row) => {
+            const rowEpc = row.epc?.trim().toUpperCase()
+            const rowTag = row.tagId?.trim().toUpperCase()
+            const rowSn = row.serialNumber?.trim().toUpperCase()
+
+            const epcMatch = itemEpcUpper && (rowEpc === itemEpcUpper || rowTag === itemEpcUpper)
+            const snMatch = itemSnUpper && (rowSn === itemSnUpper || rowEpc === itemSnUpper)
+            return Boolean(epcMatch || snMatch)
         })
 
         if (existing) {
-            // Update existing scan record so status immediately changes
+            // Update existing scan record so status immediately changes (e.g. Masuk -> Keluar)
             const [updated] = await db
                 .update(rfidScans)
                 .set({

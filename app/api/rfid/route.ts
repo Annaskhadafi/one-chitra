@@ -77,8 +77,11 @@ export async function POST(req: NextRequest) {
     }
 
     try {
+        const { searchParams } = new URL(req.url)
+        const urlStatus = searchParams.get("status") ?? searchParams.get("scan_type") ?? searchParams.get("scantype") ?? undefined
+
         const body = await req.json()
-        const records = await saveRfidScanPayload(body)
+        const records = await saveRfidScanPayload(body, urlStatus)
 
         return NextResponse.json({
             status: "OK",
