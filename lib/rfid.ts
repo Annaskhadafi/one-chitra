@@ -6,9 +6,31 @@ import { z } from "zod"
 import { db } from "@/db"
 import { products, rfidScans, warehouses } from "@/db/schema"
 
-const requiredText = z.string().trim().min(1)
+const flexibleString = z.preprocess((val) => {
+    if (val === null || val === undefined) return ""
+    return String(val).trim()
+}, z.string())
 
-const parseFlutterDate = (value: string) => new Date(value.includes("T") ? value : value.replace(" ", "T"))
+const flexibleStringOrNull = z.preprocess((val) => {
+    if (val === null || val === undefined) return null
+    const str = String(val).trim()
+    return str === "" ? null : str
+}, z.string().nullable())
+
+const flexibleRssi = z.preprocess((val) => {
+    if (val === null || val === undefined) return "0"
+    const str = String(val).trim()
+    return str === "" ? "0" : str
+}, z.string())
+
+const parseFlutterDate = (value: unknown) => {
+    if (!value) return new Date()
+    const str = String(value).trim()
+    const parsed = new Date(str.includes("T") ? str : str.replace(" ", "T"))
+    return Number.isNaN(parsed.getTime()) ? new Date() : parsed
+}
+
+const flexibleDate = z.preprocess((val) => parseFlutterDate(val), z.date())
 
 const linkedSchema = z.preprocess((value) => {
     if (typeof value === "string") {
@@ -16,33 +38,39 @@ const linkedSchema = z.preprocess((value) => {
         if (normalized === "true") return true
         if (normalized === "false") return false
     }
-    return value
+    if (typeof value === "boolean") return value
+    return false
 }, z.boolean())
 
 export const rfidScanPayloadSchema = z.object({
     material: z.object({
-        plnt: requiredText,
-        category: requiredText,
-        material: requiredText,
-        description: requiredText,
-        sloc: requiredText,
-        slocDescription: requiredText,
-        actStock: z.coerce.number().int(),
+        plnt: flexibleString,
+        category: flexibleStringOrNull,
+        material: flexibleString,
+        description: flexibleStringOrNull,
+        sloc: flexibleString,
+        slocDescription: flexibleStringOrNull,
+        actStock: z.preprocess((val) => {
+            if (val === null || val === undefined || val === "") return 0
+            const num = Number(val)
+            return Number.isNaN(num) ? 0 : Math.round(num)
+        }, z.number().int()),
     }),
     items: z.array(z.object({
-        sn: requiredText,
-        epc: requiredText,
-        rssi: z.coerce.string().trim().min(1),
+        sn: flexibleStringOrNull,
+        epc: flexibleString,
+        rssi: flexibleRssi,
         linked: linkedSchema,
-        scanType: z.string().optional(),
-        status: z.string().optional(),
+        scanType: flexibleStringOrNull,
+        status: flexibleStringOrNull,
     })).min(1),
-    createdBy: requiredText,
-    createdAt: z.string().trim().min(1)
-        .refine((value) => !Number.isNaN(parseFlutterDate(value).getTime()), "Invalid createdAt")
-        .transform(parseFlutterDate),
-    scanType: z.string().optional(),
-    status: z.string().optional(),
+    createdBy: z.preprocess((val) => {
+        if (!val) return "System"
+        return String(val).trim()
+    }, z.string()),
+    createdAt: flexibleDate,
+    scanType: flexibleStringOrNull,
+    status: flexibleStringOrNull,
 })
 
 export type RfidScanPayload = z.input<typeof rfidScanPayloadSchema>
@@ -177,34 +205,83 @@ export async function saveRfidScanPayload(payload: unknown) {
 
     const rootScanType = parsed.scanType || parsed.status || "INBOUND"
 
-    const rows = parsed.items.map((item) => {
+    const results = []
+
+    for (const item of parsed.items) {
         const itemScanType = item.scanType || item.status || rootScanType
         const normalizedScanType = itemScanType.toLowerCase().includes("keluar") || itemScanType.toLowerCase().includes("outbound")
             ? "OUTBOUND"
             : "INBOUND"
 
-        return {
-            tagId: item.epc,
-            serialNumber: item.sn,
-            epc: item.epc,
-            rssi: item.rssi,
-            linked: item.linked,
-            plant: parsed.material.plnt,
-            category: parsed.material.category,
-            materialNumber: parsed.material.material,
-            materialDescription: parsed.material.description,
-            sloc: parsed.material.sloc,
-            slocDescription: parsed.material.slocDescription,
-            actStock: parsed.material.actStock,
-            createdBy: parsed.createdBy,
-            productId: product?.id,
-            warehouseId: warehouse?.id,
-            scanType: normalizedScanType,
-            scannedAt: parsed.createdAt,
-        }
-    })
+        // Find existing record by EPC or Serial Number
+        const existing = await db.query.rfidScans.findFirst({
+            where: (scans, { or, eq }) => {
+                const conds = []
+                if (item.epc && item.epc.trim()) {
+                    conds.push(eq(scans.epc, item.epc.trim()))
+                    conds.push(eq(scans.tagId, item.epc.trim()))
+                }
+                if (item.sn && item.sn.trim()) {
+                    conds.push(eq(scans.serialNumber, item.sn.trim()))
+                }
+                return conds.length > 0 ? or(...conds) : undefined
+            },
+        })
 
-    return db.insert(rfidScans).values(rows).returning()
+        if (existing) {
+            // Update existing scan record so status immediately changes
+            const [updated] = await db
+                .update(rfidScans)
+                .set({
+                    scanType: normalizedScanType,
+                    scannedAt: parsed.createdAt,
+                    rssi: item.rssi || existing.rssi,
+                    linked: item.linked ?? existing.linked,
+                    plant: parsed.material.plnt || existing.plant,
+                    category: parsed.material.category ?? existing.category,
+                    materialNumber: parsed.material.material || existing.materialNumber,
+                    materialDescription: parsed.material.description ?? existing.materialDescription,
+                    sloc: parsed.material.sloc || existing.sloc,
+                    slocDescription: parsed.material.slocDescription ?? existing.slocDescription,
+                    actStock: parsed.material.actStock ?? existing.actStock,
+                    createdBy: parsed.createdBy || existing.createdBy,
+                    productId: product?.id ?? existing.productId,
+                    warehouseId: warehouse?.id ?? existing.warehouseId,
+                })
+                .where(eq(rfidScans.id, existing.id))
+                .returning()
+
+            results.push(updated)
+        } else {
+            // Insert new scan record
+            const [inserted] = await db
+                .insert(rfidScans)
+                .values({
+                    tagId: item.epc,
+                    serialNumber: item.sn,
+                    epc: item.epc,
+                    rssi: item.rssi,
+                    linked: item.linked,
+                    plant: parsed.material.plnt,
+                    category: parsed.material.category,
+                    materialNumber: parsed.material.material,
+                    materialDescription: parsed.material.description,
+                    sloc: parsed.material.sloc,
+                    slocDescription: parsed.material.slocDescription,
+                    actStock: parsed.material.actStock,
+                    createdBy: parsed.createdBy,
+                    productId: product?.id,
+                    warehouseId: warehouse?.id,
+                    scanType: normalizedScanType,
+                    scannedAt: parsed.createdAt,
+                })
+                .returning()
+
+            results.push(inserted)
+        }
+    }
+
+    return results
 }
 
 export const deleteRfidScanPayloadSchema = z.object({
