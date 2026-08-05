@@ -286,11 +286,11 @@ export async function saveRfidScanPayload(payload: unknown) {
 
 export const deleteRfidScanPayloadSchema = z.object({
     material: z.object({
-        plnt: requiredText,
-        material: requiredText,
-        sloc: requiredText,
+        plnt: flexibleString,
+        material: flexibleString,
+        sloc: flexibleString,
     }).optional(),
-    epcs: z.array(requiredText).min(1),
+    epcs: z.array(flexibleString).min(1),
 })
 
 export type DeleteRfidScanPayload = z.input<typeof deleteRfidScanPayloadSchema>
