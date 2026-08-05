@@ -6,7 +6,7 @@
   "description": "Memeriksa audit log dan tabel deliveries/audit_logs untuk 4 nomor DO yang hilang, mencari penyebab hilangnya data, memperbaiki sistem agar tidak terulang, serta merekonstruksi/membuat ulang DO tersebut jika data hilang di DB berdasarkan fisik kertas DO.",
   "createdAt": "2026-08-05T11:53:00.000Z",
   "startedAt": "2026-08-05T03:53:24.909Z",
-  "updatedAt": "2026-08-05T04:05:24.795Z",
-  "completedAt": "2026-08-05T04:05:24.795Z",
-  "completionDetails": "Berhasil memulihkan 4 DO (DLV-20260804-0014 s/d 0017) beserta item, serial number, driver, dan audit log ke database, serta memperbaiki penomoran DO agar hanya di-generate saat submit form disimpan"
+  "updatedAt": "2026-08-05T09:39:04.369Z",
+  "completedAt": "2026-08-05T09:39:04.369Z",
+  "completionDetails": "Mengidentifikasi penyebab data loss SO/DO, mengekstrak data dari 5 gambar fisik cetakan DO, membuat Sales Order baru yang cocok, dan menghubungkannya secara presisi dengan 4 Delivery Order (DLV-20260804-0005 s/d 0008)"
 }
