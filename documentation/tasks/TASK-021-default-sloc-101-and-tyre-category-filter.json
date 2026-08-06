@@ -1,0 +1,12 @@
+{
+  "id": "TASK-021",
+  "status": "completed",
+  "priority": "P0",
+  "title": "Set Default Sloc 101 & Filter Product Category TYRE",
+  "description": "Mengatur default Warehouse/Sloc ke '101' dan memfilter daftar produk agar hanya menampilkan material dengan category 'TYRE' pada halaman Scan Tire SN (OCR).",
+  "createdAt": "2026-08-06T13:12:00.000Z",
+  "startedAt": "2026-08-06T05:12:39.572Z",
+  "updatedAt": "2026-08-06T05:13:15.352Z",
+  "completedAt": "2026-08-06T05:13:15.352Z",
+  "completionDetails": "Mengatur default Warehouse/Sloc ke '101' dan memfilter daftar produk master data agar hanya menampilkan material dengan category 'TYRE'."
+}

@@ -1,5 +1,7 @@
+import Link from "next/link"
 import { format } from "date-fns"
-import { Link2, Package, RadioTower, Signal } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Camera, Link2, Package, RadioTower, Signal } from "lucide-react"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { getRfidScanRows } from "@/lib/rfid"
@@ -18,11 +20,21 @@ export default async function RfidPage() {
 
     return (
         <div className="flex flex-1 flex-col gap-6 p-4 md:p-8 lg:p-10">
-            <div className="flex flex-col gap-1">
-                <h1 className="text-balance text-2xl font-bold tracking-tight">RFID</h1>
-                <p className="text-pretty text-muted-foreground">
-                    Data scan RFID material dari handheld, kelola dan pantau keterhubungan data stok.
-                </p>
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex flex-col gap-1">
+                    <h1 className="text-balance text-2xl font-bold tracking-tight">RFID</h1>
+                    <p className="text-pretty text-muted-foreground">
+                        Data scan RFID material dari handheld, kelola dan pantau keterhubungan data stok.
+                    </p>
+                </div>
+                <div>
+                    <Button asChild size="lg" className="gap-2 font-semibold shadow">
+                        <Link href="/dashboard/rfid/tire-scan">
+                            <Camera className="size-5" />
+                            <span>Scan Tire SN (OCR)</span>
+                        </Link>
+                    </Button>
+                </div>
             </div>
 
             <div className="grid gap-4 md:grid-cols-4">

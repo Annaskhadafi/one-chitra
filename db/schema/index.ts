@@ -43,6 +43,7 @@ export {
 export { sapSyncLogs } from "./sap-sync";
 export * from "./sap";
 export { rfidScans } from "./rfid-scans";
+export { tireScans } from "./tire-scans";
 export {
     quotations,
     quotationItems,

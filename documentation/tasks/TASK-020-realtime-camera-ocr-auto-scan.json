@@ -1,0 +1,12 @@
+{
+  "id": "TASK-020",
+  "status": "completed",
+  "priority": "P0",
+  "title": "Real-time Live Camera Auto-Scan OCR Tire Serial Number",
+  "description": "Mengubah mode kamera agar saat dinyalakan langsung otomatis melakukan continuous scan/capture frame secara berkala (auto extract SN) tanpa perlu menekan tombol foto manual.",
+  "createdAt": "2026-08-06T12:58:00.000Z",
+  "startedAt": "2026-08-06T04:57:46.818Z",
+  "updatedAt": "2026-08-06T04:58:19.714Z",
+  "completedAt": "2026-08-06T04:58:19.714Z",
+  "completionDetails": "Implementasi Real-time Live Camera Auto-Scan OCR Tire Serial Number dengan continuous frame loop, audio & visual feedback, deteksi duplikat, dan toggle Auto-Scan ON/OFF."
+}

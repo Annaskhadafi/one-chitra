@@ -178,6 +178,11 @@ export const navigationConfig: NavSection[] = [
                         resource: "rfid",
                     },
                     {
+                        title: "Scan Tire SN (OCR)",
+                        url: "/dashboard/rfid/tire-scan",
+                        resource: "rfid",
+                    },
+                    {
                         title: "Stock Card",
                         url: "/dashboard/stock-card",
                         resource: "stocks",
