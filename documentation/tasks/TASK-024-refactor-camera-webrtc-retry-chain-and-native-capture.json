@@ -1,0 +1,12 @@
+{
+  "id": "TASK-024",
+  "status": "completed",
+  "priority": "P0",
+  "title": "Refactor Camera WebRTC Fallback Chain & Native Camera Capture",
+  "description": "Refactor WebRTC camera initialization with a progressive 4-level fallback retry chain ({ video: true }, deviceId iteration) and add HTML5 native camera capture support for mobile & desktop.",
+  "createdAt": "2026-08-06T13:38:00.000Z",
+  "startedAt": "2026-08-06T05:39:49.426Z",
+  "updatedAt": "2026-08-06T05:40:42.892Z",
+  "completedAt": "2026-08-06T05:40:42.892Z",
+  "completionDetails": "Refactor inisialisasi WebRTC kamera dengan rantai fallback 4-level ({ video: true }, deviceId iteration) dan menambahkan fitur Kamera Native HTML5 (capture='environment') untuk langsung mememicu kamera aplikasi OS tanpa hambatan izin WebRTC browser."
+}

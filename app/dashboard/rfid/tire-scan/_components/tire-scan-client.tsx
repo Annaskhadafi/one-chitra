@@ -166,6 +166,7 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
     const canvasRef = React.useRef<HTMLCanvasElement>(null)
     const [stream, setStream] = React.useState<MediaStream | null>(null)
     const fileInputRef = React.useRef<HTMLInputElement>(null)
+    const cameraNativeInputRef = React.useRef<HTMLInputElement>(null)
 
     // History Table States
     const [historyRows, setHistoryRows] = React.useState(initialRows)
@@ -177,26 +178,63 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
         return scannedItems.reduce((acc, item) => acc + (item.qty || 1), 0)
     }, [scannedItems])
 
-    // Start Video Stream with Direct User-Gesture Activation
+    // Start Video Stream with Progressive Multi-Level Fallback Chain
     const startCamera = async (targetDeviceId?: string) => {
         setIsCameraOpen(true)
         setAutoScanActive(true)
-        setScanFeedback({ type: "info", message: "Memuat kamera..." })
+        setScanFeedback({ type: "info", message: "Membuka kamera..." })
 
         if (stream) {
             stream.getTracks().forEach((track) => track.stop())
             setStream(null)
         }
 
-        try {
-            const videoConstraints: MediaTrackConstraints = targetDeviceId
-                ? { deviceId: { exact: targetDeviceId } }
-                : { width: { ideal: 1280 }, height: { ideal: 720 } }
+        let mediaStream: MediaStream | null = null
+        let lastError: any = null
 
-            const mediaStream = await navigator.mediaDevices.getUserMedia({
-                video: videoConstraints,
-            })
+        // 1. Candidate constraints from simplest { video: true } to resolutions
+        const constraintCandidates: MediaStreamConstraints[] = targetDeviceId
+            ? [{ video: { deviceId: { exact: targetDeviceId } } }, { video: true }]
+            : [
+                  { video: true }, // Simple standard constraint - works on 99.9% of webcams
+                  { video: { facingMode: { ideal: "environment" } } },
+                  { video: { width: { ideal: 1280 }, height: { ideal: 720 } } },
+                  { video: { width: { ideal: 640 }, height: { ideal: 480 } } },
+              ]
 
+        for (const candidate of constraintCandidates) {
+            try {
+                mediaStream = await navigator.mediaDevices.getUserMedia(candidate)
+                if (mediaStream) break
+            } catch (err: any) {
+                lastError = err
+                console.warn("Camera constraint attempt failed:", candidate, err.name, err.message)
+            }
+        }
+
+        // 2. Fallback: enumerate explicit videoinput deviceIds
+        if (!mediaStream && navigator.mediaDevices?.enumerateDevices) {
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices()
+                const videoDevices = devices.filter((d) => d.kind === "videoinput")
+                for (const dev of videoDevices) {
+                    if (dev.deviceId) {
+                        try {
+                            mediaStream = await navigator.mediaDevices.getUserMedia({
+                                video: { deviceId: { exact: dev.deviceId } },
+                            })
+                            if (mediaStream) break
+                        } catch (devErr) {
+                            console.warn("Explicit deviceId attempt failed:", dev.deviceId, devErr)
+                        }
+                    }
+                }
+            } catch (enumErr) {
+                console.warn("Enumerate devices error:", enumErr)
+            }
+        }
+
+        if (mediaStream) {
             setStream(mediaStream)
             if (videoRef.current) {
                 videoRef.current.srcObject = mediaStream
@@ -204,35 +242,27 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
 
             setScanFeedback({ type: "info", message: "Kamera aktif. Auto-scan mencari Serial Number ban..." })
 
-            const devices = await navigator.mediaDevices.enumerateDevices()
-            const videoDevices = devices.filter((d) => d.kind === "videoinput")
-            setAvailableCameras(videoDevices)
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices()
+                const videoDevices = devices.filter((d) => d.kind === "videoinput")
+                setAvailableCameras(videoDevices)
 
-            const activeTrack = mediaStream.getVideoTracks()[0]
-            if (activeTrack) {
-                const settings = activeTrack.getSettings()
-                if (settings.deviceId) {
-                    setSelectedCameraId(settings.deviceId)
+                const activeTrack = mediaStream.getVideoTracks()[0]
+                if (activeTrack) {
+                    const settings = activeTrack.getSettings()
+                    if (settings.deviceId) {
+                        setSelectedCameraId(settings.deviceId)
+                    }
                 }
-            }
-        } catch (err: any) {
-            console.error("Camera access error details:", err.name, err.message)
-            const isPermissionDenied = err.name === "NotAllowedError" || err.name === "PermissionDeniedError"
-            const isNotFoundError = err.name === "NotFoundError" || err.name === "DevicesNotFoundError"
-            const isNotReadableError = err.name === "NotReadableError" || err.name === "TrackStartError"
-
-            let msg = `Gagal mengakses kamera (${err.name || "Error"}): ${err.message}`
-            if (isPermissionDenied) {
-                msg = "Akses kamera ditolak. Jika memakai Brave/Edge/Chrome, pastikan izin Kamera diizinkan (Allow) atau gunakan Upload Foto Ban."
-            } else if (isNotFoundError) {
-                msg = "Perangkat kamera tidak ditemukan pada sistem ini."
-            } else if (isNotReadableError) {
-                msg = "Kamera sedang dipakai oleh aplikasi lain. Harap tutup aplikasi lain lalu coba lagi."
-            }
+            } catch (e) {}
+        } else {
+            console.error("All camera access attempts failed:", lastError)
+            const errName = lastError?.name || "Error"
+            const errMessage = lastError?.message || "Tidak dapat membuka stream kamera"
 
             setScanFeedback({
                 type: "error",
-                message: msg,
+                message: `[${errName}] ${errMessage}. Gunakan Kamera Native atau Upload Foto Ban.`,
             })
         }
     }
@@ -658,7 +688,26 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
                                     className="gap-2 font-bold rounded-xl shadow bg-primary text-primary-foreground hover:bg-primary/90"
                                 >
                                     <Camera className="size-5" />
-                                    <span>Nyalakan Kamera Auto-Scan</span>
+                                    <span>Nyalakan Kamera Live Auto-Scan</span>
+                                </Button>
+
+                                <input
+                                    ref={cameraNativeInputRef}
+                                    type="file"
+                                    accept="image/*"
+                                    capture="environment"
+                                    className="hidden"
+                                    onChange={handleFileUpload}
+                                />
+                                <Button
+                                    variant="secondary"
+                                    size="lg"
+                                    onClick={() => cameraNativeInputRef.current?.click()}
+                                    disabled={!selectedSloc || !selectedMaterial || isExtracting}
+                                    className="gap-2 rounded-xl border border-primary/20 bg-primary/5 hover:bg-primary/10 text-primary font-bold"
+                                >
+                                    <Camera className="size-5" />
+                                    <span>Foto Ban (Kamera Native)</span>
                                 </Button>
 
                                 <input
@@ -676,7 +725,7 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
                                     className="gap-2 rounded-xl"
                                 >
                                     <Upload className="size-5" />
-                                    <span>Upload Foto Ban</span>
+                                    <span>Upload File Foto</span>
                                 </Button>
 
                                 {/* Manual Input Fallback */}
@@ -1074,12 +1123,15 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
                                         </p>
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-2 pt-1">
+                                <div className="flex flex-wrap items-center gap-2 pt-1">
                                     <Button size="sm" onClick={() => startCamera()} className="gap-1 rounded-xl text-xs h-8">
-                                        <RotateCcw className="size-3" /> Coba Ulang
+                                        <RotateCcw className="size-3" /> Coba Ulang WebRTC
+                                    </Button>
+                                    <Button size="sm" variant="secondary" onClick={() => cameraNativeInputRef.current?.click()} className="gap-1 rounded-xl text-xs h-8 font-bold text-primary border border-primary/20">
+                                        <Camera className="size-3" /> Kamera Native HP/PWA
                                     </Button>
                                     <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()} className="gap-1 rounded-xl text-xs h-8">
-                                        <Upload className="size-3" /> Upload Foto
+                                        <Upload className="size-3" /> Upload File
                                     </Button>
                                 </div>
                             </div>
