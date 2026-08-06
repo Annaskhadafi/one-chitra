@@ -84,26 +84,29 @@ async function callExtractOcrApi(formData: FormData) {
         method: "POST",
         body: formData,
     })
-    const data = await res.json()
+    const raw = await res.json()
     if (!res.ok) {
-        return { success: false, error: data.error || `OCR Error ${res.status}` }
+        return { success: false, serialNumber: "", rawText: "", error: raw.error || `OCR Error ${res.status}` }
     }
-    const sn =
-        data?.serial_number ||
-        data?.serialNumber ||
-        data?.sn ||
-        data?.raw_text ||
-        data?.data?.serial_number ||
-        data?.data?.serialNumber ||
-        ""
+
+    // Chitra Vision API response: { status, message, data: { serial_number, raw_text, ... } }
+    const inner = raw?.data || raw
+    console.log("[Vision OCR] Response:", JSON.stringify(raw, null, 2))
+
+    // Fokus HANYA ke serial_number — field resmi SN ban dari Vision API
+    const rawSn: string = inner?.serial_number || ""
+    const rawText: string = inner?.raw_text || ""
+
+    // Bersihkan SN: hapus spasi, uppercase
+    const sn = rawSn.replace(/\s+/g, "").toUpperCase().trim()
+
     return {
-        success: true,
-        serialNumber: String(sn).trim(),
-        dot: data?.dot_code || data?.dot || data?.data?.dot || "",
-        brand: data?.manufacturer || data?.brand || data?.data?.brand || "",
-        size: data?.size || data?.data?.size || "",
-        imageUrl: data?.image_url ? `https://vision.chitraparatama.com${data.image_url}` : "",
-        rawResponse: data,
+        success: raw?.status === "success" && sn.length > 0,
+        serialNumber: sn,
+        rawText,
+        confidence: inner?.confidence ? parseFloat(String(inner.confidence)) : null,
+        imageUrl: inner?.image_url ? `https://vision.chitraparatama.com${inner.image_url}` : "",
+        rawResponse: raw,
     }
 }
 
@@ -349,33 +352,33 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
                 // Gunakan API Route (bukan server action) untuk menghindari hash mismatch di production
                 const res = await callExtractOcrApi(formData)
                 if (res.success && res.serialNumber) {
-                    const newSn = res.serialNumber.trim()
-                    if (newSn) {
-                        const isAlreadyScanned = scannedItems.some(
-                            (item) => item.serialNumber.toUpperCase() === newSn.toUpperCase()
-                        )
+                    const newSn = res.serialNumber  // sudah uppercase & trim dari callExtractOcrApi
+                    const isAlreadyScanned = scannedItems.some(
+                        (item) => item.serialNumber.toUpperCase() === newSn
+                    )
 
-                        if (isAlreadyScanned) {
-                            setScanFeedback({ sn: newSn, message: `SN: ${newSn} sudah ada (Duplikat)`, type: "duplicate" })
-                        } else {
-                            setScannedItems((prev) => [
-                                ...prev,
-                                {
-                                    id: `SN-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-                                    serialNumber: newSn,
-                                    qty: 1,
-                                    imageUrl: res.imageUrl,
-                                    scannedAt: new Date(),
-                                },
-                            ])
-                            triggerMobileFeedback()
-                            setFlashSuccess(true)
-                            setTimeout(() => setFlashSuccess(false), 800)
-                            setScanFeedback({ sn: newSn, message: `✅ Terbaca SN: ${newSn}`, type: "success" })
-                        }
+                    if (isAlreadyScanned) {
+                        setScanFeedback({ sn: newSn, message: `⚠️ SN: ${newSn} sudah ada (Duplikat)`, type: "duplicate" })
+                    } else {
+                        setScannedItems((prev) => [
+                            ...prev,
+                            {
+                                id: `SN-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+                                serialNumber: newSn,
+                                qty: 1,
+                                imageUrl: res.imageUrl,
+                                scannedAt: new Date(),
+                            },
+                        ])
+                        triggerMobileFeedback()
+                        setFlashSuccess(true)
+                        setTimeout(() => setFlashSuccess(false), 800)
+                        const conf = res.confidence ? ` (${(res.confidence * 100).toFixed(0)}%)` : ""
+                        setScanFeedback({ sn: newSn, message: `✅ SN: ${newSn}${conf}`, type: "success" })
                     }
                 } else if (isManual) {
-                    setScanFeedback({ type: "error", message: res.error || "SN tidak terdeteksi dari foto ini." })
+                    const hint = res.rawText ? ` | Raw OCR: "${res.rawText}"` : ""
+                    setScanFeedback({ type: "error", message: `SN tidak terdeteksi${hint}` })
                 }
             } catch (err: any) {
                 if (isManual) {
@@ -415,32 +418,30 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
             // Gunakan API Route (bukan server action) untuk menghindari hash mismatch di production
             const res = await callExtractOcrApi(formData)
             if (res.success && res.serialNumber) {
-                const newSn = res.serialNumber.trim()
-                if (newSn) {
-                    const isAlreadyScanned = scannedItems.some(
-                        (item) => item.serialNumber.toUpperCase() === newSn.toUpperCase()
-                    )
-                    if (isAlreadyScanned) {
-                        setScanFeedback({ type: "duplicate", message: `SN: ${newSn} sudah ada (Duplikat)` })
-                    } else {
-                        setScannedItems((prev) => [
-                            ...prev,
-                            {
-                                id: `SN-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-                                serialNumber: newSn,
-                                qty: 1,
-                                imageUrl: res.imageUrl,
-                                scannedAt: new Date(),
-                            },
-                        ])
-                        triggerMobileFeedback()
-                        setScanFeedback({ type: "success", message: `✅ Berhasil! SN: ${newSn}` })
-                    }
+                const newSn = res.serialNumber  // sudah uppercase & trim
+                const isAlreadyScanned = scannedItems.some(
+                    (item) => item.serialNumber.toUpperCase() === newSn
+                )
+                if (isAlreadyScanned) {
+                    setScanFeedback({ type: "duplicate", message: `⚠️ SN: ${newSn} sudah ada (Duplikat)` })
                 } else {
-                    setScanFeedback({ type: "error", message: "SN tidak terdeteksi dari foto ini. Coba foto lebih dekat & jelas." })
+                    setScannedItems((prev) => [
+                        ...prev,
+                        {
+                            id: `SN-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+                            serialNumber: newSn,
+                            qty: 1,
+                            imageUrl: res.imageUrl,
+                            scannedAt: new Date(),
+                        },
+                    ])
+                    triggerMobileFeedback()
+                    const conf = res.confidence ? ` (${(res.confidence * 100).toFixed(0)}%)` : ""
+                    setScanFeedback({ type: "success", message: `✅ Berhasil! SN: ${newSn}${conf}` })
                 }
             } else {
-                setScanFeedback({ type: "error", message: res.error || "Gagal mendeteksi Serial Number dari gambar." })
+                const hint = res.rawText ? ` | OCR membaca: "${res.rawText}"` : ""
+                setScanFeedback({ type: "error", message: `SN tidak terdeteksi dari foto ini.${hint} Coba foto lebih dekat & jelas.` })
             }
         } catch (err: any) {
             setScanFeedback({ type: "error", message: err.message || "Terjadi kesalahan saat memproses OCR." })
