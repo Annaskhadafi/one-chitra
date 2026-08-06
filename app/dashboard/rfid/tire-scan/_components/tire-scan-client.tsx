@@ -23,6 +23,9 @@ import {
     Play,
     AlertCircle,
     Video,
+    Hash,
+    Layers,
+    ChevronRight,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -89,24 +92,27 @@ interface TireScanClientProps {
     initialRows: any[]
 }
 
-// Simple Web Audio API Beep Generator for scanning feedback
-const playScanBeep = () => {
+// Simple Web Audio API Beep & Haptic Vibrator for Mobile Native Feedback
+const triggerMobileFeedback = () => {
     try {
+        if (typeof window !== "undefined" && "vibrate" in navigator) {
+            navigator.vibrate([50, 30, 50])
+        }
         const AudioContext = window.AudioContext || (window as any).webkitAudioContext
         if (!AudioContext) return
         const ctx = new AudioContext()
         const osc = ctx.createOscillator()
         const gain = ctx.createGain()
         osc.type = "sine"
-        osc.frequency.setValueAtTime(880, ctx.currentTime) // A5 note
-        gain.gain.setValueAtTime(0.15, ctx.currentTime)
+        osc.frequency.setValueAtTime(880, ctx.currentTime)
+        gain.gain.setValueAtTime(0.2, ctx.currentTime)
         gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25)
         osc.connect(gain)
         gain.connect(ctx.destination)
         osc.start()
         osc.stop(ctx.currentTime + 0.25)
     } catch (e) {
-        // Audio context may be restricted by browser policy before user interaction
+        // Fallback silently if restricted by browser policy
     }
 }
 
@@ -118,6 +124,10 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
     const [selectedSloc, setSelectedSloc] = React.useState<string>("")
     const [selectedSlocDesc, setSelectedSlocDesc] = React.useState<string>("")
     const [openSlocPopover, setOpenSlocPopover] = React.useState(false)
+
+    const [selectedMaterial, setSelectedMaterial] = React.useState<string>("")
+    const [selectedMaterialDesc, setSelectedMaterialDesc] = React.useState<string>("")
+    const [openMaterialPopover, setOpenMaterialPopover] = React.useState(false)
 
     // Set Sloc "101" as default selection if available
     React.useEffect(() => {
@@ -132,10 +142,6 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
             }
         }
     }, [masterData.warehouses, selectedSloc])
-
-    const [selectedMaterial, setSelectedMaterial] = React.useState<string>("")
-    const [selectedMaterialDesc, setSelectedMaterialDesc] = React.useState<string>("")
-    const [openMaterialPopover, setOpenMaterialPopover] = React.useState(false)
 
     // Camera / Auto-Scan States
     const [scannedItems, setScannedItems] = React.useState<ScannedSnItem[]>([])
@@ -171,20 +177,18 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
         return scannedItems.reduce((acc, item) => acc + (item.qty || 1), 0)
     }, [scannedItems])
 
-    // Start Video Stream with Direct User-Gesture Activation (Required for Chrome PWA Apps)
+    // Start Video Stream with Direct User-Gesture Activation
     const startCamera = async (targetDeviceId?: string) => {
         setIsCameraOpen(true)
         setAutoScanActive(true)
         setScanFeedback({ type: "info", message: "Memuat kamera..." })
 
-        // Stop current stream if switching devices
         if (stream) {
             stream.getTracks().forEach((track) => track.stop())
             setStream(null)
         }
 
         try {
-            // Direct getUserMedia call under user-click gesture
             const videoConstraints: MediaTrackConstraints = targetDeviceId
                 ? { deviceId: { exact: targetDeviceId } }
                 : { width: { ideal: 1280 }, height: { ideal: 720 } }
@@ -219,11 +223,11 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
 
             let msg = `Gagal mengakses kamera (${err.name || "Error"}): ${err.message}`
             if (isPermissionDenied) {
-                msg = "Akses kamera ditolak di mode PWA Window / Browser. Coba buka di browser biasa (bukan PWA App Window) atau tutup-buka kembali aplikasi PWA ini setelah memberi izin."
+                msg = "Akses kamera ditolak. Jika memakai Brave/Edge/Chrome, pastikan izin Kamera diizinkan (Allow) atau gunakan Upload Foto Ban."
             } else if (isNotFoundError) {
                 msg = "Perangkat kamera tidak ditemukan pada sistem ini."
             } else if (isNotReadableError) {
-                msg = "Kamera sedang dipakai oleh aplikasi lain (Zoom/Teams/Windows Camera App). Harap tutup aplikasi tersebut lalu coba lagi."
+                msg = "Kamera sedang dipakai oleh aplikasi lain. Harap tutup aplikasi lain lalu coba lagi."
             }
 
             setScanFeedback({
@@ -256,7 +260,7 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
         if (!videoRef.current || !canvasRef.current || isExtracting) return
 
         const video = videoRef.current
-        if (video.readyState < 2) return // Video not ready
+        if (video.readyState < 2) return
 
         const canvas = canvasRef.current
         canvas.width = video.videoWidth || 640
@@ -270,6 +274,7 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
             if (!blob) return
             const formData = new FormData()
             formData.append("file", blob, `tire-auto-scan-${Date.now()}.jpg`)
+            formData.append("image", blob, `tire-auto-scan-${Date.now()}.jpg`)
 
             setIsExtracting(true)
             try {
@@ -277,7 +282,6 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
                 if (res.success && res.serialNumber) {
                     const newSn = res.serialNumber.trim()
                     if (newSn) {
-                        // Check duplicate in current scan session
                         const isAlreadyScanned = scannedItems.some(
                             (item) => item.serialNumber.toUpperCase() === newSn.toUpperCase()
                         )
@@ -285,11 +289,10 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
                         if (isAlreadyScanned) {
                             setScanFeedback({
                                 sn: newSn,
-                                message: `SN: ${newSn} sudah ada dalam list (Duplikat).`,
+                                message: `SN: ${newSn} sudah ada (Duplikat)`,
                                 type: "duplicate",
                             })
                         } else {
-                            // Automatically add to list!
                             setScannedItems((prev) => [
                                 ...prev,
                                 {
@@ -300,13 +303,13 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
                                     scannedAt: new Date(),
                                 },
                             ])
-                            playScanBeep()
+                            triggerMobileFeedback()
                             setFlashSuccess(true)
                             setTimeout(() => setFlashSuccess(false), 800)
 
                             setScanFeedback({
                                 sn: newSn,
-                                message: `Berhasil Auto-Scan SN: ${newSn}`,
+                                message: `Terbaca SN: ${newSn}`,
                                 type: "success",
                             })
                         }
@@ -327,7 +330,7 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
         }, "image/jpeg")
     }, [isExtracting, scannedItems])
 
-    // Continuous Real-time Auto-Scan Loop when camera is active
+    // Continuous Real-time Auto-Scan Loop
     React.useEffect(() => {
         if (!isCameraOpen || !autoScanActive) return
 
@@ -335,7 +338,7 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
             if (!isExtracting) {
                 captureFrameAndExtract(false)
             }
-        }, 1600) // Scan frame every 1.6 seconds
+        }, 1600)
 
         return () => clearInterval(interval)
     }, [isCameraOpen, autoScanActive, isExtracting, captureFrameAndExtract])
@@ -347,6 +350,7 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
 
         const formData = new FormData()
         formData.append("file", file)
+        formData.append("image", file)
 
         setIsExtracting(true)
         try {
@@ -364,7 +368,7 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
                             scannedAt: new Date(),
                         },
                     ])
-                    playScanBeep()
+                    triggerMobileFeedback()
                     alert(`Berhasil Extract Serial Number: ${newSn}`)
                 }
             } else {
@@ -464,56 +468,67 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
     }
 
     return (
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-5 pb-24 md:pb-6">
+            {/* Native Mobile Segmented Control */}
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                <TabsList className="grid w-full max-w-md grid-cols-2">
-                    <TabsTrigger value="scan" className="flex items-center gap-2">
+                <TabsList className="grid w-full grid-cols-2 p-1 bg-muted/80 rounded-xl h-12">
+                    <TabsTrigger
+                        value="scan"
+                        className="flex items-center justify-center gap-2 rounded-lg text-sm font-semibold transition-all data-[state=active]:bg-background data-[state=active]:shadow-sm"
+                    >
                         <Zap className="size-4 text-emerald-500 fill-emerald-500" />
-                        <span>Auto-Scan Ban Baru</span>
+                        <span>Auto-Scan</span>
                     </TabsTrigger>
-                    <TabsTrigger value="history" className="flex items-center gap-2">
+                    <TabsTrigger
+                        value="history"
+                        className="flex items-center justify-center gap-2 rounded-lg text-sm font-semibold transition-all data-[state=active]:bg-background data-[state=active]:shadow-sm"
+                    >
                         <Eye className="size-4" />
-                        <span>Riwayat Scan ({historyRows.length})</span>
+                        <span>Riwayat ({historyRows.length})</span>
                     </TabsTrigger>
                 </TabsList>
 
                 {/* TAB 1: SCAN TERBARU */}
-                <TabsContent value="scan" className="mt-6 space-y-6">
-                    <Card className="border-accent/40 shadow-sm">
-                        <CardHeader>
-                            <CardTitle className="text-lg font-semibold flex items-center gap-2">
-                                <Warehouse className="size-5 text-primary" />
+                <TabsContent value="scan" className="mt-5 space-y-5">
+                    {/* SECTION 1: MASTER DATA SELECTION */}
+                    <Card className="border-accent/40 shadow-sm rounded-2xl overflow-hidden">
+                        <CardHeader className="bg-muted/30 pb-3">
+                            <CardTitle className="text-base font-bold flex items-center gap-2">
+                                <Warehouse className="size-5 text-primary shrink-0" />
                                 1. Pilih Gudang & Barang
                             </CardTitle>
-                            <CardDescription>
-                                Pilih lokasi penyimpanan dan material ban sebelum mengaktifkan kamera Auto-Scan.
+                            <CardDescription className="text-xs">
+                                Tentukan lokasi Sloc dan material ban kategori TYRE.
                             </CardDescription>
                         </CardHeader>
-                        <CardContent className="grid gap-6 md:grid-cols-2">
+                        <CardContent className="grid gap-4 pt-4 md:grid-cols-2">
                             {/* Warehouse Autocomplete */}
-                            <div className="space-y-2 flex flex-col">
-                                <Label className="font-semibold">Warehouse / Gudang (Sloc)</Label>
+                            <div className="space-y-1.5 flex flex-col">
+                                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                                    Warehouse / Gudang (Sloc)
+                                </Label>
                                 <Popover open={openSlocPopover} onOpenChange={setOpenSlocPopover}>
                                     <PopoverTrigger asChild>
                                         <Button
                                             variant="outline"
                                             role="combobox"
                                             aria-expanded={openSlocPopover}
-                                            className="w-full justify-between h-11"
+                                            className="w-full justify-between h-12 rounded-xl text-left font-normal border-input hover:bg-accent/50"
                                         >
                                             {selectedSloc ? (
-                                                <span className="truncate">
-                                                    <strong className="font-semibold text-primary">{selectedSloc}</strong> - {selectedSlocDesc || "Gudang"}
+                                                <span className="truncate text-sm">
+                                                    <strong className="font-bold text-primary">{selectedSloc}</strong>
+                                                    {selectedSlocDesc && <span className="text-xs text-muted-foreground ml-1.5">({selectedSlocDesc})</span>}
                                                 </span>
                                             ) : (
-                                                <span className="text-muted-foreground">-- Pilih Warehouse / Sloc --</span>
+                                                <span className="text-muted-foreground text-sm">-- Pilih Warehouse --</span>
                                             )}
                                             <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
                                         </Button>
                                     </PopoverTrigger>
-                                    <PopoverContent className="w-full p-0" align="start">
+                                    <PopoverContent className="w-full p-0 max-h-72" align="start">
                                         <Command>
-                                            <CommandInput placeholder="Cari Sloc / Nama Gudang..." />
+                                            <CommandInput placeholder="Cari Sloc / Nama Gudang..." className="h-11" />
                                             <CommandList>
                                                 <CommandEmpty>Gudang tidak ditemukan.</CommandEmpty>
                                                 <CommandGroup>
@@ -526,18 +541,19 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
                                                                 setSelectedSlocDesc(wh.description || "")
                                                                 setOpenSlocPopover(false)
                                                             }}
+                                                            className="py-2.5"
                                                         >
                                                             <Check
                                                                 className={cn(
-                                                                    "mr-2 size-4",
+                                                                    "mr-2 size-4 text-primary",
                                                                     selectedSloc === wh.sloc ? "opacity-100" : "opacity-0"
                                                                 )}
                                                             />
-                                                            <div>
-                                                                <span className="font-semibold">{wh.sloc}</span>
+                                                            <div className="flex flex-col">
+                                                                <span className="font-bold text-sm">{wh.sloc}</span>
                                                                 {wh.description && (
-                                                                    <span className="text-xs text-muted-foreground ml-2">
-                                                                        ({wh.description})
+                                                                    <span className="text-xs text-muted-foreground">
+                                                                        {wh.description}
                                                                     </span>
                                                                 )}
                                                             </div>
@@ -551,31 +567,34 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
                             </div>
 
                             {/* Material Autocomplete */}
-                            <div className="space-y-2 flex flex-col">
-                                <Label className="font-semibold">Material Number & Nama Barang</Label>
+                            <div className="space-y-1.5 flex flex-col">
+                                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                                    Material Number & Barang (TYRE)
+                                </Label>
                                 <Popover open={openMaterialPopover} onOpenChange={setOpenMaterialPopover}>
                                     <PopoverTrigger asChild>
                                         <Button
                                             variant="outline"
                                             role="combobox"
                                             aria-expanded={openMaterialPopover}
-                                            className="w-full justify-between h-11"
+                                            className="w-full justify-between h-12 rounded-xl text-left font-normal border-input hover:bg-accent/50"
                                         >
                                             {selectedMaterial ? (
-                                                <span className="truncate">
-                                                    <strong className="font-semibold text-primary">{selectedMaterial}</strong> - {selectedMaterialDesc || "Material"}
+                                                <span className="truncate text-sm">
+                                                    <strong className="font-bold text-primary">{selectedMaterial}</strong>
+                                                    {selectedMaterialDesc && <span className="text-xs text-muted-foreground ml-1.5">- {selectedMaterialDesc}</span>}
                                                 </span>
                                             ) : (
-                                                <span className="text-muted-foreground">-- Pilih Material / Nama Barang --</span>
+                                                <span className="text-muted-foreground text-sm">-- Pilih Material TYRE --</span>
                                             )}
                                             <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
                                         </Button>
                                     </PopoverTrigger>
-                                    <PopoverContent className="w-full p-0" align="start">
+                                    <PopoverContent className="w-full p-0 max-h-72" align="start">
                                         <Command>
-                                            <CommandInput placeholder="Cari Material Number / Deskripsi..." />
+                                            <CommandInput placeholder="Cari Material TYRE..." className="h-11" />
                                             <CommandList>
-                                                <CommandEmpty>Material tidak ditemukan.</CommandEmpty>
+                                                <CommandEmpty>Material TYRE tidak ditemukan.</CommandEmpty>
                                                 <CommandGroup>
                                                     {masterData.products.map((prod) => (
                                                         <CommandItem
@@ -586,17 +605,18 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
                                                                 setSelectedMaterialDesc(prod.materialDescription || "")
                                                                 setOpenMaterialPopover(false)
                                                             }}
+                                                            className="py-2.5"
                                                         >
                                                             <Check
                                                                 className={cn(
-                                                                    "mr-2 size-4",
+                                                                    "mr-2 size-4 text-primary",
                                                                     selectedMaterial === prod.materialNumber ? "opacity-100" : "opacity-0"
                                                                 )}
                                                             />
                                                             <div className="flex flex-col">
-                                                                <span className="font-semibold">{prod.materialNumber}</span>
+                                                                <span className="font-bold text-sm">{prod.materialNumber}</span>
                                                                 {prod.materialDescription && (
-                                                                    <span className="text-xs text-muted-foreground truncate max-w-sm">
+                                                                    <span className="text-xs text-muted-foreground truncate max-w-xs">
                                                                         {prod.materialDescription}
                                                                     </span>
                                                                 )}
@@ -613,31 +633,29 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
                     </Card>
 
                     {/* SECTION 2: AUTO SCANNER & ACTIVE BATCH LIST */}
-                    <Card className="border-accent/40 shadow-sm">
-                        <CardHeader className="flex flex-row items-center justify-between pb-2">
+                    <Card className="border-accent/40 shadow-sm rounded-2xl overflow-hidden">
+                        <CardHeader className="flex flex-row items-center justify-between pb-3 bg-muted/30">
                             <div>
-                                <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                                <CardTitle className="text-base font-bold flex items-center gap-2">
                                     <Zap className="size-5 text-amber-500 fill-amber-500" />
-                                    2. Live Camera Auto-Scan OCR
+                                    2. Pindaian SN Ban
                                 </CardTitle>
-                                <CardDescription>
-                                    Kamera akan secara otomatis membaca dan mencatat Serial Number ban ke daftar list.
+                                <CardDescription className="text-xs">
+                                    Daftar Serial Number ban yang telah terekstrak.
                                 </CardDescription>
                             </div>
-                            <div className="flex items-center gap-3">
-                                <Badge variant="secondary" className="px-3 py-1.5 text-sm font-semibold">
-                                    Total Qty Scanned: <span className="ml-1.5 text-primary text-base font-bold">{totalQty}</span>
-                                </Badge>
-                            </div>
+                            <Badge variant="secondary" className="px-3 py-1.5 text-sm font-bold rounded-xl bg-primary/10 text-primary border-primary/20">
+                                Total: {totalQty} Pcs
+                            </Badge>
                         </CardHeader>
-                        <CardContent className="space-y-6">
-                            {/* Actions Bar */}
-                            <div className="flex flex-wrap items-center gap-3">
+                        <CardContent className="space-y-4 pt-4">
+                            {/* Desktop Actions Bar */}
+                            <div className="hidden md:flex flex-wrap items-center gap-3">
                                 <Button
                                     onClick={() => startCamera()}
                                     disabled={!selectedSloc || !selectedMaterial}
                                     size="lg"
-                                    className="gap-2 font-semibold shadow bg-primary text-primary-foreground hover:bg-primary/90"
+                                    className="gap-2 font-bold rounded-xl shadow bg-primary text-primary-foreground hover:bg-primary/90"
                                 >
                                     <Camera className="size-5" />
                                     <span>Nyalakan Kamera Auto-Scan</span>
@@ -655,7 +673,7 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
                                     size="lg"
                                     onClick={() => fileInputRef.current?.click()}
                                     disabled={!selectedSloc || !selectedMaterial || isExtracting}
-                                    className="gap-2"
+                                    className="gap-2 rounded-xl"
                                 >
                                     <Upload className="size-5" />
                                     <span>Upload Foto Ban</span>
@@ -668,16 +686,59 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
                                         value={manualSnInput}
                                         onChange={(e) => setManualSnInput(e.target.value)}
                                         onKeyDown={(e) => e.key === "Enter" && handleAddManualSn()}
-                                        className="w-48"
+                                        className="w-48 rounded-xl h-11"
                                     />
-                                    <Button variant="secondary" onClick={handleAddManualSn}>
+                                    <Button variant="secondary" onClick={handleAddManualSn} className="rounded-xl h-11">
                                         <Plus className="size-4 mr-1" /> Add
                                     </Button>
                                 </div>
                             </div>
 
-                            {/* Scanned Serial Numbers Table */}
-                            <div className="rounded-md border overflow-hidden">
+                            {/* Mobile Card List View (< md) */}
+                            <div className="block md:hidden space-y-3">
+                                {scannedItems.length === 0 ? (
+                                    <div className="rounded-2xl border-2 border-dashed p-6 text-center text-muted-foreground space-y-2 bg-muted/20">
+                                        <Zap className="size-8 mx-auto text-amber-500 opacity-60" />
+                                        <p className="text-sm font-semibold">Belum ada Serial Number yang di-scan.</p>
+                                        <p className="text-xs">Tekan tombol Kamera Auto-Scan di bawah untuk mulai memindai ban.</p>
+                                    </div>
+                                ) : (
+                                    scannedItems.map((item, index) => (
+                                        <div
+                                            key={item.id}
+                                            className="flex items-center justify-between p-3.5 rounded-2xl border bg-card shadow-xs animate-in fade-in-50 duration-200"
+                                        >
+                                            <div className="flex items-center gap-3 min-w-0">
+                                                <div className="size-8 rounded-full bg-primary/10 text-primary font-bold text-xs flex items-center justify-center shrink-0">
+                                                    {index + 1}
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <Input
+                                                        value={item.serialNumber}
+                                                        onChange={(e) => handleUpdateSnValue(item.id, e.target.value)}
+                                                        className="font-mono text-base font-bold text-primary h-8 px-2 py-0 border-transparent hover:border-input focus:border-input bg-transparent"
+                                                    />
+                                                    <span className="text-[11px] text-muted-foreground block pl-2">
+                                                        {format(item.scannedAt, "HH:mm:ss")}
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => handleRemoveSn(item.id)}
+                                                className="text-destructive hover:bg-destructive/10 shrink-0 rounded-xl"
+                                            >
+                                                <Trash2 className="size-4" />
+                                            </Button>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+
+                            {/* Desktop Table View (>= md) */}
+                            <div className="hidden md:block rounded-xl border overflow-hidden">
                                 <Table>
                                     <TableHeader className="bg-muted/50">
                                         <TableRow>
@@ -731,12 +792,13 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
                                 </Table>
                             </div>
 
-                            {/* Save Batch Action */}
-                            <div className="flex justify-end gap-3 pt-2">
+                            {/* Desktop Save Action */}
+                            <div className="hidden md:flex justify-end gap-3 pt-2">
                                 <Button
                                     variant="outline"
                                     onClick={() => setScannedItems([])}
                                     disabled={scannedItems.length === 0 || isSaving}
+                                    className="rounded-xl"
                                 >
                                     <RotateCcw className="size-4 mr-2" /> Reset Sesi
                                 </Button>
@@ -744,7 +806,7 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
                                     size="lg"
                                     onClick={handleSaveBatch}
                                     disabled={scannedItems.length === 0 || isSaving}
-                                    className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow"
+                                    className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow"
                                 >
                                     {isSaving ? <Loader2 className="size-5 animate-spin" /> : <Save className="size-5" />}
                                     <span>Simpan Data Scan Ban ({scannedItems.length})</span>
@@ -755,16 +817,44 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
                 </TabsContent>
 
                 {/* TAB 2: RIWAYAT SCAN BAN */}
-                <TabsContent value="history" className="mt-6">
-                    <Card className="border-accent/40 shadow-sm">
-                        <CardHeader>
-                            <CardTitle className="text-lg font-semibold">Daftar Riwayat Scan Ban</CardTitle>
-                            <CardDescription>
-                                Hasil pindaian Serial Number ban yang telah tersimpan di database dan terkoneksi ke Vision API.
+                <TabsContent value="history" className="mt-5">
+                    <Card className="border-accent/40 shadow-sm rounded-2xl overflow-hidden">
+                        <CardHeader className="bg-muted/30">
+                            <CardTitle className="text-base font-bold">Daftar Riwayat Scan Ban</CardTitle>
+                            <CardDescription className="text-xs">
+                                Data pindaian SN ban yang telah tersimpan.
                             </CardDescription>
                         </CardHeader>
-                        <CardContent>
-                            <div className="rounded-md border overflow-hidden">
+                        <CardContent className="p-0">
+                            {/* Mobile History View */}
+                            <div className="block md:hidden divide-y">
+                                {historyRows.length === 0 ? (
+                                    <div className="p-8 text-center text-muted-foreground text-sm">
+                                        Belum ada riwayat scan ban tersimpan.
+                                    </div>
+                                ) : (
+                                    historyRows.map((row) => (
+                                        <div key={row.id} className="p-4 flex items-center justify-between gap-3">
+                                            <div className="space-y-1 min-w-0">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-bold text-xs text-primary">{row.sloc}</span>
+                                                    <span className="font-mono text-xs font-semibold text-emerald-600">{row.serialNumber}</span>
+                                                </div>
+                                                <p className="text-xs truncate font-medium">{row.materialNumber} - {row.materialDescription}</p>
+                                                <span className="text-[10px] text-muted-foreground block">
+                                                    {format(new Date(row.scannedAt), "dd MMM yyyy HH:mm")}
+                                                </span>
+                                            </div>
+                                            <Button variant="outline" size="sm" onClick={() => setDetailItem(row)} className="rounded-xl shrink-0">
+                                                <Eye className="size-4" />
+                                            </Button>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+
+                            {/* Desktop Table View */}
+                            <div className="hidden md:block overflow-hidden">
                                 <Table>
                                     <TableHeader className="bg-muted/50">
                                         <TableRow>
@@ -843,17 +933,51 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
                 </TabsContent>
             </Tabs>
 
+            {/* STICKY FLOATING ACTION BAR FOR MOBILE NATIVE UX (< md) */}
+            <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-background/95 backdrop-blur-xl border-t p-3.5 flex items-center justify-between gap-2 shadow-2xl">
+                <Button
+                    onClick={() => startCamera()}
+                    disabled={!selectedSloc || !selectedMaterial}
+                    size="lg"
+                    className="flex-1 gap-2 font-bold rounded-2xl h-12 shadow-lg bg-primary text-primary-foreground active:scale-95 transition-transform"
+                >
+                    <Camera className="size-5" />
+                    <span>Nyalakan Kamera</span>
+                </Button>
+
+                <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={!selectedSloc || !selectedMaterial || isExtracting}
+                    className="size-12 rounded-2xl shrink-0"
+                >
+                    <Upload className="size-5" />
+                </Button>
+
+                {scannedItems.length > 0 && (
+                    <Button
+                        size="lg"
+                        onClick={handleSaveBatch}
+                        disabled={isSaving}
+                        className="gap-1.5 font-bold rounded-2xl h-12 bg-emerald-600 hover:bg-emerald-700 text-white shrink-0 shadow-lg px-4"
+                    >
+                        {isSaving ? <Loader2 className="size-5 animate-spin" /> : <Save className="size-5" />}
+                        <span>Simpan ({scannedItems.length})</span>
+                    </Button>
+                )}
+            </div>
+
             {/* LIVE AUTO-SCAN CAMERA MODAL */}
             <Dialog open={isCameraOpen} onOpenChange={(open) => !open && stopCamera()}>
-                <DialogContent className="sm:max-w-3xl">
+                <DialogContent className="sm:max-w-3xl max-w-[95vw] p-4 rounded-3xl">
                     <DialogHeader>
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                            <DialogTitle className="flex items-center gap-2 text-xl">
-                                <Zap className="size-6 text-amber-500 fill-amber-500 animate-pulse" />
-                                Live Camera Auto-Scan SN Ban
+                            <DialogTitle className="flex items-center gap-2 text-lg font-bold">
+                                <Zap className="size-5 text-amber-500 fill-amber-500 animate-pulse" />
+                                Live Camera Auto-Scan
                             </DialogTitle>
-                            <div className="flex items-center gap-3">
-                                {/* Camera selector dropdown */}
+                            <div className="flex items-center justify-between sm:justify-end gap-3">
                                 {availableCameras.length > 1 && (
                                     <div className="flex items-center gap-1.5">
                                         <Video className="size-4 text-muted-foreground" />
@@ -864,8 +988,8 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
                                                 startCamera(val)
                                             }}
                                         >
-                                            <SelectTrigger className="h-8 w-44 text-xs">
-                                                <SelectValue placeholder="Pilih Kamera" />
+                                            <SelectTrigger className="h-8 w-36 text-xs rounded-xl">
+                                                <SelectValue placeholder="Kamera" />
                                             </SelectTrigger>
                                             <SelectContent>
                                                 {availableCameras.map((cam, idx) => (
@@ -887,83 +1011,75 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
                                 </div>
                             </div>
                         </div>
-                        <DialogDescription>
-                            Dekatkan kamera ke Serial Number ban. Sistem mengekstrak SN dan mencatat Qty secara otomatis.
-                        </DialogDescription>
                     </DialogHeader>
 
-                    <div className="space-y-4">
+                    <div className="space-y-3">
                         {/* Live Video View Container */}
                         <div
                             className={cn(
-                                "relative aspect-video bg-black rounded-lg overflow-hidden flex items-center justify-center transition-all duration-300 border-4",
-                                flashSuccess ? "border-emerald-500 shadow-lg shadow-emerald-500/50" : "border-muted"
+                                "relative aspect-video bg-black rounded-2xl overflow-hidden flex items-center justify-center transition-all duration-300 border-4",
+                                flashSuccess ? "border-emerald-500 shadow-xl shadow-emerald-500/50" : "border-muted"
                             )}
                         >
                             <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
                             <canvas ref={canvasRef} className="hidden" />
 
-                            {/* Scanner Target Guide Overlay */}
-                            <div className="absolute inset-10 border-2 border-dashed border-amber-400/90 rounded-lg pointer-events-none flex flex-col items-center justify-between p-4 bg-black/10">
-                                <Badge className="bg-black/70 text-white font-normal backdrop-blur-md px-3 py-1">
+                            {/* Mobile Target Overlay */}
+                            <div className="absolute inset-6 md:inset-10 border-2 border-dashed border-amber-400/90 rounded-2xl pointer-events-none flex flex-col items-center justify-between p-3 bg-black/10">
+                                <Badge className="bg-black/70 text-white text-[11px] font-normal backdrop-blur-md px-3 py-0.5 rounded-full">
                                     Arahkan Kode SN Ban Ke Sini
                                 </Badge>
                                 {isExtracting && (
-                                    <div className="flex items-center gap-2 bg-amber-500/90 text-black px-3 py-1 rounded-full font-semibold text-xs animate-pulse">
-                                        <Loader2 className="size-3.5 animate-spin" />
+                                    <div className="flex items-center gap-2 bg-amber-500/90 text-black px-3 py-1 rounded-full font-bold text-xs animate-pulse">
+                                        <Loader2 className="size-3 animate-spin" />
                                         Mengekstrak Frame...
                                     </div>
                                 )}
                             </div>
 
                             {/* Live Status Overlay Banner */}
-                            <div className="absolute bottom-3 left-3 right-3 bg-black/85 backdrop-blur-md p-3 rounded-lg flex items-center justify-between border border-white/10 text-white">
+                            <div className="absolute bottom-2 left-2 right-2 bg-black/85 backdrop-blur-md p-2.5 rounded-xl flex items-center justify-between border border-white/10 text-white">
                                 <div className="flex items-center gap-2 overflow-hidden">
                                     {scanFeedback.type === "success" && (
-                                        <CheckCircle2 className="size-5 text-emerald-400 shrink-0" />
+                                        <CheckCircle2 className="size-4 text-emerald-400 shrink-0" />
                                     )}
                                     {scanFeedback.type === "duplicate" && (
-                                        <AlertCircle className="size-5 text-amber-400 shrink-0" />
+                                        <AlertCircle className="size-4 text-amber-400 shrink-0" />
                                     )}
                                     {scanFeedback.type === "info" && (
-                                        <Zap className="size-5 text-amber-400 shrink-0 animate-spin" />
+                                        <Zap className="size-4 text-amber-400 shrink-0 animate-spin" />
                                     )}
                                     {scanFeedback.type === "error" && (
-                                        <AlertCircle className="size-5 text-rose-400 shrink-0" />
+                                        <AlertCircle className="size-4 text-rose-400 shrink-0" />
                                     )}
-                                    <span className="text-sm font-semibold truncate">
+                                    <span className="text-xs font-semibold truncate">
                                         {scanFeedback.message}
                                     </span>
                                 </div>
-                                <Badge variant="secondary" className="font-mono text-xs shrink-0">
-                                    Total: {scannedItems.length} Pcs
+                                <Badge variant="secondary" className="font-mono text-[11px] shrink-0 rounded-lg">
+                                    Total: {scannedItems.length}
                                 </Badge>
                             </div>
                         </div>
 
                         {/* Permission Error Diagnostic Card */}
                         {scanFeedback.type === "error" && (
-                            <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 space-y-3">
-                                <div className="flex items-start gap-3">
-                                    <AlertCircle className="size-5 text-destructive shrink-0 mt-0.5" />
-                                    <div className="space-y-1 text-sm">
-                                        <h4 className="font-bold text-destructive">Kamera Belum Terhubung Atau Ditolak System</h4>
-                                        <p className="text-muted-foreground text-xs leading-relaxed">
-                                            Browser atau Windows OS menolak akses webcam. Pastikan:
+                            <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 space-y-2">
+                                <div className="flex items-start gap-2">
+                                    <AlertCircle className="size-4 text-destructive shrink-0 mt-0.5" />
+                                    <div className="space-y-1 text-xs">
+                                        <h4 className="font-bold text-destructive">Kamera Belum Terhubung</h4>
+                                        <p className="text-muted-foreground text-[11px]">
+                                            Pastikan izin kamera diizinkan (Allow) atau gunakan tombol Upload Foto Ban.
                                         </p>
-                                        <ul className="list-disc pl-4 text-xs text-muted-foreground space-y-1">
-                                            <li>Ikon 🔒 di samping URL `localhost:3000` diatur ke <strong>Allow (Izinkan)</strong>.</li>
-                                            <li>Aplikasi lain yang menggunakan kamera (Zoom / Teams / Camera App) sudah ditutup.</li>
-                                            <li>Di Windows: Buka <strong>Settings &gt; Privacy &amp; security &gt; Camera</strong> dan aktifkan <strong>"Let desktop apps access your camera"</strong>.</li>
-                                        </ul>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2 pt-1">
-                                    <Button size="sm" onClick={() => startCamera()} className="gap-1.5">
-                                        <RotateCcw className="size-3.5" /> Coba Hubungkan Ulang
+                                    <Button size="sm" onClick={() => startCamera()} className="gap-1 rounded-xl text-xs h-8">
+                                        <RotateCcw className="size-3" /> Coba Ulang
                                     </Button>
-                                    <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()} className="gap-1.5">
-                                        <Upload className="size-3.5" /> Gunakan Upload Foto
+                                    <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()} className="gap-1 rounded-xl text-xs h-8">
+                                        <Upload className="size-3" /> Upload Foto
                                     </Button>
                                 </div>
                             </div>
@@ -971,8 +1087,8 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
                     </div>
 
                     <DialogFooter className="flex flex-row items-center justify-between sm:justify-between pt-2">
-                        <Button variant="outline" onClick={stopCamera}>
-                            Tutup Kamera
+                        <Button variant="outline" onClick={stopCamera} className="rounded-xl">
+                            Tutup
                         </Button>
 
                         <div className="flex items-center gap-2">
@@ -980,19 +1096,19 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
                                 variant="secondary"
                                 onClick={() => captureFrameAndExtract(true)}
                                 disabled={isExtracting}
-                                className="gap-2 font-semibold"
+                                className="gap-1.5 font-bold rounded-xl text-xs"
                             >
                                 <Camera className="size-4" />
-                                <span>Scan Frame Ini Manual</span>
+                                <span>Scan Manual</span>
                             </Button>
 
                             <Button
                                 onClick={() => setAutoScanActive((prev) => !prev)}
                                 variant={autoScanActive ? "default" : "outline"}
-                                className="gap-2"
+                                className="gap-1.5 rounded-xl text-xs"
                             >
                                 {autoScanActive ? <Pause className="size-4" /> : <Play className="size-4" />}
-                                <span>{autoScanActive ? "Pause Auto-Scan" : "Mulai Auto-Scan"}</span>
+                                <span>{autoScanActive ? "Pause" : "Mulai"}</span>
                             </Button>
                         </div>
                     </DialogFooter>
@@ -1001,25 +1117,25 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
 
             {/* DETAIL MODAL */}
             <Dialog open={Boolean(detailItem)} onOpenChange={() => setDetailItem(null)}>
-                <DialogContent className="sm:max-w-xl">
+                <DialogContent className="sm:max-w-xl max-w-[95vw] rounded-3xl">
                     <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2">
+                        <DialogTitle className="flex items-center gap-2 text-base">
                             <Package className="size-5 text-primary" />
                             Detail Scan Ban: {detailItem?.batchId}
                         </DialogTitle>
                     </DialogHeader>
                     {detailItem && (
                         <div className="space-y-4 py-2">
-                            <div className="grid grid-cols-2 gap-4 rounded-lg bg-muted/40 p-4 border text-sm">
+                            <div className="grid grid-cols-2 gap-3 rounded-2xl bg-muted/40 p-4 border text-sm">
                                 <div>
                                     <span className="text-muted-foreground text-xs block">Warehouse / Sloc</span>
                                     <span className="font-bold text-primary">{detailItem.sloc}</span>
-                                    <div className="text-xs">{detailItem.slocDescription}</div>
+                                    <div className="text-xs text-muted-foreground">{detailItem.slocDescription}</div>
                                 </div>
                                 <div>
                                     <span className="text-muted-foreground text-xs block">Material Number</span>
                                     <span className="font-bold">{detailItem.materialNumber}</span>
-                                    <div className="text-xs truncate">{detailItem.materialDescription}</div>
+                                    <div className="text-xs text-muted-foreground truncate">{detailItem.materialDescription}</div>
                                 </div>
                                 <div>
                                     <span className="text-muted-foreground text-xs block">Serial Number Ban</span>
@@ -1042,22 +1158,22 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
 
             {/* DELETE CONFIRMATION DIALOG */}
             <Dialog open={Boolean(deleteId)} onOpenChange={() => setDeleteId(null)}>
-                <DialogContent className="sm:max-w-md">
+                <DialogContent className="sm:max-w-md max-w-[90vw] rounded-3xl">
                     <DialogHeader>
-                        <DialogTitle>Konfirmasi Hapus Data Scan</DialogTitle>
-                        <DialogDescription>
+                        <DialogTitle className="text-base">Konfirmasi Hapus Data Scan</DialogTitle>
+                        <DialogDescription className="text-xs">
                             Apakah Anda yakin ingin menghapus data scan ban ini dari database?
                         </DialogDescription>
                     </DialogHeader>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setDeleteId(null)} disabled={isDeleting}>
+                    <DialogFooter className="flex flex-row justify-end gap-2">
+                        <Button variant="outline" onClick={() => setDeleteId(null)} disabled={isDeleting} className="rounded-xl">
                             Batal
                         </Button>
                         <Button
                             variant="destructive"
                             onClick={handleDeleteRecord}
                             disabled={isDeleting}
-                            className="gap-2"
+                            className="gap-2 rounded-xl"
                         >
                             {isDeleting && <Loader2 className="size-4 animate-spin" />}
                             <span>Ya, Hapus</span>

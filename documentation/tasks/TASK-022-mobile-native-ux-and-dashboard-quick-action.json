@@ -1,0 +1,12 @@
+{
+  "id": "TASK-022",
+  "status": "completed",
+  "priority": "P0",
+  "title": "Mobile Native UI/UX & Quick Action Link di Main Dashboard",
+  "description": "Mengoptimalkan tampilan halaman /dashboard/rfid/tire-scan agar memiliki pengalaman UI/UX Mobile Native (sticky action bar, touch-friendly UI, native viewfinder) saat dibuka di perangkat HP/Mobile, serta menambahkan Quick Action link di Dashboard Utama.",
+  "createdAt": "2026-08-06T13:22:00.000Z",
+  "startedAt": "2026-08-06T05:21:54.088Z",
+  "updatedAt": "2026-08-06T05:22:44.086Z",
+  "completedAt": "2026-08-06T05:22:44.086Z",
+  "completionDetails": "Mengoptimalkan tampilan /dashboard/rfid/tire-scan dengan Mobile Native UI/UX (sticky floating action bar, touch-friendly list view, haptic feedback) serta menambahkan link Quick Action 'Scan Tire SN (OCR)' pada Main Dashboard."
+}

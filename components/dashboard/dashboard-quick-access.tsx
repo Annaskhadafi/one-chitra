@@ -7,6 +7,7 @@ import {
   BadgeCheck,
   BarChart3,
   Boxes,
+  Camera,
   ClipboardList,
   LineChart,
   PackageCheck,
@@ -37,11 +38,19 @@ type QuickAccessItem = {
 
 const QUICK_ACCESS_ITEMS: QuickAccessItem[] = [
   {
+    title: "Scan Tire SN (OCR)",
+    href: "/dashboard/rfid/tire-scan",
+    description: "Scan Serial Number ban via kamera & Vision API.",
+    icon: Camera,
+    iconClassName: "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400",
+    accentClassName: "from-emerald-400/80 to-teal-400/80",
+  },
+  {
     title: "Sales Revenue",
     href: "/dashboard/revenue-forecast",
     description: "Ringkasan sales revenue dan performanya.",
     icon: TrendingUp,
-    iconClassName: "bg-emerald-50 text-emerald-600",
+    iconClassName: "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400",
     accentClassName: "from-emerald-400/80 to-teal-400/80",
   },
   {
@@ -49,7 +58,7 @@ const QUICK_ACCESS_ITEMS: QuickAccessItem[] = [
     href: "/dashboard/r49-dashboard",
     description: "Ringkasan performa R49 secara cepat.",
     icon: BarChart3,
-    iconClassName: "bg-sky-50 text-sky-600",
+    iconClassName: "bg-sky-50 text-sky-600 dark:bg-sky-950/50 dark:text-sky-400",
     accentClassName: "from-sky-400/80 to-blue-400/80",
   },
   {
@@ -57,7 +66,7 @@ const QUICK_ACCESS_ITEMS: QuickAccessItem[] = [
     href: "/dashboard/quotations",
     description: "Pantau dan buka dokumen quotation.",
     icon: ClipboardList,
-    iconClassName: "bg-amber-50 text-amber-600",
+    iconClassName: "bg-amber-50 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400",
     accentClassName: "from-amber-400/80 to-orange-400/80",
   },
   {
@@ -65,7 +74,7 @@ const QUICK_ACCESS_ITEMS: QuickAccessItem[] = [
     href: "/dashboard/sales-orders",
     description: "Akses order penjualan dan statusnya.",
     icon: ShoppingCart,
-    iconClassName: "bg-violet-50 text-violet-600",
+    iconClassName: "bg-violet-50 text-violet-600 dark:bg-violet-950/50 dark:text-violet-400",
     accentClassName: "from-violet-400/80 to-fuchsia-400/80",
   },
   {
@@ -73,7 +82,7 @@ const QUICK_ACCESS_ITEMS: QuickAccessItem[] = [
     href: "/dashboard/deliveries",
     description: "Kelola pengiriman yang sedang berjalan.",
     icon: Truck,
-    iconClassName: "bg-rose-50 text-rose-600",
+    iconClassName: "bg-rose-50 text-rose-600 dark:bg-rose-950/50 dark:text-rose-400",
     accentClassName: "from-rose-400/80 to-pink-400/80",
   },
   {
@@ -81,7 +90,7 @@ const QUICK_ACCESS_ITEMS: QuickAccessItem[] = [
     href: "/dashboard/good-receive-manual",
     description: "Penerimaan barang manual dengan cepat.",
     icon: PackageCheck,
-    iconClassName: "bg-cyan-50 text-cyan-600",
+    iconClassName: "bg-cyan-50 text-cyan-600 dark:bg-cyan-950/50 dark:text-cyan-400",
     accentClassName: "from-cyan-400/80 to-teal-400/80",
   },
   {
@@ -89,7 +98,7 @@ const QUICK_ACCESS_ITEMS: QuickAccessItem[] = [
     href: "/dashboard/stock-alerts",
     description: "Lihat item stok yang perlu perhatian.",
     icon: TriangleAlert,
-    iconClassName: "bg-red-50 text-red-600",
+    iconClassName: "bg-red-50 text-red-600 dark:bg-red-950/50 dark:text-red-400",
     accentClassName: "from-red-400/80 to-orange-400/80",
   },
   {
@@ -97,7 +106,7 @@ const QUICK_ACCESS_ITEMS: QuickAccessItem[] = [
     href: "/dashboard/customer-segmentation",
     description: "Segmentasi pelanggan untuk insight sales.",
     icon: Users,
-    iconClassName: "bg-indigo-50 text-indigo-600",
+    iconClassName: "bg-indigo-50 text-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-400",
     accentClassName: "from-indigo-400/80 to-blue-400/80",
   },
   {
@@ -105,7 +114,7 @@ const QUICK_ACCESS_ITEMS: QuickAccessItem[] = [
     href: "/dashboard/sales-dashboard",
     description: "Monitoring performa penjualan harian.",
     icon: LineChart,
-    iconClassName: "bg-lime-50 text-lime-600",
+    iconClassName: "bg-lime-50 text-lime-600 dark:bg-lime-950/50 dark:text-lime-400",
     accentClassName: "from-lime-400/80 to-emerald-400/80",
   },
   {
@@ -113,7 +122,7 @@ const QUICK_ACCESS_ITEMS: QuickAccessItem[] = [
     href: "/dashboard/sales-dashboard/a2r-competition",
     description: "Leaderboard poin sales untuk program A2R.",
     icon: Trophy,
-    iconClassName: "bg-blue-50 text-blue-600",
+    iconClassName: "bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-400",
     accentClassName: "from-blue-400/80 to-indigo-400/80",
   },
   {
@@ -121,7 +130,7 @@ const QUICK_ACCESS_ITEMS: QuickAccessItem[] = [
     href: "/dashboard/approvals",
     description: "Cek approval yang menunggu tindakan.",
     icon: BadgeCheck,
-    iconClassName: "bg-slate-100 text-slate-700",
+    iconClassName: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
     accentClassName: "from-slate-400/80 to-slate-500/80",
   },
 ]
@@ -144,7 +153,7 @@ export function DashboardQuickAccess({
             ) : null}
           </div>
           <Badge variant="outline" className="w-fit rounded-full px-3 py-1 text-[11px]">
-            11 shortcut utama
+            {QUICK_ACCESS_ITEMS.length} shortcut utama
           </Badge>
         </div>
       </CardHeader>
