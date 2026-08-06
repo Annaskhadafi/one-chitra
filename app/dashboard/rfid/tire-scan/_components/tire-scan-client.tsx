@@ -74,10 +74,38 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
 import {
     TireMasterData,
-    extractTireSerialNumber,
     saveTireScanBatch,
     deleteTireScanItem,
 } from "@/app/actions/tire-scan"
+
+// Helper: call OCR via API Route (tidak pakai Server Action untuk menghindari hash mismatch di production)
+async function callExtractOcrApi(formData: FormData) {
+    const res = await fetch("/api/v1/tire/extract", {
+        method: "POST",
+        body: formData,
+    })
+    const data = await res.json()
+    if (!res.ok) {
+        return { success: false, error: data.error || `OCR Error ${res.status}` }
+    }
+    const sn =
+        data?.serial_number ||
+        data?.serialNumber ||
+        data?.sn ||
+        data?.raw_text ||
+        data?.data?.serial_number ||
+        data?.data?.serialNumber ||
+        ""
+    return {
+        success: true,
+        serialNumber: String(sn).trim(),
+        dot: data?.dot_code || data?.dot || data?.data?.dot || "",
+        brand: data?.manufacturer || data?.brand || data?.data?.brand || "",
+        size: data?.size || data?.data?.size || "",
+        imageUrl: data?.image_url ? `https://vision.chitraparatama.com${data.image_url}` : "",
+        rawResponse: data,
+    }
+}
 
 export type ScannedSnItem = {
     id: string
@@ -178,27 +206,41 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
         return scannedItems.reduce((acc, item) => acc + (item.qty || 1), 0)
     }, [scannedItems])
 
-    // Start Video Stream with Progressive Multi-Level Fallback Chain
+    // Deteksi browser Brave (untuk warning khusus)
+    const isBraveBrowser = React.useMemo(() => {
+        if (typeof navigator === "undefined") return false
+        return (navigator as any).brave !== undefined || /Brave/i.test(navigator.userAgent)
+    }, [])
+
+    // Start Video Stream dengan Multi-Level Fallback Chain
     const startCamera = async (targetDeviceId?: string) => {
         setIsCameraOpen(true)
         setAutoScanActive(true)
-        setScanFeedback({ type: "info", message: "Membuka kamera..." })
+        setScanFeedback({ type: "info", message: "Meminta akses kamera..." })
 
         if (stream) {
             stream.getTracks().forEach((track) => track.stop())
             setStream(null)
         }
 
+        // Cek apakah getUserMedia tersedia
+        if (!navigator?.mediaDevices?.getUserMedia) {
+            setScanFeedback({
+                type: "error",
+                message: "Browser ini tidak mendukung WebRTC Camera. Gunakan tombol Kamera Native di bawah.",
+            })
+            return
+        }
+
         let mediaStream: MediaStream | null = null
         let lastError: any = null
 
-        // 1. Candidate constraints from simplest { video: true } to resolutions
+        // Level 1: { video: true } — paling sederhana, kompatibel 99%
         const constraintCandidates: MediaStreamConstraints[] = targetDeviceId
             ? [{ video: { deviceId: { exact: targetDeviceId } } }, { video: true }]
             : [
-                  { video: true }, // Simple standard constraint - works on 99.9% of webcams
+                  { video: true },
                   { video: { facingMode: { ideal: "environment" } } },
-                  { video: { width: { ideal: 1280 }, height: { ideal: 720 } } },
                   { video: { width: { ideal: 640 }, height: { ideal: 480 } } },
               ]
 
@@ -208,11 +250,11 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
                 if (mediaStream) break
             } catch (err: any) {
                 lastError = err
-                console.warn("Camera constraint attempt failed:", candidate, err.name, err.message)
+                console.warn("Camera attempt failed:", err.name, err.message)
             }
         }
 
-        // 2. Fallback: enumerate explicit videoinput deviceIds
+        // Level 2: Enumerate deviceId secara eksplisit jika semua constraints gagal
         if (!mediaStream && navigator.mediaDevices?.enumerateDevices) {
             try {
                 const devices = await navigator.mediaDevices.enumerateDevices()
@@ -224,14 +266,10 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
                                 video: { deviceId: { exact: dev.deviceId } },
                             })
                             if (mediaStream) break
-                        } catch (devErr) {
-                            console.warn("Explicit deviceId attempt failed:", dev.deviceId, devErr)
-                        }
+                        } catch (e) {}
                     }
                 }
-            } catch (enumErr) {
-                console.warn("Enumerate devices error:", enumErr)
-            }
+            } catch (e) {}
         }
 
         if (mediaStream) {
@@ -239,31 +277,31 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
             if (videoRef.current) {
                 videoRef.current.srcObject = mediaStream
             }
-
-            setScanFeedback({ type: "info", message: "Kamera aktif. Auto-scan mencari Serial Number ban..." })
+            setScanFeedback({ type: "info", message: "✅ Kamera aktif. Auto-scan berjalan..." })
 
             try {
                 const devices = await navigator.mediaDevices.enumerateDevices()
-                const videoDevices = devices.filter((d) => d.kind === "videoinput")
-                setAvailableCameras(videoDevices)
-
+                setAvailableCameras(devices.filter((d) => d.kind === "videoinput"))
                 const activeTrack = mediaStream.getVideoTracks()[0]
-                if (activeTrack) {
-                    const settings = activeTrack.getSettings()
-                    if (settings.deviceId) {
-                        setSelectedCameraId(settings.deviceId)
-                    }
+                if (activeTrack?.getSettings().deviceId) {
+                    setSelectedCameraId(activeTrack.getSettings().deviceId!)
                 }
             } catch (e) {}
         } else {
-            console.error("All camera access attempts failed:", lastError)
             const errName = lastError?.name || "Error"
-            const errMessage = lastError?.message || "Tidak dapat membuka stream kamera"
+            const isPermDenied = errName === "NotAllowedError" || errName === "PermissionDeniedError"
+            const isNotReadable = errName === "NotReadableError" || errName === "TrackStartError"
 
-            setScanFeedback({
-                type: "error",
-                message: `[${errName}] ${errMessage}. Gunakan Kamera Native atau Upload Foto Ban.`,
-            })
+            let msg = `Kamera gagal dibuka (${errName}).`
+            if (isPermDenied) {
+                msg = isBraveBrowser
+                    ? "Brave Shield memblokir kamera. Klik ikon 🦁 di URL bar → matikan Brave Shields untuk localhost, lalu coba lagi. Atau gunakan Kamera Native."
+                    : "Izin kamera ditolak browser. Klik ikon kunci/kamera di URL bar → pilih Allow, refresh halaman, coba lagi. Atau gunakan Kamera Native."
+            } else if (isNotReadable) {
+                msg = "Kamera sedang dipakai aplikasi lain (Zoom/Teams/Camera App). Tutup aplikasi tersebut lalu coba lagi."
+            }
+
+            setScanFeedback({ type: "error", message: msg })
         }
     }
 
@@ -303,12 +341,13 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
         canvas.toBlob(async (blob) => {
             if (!blob) return
             const formData = new FormData()
-            formData.append("file", blob, `tire-auto-scan-${Date.now()}.jpg`)
-            formData.append("image", blob, `tire-auto-scan-${Date.now()}.jpg`)
+            formData.append("file", blob, `tire-scan-${Date.now()}.jpg`)
+            formData.append("image", blob, `tire-scan-${Date.now()}.jpg`)
 
             setIsExtracting(true)
             try {
-                const res = await extractTireSerialNumber(formData)
+                // Gunakan API Route (bukan server action) untuk menghindari hash mismatch di production
+                const res = await callExtractOcrApi(formData)
                 if (res.success && res.serialNumber) {
                     const newSn = res.serialNumber.trim()
                     if (newSn) {
@@ -317,11 +356,7 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
                         )
 
                         if (isAlreadyScanned) {
-                            setScanFeedback({
-                                sn: newSn,
-                                message: `SN: ${newSn} sudah ada (Duplikat)`,
-                                type: "duplicate",
-                            })
+                            setScanFeedback({ sn: newSn, message: `SN: ${newSn} sudah ada (Duplikat)`, type: "duplicate" })
                         } else {
                             setScannedItems((prev) => [
                                 ...prev,
@@ -336,19 +371,11 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
                             triggerMobileFeedback()
                             setFlashSuccess(true)
                             setTimeout(() => setFlashSuccess(false), 800)
-
-                            setScanFeedback({
-                                sn: newSn,
-                                message: `Terbaca SN: ${newSn}`,
-                                type: "success",
-                            })
+                            setScanFeedback({ sn: newSn, message: `✅ Terbaca SN: ${newSn}`, type: "success" })
                         }
                     }
                 } else if (isManual) {
-                    setScanFeedback({
-                        type: "error",
-                        message: res.error || "Teks SN tidak terdeteksi dari foto.",
-                    })
+                    setScanFeedback({ type: "error", message: res.error || "SN tidak terdeteksi dari foto ini." })
                 }
             } catch (err: any) {
                 if (isManual) {
@@ -357,7 +384,7 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
             } finally {
                 setIsExtracting(false)
             }
-        }, "image/jpeg")
+        }, "image/jpeg", 0.85)
     }, [isExtracting, scannedItems])
 
     // Continuous Real-time Auto-Scan Loop
@@ -373,7 +400,7 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
         return () => clearInterval(interval)
     }, [isCameraOpen, autoScanActive, isExtracting, captureFrameAndExtract])
 
-    // File Upload Fallback
+    // File Upload / Native Camera Capture Handler
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
         if (!file) return
@@ -383,32 +410,44 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
         formData.append("image", file)
 
         setIsExtracting(true)
+        setScanFeedback({ type: "info", message: "🔍 Mengekstrak Serial Number dari foto..." })
         try {
-            const res = await extractTireSerialNumber(formData)
+            // Gunakan API Route (bukan server action) untuk menghindari hash mismatch di production
+            const res = await callExtractOcrApi(formData)
             if (res.success && res.serialNumber) {
                 const newSn = res.serialNumber.trim()
                 if (newSn) {
-                    setScannedItems((prev) => [
-                        ...prev,
-                        {
-                            id: `SN-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-                            serialNumber: newSn,
-                            qty: 1,
-                            imageUrl: res.imageUrl,
-                            scannedAt: new Date(),
-                        },
-                    ])
-                    triggerMobileFeedback()
-                    alert(`Berhasil Extract Serial Number: ${newSn}`)
+                    const isAlreadyScanned = scannedItems.some(
+                        (item) => item.serialNumber.toUpperCase() === newSn.toUpperCase()
+                    )
+                    if (isAlreadyScanned) {
+                        setScanFeedback({ type: "duplicate", message: `SN: ${newSn} sudah ada (Duplikat)` })
+                    } else {
+                        setScannedItems((prev) => [
+                            ...prev,
+                            {
+                                id: `SN-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+                                serialNumber: newSn,
+                                qty: 1,
+                                imageUrl: res.imageUrl,
+                                scannedAt: new Date(),
+                            },
+                        ])
+                        triggerMobileFeedback()
+                        setScanFeedback({ type: "success", message: `✅ Berhasil! SN: ${newSn}` })
+                    }
+                } else {
+                    setScanFeedback({ type: "error", message: "SN tidak terdeteksi dari foto ini. Coba foto lebih dekat & jelas." })
                 }
             } else {
-                alert(res.error || "Gagal mendeteksi Serial Number dari gambar.")
+                setScanFeedback({ type: "error", message: res.error || "Gagal mendeteksi Serial Number dari gambar." })
             }
         } catch (err: any) {
-            alert(err.message || "Terjadi kesalahan saat memproses OCR.")
+            setScanFeedback({ type: "error", message: err.message || "Terjadi kesalahan saat memproses OCR." })
         } finally {
             setIsExtracting(false)
             if (fileInputRef.current) fileInputRef.current.value = ""
+            if (cameraNativeInputRef.current) cameraNativeInputRef.current.value = ""
         }
     }
 
@@ -1117,18 +1156,23 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
                                 <div className="flex items-start gap-2">
                                     <AlertCircle className="size-4 text-destructive shrink-0 mt-0.5" />
                                     <div className="space-y-1 text-xs">
-                                        <h4 className="font-bold text-destructive">Kamera Belum Terhubung</h4>
-                                        <p className="text-muted-foreground text-[11px]">
-                                            Pastikan izin kamera diizinkan (Allow) atau gunakan tombol Upload Foto Ban.
+                                        <h4 className="font-bold text-destructive">Kamera Tidak Dapat Diakses via WebRTC</h4>
+                                        <p className="text-muted-foreground text-[11px] leading-relaxed">
+                                            {scanFeedback.message}
                                         </p>
+                                        {isBraveBrowser && (
+                                            <p className="text-amber-600 dark:text-amber-400 text-[11px] leading-relaxed font-medium">
+                                                💡 <strong>Brave Shield</strong>: Klik ikon 🦁 di address bar → pilih &quot;Allow all cookies&quot; atau nonaktifkan Shields untuk localhost/site ini.
+                                            </p>
+                                        )}
                                     </div>
                                 </div>
                                 <div className="flex flex-wrap items-center gap-2 pt-1">
                                     <Button size="sm" onClick={() => startCamera()} className="gap-1 rounded-xl text-xs h-8">
                                         <RotateCcw className="size-3" /> Coba Ulang WebRTC
                                     </Button>
-                                    <Button size="sm" variant="secondary" onClick={() => cameraNativeInputRef.current?.click()} className="gap-1 rounded-xl text-xs h-8 font-bold text-primary border border-primary/20">
-                                        <Camera className="size-3" /> Kamera Native HP/PWA
+                                    <Button size="sm" variant="secondary" onClick={() => cameraNativeInputRef.current?.click()} className="gap-1 rounded-xl text-xs h-8 font-bold bg-primary/10 text-primary border border-primary/30">
+                                        <Camera className="size-3" /> 📷 Kamera Native (Recommended)
                                     </Button>
                                     <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()} className="gap-1 rounded-xl text-xs h-8">
                                         <Upload className="size-3" /> Upload File
