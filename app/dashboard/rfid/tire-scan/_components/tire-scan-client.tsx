@@ -277,9 +277,8 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
 
         if (mediaStream) {
             setStream(mediaStream)
-            if (videoRef.current) {
-                videoRef.current.srcObject = mediaStream
-            }
+            // Jangan langsung assign ke videoRef di sini — videoRef bisa null jika Dialog belum render
+            // Gunakan useEffect untuk assign srcObject setelah stream state berubah
             setScanFeedback({ type: "info", message: "✅ Kamera aktif. Auto-scan berjalan..." })
 
             try {
@@ -318,6 +317,21 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
         setIsExtracting(false)
     }
 
+    // Assign stream ke video element via useEffect agar timing aman (videoRef selalu mounted)
+    React.useEffect(() => {
+        if (!videoRef.current) return
+        if (stream) {
+            videoRef.current.srcObject = stream
+            // play() dipanggil eksplisit — wajib di Brave/Chrome untuk autoplay policy
+            videoRef.current.play().catch((err) => {
+                console.warn("[Camera] video.play() failed:", err.name, err.message)
+            })
+        } else {
+            videoRef.current.srcObject = null
+        }
+    }, [stream])
+
+    // Cleanup stream on unmount
     React.useEffect(() => {
         return () => {
             if (stream) {
@@ -1110,7 +1124,7 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
                                 flashSuccess ? "border-emerald-500 shadow-xl shadow-emerald-500/50" : "border-muted"
                             )}
                         >
-                            <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
+                            <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
                             <canvas ref={canvasRef} className="hidden" />
 
                             {/* Mobile Target Overlay */}
@@ -1157,23 +1171,34 @@ export function TireScanClient({ masterData, initialRows }: TireScanClientProps)
                                 <div className="flex items-start gap-2">
                                     <AlertCircle className="size-4 text-destructive shrink-0 mt-0.5" />
                                     <div className="space-y-1 text-xs">
-                                        <h4 className="font-bold text-destructive">Kamera Tidak Dapat Diakses via WebRTC</h4>
+                                        <h4 className="font-bold text-destructive">Kamera Tidak Tampil (WebRTC Blocked)</h4>
                                         <p className="text-muted-foreground text-[11px] leading-relaxed">
                                             {scanFeedback.message}
                                         </p>
-                                        {isBraveBrowser && (
-                                            <p className="text-amber-600 dark:text-amber-400 text-[11px] leading-relaxed font-medium">
-                                                💡 <strong>Brave Shield</strong>: Klik ikon 🦁 di address bar → pilih &quot;Allow all cookies&quot; atau nonaktifkan Shields untuk localhost/site ini.
-                                            </p>
-                                        )}
+                                        <div className="text-amber-700 dark:text-amber-300 text-[11px] leading-relaxed space-y-0.5 pt-0.5">
+                                            <p className="font-semibold">✅ Jika izin sudah di-Allow tapi kamera masih hitam:</p>
+                                            <p>1. Klik <strong>&quot;Reload &amp; Coba Lagi&quot;</strong> di bawah — izin baru berlaku setelah reload.</p>
+                                            <p>2. Atau gunakan <strong>&quot;Kamera Native&quot;</strong> (tidak perlu WebRTC, langsung buka kamera OS).</p>
+                                            {isBraveBrowser && (
+                                                <p>3. <strong>Brave</strong>: Klik ikon 🦁 → <em>Shields Down</em> untuk site ini → reload.</p>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                                 <div className="flex flex-wrap items-center gap-2 pt-1">
+                                    <Button
+                                        size="sm"
+                                        variant="destructive"
+                                        onClick={() => { stopCamera(); window.location.reload() }}
+                                        className="gap-1 rounded-xl text-xs h-8 font-bold"
+                                    >
+                                        <RotateCcw className="size-3" /> Reload &amp; Coba Lagi
+                                    </Button>
                                     <Button size="sm" onClick={() => startCamera()} className="gap-1 rounded-xl text-xs h-8">
                                         <RotateCcw className="size-3" /> Coba Ulang WebRTC
                                     </Button>
                                     <Button size="sm" variant="secondary" onClick={() => cameraNativeInputRef.current?.click()} className="gap-1 rounded-xl text-xs h-8 font-bold bg-primary/10 text-primary border border-primary/30">
-                                        <Camera className="size-3" /> 📷 Kamera Native (Recommended)
+                                        <Camera className="size-3" /> 📷 Kamera Native
                                     </Button>
                                     <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()} className="gap-1 rounded-xl text-xs h-8">
                                         <Upload className="size-3" /> Upload File
