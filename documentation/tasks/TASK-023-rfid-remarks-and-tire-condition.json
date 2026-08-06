@@ -1,0 +1,12 @@
+{
+  "id": "TASK-023",
+  "status": "completed",
+  "priority": "P0",
+  "title": "Add Remarks & Kondisi Ban (tire_condition) to RFID Schema, UI & API",
+  "description": "Menambahkan kolom tireCondition (Kondisi Ban) dan remarks (Keterangan) ke schema database rfid_scans, halaman RFID (tabel, form, detail dialog), server actions, serta memperbarui API GET & POST /api/rfid (status=masuk & status=keluar) sesuai payload format yang diberikan.",
+  "createdAt": "2026-08-06T13:30:00.000Z",
+  "startedAt": "2026-08-06T05:30:24.326Z",
+  "updatedAt": "2026-08-06T05:33:17.869Z",
+  "completedAt": "2026-08-06T05:33:17.869Z",
+  "completionDetails": "Menambahkan kolom Kondisi Ban (tire_condition) dan Keterangan (remarks) ke database schema rfid_scans, halaman tabel RFID, form dialog, detail dialog, server actions, serta memperbarui API GET & POST /api/rfid (masuk & keluar) sesuai spesifikasi JSON payload."
+}

@@ -358,6 +358,8 @@ export function RfidTableClient({ initialRows }: RfidTableClientProps) {
                                 <TableHead>EPC / Tag ID</TableHead>
                                 <TableHead>RSSI</TableHead>
                                 <TableHead>Status</TableHead>
+                                <TableHead>Kondisi Ban</TableHead>
+                                <TableHead>Keterangan</TableHead>
                                 <TableHead>DO Link</TableHead>
                                 <TableHead>Keterhubungan</TableHead>
                                 <TableHead className="text-right">Act Stock</TableHead>
@@ -368,13 +370,15 @@ export function RfidTableClient({ initialRows }: RfidTableClientProps) {
                         <TableBody>
                             {filteredRows.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={13} className="h-32 text-center text-muted-foreground">
+                                    <TableCell colSpan={15} className="h-32 text-center text-muted-foreground">
                                         Tidak ada data RFID yang sesuai filter.
                                     </TableCell>
                                 </TableRow>
                             ) : (
                                 filteredRows.map((row) => {
                                     const itemStatus = row.status || (row.scanType?.toLowerCase().includes("keluar") || row.scanType?.toLowerCase().includes("outbound") ? "Keluar" : "Masuk")
+                                    const itemCondition = row.tireCondition || row.tire_condition
+                                    const itemRemarks = row.remarks || row.keterangan
                                     return (
                                     <TableRow key={row.id} className={selectedIds.includes(row.id) ? "bg-muted/50" : ""}>
                                         <TableCell className="text-center">
@@ -464,6 +468,21 @@ export function RfidTableClient({ initialRows }: RfidTableClientProps) {
                                                     {itemStatus}
                                                 </Badge>
                                             )}
+                                        </TableCell>
+                                        <TableCell>
+                                            {itemCondition ? (
+                                                <Badge
+                                                    variant={itemCondition.toUpperCase() === "GOOD" ? "default" : "destructive"}
+                                                    className="text-[10px] font-bold uppercase"
+                                                >
+                                                    {itemCondition}
+                                                </Badge>
+                                            ) : (
+                                                <span className="text-muted-foreground text-xs">-</span>
+                                            )}
+                                        </TableCell>
+                                        <TableCell className="max-w-[180px] truncate text-xs" title={itemRemarks ?? undefined}>
+                                            {itemRemarks ?? "-"}
                                         </TableCell>
                                         <TableCell>
                                             {row.doNumber ? (

@@ -22,6 +22,8 @@ const rfidScanFormSchema = z.object({
     actStock: z.coerce.number().int().optional().nullable(),
     createdBy: z.string().trim().optional(),
     scanType: z.string().trim().optional(),
+    tireCondition: z.string().trim().optional().nullable(),
+    remarks: z.string().trim().optional().nullable(),
 })
 
 export type RfidScanFormInput = z.infer<typeof rfidScanFormSchema>
@@ -48,6 +50,8 @@ export async function createRfidScanAction(data: RfidScanFormInput) {
             actStock: parsed.actStock ?? null,
             createdBy: parsed.createdBy || userName,
             scanType: parsed.scanType || "INBOUND",
+            tireCondition: parsed.tireCondition || null,
+            remarks: parsed.remarks || null,
             userId: session.user.id,
             scannedAt: new Date(),
         }).returning()
@@ -93,6 +97,8 @@ export async function updateRfidScanAction(id: number, data: Partial<RfidScanFor
                 actStock: parsed.actStock !== undefined ? parsed.actStock : existing.actStock,
                 createdBy: parsed.createdBy !== undefined ? (parsed.createdBy || null) : existing.createdBy,
                 scanType: parsed.scanType !== undefined ? (parsed.scanType || "INBOUND") : existing.scanType,
+                tireCondition: parsed.tireCondition !== undefined ? (parsed.tireCondition || null) : existing.tireCondition,
+                remarks: parsed.remarks !== undefined ? (parsed.remarks || null) : existing.remarks,
             })
             .where(eq(rfidScans.id, id))
             .returning()

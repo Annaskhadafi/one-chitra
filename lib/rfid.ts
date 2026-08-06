@@ -65,6 +65,13 @@ export const rfidScanPayloadSchema = z.object({
         linked: linkedSchema,
         scanType: flexibleStringOrNull,
         status: flexibleStringOrNull,
+        tire_condition: flexibleStringOrNull,
+        tireCondition: flexibleStringOrNull,
+        condition: flexibleStringOrNull,
+        kondisi: flexibleStringOrNull,
+        remarks: flexibleStringOrNull,
+        keterangan: flexibleStringOrNull,
+        catatan: flexibleStringOrNull,
     })).min(1),
     createdBy: z.preprocess((val) => {
         if (!val) return "System"
@@ -225,6 +232,9 @@ export async function saveRfidScanPayload(payload: unknown, overrideStatus?: str
             const itemEpcUpper = item.epc?.trim().toUpperCase()
             const itemSnUpper = item.sn?.trim().toUpperCase()
 
+            const itemTireCondition = item.tire_condition || item.tireCondition || item.condition || item.kondisi || null
+            const itemRemarks = item.remarks || item.keterangan || item.catatan || null
+
             // Find existing scan record by matching EPC, Tag ID, or Serial Number
             const existing = allExistingScans.find((row) => {
                 const rowEpc = row.epc?.trim().toUpperCase()
@@ -255,6 +265,8 @@ export async function saveRfidScanPayload(payload: unknown, overrideStatus?: str
                         createdBy: parsed.createdBy || existing.createdBy,
                         productId: product?.id ?? existing.productId,
                         warehouseId: warehouse?.id ?? existing.warehouseId,
+                        tireCondition: itemTireCondition ?? existing.tireCondition,
+                        remarks: itemRemarks ?? existing.remarks,
                     })
                     .where(eq(rfidScans.id, existing.id))
                     .returning()
@@ -282,6 +294,8 @@ export async function saveRfidScanPayload(payload: unknown, overrideStatus?: str
                         warehouseId: warehouse?.id,
                         scanType: normalizedScanType,
                         scannedAt: parsed.createdAt,
+                        tireCondition: itemTireCondition,
+                        remarks: itemRemarks,
                     })
                     .returning()
 

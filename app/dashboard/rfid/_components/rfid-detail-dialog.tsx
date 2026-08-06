@@ -36,6 +36,10 @@ export type RfidRow = {
     warehouseId?: number | null
     scanType?: string | null
     userId?: string | null
+    tireCondition?: string | null
+    tire_condition?: string | null
+    remarks?: string | null
+    keterangan?: string | null
     scannedAt: Date | string
 }
 
@@ -204,6 +208,38 @@ export function RfidDetailDialog({
                                     <Layers className="size-3" /> Scan Type
                                 </p>
                                 <p className="text-sm font-medium mt-1">{data.scanType || "-"}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <Separator />
+
+                    {/* Condition & Remarks Section */}
+                    <div>
+                        <h3 className="text-sm font-semibold flex items-center gap-2 text-foreground/80 mb-3">
+                            <Info className="size-4 text-emerald-500" /> Kondisi Ban & Keterangan (Remarks)
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-lg bg-muted/40 border">
+                            <div>
+                                <p className="text-xs font-medium text-muted-foreground">Kondisi Ban (Tire Condition)</p>
+                                <div className="mt-1">
+                                    {data.tireCondition || data.tire_condition ? (
+                                        <Badge
+                                            variant={(data.tireCondition || data.tire_condition)?.toUpperCase() === "GOOD" ? "default" : "destructive"}
+                                            className="font-bold uppercase"
+                                        >
+                                            {data.tireCondition || data.tire_condition}
+                                        </Badge>
+                                    ) : (
+                                        <span className="text-sm text-muted-foreground">-</span>
+                                    )}
+                                </div>
+                            </div>
+                            <div>
+                                <p className="text-xs font-medium text-muted-foreground">Keterangan / Remarks</p>
+                                <p className="text-sm font-medium mt-1 text-foreground/90">
+                                    {data.remarks || data.keterangan || "-"}
+                                </p>
                             </div>
                         </div>
                     </div>

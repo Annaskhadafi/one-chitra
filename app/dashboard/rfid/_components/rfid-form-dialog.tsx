@@ -53,6 +53,8 @@ export function RfidFormDialog({
     const [actStock, setActStock] = useState<string>("")
     const [createdBy, setCreatedBy] = useState("")
     const [status, setStatus] = useState<"Masuk" | "Keluar">("Masuk")
+    const [tireCondition, setTireCondition] = useState("")
+    const [remarks, setRemarks] = useState("")
 
     useEffect(() => {
         if (open) {
@@ -71,6 +73,8 @@ export function RfidFormDialog({
                 setSlocDescription(initialData.slocDescription || "")
                 setActStock(initialData.actStock !== null && initialData.actStock !== undefined ? String(initialData.actStock) : "")
                 setCreatedBy(initialData.createdBy || "")
+                setTireCondition(initialData.tireCondition || initialData.tire_condition || "")
+                setRemarks(initialData.remarks || initialData.keterangan || "")
             } else {
                 // Reset for create
                 setTagId("")
@@ -87,6 +91,8 @@ export function RfidFormDialog({
                 setSlocDescription("")
                 setActStock("")
                 setCreatedBy("")
+                setTireCondition("GOOD")
+                setRemarks("")
             }
         }
     }, [open, mode, initialData])
@@ -116,6 +122,8 @@ export function RfidFormDialog({
             slocDescription: slocDescription.trim() || undefined,
             actStock: actStock.trim() !== "" ? Number(actStock) : undefined,
             createdBy: createdBy.trim() || undefined,
+            tireCondition: tireCondition.trim() || undefined,
+            remarks: remarks.trim() || undefined,
         }
 
         try {
@@ -306,13 +314,42 @@ export function RfidFormDialog({
                             </div>
                         </div>
 
-                        <div className="space-y-1.5 border-t pt-3">
-                            <Label htmlFor="createdBy">Created By / Scanner User</Label>
-                            <Input
-                                id="createdBy"
-                                placeholder="Contoh: John Doe"
-                                value={createdBy}
-                                onChange={(e) => setCreatedBy(e.target.value)}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t pt-3">
+                            <div className="space-y-1.5">
+                                <Label htmlFor="tireCondition" className="font-semibold">Kondisi Ban (Tire Condition)</Label>
+                                <Select
+                                    value={tireCondition}
+                                    onValueChange={(val) => setTireCondition(val)}
+                                >
+                                    <SelectTrigger id="tireCondition">
+                                        <SelectValue placeholder="Pilih Kondisi Ban" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="GOOD">GOOD (Bagus / Normal)</SelectItem>
+                                        <SelectItem value="BAD">BAD (Rusak / Afkir)</SelectItem>
+                                        <SelectItem value="REPAIR">REPAIR (Perlu Perbaikan)</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label htmlFor="createdBy">Created By / Scanner User</Label>
+                                <Input
+                                    id="createdBy"
+                                    placeholder="Contoh: Operator Handheld / Admin"
+                                    value={createdBy}
+                                    onChange={(e) => setCreatedBy(e.target.value)}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="space-y-1.5">
+                            <Label htmlFor="remarks" className="font-semibold">Keterangan / Remarks</Label>
+                            <Textarea
+                                id="remarks"
+                                rows={2}
+                                placeholder="Catatan atau keterangan mengenai ban (Contoh: Terdapat kerusakan pada sidewall)..."
+                                value={remarks}
+                                onChange={(e) => setRemarks(e.target.value)}
                             />
                         </div>
                     </div>

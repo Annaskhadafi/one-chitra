@@ -51,6 +51,10 @@ export async function GET(req: NextRequest) {
             slocDescription: r.slocDescription,
             actStock: r.actStock,
             createdBy: r.createdBy,
+            tire_condition: r.tireCondition,
+            tireCondition: r.tireCondition,
+            remarks: r.remarks,
+            keterangan: r.remarks,
         }))
 
         return NextResponse.json({

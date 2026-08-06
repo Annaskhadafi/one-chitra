@@ -31,6 +31,10 @@ export async function GET() {
                 actStock: rfidScans.actStock,
                 createdBy: rfidScans.createdBy,
                 plant: rfidScans.plant,
+                tireCondition: rfidScans.tireCondition,
+                tire_condition: rfidScans.tireCondition,
+                remarks: rfidScans.remarks,
+                keterangan: rfidScans.remarks,
             })
             .from(rfidScans)
             .orderBy(desc(rfidScans.scannedAt), desc(rfidScans.id))
