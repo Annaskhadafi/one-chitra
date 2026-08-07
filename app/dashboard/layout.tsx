@@ -23,6 +23,7 @@ import { getDashboardRouteResource } from "@/lib/route-permissions"
 import { ChatWidget } from "@/components/chat/chat-widget"
 import { navigationConfig } from "@/lib/navigation"
 import { Providers } from "@/components/providers"
+import { IframeDetector } from "@/components/iframe-detector"
 
 type RuntimeNavSubItem = NonNullable<RuntimeNavSection["items"][number]["items"]>[number]
 
@@ -422,6 +423,7 @@ export default async function DashboardLayout({
 
   return (
     <PermissionsProvider permissions={permissions}>
+      <IframeDetector />
       <Providers>
         <DashboardThemeProvider
           defaultOpen={defaultOpen}

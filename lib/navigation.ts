@@ -570,6 +570,11 @@ export const navigationConfig: NavSection[] = [
                         resource: "admin",
                     },
                     {
+                        title: "Embed Web Generator",
+                        url: "/dashboard/settings/embed-generator",
+                        resource: "admin",
+                    },
+                    {
                         title: "Knowledge Chitra Jenius",
                         url: "/dashboard/chitra-knowledge",
                         resource: "admin",

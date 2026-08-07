@@ -164,3 +164,28 @@
     transform-origin: center;
   }
 }
+
+/* Custom overrides when the app is rendered inside an iframe for external systems */
+body.iframe-embed aside,
+body.iframe-embed [data-sidebar="sidebar"],
+body.iframe-embed header,
+body.iframe-embed [class*="SiteHeader"],
+body.iframe-embed [class*="AppSidebar"],
+body.iframe-embed .no-embed {
+    display: none !important;
+}
+
+body.iframe-embed main,
+body.iframe-embed [class*="SidebarInset"],
+body.iframe-embed .flex-1 {
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+    background: transparent !important;
+}
+
+/* Remove default scroll padding or borders for better iframe nesting */
+body.iframe-embed {
+    overflow-x: hidden;
+}
+
