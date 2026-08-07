@@ -1,0 +1,12 @@
+{
+  "id": "TASK-026",
+  "status": "completed",
+  "priority": "P0",
+  "title": "Embed Web Generator with Token Authentication",
+  "description": "Create a page in one-chitra to select a page, generate an iframe embed code with a secure token, and support bypass login / auto-login token authentication for external systems like hero.chitraparatama.com.",
+  "createdAt": "2026-08-07T19:32:00.000Z",
+  "updatedAt": "2026-08-07T12:13:20.605Z",
+  "startedAt": "2026-08-07T11:32:32.809Z",
+  "completedAt": "2026-08-07T12:13:20.605Z",
+  "completionDetails": "Enhanced dropdown target pages to dynamically load from system navigationConfig excluding critical pages like user management and security settings"
+}

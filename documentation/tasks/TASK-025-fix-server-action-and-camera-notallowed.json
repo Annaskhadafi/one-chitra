@@ -1,10 +1,12 @@
 {
   "id": "TASK-025",
-  "status": "in_progress",
+  "status": "completed",
   "priority": "P0",
   "title": "Fix: Replace Server Action with API Route + Fix Brave Camera NotAllowedError",
   "description": "1. Replace extractTireSerialNumber Server Action calls with fetch() to existing /api/v1/tire/extract API Route to fix 'Server Action not found on server' error in production. 2. Fix Brave camera NotAllowedError by detecting Brave browser and adding better UX with Native Camera as primary option.",
   "createdAt": "2026-08-06T13:45:00.000Z",
   "startedAt": "2026-08-06T05:46:39.597Z",
-  "updatedAt": "2026-08-06T05:46:39.597Z"
+  "updatedAt": "2026-08-06T05:50:45.317Z",
+  "completedAt": "2026-08-06T05:50:45.317Z",
+  "completionDetails": "Fix: 1) Ganti semua extractTireSerialNumber server action calls dengan fetch() ke /api/v1/tire/extract API Route untuk menghindari hash mismatch di production. 2) Deteksi Brave browser untuk pesan error yang lebih akurat. 3) Kamera Native sebagai opsi recommended saat WebRTC gagal. 4) Hapus alert() yang mengganggu, ganti dengan scanFeedback state."
 }

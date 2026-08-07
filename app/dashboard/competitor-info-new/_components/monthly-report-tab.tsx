@@ -569,13 +569,14 @@ function ReportTable({ children }: { children: React.ReactNode }) {
     )
 }
 
-function TableHeadCell({ children }: { children: React.ReactNode }) {
-    return <th className="border-b border-slate-200 bg-[#0f4c81] px-3 py-2 font-bold text-white">{children}</th>
+function TableHeadCell({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+    return <th className={`border-b border-slate-200 bg-[#0f4c81] px-3 py-2 font-bold text-white ${className}`}>{children}</th>
 }
 
-function TableCellCompact({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-    return <td className={`border-b border-slate-100 px-3 py-2 align-top ${className}`}>{children}</td>
+function TableCellCompact({ children, className = "", colSpan, title }: { children: React.ReactNode; className?: string; colSpan?: number; title?: string }) {
+    return <td colSpan={colSpan} title={title} className={`border-b border-slate-100 px-3 py-2 align-top ${className}`}>{children}</td>
 }
+
 
 function InsightList({ items, tone = "blue" }: { items: string[]; tone?: "blue" | "orange" }) {
     const color = tone === "orange" ? "text-[#f97316]" : "text-[#0f4c81]"
@@ -1339,7 +1340,8 @@ export function MonthlyReportTab() {
 
     // Split into max 2 slides
     const MAX_SLIDES = 2
-    const lostStockPages: typeof topCustSorted[][] = []
+    type TopCustItem = (typeof topCustSorted)[number]
+    const lostStockPages: TopCustItem[][] = []
     if (top5Customers.length <= 3) {
         lostStockPages.push(top5Customers)
         if (restCustomers.length > 0) lostStockPages.push(restCustomers)
@@ -1457,16 +1459,6 @@ export function MonthlyReportTab() {
                                     <div className="w-full rounded-lg border border-emerald-200 bg-emerald-100/95 p-8 shadow-2xl outline outline-1 outline-white/50">
                                         <p className="text-sm font-black uppercase tracking-[0.3em] text-emerald-800">Competitor Intelligence</p>
                                         <p className="mt-6 text-5xl font-black leading-tight text-[#0f4c81]">Market Price<br />Activity<br />Lost Sale</p>
-                                        <div className="mt-10 grid grid-cols-2 gap-3 text-sm">
-                                            <div className="rounded-md bg-white/95 p-4 text-[#0f4c81] shadow-sm">
-                                                <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Median Price</p>
-                                                <p className="mt-1 text-2xl font-black tabular-nums">{formatMoney(report.medianPrice)}</p>
-                                            </div>
-                                            <div className="rounded-md bg-[#0f4c81] p-4 text-white shadow-sm">
-                                                <p className="text-xs font-bold uppercase tracking-wide text-blue-100">Activity</p>
-                                                <p className="mt-1 text-2xl font-black tabular-nums">{report.activities.length}</p>
-                                            </div>
-                                        </div>
                                         <p className="mt-8 text-sm font-semibold leading-7 text-emerald-900">Prepared for monthly commercial review and competitor movement monitoring.</p>
                                     </div>
                                 </div>
@@ -2549,13 +2541,13 @@ export function MonthlyReportTab() {
                                     </div>
                                 </Slide>
                             )
-                        }) : (
+                        }) : [
                             <Slide key="fleet-empty" eyebrow={`Slide ${fleetSlide} - Fleet List`} title={`Fleet List Update — ${monthLabel(month)}`}>
                                 <div className="flex h-[calc(100%-88px)] items-center justify-center rounded-lg border border-dashed bg-white text-sm text-slate-500">
                                     {fleetData.length === 0 ? "Memuat data fleet..." : "Tidak ada update fleet di bulan ini."}
                                 </div>
                             </Slide>
-                        )),
+                        ]),
                         <Slide key="thanks" eyebrow={`Slide ${closingSlide} - Closing`} title="Thank You / Closing">
                             <div className="flex h-[calc(100%-88px)] flex-col items-center justify-center rounded-lg bg-[#0f4c81] text-center text-white">
                                 <Image src="/cp_logo_alpha.png" alt="Chitra Paratama" width={190} height={80} className="mb-8 h-20 w-auto rounded bg-white/95 p-3" />
