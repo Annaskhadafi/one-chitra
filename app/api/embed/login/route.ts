@@ -76,9 +76,25 @@ export async function GET(request: NextRequest) {
 
         console.log("[Embed API] Verification token generated successfully. Redirecting via Better-Auth magicLink.");
 
+        // Dapatkan base URL eksternal yang valid (menghindari distorsi IP internal 0.0.0.0 dari container Dokploy)
+        let baseUrl = process.env.BETTER_AUTH_URL || process.env.NEXT_PUBLIC_BETTER_AUTH_URL;
+        
+        if (!baseUrl || baseUrl.includes("localhost") || baseUrl.includes("0.0.0.0")) {
+            const host = request.headers.get("host") || "localhost:3000";
+            const protocol = request.nextUrl.protocol === "https:" ? "https" : "http";
+            baseUrl = `${protocol}://${host}`;
+        } else {
+            if (baseUrl.endsWith("/")) {
+                baseUrl = baseUrl.slice(0, -1);
+            }
+            if (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://")) {
+                baseUrl = `https://${baseUrl}`;
+            }
+        }
+
         // 4. Redirect ke endpoint verifikasi magic link Better-Auth resmi
         // Endpoint: /api/auth/magic-link/verify?token=MAGIC_TOKEN&callbackURL=TARGET_PAGE
-        const targetUrl = new URL("/api/auth/magic-link/verify", request.url);
+        const targetUrl = new URL("/api/auth/magic-link/verify", baseUrl);
         targetUrl.searchParams.set("token", magicToken);
         targetUrl.searchParams.set("callbackURL", tokenData.pagePath);
 
