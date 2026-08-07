@@ -80,16 +80,23 @@ export async function GET(request: NextRequest) {
         let baseUrl = process.env.BETTER_AUTH_URL || process.env.NEXT_PUBLIC_BETTER_AUTH_URL;
         
         if (!baseUrl || baseUrl.includes("localhost") || baseUrl.includes("0.0.0.0")) {
-            const host = request.headers.get("host") || "localhost:3000";
-            const protocol = request.nextUrl.protocol === "https:" ? "https" : "http";
-            baseUrl = `${protocol}://${host}`;
-        } else {
-            if (baseUrl.endsWith("/")) {
-                baseUrl = baseUrl.slice(0, -1);
+            const forwardedHost = request.headers.get("x-forwarded-host");
+            const forwardedProto = request.headers.get("x-forwarded-proto") || "https";
+            
+            if (forwardedHost) {
+                baseUrl = `${forwardedProto}://${forwardedHost}`;
+            } else {
+                const host = request.headers.get("host") || "localhost:3000";
+                const protocol = request.nextUrl.protocol === "https:" ? "https" : "http";
+                baseUrl = `${protocol}://${host}`;
             }
-            if (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://")) {
-                baseUrl = `https://${baseUrl}`;
-            }
+        }
+
+        if (baseUrl && baseUrl.endsWith("/")) {
+            baseUrl = baseUrl.slice(0, -1);
+        }
+        if (baseUrl && !baseUrl.startsWith("http://") && !baseUrl.startsWith("https://")) {
+            baseUrl = `https://${baseUrl}`;
         }
 
         // 4. Redirect ke endpoint verifikasi magic link Better-Auth resmi
