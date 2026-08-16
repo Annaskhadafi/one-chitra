@@ -1,0 +1,12 @@
+{
+  "id": "TASK-029",
+  "status": "completed",
+  "priority": "P0",
+  "title": "Enhance Chitra Genius Chatbot & Knowledge Base dengan Raray Vision RAG API",
+  "description": "Integrasi Chitra Genius Chatbot dan Knowledge Base Upload menggunakan API Raray Vision RAG (/api/v1/rag/ingest, /api/v1/rag/chat, /api/v1/rag/documents, /api/v1/rag/search, /api/v1/rag/documents/{id}).",
+  "createdAt": "2026-08-16T20:05:00.000Z",
+  "updatedAt": "2026-08-16T13:31:22.474Z",
+  "startedAt": "2026-08-16T12:31:18.721Z",
+  "completedAt": "2026-08-16T13:31:22.474Z",
+  "completionDetails": "Integrasi Chitra Genius Chatbot dan Knowledge Base Upload menggunakan Raray Vision RAG API (/api/v1/rag/ingest, /api/v1/rag/chat, /api/v1/rag/documents, /api/v1/rag/search, /api/v1/rag/documents/{id})"
+}

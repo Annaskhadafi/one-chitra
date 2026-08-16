@@ -8,6 +8,7 @@ import type { OcrResult as MistralOcrResult } from "@/lib/mistral-ocr"
 
 import { extractPdfViaInspector } from "@/lib/vision-pdf-inspector"
 import { structurePoFromMarkdown } from "@/lib/ai-document-structurer"
+import { tryHeuristicPoParse } from "@/lib/heuristic-document-parser"
 
 export const runtime = "nodejs"
 
@@ -54,18 +55,35 @@ export async function POST(req: NextRequest) {
                 pagesProcessed = inspectorResult.data?.page_count || 1
 
                 if (markdown.trim()) {
-                    const structured = await structurePoFromMarkdown(markdown)
-                    basic = {
-                        customer_name: sanitizeText(structured.customer_company_name),
-                        po_number: sanitizeText(structured.po_number),
-                        date: sanitizeText(structured.document_date),
-                        items: (structured.products || []).map((p) => ({
-                            product: sanitizeText(p.name),
-                            qty: Number(p.qty) || 0,
-                            price: Number(p.unit_price) || 0,
-                        })),
+                    // Layer 1: Coba Heuristic Fast Deterministic Table & Anchor Parser (< 5ms)
+                    const heuristic = tryHeuristicPoParse(markdown)
+                    if (heuristic.success && heuristic.data && heuristic.data.products && heuristic.data.products.length > 0) {
+                        basic = {
+                            customer_name: sanitizeText(heuristic.data.customer_company_name),
+                            po_number: sanitizeText(heuristic.data.po_number),
+                            date: sanitizeText(heuristic.data.document_date),
+                            items: heuristic.data.products.map((p) => ({
+                                product: sanitizeText(p.name),
+                                qty: Number(p.qty) || 0,
+                                price: Number(p.unit_price) || 0,
+                            })),
+                        }
+                        model = `pdf-inspector-heuristic (${inspectorResult.data?.pdf_type || "pdf"})`
+                    } else {
+                        // Layer 2: LLM Structurer Fallback jika tabel non-standar
+                        const structured = await structurePoFromMarkdown(markdown)
+                        basic = {
+                            customer_name: sanitizeText(structured.customer_company_name),
+                            po_number: sanitizeText(structured.po_number),
+                            date: sanitizeText(structured.document_date),
+                            items: (structured.products || []).map((p) => ({
+                                product: sanitizeText(p.name),
+                                qty: Number(p.qty) || 0,
+                                price: Number(p.unit_price) || 0,
+                            })),
+                        }
+                        model = `pdf-inspector-ai (${inspectorResult.data?.pdf_type || "pdf"})`
                     }
-                    model = `pdf-inspector-ai (${inspectorResult.data?.pdf_type || "pdf"})`
                 }
             } catch (microserviceErr) {
                 console.warn("[OCR-API] PDF Inspector microservice failed, falling back:", microserviceErr)

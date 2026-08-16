@@ -27,6 +27,7 @@ import { extractJsonFromText } from "@/lib/ocr-utils"
 import { ensureHelpDeskSchema } from "@/lib/helpdesk-schema"
 import { extractRawTextFromDocumentViaOllama } from "@/lib/ollama-vision-ocr"
 import { readManagedUpload } from "@/lib/upload-storage"
+import { chatWithRag } from "@/lib/raray-rag"
 
 const HELP_DESK_BOT_ID = HELP_DESK_CONFIG.botId
 const HELP_DESK_BOT_NAME = HELP_DESK_CONFIG.botName
@@ -556,17 +557,42 @@ export async function getHelpDeskStarterPrompts() {
 }
 
 export async function generateHelpDeskReply(question: string) {
-    if (!question.trim()) {
+    const cleanQuestion = question.trim()
+    if (!cleanQuestion) {
         return "Silakan tulis pertanyaan Anda terlebih dahulu ya."
     }
 
+    // 1. Coba panggil Raray Vision RAG Chatbot (FastAPI + pgvector + Groq/Qwen)
+    try {
+        const ragRes = await chatWithRag(cleanQuestion, 4)
+        if (ragRes.status === "success" && ragRes.data?.answer) {
+            let replyText = ragRes.data.answer.trim()
+            if (ragRes.data.sources && ragRes.data.sources.length > 0) {
+                const uniqueSources = Array.from(
+                    new Set(
+                        ragRes.data.sources
+                            .map((s) => s.filename || (typeof s.heading === "string" ? s.heading : null))
+                            .filter(Boolean)
+                    )
+                )
+                if (uniqueSources.length > 0) {
+                    replyText += `\n\n📌 Sumber Referensi: ${uniqueSources.join(", ")}`
+                }
+            }
+            return sanitizeHelpDeskReplyText(replyText)
+        }
+    } catch (ragError) {
+        console.warn("[HelpDesk] Raray Vision RAG Chatbot fallback:", ragError)
+    }
+
+    // 2. Fallback ke knowledge seed lokal + Ollama / rule based
     await ensureHelpDeskSchema()
     await ensureHelpDeskKnowledgeSeed()
-    const { sources, chunks } = await searchHelpDeskKnowledge(question)
+    const { sources, chunks } = await searchHelpDeskKnowledge(cleanQuestion)
 
     try {
         const answer = await askHelpDeskOllama({
-            question,
+            question: cleanQuestion,
             contextSources: sources,
             contextChunks: chunks,
         })
@@ -576,7 +602,7 @@ export async function generateHelpDeskReply(question: string) {
         console.error("Help desk Ollama error", error)
     }
 
-    return sanitizeHelpDeskReplyText(buildHelpDeskFallbackAnswer(question, sources, chunks).text)
+    return sanitizeHelpDeskReplyText(buildHelpDeskFallbackAnswer(cleanQuestion, sources, chunks).text)
 }
 
 export async function extractHelpDeskKnowledgeFromDocument(params: {

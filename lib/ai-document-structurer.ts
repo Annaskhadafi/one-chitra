@@ -68,11 +68,10 @@ const quotationSchema = z.object({
     ).default([]),
 }).partial().passthrough()
 
-/**
- * Call Mistral Chat completion for fast structured JSON output from text
- */
+const DEFAULT_MISTRAL_KEY = "O4w7VrNqbFqRgrKaQRXuZo3M8jax0hgz"
+
 async function callMistralChat(systemPrompt: string, userText: string): Promise<string> {
-    const apiKey = process.env.MISTRAL_API_KEY?.trim()
+    const apiKey = process.env.MISTRAL_API_KEY?.trim() || DEFAULT_MISTRAL_KEY
     if (!apiKey) {
         throw new Error("MISTRAL_API_KEY is not set")
     }
@@ -115,11 +114,11 @@ async function callMistralChat(systemPrompt: string, userText: string): Promise<
  * Fallback to Ollama Chat if Mistral is unavailable
  */
 async function callOllamaChat(systemPrompt: string, userText: string): Promise<string> {
-    const rawUrl = process.env.OLLAMA_URL || "http://localhost:11434"
+    const rawUrl = process.env.OLLAMA_URL || "https://ollama.com/api/chat"
     const baseUrl = rawUrl.replace(/\/$/, "")
     const endpoint = baseUrl.endsWith("/api/chat") ? baseUrl : `${baseUrl}/api/chat`
-    const model = process.env.OLLAMA_MODEL || "kimi-k2.5:cloud"
-    const apiKey = process.env.OLLAMA_API_KEY || ""
+    const model = process.env.OLLAMA_MODEL || "qwen3.5:397b-cloud"
+    const apiKey = process.env.OLLAMA_API_KEY || "0f6943349a014608a78bbed67356697a.Gjpmub8qLOAkXW_DSM4OMfkH"
     const sanitizedText = userText.length > 12000 ? userText.slice(0, 12000) : userText
 
     const response = await fetch(endpoint, {
@@ -172,16 +171,14 @@ async function completeStructuredChat(systemPrompt: string, userText: string): P
     const errors: string[] = []
 
     // 1. Try Mistral (Fastest & high quality JSON)
-    if (process.env.MISTRAL_API_KEY?.trim()) {
-        try {
-            return await callMistralChat(systemPrompt, userText)
-        } catch (err) {
-            console.warn("[AI-Structurer] Mistral chat failed, trying fallback:", err)
-            errors.push(`Mistral: ${err instanceof Error ? err.message : String(err)}`)
-        }
+    try {
+        return await callMistralChat(systemPrompt, userText)
+    } catch (err) {
+        console.warn("[AI-Structurer] Mistral chat failed, trying fallback:", err)
+        errors.push(`Mistral: ${err instanceof Error ? err.message : String(err)}`)
     }
 
-    // 2. Try Ollama
+    // 2. Try Ollama Cloud / Local
     try {
         return await callOllamaChat(systemPrompt, userText)
     } catch (err) {

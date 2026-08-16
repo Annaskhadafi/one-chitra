@@ -520,7 +520,7 @@ export function tryHeuristicVendorQuotationParse(markdownText: string): {
         data: {
             vendor_name: resolvedVendor,
             quote_number: resolvedQuoteNo,
-            quoteDate: quoteDate,
+            quote_date: quoteDate,
             remark: null,
             items,
         },
