@@ -108,50 +108,34 @@ function normalizeNullableText(value: string | null | undefined) {
     return normalized.length > 0 ? normalized : null
 }
 
+import { processVendorQuotationOcrCore } from "@/lib/vendor-quotation-processor"
+
 export async function triggerVendorQuotationOcr(
     fileUrl: string,
     eprEntryId?: string,
     persist = true
 ): Promise<TriggerOcrResult> {
     try {
-        console.log(`[OCR-Action] triggerVendorQuotationOcr called for: ${fileUrl}`)
+        console.log(`[OCR-Action] triggerVendorQuotationOcr called directly for: ${fileUrl}`)
         const headersList = await headers()
         const session = await auth.api.getSession({ headers: headersList })
         const userId = session?.user?.id ?? null
 
-        const forwardedProto = headersList.get("x-forwarded-proto")
-        const forwardedHost = headersList.get("x-forwarded-host") ?? headersList.get("host")
-        
-        const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || "").trim() 
-            || (forwardedHost ? `${forwardedProto || "https"}://${forwardedHost}` : "http://localhost:3000")
-        
-        console.log(`[OCR-Action] Using Base URL: ${baseUrl}`)
-
-        const targetUrl = `${baseUrl.replace(/\/$/, "")}/api/ocr-vendor-quotation`
-        
-        const response = await fetch(targetUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ fileUrl, eprEntryId, userId, persist }),
-        }).catch(err => {
-            console.error(`[OCR-Action] Fetch failed for ${targetUrl}:`, err)
-            throw new Error(`Koneksi internal gagal: ${err.message}`)
+        const res = await processVendorQuotationOcrCore({
+            fileUrl,
+            eprEntryId,
+            userId,
+            persist,
         })
 
-        if (!response.ok) {
-            const errData = await response.json().catch(() => ({}))
-            console.error(`[OCR-Action] API error status ${response.status}:`, errData)
-            return { success: false, error: (errData as { error?: string }).error ?? `HTTP ${response.status}: Server gagal memproses OCR` }
+        if (!res.success) {
+            console.error(`[OCR-Action] Processing failed:`, res.error)
+            return { success: false, error: res.error || "Gagal memproses OCR dokumen" }
         }
 
-        const result = await response.json() as {
-            id: number
-            data: TriggerOcrResult["data"]
-        }
-
-        console.log(`[OCR-Action] OCR Trigger success! ID: ${result.id}`)
+        console.log(`[OCR-Action] OCR Trigger success! ID: ${res.id}`)
         revalidatePath("/dashboard/vendor-quotations")
-        return { success: true, id: result.id, data: result.data }
+        return { success: true, id: res.id, data: res.data }
     } catch (error) {
         const message = error instanceof Error ? error.message : "Gagal memulai OCR"
         console.error(`[OCR-Action] Critical error:`, message)

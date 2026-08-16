@@ -27,6 +27,9 @@ type DeliveryOrderBoxFields = {
     customerPoDate?: string | null
 }
 
+import { extractPdfViaInspector } from "@/lib/vision-pdf-inspector"
+import { structurePoFromMarkdown } from "@/lib/ai-document-structurer"
+
 type DetectionSource = "label" | "pattern" | "none"
 
 export async function triggerSalesOrderBasicOcrFast(formData: FormData) {
@@ -36,9 +39,11 @@ export async function triggerSalesOrderBasicOcrFast(formData: FormData) {
             return { success: false as const, error: "File wajib diisi" }
         }
 
-        const allowedTypes = new Set(["application/pdf"])
-        if (!allowedTypes.has(file.type)) {
-            return { success: false as const, error: "Hanya file PDF yang didukung untuk Sales Order OCR" }
+        const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")
+        const isImage = file.type.startsWith("image/") || /\.(png|jpe?g|webp)$/i.test(file.name)
+
+        if (!isPdf && !isImage) {
+            return { success: false as const, error: "Format file tidak didukung. Harap gunakan file PDF atau Gambar (PNG/JPG/WEBP)." }
         }
 
         const buffer = Buffer.from(await file.arrayBuffer())
@@ -49,49 +54,99 @@ export async function triggerSalesOrderBasicOcrFast(formData: FormData) {
             contentType: file.type,
         })
 
-        const hasMistralKey = Boolean(process.env.MISTRAL_API_KEY?.trim())
+        let basic: BasicOcrResult | null = null
+        let rawText = ""
+        let model = "pdf-inspector-v1"
+        let pagesProcessed = 1
         let providerWarning: string | undefined
-        let ocr
 
-        if (hasMistralKey) {
-            const fastMistral = await tryExtractStructured({
-                fileBuffer: buffer,
-                filename: file.name,
-                pages: [1],
-            })
+        // 1. JIKA FILE PDF -> PRIORITASKAN PDF INSPECTOR MICROSERVICE (FAST)
+        if (isPdf) {
+            try {
+                console.log(`[SO-OCR] Processing PDF via PDF Inspector microservice: ${file.name}`)
+                const inspectorResult = await extractPdfViaInspector(buffer, file.name, {
+                    auto_ocr: true,
+                    pages: "1,2,3",
+                    timeoutMs: 12000,
+                })
+                const markdown = inspectorResult.data?.markdown || ""
+                rawText = markdown
+                pagesProcessed = inspectorResult.data?.page_count || 1
 
-            if (fastMistral.success) {
-                ocr = fastMistral.result
-                const fastBasic = toBasicPayload(ocr)
-
-                if (hasMeaningfulBasicResult(fastBasic)) {
-                    return {
-                        success: true as const,
-                        fileUrl: savedUpload.url,
-                        fileName: file.name,
-                        fileType: file.type,
-                        basic: fastBasic,
-                        rawText: sanitizeText(ocr.rawText),
-                        model: ocr.model,
-                        pagesProcessed: ocr.pagesProcessed,
+                if (markdown.trim()) {
+                    console.log(`[SO-OCR] Structuring extracted PDF markdown via Fast Engine...`)
+                    const structured = await structurePoFromMarkdown(markdown)
+                    basic = {
+                        customer_name: sanitizeText(structured.customer_company_name),
+                        po_number: sanitizeText(structured.po_number),
+                        date: sanitizeText(structured.document_date),
+                        items: (structured.products || []).map((p) => ({
+                            product: sanitizeText(p.name),
+                            qty: Number(p.qty) || 0,
+                            price: Number(p.unit_price) || 0,
+                        })),
                     }
+                    model = `pdf-inspector (${inspectorResult.data?.pdf_type || "fast"})`
                 }
+            } catch (microserviceErr) {
+                console.warn("[SO-OCR] PDF Inspector failed, falling back to legacy Vision OCR:", microserviceErr)
+                providerWarning = `Microservice dialihkan ke fallback: ${getErrorMessage(microserviceErr)}`
+            }
+        }
 
-                const fullMistral = await tryExtractStructured({
+        // 2. FALLBACK ATAU FILE GAMBAR -> GUNAKAN OCR VISION LAMA
+        if (!basic || !hasMeaningfulBasicResult(basic)) {
+            const hasMistralKey = Boolean(process.env.MISTRAL_API_KEY?.trim())
+            let ocr
+
+            if (hasMistralKey) {
+                const fastMistral = await tryExtractStructured({
                     fileBuffer: buffer,
                     filename: file.name,
-                    pages: "all",
+                    pages: [1],
                 })
 
-                if (fullMistral.success) {
-                    ocr = fullMistral.result
-                    providerWarning = "OCR memakai eskalasi semua halaman karena hasil halaman pertama belum cukup jelas."
+                if (fastMistral.success) {
+                    ocr = fastMistral.result
+                    const fastBasic = toBasicPayload(ocr)
+
+                    if (hasMeaningfulBasicResult(fastBasic)) {
+                        return {
+                            success: true as const,
+                            fileUrl: savedUpload.url,
+                            fileName: file.name,
+                            fileType: file.type,
+                            basic: fastBasic,
+                            rawText: sanitizeText(ocr.rawText),
+                            model: ocr.model,
+                            pagesProcessed: ocr.pagesProcessed,
+                            providerWarning,
+                        }
+                    }
+
+                    const fullMistral = await tryExtractStructured({
+                        fileBuffer: buffer,
+                        filename: file.name,
+                        pages: "all",
+                    })
+
+                    if (fullMistral.success) {
+                        ocr = fullMistral.result
+                        providerWarning = "OCR memakai eskalasi semua halaman karena hasil halaman pertama belum cukup jelas."
+                    } else {
+                        providerWarning = [
+                            "OCR halaman pertama belum cukup jelas.",
+                            `OCR semua halaman gagal: ${getErrorMessage(fullMistral.error)}`,
+                            "Dialihkan ke fallback cepat.",
+                        ].join(" ")
+                        ocr = await extractStructuredFromPoViaOllama({
+                            fileBuffer: buffer,
+                            filename: file.name,
+                            pages: [1],
+                        })
+                    }
                 } else {
-                    providerWarning = [
-                        "OCR halaman pertama belum cukup jelas.",
-                        `OCR semua halaman gagal: ${getErrorMessage(fullMistral.error)}`,
-                        "Dialihkan ke fallback cepat.",
-                    ].join(" ")
+                    providerWarning = `OCR utama gagal, dialihkan ke fallback: ${getErrorMessage(fastMistral.error)}`
                     ocr = await extractStructuredFromPoViaOllama({
                         fileBuffer: buffer,
                         filename: file.name,
@@ -99,29 +154,25 @@ export async function triggerSalesOrderBasicOcrFast(formData: FormData) {
                     })
                 }
             } else {
-                providerWarning = `OCR utama gagal, dialihkan ke fallback: ${getErrorMessage(fastMistral.error)}`
                 ocr = await extractStructuredFromPoViaOllama({
                     fileBuffer: buffer,
                     filename: file.name,
                     pages: [1],
                 })
             }
-        } else {
-            ocr = await extractStructuredFromPoViaOllama({
-                fileBuffer: buffer,
-                filename: file.name,
-                pages: [1],
-            })
+
+            basic = toBasicPayload(ocr)
+            rawText = sanitizeText(ocr.rawText)
+            model = ocr.model
+            pagesProcessed = ocr.pagesProcessed
         }
 
-        const basic = toBasicPayload(ocr)
-
-        if (!hasMeaningfulBasicResult(basic)) {
+        if (!basic || !hasMeaningfulBasicResult(basic)) {
             return {
                 success: false as const,
                 error: "OCR belum berhasil membaca data PO. Coba file yang lebih jelas atau ulangi proses.",
                 fileUrl: savedUpload.url,
-                rawText: sanitizeText(ocr.rawText),
+                rawText: sanitizeText(rawText),
             }
         }
 
@@ -131,9 +182,9 @@ export async function triggerSalesOrderBasicOcrFast(formData: FormData) {
             fileName: file.name,
             fileType: file.type,
             basic,
-            rawText: sanitizeText(ocr.rawText),
-            model: ocr.model,
-            pagesProcessed: ocr.pagesProcessed,
+            rawText: sanitizeText(rawText),
+            model,
+            pagesProcessed,
             providerWarning,
         }
     } catch (error) {

@@ -1,0 +1,12 @@
+{
+  "id": "TASK-027",
+  "status": "completed",
+  "priority": "P0",
+  "title": "Integrasi Microservice PDF Inspector & AI Mapping untuk Sales Orders dan EPR Integrasi",
+  "description": "Integrasikan microservice PDF Inspector (https://vision.chitraparatama.com/api/v1/pdf-inspector/process) untuk dokumen PDF Sales Order dan EPR Integrasi Quotation, fallback ke AI Vision untuk gambar, serta tampilkan status proses realtime multi-tahap.",
+  "createdAt": "2026-08-16T13:32:00.000Z",
+  "updatedAt": "2026-08-16T05:37:35.127Z",
+  "startedAt": "2026-08-16T05:32:03.542Z",
+  "completedAt": "2026-08-16T05:37:35.127Z",
+  "completionDetails": "Integrasi Microservice PDF Inspector (https://vision.chitraparatama.com/api/v1/pdf-inspector/process) & AI Document Structurer untuk Sales Orders OCR dan EPR Integrasi Vendor Quotation, dengan fallback otomatis ke AI Vision untuk gambar dan status realtime multi-tahap."
+}

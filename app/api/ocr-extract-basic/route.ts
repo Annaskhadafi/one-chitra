@@ -6,6 +6,9 @@ import { extractStructuredFromDocument } from "@/lib/mistral-ocr"
 import type { OcrResult as OllamaOcrResult } from "@/lib/ollama-so-ocr"
 import type { OcrResult as MistralOcrResult } from "@/lib/mistral-ocr"
 
+import { extractPdfViaInspector } from "@/lib/vision-pdf-inspector"
+import { structurePoFromMarkdown } from "@/lib/ai-document-structurer"
+
 export const runtime = "nodejs"
 
 const requestSchema = z.object({
@@ -31,40 +34,78 @@ export async function POST(req: NextRequest) {
             return Response.json({ error: "File tidak ditemukan" }, { status: 404 })
         }
 
-        const hasMistralKey = Boolean(process.env.MISTRAL_API_KEY?.trim())
-        const pages = body.data.pages ?? "all"
-        let ocr: OllamaOcrResult | MistralOcrResult
-        let ollamaError: string | null = null
+        const isPdf = uploaded.contentType === "application/pdf" || uploaded.filename.toLowerCase().endsWith(".pdf")
+        let basic: ReturnType<typeof toBasicPayload> | null = null
+        let rawText = ""
+        let model = "pdf-inspector-v1"
+        let pagesProcessed = 1
+        let providerWarning: string | undefined
 
-        try {
-            ocr = await extractStructuredFromPoViaOllama({
-                fileBuffer: uploaded.buffer,
-                filename: uploaded.filename,
-                pages,
-            })
-        } catch (error) {
-            ollamaError = error instanceof Error ? error.message : String(error)
-            if (!hasMistralKey) {
-                throw error
+        // 1. Prioritize PDF Inspector for PDF documents
+        if (isPdf) {
+            try {
+                const inspectorResult = await extractPdfViaInspector(uploaded.buffer, uploaded.filename, {
+                    auto_ocr: true,
+                    pages: "1,2,3",
+                    timeoutMs: 12000,
+                })
+                const markdown = inspectorResult.data?.markdown || ""
+                rawText = markdown
+                pagesProcessed = inspectorResult.data?.page_count || 1
+
+                if (markdown.trim()) {
+                    const structured = await structurePoFromMarkdown(markdown)
+                    basic = {
+                        customer_name: sanitizeText(structured.customer_company_name),
+                        po_number: sanitizeText(structured.po_number),
+                        date: sanitizeText(structured.document_date),
+                        items: (structured.products || []).map((p) => ({
+                            product: sanitizeText(p.name),
+                            qty: Number(p.qty) || 0,
+                            price: Number(p.unit_price) || 0,
+                        })),
+                    }
+                    model = `pdf-inspector-ai (${inspectorResult.data?.pdf_type || "pdf"})`
+                }
+            } catch (microserviceErr) {
+                console.warn("[OCR-API] PDF Inspector microservice failed, falling back:", microserviceErr)
+                providerWarning = `Microservice dialihkan ke fallback: ${microserviceErr instanceof Error ? microserviceErr.message : String(microserviceErr)}`
             }
-
-            ocr = await extractStructuredFromDocument({
-                fileBuffer: uploaded.buffer,
-                filename: uploaded.filename,
-                pages,
-            })
         }
 
-        let basic = toBasicPayload(ocr)
+        // 2. Fallback or Image -> Legacy Ollama / Mistral OCR
+        if (!basic || !hasMeaningfulBasicResult(basic)) {
+            const hasMistralKey = Boolean(process.env.MISTRAL_API_KEY?.trim())
+            const pages = body.data.pages ?? "all"
+            let ocr: OllamaOcrResult | MistralOcrResult
+            let ollamaError: string | null = null
 
-        if (!hasMeaningfulBasicResult(basic) && hasMistralKey && !ollamaError) {
-                const fallbackOcr = await extractStructuredFromDocument({
+            try {
+                ocr = await extractStructuredFromPoViaOllama({
                     fileBuffer: uploaded.buffer,
                     filename: uploaded.filename,
                     pages,
                 })
-                ocr = fallbackOcr
-                basic = toBasicPayload(fallbackOcr)
+            } catch (error) {
+                ollamaError = error instanceof Error ? error.message : String(error)
+                if (!hasMistralKey) {
+                    throw error
+                }
+
+                ocr = await extractStructuredFromDocument({
+                    fileBuffer: uploaded.buffer,
+                    filename: uploaded.filename,
+                    pages,
+                })
+            }
+
+            basic = toBasicPayload(ocr)
+            rawText = sanitizeText(ocr.rawText)
+            model = ocr.model
+            pagesProcessed = ocr.pagesProcessed
+            if (ollamaError) {
+                providerWarning = `OCR utama gagal, dialihkan ke fallback: ${ollamaError}`
+            }
         }
 
         if (!hasMeaningfulBasicResult(basic)) {
@@ -72,9 +113,9 @@ export async function POST(req: NextRequest) {
                 {
                     error: "OCR tidak menemukan data PO yang bisa dibaca. Pastikan dokumen jelas, halaman yang berisi PO terlihat, dan file tidak berupa scan yang terlalu buram.",
                     basic,
-                    rawText: sanitizeText(ocr.rawText),
-                    model: ocr.model,
-                    pagesProcessed: ocr.pagesProcessed,
+                    rawText: sanitizeText(rawText),
+                    model,
+                    pagesProcessed,
                 },
                 { status: 422 }
             )
@@ -82,10 +123,10 @@ export async function POST(req: NextRequest) {
 
         return Response.json({
             basic,
-            model: ocr.model,
-            pagesProcessed: ocr.pagesProcessed,
-            rawText: sanitizeText(ocr.rawText),
-            providerWarning: ollamaError ? `OCR utama gagal, dialihkan ke fallback: ${ollamaError}` : undefined,
+            model,
+            pagesProcessed,
+            rawText: sanitizeText(rawText),
+            providerWarning,
         })
     } catch (error) {
         const message = error instanceof Error ? error.message : "OCR basic extraction gagal"

@@ -167,6 +167,9 @@ export function VendorQuotationOcrDialog({ open, onOpenChange, initialUrl = "", 
         }
     }
 
+    const [extractStep, setExtractStep] = useState<"idle" | "fetching" | "extracting" | "mapping" | "done">("idle")
+    const [extractStatusText, setExtractStatusText] = useState("")
+
     async function handleExtract() {
         if (!fileUrl.trim()) {
             toast.error("Upload file atau masukkan URL file terlebih dahulu")
@@ -176,29 +179,51 @@ export function VendorQuotationOcrDialog({ open, onOpenChange, initialUrl = "", 
         setLoading(true)
         setResult(null)
         setDraft(null)
+        setExtractStep("fetching")
+        setExtractStatusText("1/3 Menyiapkan dan mengunduh dokumen...")
+
+        const timer1 = setTimeout(() => {
+            setExtractStep("extracting")
+            setExtractStatusText("2/3 Mengekstrak dokumen via Microservice PDF Inspector...")
+        }, 600)
+
+        const timer2 = setTimeout(() => {
+            setExtractStep("mapping")
+            setExtractStatusText("3/3 Structured Mapping (Vendor, No Quote & Items)...")
+        }, 1800)
+
         try {
             const normalizedFileUrl = toAbsoluteUploadDocumentUrl(fileUrl) ?? fileUrl.trim()
             setFileUrl(normalizedFileUrl)
 
             const res = await triggerVendorQuotationOcr(normalizedFileUrl, undefined, !isManualFlow)
+            clearTimeout(timer1)
+            clearTimeout(timer2)
+
             if (!res.success || !res.data) {
                 console.error("[OCR-Client] Server Action failed:", res.error)
                 toast.error(res.error ?? "OCR gagal mengekstrak data dari dokumen ini.", { duration: 6000 })
+                setExtractStep("idle")
                 return
             }
 
+            setExtractStep("done")
+            setExtractStatusText("Ekstraksi Berhasil!")
             setResult(res.data)
             if (isManualFlow) {
                 setDraft(toEditableDraft(res.data))
-                toast.success("OCR berhasil. Silakan review dan edit dulu sebelum simpan.")
+                toast.success("OCR berhasil diekstrak dengan cepat. Silakan review dan edit sebelum simpan.")
             } else {
                 toast.success(`OCR berhasil dan data langsung disimpan${res.id ? ` (ID #${res.id})` : ""}.`)
                 onSuccess?.()
                 handleClose(false)
             }
         } catch (err) {
+            clearTimeout(timer1)
+            clearTimeout(timer2)
             console.error("[OCR-Client] Action catch block:", err)
             toast.error("Terjadi kesalahan sistem saat menjalankan OCR. Periksa koneksi internet Anda.")
+            setExtractStep("idle")
         } finally {
             setLoading(false)
         }
@@ -370,18 +395,42 @@ export function VendorQuotationOcrDialog({ open, onOpenChange, initialUrl = "", 
                     </div>
 
                     {(loading || uploading || saving) && (
-                        <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed py-10 text-muted-foreground">
-                            <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
-                            <p className="text-sm font-medium">
-                                {uploading ? "Mengupload file... Mohon tunggu" : saving ? "Menyimpan ke database... Mohon tunggu" : "Memproses OCR... Mohon tunggu"}
-                            </p>
-                            <p className="text-xs">
-                                {uploading
-                                    ? "Menyimpan file PDF/gambar agar bisa diproses OCR"
-                                    : saving
-                                        ? "Menyimpan hasil OCR yang sudah Anda edit"
-                                        : "Mengunduh file dan mengekstrak data dengan AI"}
-                            </p>
+                        <div className="flex flex-col items-center justify-center gap-4 rounded-xl border border-indigo-100 bg-indigo-50/40 p-6 text-center animate-in fade-in">
+                            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-100/80">
+                                <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
+                            </div>
+                            <div className="space-y-1">
+                                <p className="text-sm font-bold text-slate-800">
+                                    {uploading ? "Mengunggah file ke storage..." : saving ? "Menyimpan ke database..." : (extractStatusText || "Memproses Ekstraksi & Pemetaan Data...")}
+                                </p>
+                                <p className="text-xs text-slate-500 max-w-md">
+                                    {uploading
+                                        ? "Menyimpan dokumen PDF / Gambar Anda secara persisten."
+                                        : saving
+                                            ? "Menyimpan data hasil ekstraksi ke database sistem."
+                                            : "Dokumen PDF diproses cepat via Microservice PDF Inspector lalu dipetakan ke struktur item data sistem."}
+                                </p>
+                            </div>
+
+                            {loading && !uploading && !saving && (
+                                <div className="grid grid-cols-3 gap-2 w-full max-w-md pt-2 text-left">
+                                    <div className={`p-2 rounded-lg text-xs font-semibold border ${
+                                        extractStep === "fetching" ? "bg-white border-indigo-300 text-indigo-700 shadow-sm" : extractStep === "extracting" || extractStep === "mapping" || extractStep === "done" ? "bg-green-50 border-green-200 text-green-700" : "bg-slate-100 text-slate-400 border-slate-200"
+                                    }`}>
+                                        1. Unduh File
+                                    </div>
+                                    <div className={`p-2 rounded-lg text-xs font-semibold border ${
+                                        extractStep === "extracting" ? "bg-white border-indigo-300 text-indigo-700 shadow-sm animate-pulse" : extractStep === "mapping" || extractStep === "done" ? "bg-green-50 border-green-200 text-green-700" : "bg-slate-100 text-slate-400 border-slate-200"
+                                    }`}>
+                                        2. Microservice PDF
+                                    </div>
+                                    <div className={`p-2 rounded-lg text-xs font-semibold border ${
+                                        extractStep === "mapping" ? "bg-white border-indigo-300 text-indigo-700 shadow-sm animate-pulse" : extractStep === "done" ? "bg-green-50 border-green-200 text-green-700" : "bg-slate-100 text-slate-400 border-slate-200"
+                                    }`}>
+                                        3. Structured Mapping
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
 

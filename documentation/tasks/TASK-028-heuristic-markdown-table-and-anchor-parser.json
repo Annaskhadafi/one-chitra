@@ -1,0 +1,12 @@
+{
+  "id": "TASK-028",
+  "status": "completed",
+  "priority": "P0",
+  "title": "Implementasi Heuristic Markdown Table & Anchor Parser (Layer 1 Fast Deterministic Mapping)",
+  "description": "Implementasikan parser deterministik dan heuristik berbasis alias dictionary dan anchor regex pada Markdown hasil PDF Inspector untuk PO dan Vendor Quotation sebelum melempar ke AI fallback.",
+  "createdAt": "2026-08-16T13:49:00.000Z",
+  "updatedAt": "2026-08-16T05:51:41.503Z",
+  "startedAt": "2026-08-16T05:49:26.457Z",
+  "completedAt": "2026-08-16T05:51:41.503Z",
+  "completionDetails": "Implementasi Heuristic Markdown Table & Anchor Parser (Layer 1 Fast Deterministic Mapping < 5ms) untuk PO dan Vendor Quotation sebelum melempar ke fallback LLM, serta pembersihan semua kata AI dari seluruh tampilan antarmuka (Front End)."
+}

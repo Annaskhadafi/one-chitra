@@ -9,7 +9,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { AlertCircle, CheckCircle2, Database, FileText, Loader2, Search, ScanText, XCircle } from "lucide-react";
+import { AlertCircle, CheckCircle2, Database, FileText, Loader2, Search, ScanText, XCircle, Sparkles } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 import { VendorQuotationOcrDialog } from "../vendor-quotations/_components/vendor-quotation-ocr-dialog";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -203,50 +204,64 @@ export function EprIntegrasiClient({ columns, entries, viewId, ocrStatusMap }: P
         let successCount = 0;
         let failCount = 0;
 
-        for (let startIndex = 0; startIndex < batchItems.length; startIndex += OCR_BATCH_CONCURRENCY) {
-            const chunk = batchItems.slice(startIndex, startIndex + OCR_BATCH_CONCURRENCY);
-
-            chunk.forEach((item) => {
-                setRuntimeOcrStatusMap((current) => ({
-                    ...current,
-                    [item.url]: "processing",
-                }));
+        // Set semua item batch ke status processing
+        setRuntimeOcrStatusMap((current) => {
+            const next = { ...current };
+            batchItems.forEach((item) => {
+                next[item.url] = "processing";
             });
+            return next;
+        });
 
-            const chunkResults = await Promise.all(
-                chunk.map(async (item) => {
-                    try {
-                        const result = await triggerVendorQuotationOcr(item.url, item.entryId);
-                        return { item, success: result.success };
-                    } catch (_error) {
-                        return { item, success: false };
-                    }
-                })
-            );
+        // Worker Queue untuk pemrosesan paralel dengan realtime update per item
+        let nextIndex = 0;
+        const workerCount = Math.min(OCR_BATCH_CONCURRENCY, batchItems.length);
 
-            for (const result of chunkResults) {
-                completedCount += 1;
-                setBatchProgress({ current: completedCount, total: batchItems.length });
+        const processItem = async (item: { url: string; entryId: string }) => {
+            let itemSuccess = false;
+            try {
+                // Timeout guard 25 detik per item agar tidak stuck selamanya
+                const timeoutPromise = new Promise<{ success: boolean; error?: string }>((resolve) =>
+                    setTimeout(() => resolve({ success: false, error: "Timeout proses OCR" }), 25000)
+                );
 
-                if (result.success) {
-                    successCount += 1;
-                    setRuntimeOcrStatusMap((current) => ({
-                        ...current,
-                        [result.item.url]: "done",
-                    }));
-                } else {
-                    failCount += 1;
-                    setRuntimeOcrStatusMap((current) => ({
-                        ...current,
-                        [result.item.url]: "failed",
-                    }));
-                }
+                const ocrPromise = triggerVendorQuotationOcr(item.url, item.entryId);
+                const result = await Promise.race([ocrPromise, timeoutPromise]);
+                itemSuccess = Boolean(result.success);
+            } catch (err) {
+                console.error("[Batch-OCR] Item error:", item.url, err);
+                itemSuccess = false;
             }
 
-            router.refresh();
-        }
+            completedCount += 1;
+            if (itemSuccess) {
+                successCount += 1;
+            } else {
+                failCount += 1;
+            }
+
+            setBatchProgress({ current: completedCount, total: batchItems.length });
+            setRuntimeOcrStatusMap((current) => ({
+                ...current,
+                [item.url]: itemSuccess ? "done" : "failed",
+            }));
+        };
+
+        const workers = Array.from({ length: workerCount }, async () => {
+            while (nextIndex < batchItems.length) {
+                const currentIndex = nextIndex;
+                nextIndex += 1;
+                const item = batchItems[currentIndex];
+                if (item) {
+                    await processItem(item);
+                }
+            }
+        });
+
+        await Promise.all(workers);
 
         setIsBatchProcessing(false);
+        router.refresh();
         return { successCount, failCount };
     };
 
@@ -485,6 +500,21 @@ export function EprIntegrasiClient({ columns, entries, viewId, ocrStatusMap }: P
                 </Select>
                 <div className="flex items-center rounded-md border px-3 text-sm text-muted-foreground">{totalEntries.toLocaleString("id-ID")} data tampil</div>
             </div>
+
+            {isBatchProcessing && (
+                <div className="rounded-xl border border-indigo-200 bg-indigo-50/80 p-4 space-y-2.5 animate-in fade-in slide-in-from-top-2">
+                    <div className="flex items-center justify-between text-xs font-semibold text-indigo-900">
+                        <span className="flex items-center gap-2">
+                            <Loader2 className="h-4 w-4 animate-spin text-indigo-600" />
+                            Memproses Ekstraksi OCR Batch via PDF Inspector & Smart Mapping...
+                        </span>
+                        <span className="font-mono bg-white px-2 py-0.5 rounded border border-indigo-200">
+                            {batchProgress.current} / {batchProgress.total} ({Math.round((batchProgress.current / Math.max(1, batchProgress.total)) * 100)}%)
+                        </span>
+                    </div>
+                    <Progress value={(batchProgress.current / Math.max(1, batchProgress.total)) * 100} className="h-2 bg-indigo-100" />
+                </div>
+            )}
 
             <div className="rounded-md border border-emerald-200 bg-emerald-50/70 px-4 py-3 text-sm text-emerald-800">
                 Pilih baris yang quotation-nya ingin di-extract. Batch pilihan dibatasi maksimal 10 file quotation per proses.

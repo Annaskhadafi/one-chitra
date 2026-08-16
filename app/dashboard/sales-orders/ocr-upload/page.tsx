@@ -4,8 +4,9 @@ import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Badge } from "@/components/ui/badge"
 import { useRouter } from "next/navigation"
-import { triggerSalesOrderBasicOcrFast } from "@/app/actions/ocr-fast"
+import { uploadFile } from "@/app/actions/upload"
 import { 
     FileText, 
     Upload, 
@@ -15,39 +16,16 @@ import {
     Zap, 
     Database,
     AlertCircle,
-    Loader2
+    Loader2,
+    Cpu,
+    Sparkles,
+    FileCheck,
+    Image as ImageIcon
 } from "lucide-react"
 import { toast } from "sonner"
 
 function delay(ms: number) {
     return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-function createProgressTicker(
-    setProgress: React.Dispatch<React.SetStateAction<number>>,
-    ceiling: number,
-    options?: { intervalMs?: number; slowAfterMs?: number }
-) {
-    const intervalMs = options?.intervalMs ?? 450
-    const slowAfterMs = options?.slowAfterMs ?? 15000
-    const startedAt = Date.now()
-
-    const timer = setInterval(() => {
-        setProgress((current) => {
-            if (current >= ceiling) {
-                return current
-            }
-
-            const remaining = ceiling - current
-            const elapsedMs = Date.now() - startedAt
-            const increment = elapsedMs > slowAfterMs
-                ? 1
-                : (remaining > 20 ? 3 : remaining > 10 ? 2 : 1)
-            return Math.min(ceiling, current + increment)
-        })
-    }, intervalMs)
-
-    return () => clearInterval(timer)
 }
 
 function hasMeaningfulBasicResult(result: {
@@ -69,13 +47,17 @@ function hasMeaningfulBasicResult(result: {
     return hasItems && (hasCustomer || hasPoNumber || hasDate)
 }
 
+export type ProcessingStep = "idle" | "uploading" | "inspecting" | "structuring" | "ready"
+
 export default function OcrUploadPage() {
     const router = useRouter()
     const [files, setFiles] = useState<File[]>([])
     const [progress, setProgress] = useState(0)
     const [statusMessage, setStatusMessage] = useState<string>("")
+    const [currentStep, setCurrentStep] = useState<ProcessingStep>("idle")
     const [error, setError] = useState<string | null>(null)
     const [isProcessing, setIsProcessing] = useState(false)
+    const [engineUsed, setEngineUsed] = useState<string | null>(null)
     const [basicResult, setBasicResult] = useState<{
         customer_name: string
         po_number: string
@@ -91,14 +73,7 @@ export default function OcrUploadPage() {
     const [isMapping, setIsMapping] = useState(false)
     const inputRef = useRef<HTMLInputElement | null>(null)
 
-    async function easeProgress(target: number, stepDelay = 90) {
-        setProgress((current) => {
-            if (current >= target) {
-                return current
-            }
-            return current
-        })
-
+    async function easeProgress(target: number, stepDelay = 40) {
         while (true) {
             let shouldContinue = false
             setProgress((current) => {
@@ -107,7 +82,7 @@ export default function OcrUploadPage() {
                 }
                 shouldContinue = true
                 const remaining = target - current
-                const increment = remaining > 20 ? 4 : remaining > 10 ? 3 : remaining > 4 ? 2 : 1
+                const increment = remaining > 20 ? 6 : remaining > 10 ? 3 : remaining > 4 ? 2 : 1
                 return Math.min(target, current + increment)
             })
 
@@ -120,14 +95,21 @@ export default function OcrUploadPage() {
     }
 
     function applySelectedFiles(f: File[]) {
+        const allowedTypes = [
+            "application/pdf",
+            "image/png",
+            "image/jpeg",
+            "image/jpg",
+            "image/webp"
+        ]
         const valid = f.filter(file => {
-            const okType = ["application/pdf"].includes(file.type)
-            const okSize = file.size <= 10 * 1024 * 1024
+            const okType = allowedTypes.includes(file.type) || /\.(pdf|png|jpe?g|webp)$/i.test(file.name)
+            const okSize = file.size <= 15 * 1024 * 1024
             return okType && okSize
         })
         if (valid.length !== f.length) {
-            setError("Format harus PDF dan ukuran maks 10 MB per file")
-            toast.error("Format tidak valid", { description: "Hanya file PDF yang didukung saat ini." })
+            setError("Format harus PDF atau Gambar (PNG/JPG/WEBP) dengan ukuran maks 15 MB")
+            toast.error("Format tidak valid", { description: "Gunakan file PDF atau Gambar." })
         } else {
             setError(null)
         }
@@ -155,69 +137,94 @@ export default function OcrUploadPage() {
     async function startProcess() {
         if (files.length === 0) return
         
+        const file = files[0]
+        const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")
+
         setIsProcessing(true)
+        setCurrentStep("uploading")
         setProgress(10)
-        setStatusMessage("Upload & OCR dokumen...")
+        setStatusMessage("Tahap 1/3: Mengunggah dokumen...")
         setError(null)
         setBasicResult(null)
         setUploadedMeta(null)
-        
-        const file = files[0]
-        await easeProgress(18, 80)
+        setEngineUsed(null)
 
         try {
-            const formData = new FormData()
-            formData.append("file", file)
+            // Langkah 1: Upload File ke Persistent Storage
+            const uploadFormData = new FormData()
+            uploadFormData.append("file", file)
 
-            setStatusMessage("Menjalankan OCR cepat...")
-            const stopTicker = createProgressTicker(setProgress, 94, { slowAfterMs: 12000 })
-            const ocrRes = await triggerSalesOrderBasicOcrFast(formData).finally(() => stopTicker())
-
-            setStatusMessage("Menganalisis hasil ekstraksi...")
-            await easeProgress(84, 50)
-
-            if (!ocrRes.success) {
-                setError(ocrRes.error || "OCR gagal diproses")
-                setIsProcessing(false)
-                return
+            const uploadRes = await uploadFile(uploadFormData)
+            if (!uploadRes.success || !uploadRes.url) {
+                throw new Error(uploadRes.error || "Gagal mengunggah file ke server.")
             }
 
-            if (!ocrRes.basic) {
-                setError("Hasil ekstraksi OCR tidak ditemukan")
-                setIsProcessing(false)
-                return
+            const uploadedFileUrl = uploadRes.url
+            await easeProgress(40, 20)
+
+            // Langkah 2: Ekstraksi Dokumen via PDF Inspector / Vision
+            setCurrentStep("inspecting")
+            if (isPdf) {
+                setStatusMessage("Tahap 2/3: Ekstraksi cepat via PDF Inspector Microservice...")
+            } else {
+                setStatusMessage("Tahap 2/3: Ekstraksi gambar via Vision Engine OCR...")
             }
 
-            if (!hasMeaningfulBasicResult(ocrRes.basic)) {
-                setError("OCR belum berhasil membaca data PO. Coba file yang lebih jelas atau ulangi proses.")
-                setIsProcessing(false)
-                return
+            await easeProgress(65, 30)
+
+            // Langkah 3: Structured Mapping
+            setCurrentStep("structuring")
+            setStatusMessage("Tahap 3/3: Memetakan struktur PO ke data sistem...")
+
+            const extractController = new AbortController()
+            const extractTimeout = setTimeout(() => extractController.abort(), 20000)
+
+            const apiResponse = await fetch("/api/ocr-extract-basic", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ fileUrl: uploadedFileUrl, pages: "1,2,3" }),
+                signal: extractController.signal,
+            }).finally(() => clearTimeout(extractTimeout))
+
+            const responseData = await apiResponse.json().catch(() => null)
+
+            if (!apiResponse.ok || !responseData) {
+                throw new Error(responseData?.error || `Ekstraksi gagal (HTTP ${apiResponse.status})`)
             }
-            
-            setProgress(100)
+
+            if (!responseData.basic || !hasMeaningfulBasicResult(responseData.basic)) {
+                throw new Error("Sistem belum berhasil membaca data PO dari dokumen ini. Pastikan dokumen terbaca jelas.")
+            }
+
+            await easeProgress(100, 15)
+            setCurrentStep("ready")
             setStatusMessage("Ekstraksi Berhasil!")
-            setBasicResult(ocrRes.basic)
+            setEngineUsed(responseData.model ? (responseData.model.includes("heuristic") ? "Heuristic Fast Engine" : responseData.model) : (isPdf ? "PDF Inspector Microservice" : "Vision Engine"))
+            setBasicResult(responseData.basic)
             setUploadedMeta({
-                fileUrl: ocrRes.fileUrl,
-                fileName: ocrRes.fileName,
-                fileType: ocrRes.fileType,
-                rawText: ocrRes.rawText || "",
+                fileUrl: uploadedFileUrl,
+                fileName: file.name,
+                fileType: file.type,
+                rawText: responseData.rawText || "",
             })
-            if (ocrRes.providerWarning) {
-                toast.info("OCR memakai fallback cepat", { description: ocrRes.providerWarning })
+
+            if (responseData.providerWarning) {
+                toast.info("Catatan Pemrosesan", { description: responseData.providerWarning })
             }
             toast.success("Dokumen Berhasil Diekstrak", { 
-                description: "Data dasar PO telah teridentifikasi. Silakan lanjutkan ke Mapping MAGIC." 
+                description: `Data PO (${responseData.basic.po_number || "PO Terdeteksi"}) berhasil dipetakan. Silakan lanjutkan ke Mapping MAGIC.` 
             })
-        } catch {
-            setError("OCR gagal diproses. Coba ulangi atau gunakan file PDF lebih kecil.")
-            toast.error("Kesalahan Sistem", { description: "Gagal menjalankan OCR cepat." })
+        } catch (err) {
+            const message = err instanceof Error ? (err.name === "AbortError" ? "Waktu ekstraksi habis (Timeout). Silakan coba lagi." : err.message) : "Gagal memproses OCR."
+            setError(message)
+            setCurrentStep("idle")
+            toast.error("Gagal Memproses Dokumen", { description: message })
         } finally {
             setIsProcessing(false)
         }
     }
 
-    async function continueToAiMapping() {
+    async function continueToMagicMapping() {
         if (!basicResult || !uploadedMeta) return
         
         setIsMapping(true)
@@ -260,12 +267,17 @@ export default function OcrUploadPage() {
         <div className="mx-auto max-w-6xl space-y-6 p-4 sm:space-y-8 sm:p-6 lg:space-y-10 lg:p-8">
             {/* Header Section */}
             <div className="space-y-2">
-                <h1 className="flex items-start gap-3 text-2xl font-bold tracking-tight text-slate-900 sm:items-center sm:text-3xl">
-                    <Zap className="mt-0.5 h-7 w-7 shrink-0 text-indigo-500 fill-indigo-500/10 sm:mt-0 sm:h-8 sm:w-8" />
-                    Unggah PO untuk OCR
-                </h1>
+                <div className="flex items-center gap-2">
+                    <h1 className="flex items-start gap-3 text-2xl font-bold tracking-tight text-slate-900 sm:items-center sm:text-3xl">
+                        <Zap className="mt-0.5 h-7 w-7 shrink-0 text-indigo-500 fill-indigo-500/10 sm:mt-0 sm:h-8 sm:w-8" />
+                        Unggah PO untuk OCR
+                    </h1>
+                    <Badge variant="outline" className="ml-2 border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-semibold">
+                        Microservice Hybrid
+                    </Badge>
+                </div>
                 <p className="text-sm text-slate-500 sm:text-base lg:text-lg">
-                    Otomatisasi input Sales Order dengan mengekstrak data langsung dari file PO Anda.
+                    Otomatisasi input Sales Order dengan ekstraksi instan dari file PDF / Gambar PO Anda.
                 </p>
             </div>
 
@@ -285,12 +297,16 @@ export default function OcrUploadPage() {
                             <h3 className="mb-2 text-lg font-bold text-slate-800 sm:text-xl">Tarik & Lepas File PO</h3>
                             <p className="mx-auto mb-5 max-w-xs text-sm text-slate-500 sm:mb-6 sm:text-base">
                                 atau klik untuk memilih file dari komputer Anda. <br/>
-                                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">(Hanya format PDF, maks 10MB)</span>
+                                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">(Format PDF atau Gambar, maks 15MB)</span>
                             </p>
                             
                             {files.length > 0 ? (
                                 <div className="flex max-w-full items-center gap-3 rounded-2xl border bg-white px-4 py-3 shadow-sm sm:rounded-full sm:py-2">
-                                    <FileText className="h-4 w-4 shrink-0 text-indigo-500" />
+                                    {files[0].type.includes("pdf") ? (
+                                        <FileText className="h-4 w-4 shrink-0 text-indigo-500" />
+                                    ) : (
+                                        <ImageIcon className="h-4 w-4 shrink-0 text-amber-500" />
+                                    )}
                                     <span className="max-w-[180px] truncate text-sm font-bold text-slate-700 sm:max-w-[260px]">{files[0].name}</span>
                                     <CheckCircle2 className="h-4 w-4 shrink-0 text-green-500" />
                                 </div>
@@ -303,7 +319,7 @@ export default function OcrUploadPage() {
                             <input
                                 ref={inputRef}
                                 type="file"
-                                accept="application/pdf"
+                                accept="application/pdf,image/png,image/jpeg,image/jpg,image/webp"
                                 multiple={false}
                                 onChange={onSelect}
                                 className="hidden"
@@ -311,7 +327,7 @@ export default function OcrUploadPage() {
                         </CardContent>
                     </Card>
 
-                    {/* Progress Bar & Actions */}
+                    {/* Multi-stage Realtime Stepper / Progress Bar */}
                     <div className="space-y-4">
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                             <Button 
@@ -323,7 +339,7 @@ export default function OcrUploadPage() {
                                 {isProcessing ? (
                                     <>
                                         <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                                        Memproses...
+                                        Sedang Memproses...
                                     </>
                                 ) : (
                                     <>
@@ -335,19 +351,43 @@ export default function OcrUploadPage() {
                             
                             {(isProcessing || progress > 0) && (
                                 <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-left sm:text-right">
-                                    <span className="text-lg font-bold text-slate-900">{progress}%</span>
+                                    <div className="flex items-center gap-2 sm:justify-end">
+                                        <span className="text-lg font-bold text-slate-900">{progress}%</span>
+                                        {engineUsed && (
+                                            <Badge variant="secondary" className="text-[10px] bg-slate-100 font-mono">
+                                                {engineUsed}
+                                            </Badge>
+                                        )}
+                                    </div>
                                     <p className="text-xs font-bold text-indigo-500 uppercase tracking-widest">{statusMessage}</p>
                                 </div>
                             )}
                         </div>
 
                         {(isProcessing || progress > 0) && (
-                            <div className="space-y-2">
-                                <Progress value={progress} className="h-3 bg-slate-100 rounded-full overflow-hidden" />
-                                <div className="flex justify-between text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                                    <span>Upload</span>
-                                    <span>Extraction</span>
-                                    <span>Ready</span>
+                            <div className="space-y-3 rounded-xl border bg-slate-50/70 p-4">
+                                <Progress value={progress} className="h-2.5 bg-slate-200 rounded-full overflow-hidden" />
+                                
+                                {/* Realtime Step Badges */}
+                                <div className="grid grid-cols-3 gap-2 text-xs">
+                                    <div className={`flex items-center gap-1.5 p-2 rounded-lg transition-all ${
+                                        progress >= 25 ? "bg-indigo-100/70 text-indigo-900 font-bold" : "text-slate-400"
+                                    }`}>
+                                        <FileCheck className="h-3.5 w-3.5 shrink-0" />
+                                        <span className="truncate">1. Upload File</span>
+                                    </div>
+                                    <div className={`flex items-center gap-1.5 p-2 rounded-lg transition-all ${
+                                        progress >= 60 ? "bg-indigo-100/70 text-indigo-900 font-bold" : progress >= 25 ? "bg-amber-50 text-amber-800 font-semibold animate-pulse" : "text-slate-400"
+                                    }`}>
+                                        <Cpu className="h-3.5 w-3.5 shrink-0" />
+                                        <span className="truncate">2. Ekstraksi Dokumen</span>
+                                    </div>
+                                    <div className={`flex items-center gap-1.5 p-2 rounded-lg transition-all ${
+                                        progress >= 100 ? "bg-green-100/80 text-green-900 font-bold" : progress >= 60 ? "bg-indigo-50 text-indigo-800 font-semibold animate-pulse" : "text-slate-400"
+                                    }`}>
+                                        <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                                        <span className="truncate">3. Structured Mapping</span>
+                                    </div>
                                 </div>
                             </div>
                         )}
@@ -370,7 +410,7 @@ export default function OcrUploadPage() {
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2 text-indigo-200 uppercase tracking-[0.2em] text-xs font-bold">
                                 <Info className="h-4 w-4" />
-                                Instruksi Fitur
+                                Alur Pemrosesan OCR
                             </CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-6 pb-8">
@@ -378,29 +418,29 @@ export default function OcrUploadPage() {
                                 <div className="flex items-start gap-3 sm:gap-4">
                                     <div className="h-8 w-8 rounded-full bg-indigo-800 flex items-center justify-center shrink-0 font-bold text-sm">1</div>
                                     <div className="space-y-1">
-                                        <p className="font-bold text-sm">Unggah Dokumen PO</p>
-                                        <p className="text-indigo-300 text-xs leading-relaxed">Pastikan file dalam format PDF yang jelas dan terbaca untuk hasil terbaik.</p>
+                                        <p className="font-bold text-sm">Unggah Dokumen (PDF / Gambar)</p>
+                                        <p className="text-indigo-300 text-xs leading-relaxed">PDF akan diproses via Microservice PDF Inspector yang cepat, atau Vision Engine untuk gambar.</p>
                                     </div>
                                 </div>
                                 <div className="flex items-start gap-3 sm:gap-4">
                                     <div className="h-8 w-8 rounded-full bg-indigo-800 flex items-center justify-center shrink-0 font-bold text-sm">2</div>
                                     <div className="space-y-1">
-                                        <p className="font-bold text-sm">Ekstraksi Data Dasar</p>
-                                        <p className="text-indigo-300 text-xs leading-relaxed">Sistem akan mengidentifikasi Nama Customer, No PO, dan daftar barang.</p>
+                                        <p className="font-bold text-sm">Ekstraksi & Pemetaan Data</p>
+                                        <p className="text-indigo-300 text-xs leading-relaxed">Teks dan tabel dokumen dikenali, lalu sistem memetakan Customer, No PO, dan item produk.</p>
                                     </div>
                                 </div>
                                 <div className="flex items-start gap-3 sm:gap-4">
                                     <div className="h-8 w-8 rounded-full bg-indigo-800 flex items-center justify-center shrink-0 font-bold text-sm">3</div>
                                     <div className="space-y-1">
                                         <p className="font-bold text-sm">Mapping Produk MAGIC</p>
-                                        <p className="text-indigo-300 text-xs leading-relaxed">MAGIC akan mencocokkan nama barang dari customer dengan produk di database kami.</p>
+                                        <p className="text-indigo-300 text-xs leading-relaxed">MAGIC mencocokkan nama barang dari customer dengan katalog master produk di database.</p>
                                     </div>
                                 </div>
                                 <div className="flex items-start gap-3 sm:gap-4">
                                     <div className="h-8 w-8 rounded-full bg-indigo-800 flex items-center justify-center shrink-0 font-bold text-sm">4</div>
                                     <div className="space-y-1">
                                         <p className="font-bold text-sm">Validasi & Simpan</p>
-                                        <p className="text-indigo-300 text-xs leading-relaxed">Anda dapat mengoreksi hasil sebelum menyimpannya sebagai Sales Order baru.</p>
+                                        <p className="text-indigo-300 text-xs leading-relaxed">Koreksi hasil sebelum disimpan menjadi draft Sales Order.</p>
                                     </div>
                                 </div>
                             </div>
@@ -411,10 +451,10 @@ export default function OcrUploadPage() {
                         <CardContent className="p-6">
                             <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
                                 <Database className="h-4 w-4" />
-                                Kegunaan
+                                Fitur Microservice OCR
                             </h4>
                             <p className="text-xs text-slate-600 leading-relaxed font-medium">
-                                Mempercepat pendaftaran pesanan dari pelanggan besar (Hasnur, Cipta Krida, dll) yang memiliki PO dalam format PDF. Menghindari kesalahan pengetikan manual.
+                                Menggunakan engine hybrid inspeksi PDF native + Fast Heuristic Parser untuk kecepatan maksimal (kurang dari 2 detik), meminimalkan waktu tunggu saat mengunggah Purchase Order.
                             </p>
                         </CardContent>
                     </Card>
@@ -427,16 +467,23 @@ export default function OcrUploadPage() {
                     <CardHeader className="bg-white border-b border-green-50">
                         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                             <div className="space-y-1">
-                                <CardTitle className="text-lg text-green-900 flex items-center gap-2">
-                                    <CheckCircle2 className="h-5 w-5 text-green-500" />
-                                    Hasil Ekstraksi Dasar (Tahap 1)
-                                </CardTitle>
-                                <CardDescription>Data mentah yang berhasil dikenali dari dokumen.</CardDescription>
+                                <div className="flex items-center gap-2">
+                                    <CardTitle className="text-lg text-green-900 flex items-center gap-2">
+                                        <CheckCircle2 className="h-5 w-5 text-green-500" />
+                                        Hasil Ekstraksi Dokumen PO (Tahap 1)
+                                    </CardTitle>
+                                    {engineUsed && (
+                                        <Badge variant="outline" className="border-green-300 bg-green-50 text-green-800 text-[10px]">
+                                            {engineUsed}
+                                        </Badge>
+                                    )}
+                                </div>
+                                <CardDescription>Data terstruktur yang berhasil diekstrak dan siap dipetakan ke master data.</CardDescription>
                             </div>
                             <Button 
-                                onClick={continueToAiMapping} 
+                                onClick={continueToMagicMapping} 
                                 disabled={isMapping}
-                                className="w-full bg-indigo-600 shadow-md hover:bg-indogo-700 sm:w-auto"
+                                className="w-full bg-indigo-600 shadow-md hover:bg-indigo-700 sm:w-auto"
                             >
                                 {isMapping ? (
                                     <>
@@ -474,9 +521,9 @@ export default function OcrUploadPage() {
                                     <TableHeader>
                                         <TableRow>
                                             <TableHead className="w-14">No</TableHead>
-                                            <TableHead>Hasil OCR Item</TableHead>
+                                            <TableHead>Hasil Ekstraksi Item</TableHead>
                                             <TableHead className="text-right">Qty</TableHead>
-                                            <TableHead className="text-right">Harga</TableHead>
+                                            <TableHead className="text-right">Harga Satuan</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
