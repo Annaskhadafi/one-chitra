@@ -7,10 +7,41 @@ import { eq } from "drizzle-orm"
 
 type AuthSession = NonNullable<Awaited<ReturnType<typeof auth.api.getSession>>>
 
+// In-Memory Cache (TTL: 60s for roles/permissions, 30s for user roles)
+const permissionsCache = new Map<string, { permissions: string[]; expiresAt: number }>()
+const userRoleCache = new Map<string, { role: string; expiresAt: number }>()
+
+const PERM_CACHE_TTL = 60_000
+const USER_ROLE_TTL = 30_000
+
 async function getSessionFromRequestContext(): Promise<AuthSession | null> {
     return auth.api.getSession({
         headers: await headers()
     })
+}
+
+export async function getUserRoleCached(userId: string): Promise<string | null> {
+    const now = Date.now()
+    const cached = userRoleCache.get(userId)
+    if (cached && now < cached.expiresAt) {
+        return cached.role
+    }
+
+    try {
+        const dbUser = await db.query.user.findFirst({
+            where: (u, { eq: eqOp }) => eqOp(u.id, userId),
+            columns: { role: true },
+        })
+
+        const role = dbUser?.role || null
+        if (role) {
+            userRoleCache.set(userId, { role, expiresAt: now + USER_ROLE_TTL })
+        }
+        return role
+    } catch (err) {
+        console.error("[getUserRoleCached] Error:", err)
+        return cached?.role || null
+    }
 }
 
 export async function checkPermission(
@@ -23,9 +54,8 @@ export async function checkPermission(
         if (!session) {
             session = await getSessionFromRequestContext()
         }
-    } catch (e) {
+    } catch {
         if (process.env.NODE_ENV !== "production") {
-            console.log("Permission check skipped: No request context detected (running in script)");
             return true;
         }
         throw new Error("Failed to get session context");
@@ -35,25 +65,18 @@ export async function checkPermission(
         throw new Error("Authentication required")
     }
 
-    // Fetch user from DB to get the latest role
-    const dbUser = await db.query.user.findFirst({
-        where: (u, { eq }) => eq(u.id, session.user.id),
-    })
-
-    if (!dbUser?.role) {
+    // Fetch user role (cached)
+    const userRole = await getUserRoleCached(session.user.id)
+    if (!userRole) {
         throw new Error("User has no assigned role")
     }
 
-    // Special case for admin role which usually has all permissions
-    // Our existing system maps roles to permissions in role_permissions table.
-    // getPermissionsByRoleName returns permissions in "resource:action" format.
-
-    // Admin has all permissions if we follow the pattern in use-permissions.tsx
-    if (dbUser.role.toLowerCase() === 'admin' || dbUser.role.toLowerCase() === 'superuser') {
+    const roleLower = userRole.toLowerCase()
+    if (roleLower === 'admin' || roleLower === 'superuser') {
         return true
     }
 
-    const userPermissions = await getPermissionsByRoleName(dbUser.role)
+    const userPermissions = await getPermissionsByRoleName(userRole)
     const requiredPermission = `${resource}:${action}`
 
     if (!userPermissions.includes(requiredPermission)) {
@@ -70,9 +93,8 @@ export async function getAuthenticatedSession(resource?: string, action?: 'view'
     let session: AuthSession | null;
     try {
         session = await getSessionFromRequestContext()
-    } catch (e) {
+    } catch {
         if (process.env.NODE_ENV !== "production") {
-            console.log("Session lookup fallback for build/scripts");
             return { user: { id: "QtRav31w2URDoLREkWt1DSzj3hXuFnh0" } } as { user: { id: string, name: string, email: string } };
         }
         throw new Error("Failed to get session context");
@@ -89,20 +111,42 @@ export async function getAuthenticatedSession(resource?: string, action?: 'view'
     return session
 }
 
-export async function getPermissionsByRoleName(roleName: string) {
-    const role = await db.query.roles.findFirst({
-        where: (r, { ilike }) => ilike(r.name, roleName),
-    })
+export async function getPermissionsByRoleName(roleName: string): Promise<string[]> {
+    const key = roleName.trim().toLowerCase()
+    const now = Date.now()
+    const cached = permissionsCache.get(key)
+    if (cached && now < cached.expiresAt) {
+        return cached.permissions
+    }
 
-    if (!role) return []
+    try {
+        const role = await db.query.roles.findFirst({
+            where: (r, { ilike }) => ilike(r.name, roleName),
+        })
 
-    const perms = await db.select({
-        resource: permissions.resource,
-        action: permissions.action,
-    })
-        .from(rolePermissions)
-        .innerJoin(permissions, eq(rolePermissions.permissionId, permissions.id))
-        .where(eq(rolePermissions.roleId, role.id))
+        if (!role) {
+            permissionsCache.set(key, { permissions: [], expiresAt: now + PERM_CACHE_TTL })
+            return []
+        }
 
-    return perms.map(p => `${p.resource}:${p.action}`)
+        const perms = await db.select({
+            resource: permissions.resource,
+            action: permissions.action,
+        })
+            .from(rolePermissions)
+            .innerJoin(permissions, eq(rolePermissions.permissionId, permissions.id))
+            .where(eq(rolePermissions.roleId, role.id))
+
+        const result = perms.map(p => `${p.resource}:${p.action}`)
+        permissionsCache.set(key, { permissions: result, expiresAt: now + PERM_CACHE_TTL })
+        return result
+    } catch (err) {
+        console.error("[getPermissionsByRoleName] Error:", err)
+        return cached?.permissions || []
+    }
+}
+
+export function invalidateRbacCache() {
+    permissionsCache.clear()
+    userRoleCache.clear()
 }

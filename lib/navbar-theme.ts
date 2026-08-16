@@ -30,20 +30,44 @@ function sanitizeColor(value: string | null | undefined, fallback: string): stri
     return HEX_COLOR_REGEX.test(value) ? value : fallback
 }
 
+// In-Memory Cache (TTL: 60 seconds)
+let cachedTheme: NavbarTheme | null = null
+let themeExpiresAt = 0
+const THEME_TTL_MS = 60_000
+
 export async function getNavbarTheme(): Promise<NavbarTheme> {
-    const rows = await db
-        .select({ key: settings.key, value: settings.value })
-        .from(settings)
-        .where(inArray(settings.key, Object.values(SETTING_KEYS)))
-
-    const map = new Map(rows.map((row) => [row.key, row.value]))
-
-    return {
-        navbarBg: sanitizeColor(map.get(SETTING_KEYS.navbarBg), defaultNavbarTheme.navbarBg),
-        activeBg: sanitizeColor(map.get(SETTING_KEYS.activeBg), defaultNavbarTheme.activeBg),
-        fontColor: sanitizeColor(map.get(SETTING_KEYS.fontColor), defaultNavbarTheme.fontColor),
-        sectionColor: sanitizeColor(map.get(SETTING_KEYS.sectionColor), defaultNavbarTheme.sectionColor),
+    const now = Date.now()
+    if (cachedTheme && now < themeExpiresAt) {
+        return cachedTheme
     }
+
+    try {
+        const rows = await db
+            .select({ key: settings.key, value: settings.value })
+            .from(settings)
+            .where(inArray(settings.key, Object.values(SETTING_KEYS)))
+
+        const map = new Map(rows.map((row) => [row.key, row.value]))
+
+        const theme: NavbarTheme = {
+            navbarBg: sanitizeColor(map.get(SETTING_KEYS.navbarBg), defaultNavbarTheme.navbarBg),
+            activeBg: sanitizeColor(map.get(SETTING_KEYS.activeBg), defaultNavbarTheme.activeBg),
+            fontColor: sanitizeColor(map.get(SETTING_KEYS.fontColor), defaultNavbarTheme.fontColor),
+            sectionColor: sanitizeColor(map.get(SETTING_KEYS.sectionColor), defaultNavbarTheme.sectionColor),
+        }
+
+        cachedTheme = theme
+        themeExpiresAt = now + THEME_TTL_MS
+        return theme
+    } catch (err) {
+        console.error("[getNavbarTheme] Error fetching theme:", err)
+        return cachedTheme || defaultNavbarTheme
+    }
+}
+
+export function invalidateNavbarThemeCache() {
+    cachedTheme = null
+    themeExpiresAt = 0
 }
 
 export { SETTING_KEYS as navbarThemeSettingKeys }

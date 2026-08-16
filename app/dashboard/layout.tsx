@@ -13,7 +13,7 @@ import { DashboardThemeProvider } from "@/components/dashboard-theme-provider"
 import "@/app/dashboard/theme.css"
 
 import { auth } from "@/lib/auth"
-import { getPermissionsByRoleName } from "@/lib/rbac"
+import { getPermissionsByRoleName, getUserRoleCached } from "@/lib/rbac"
 import { headers } from "next/headers"
 import { PermissionsProvider } from "@/hooks/use-permissions"
 import { getNavbarTheme } from "@/lib/navbar-theme"
@@ -312,14 +312,12 @@ export default async function DashboardLayout({
   } | undefined
 
   if (session?.user?.id) {
-    // Fetch user from DB to get the latest role
-    const dbUser = await db.query.user.findFirst({
-      where: (u, { eq }) => eq(u.id, session.user.id),
-    })
+    // Fetch user role (with in-memory cache) to prevent repeated remote DB roundtrips
+    const userRole = await getUserRoleCached(session.user.id)
 
-    if (dbUser?.role) {
-      permissions = await getPermissionsByRoleName(dbUser.role)
-      roleLower = dbUser.role.toLowerCase()
+    if (userRole) {
+      permissions = await getPermissionsByRoleName(userRole)
+      roleLower = userRole.toLowerCase()
       if (roleLower === 'admin' || roleLower === 'superuser') {
         permissions.push('admin:view')
       }

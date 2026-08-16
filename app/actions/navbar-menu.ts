@@ -12,6 +12,7 @@ import {
     parseNavigationConfigFromSetting,
     type EditableNavSection,
 } from "../../lib/navigation-menu"
+import { invalidateNavbarMenuCache } from "@/lib/server/navbar-menu"
 
 export async function getNavbarMenuSettingsAction(): Promise<EditableNavSection[]> {
     const result = await db
@@ -46,6 +47,7 @@ export async function saveNavbarMenuSettingsAction(config: EditableNavSection[])
             })
         }
 
+        invalidateNavbarMenuCache()
         revalidatePath("/dashboard")
         revalidatePath("/dashboard/settings/navbar")
 
@@ -79,6 +81,7 @@ export async function resetNavbarMenuSettingsAction() {
             })
         }
 
+        invalidateNavbarMenuCache()
         revalidatePath("/dashboard")
         revalidatePath("/dashboard/settings/navbar")
 
