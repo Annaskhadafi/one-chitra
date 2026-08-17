@@ -232,152 +232,173 @@ export async function getSalesOrders() {
         deliveryMap.set(delivery.salesOrderId, current)
     }
 
-    // Fetch items with products separately to avoid nested lateral join issues
-    const ordersWithItems = await Promise.all(
-        orders.map(async (order) => {
-            const items = await db.query.salesOrderItems.findMany({
-                where: eq(salesOrderItems.salesOrderId, order.id),
-                with: {
-                    product: true,
-                },
-            })
+    if (orders.length === 0) {
+        return []
+    }
 
-            const orderDeliveries = deliveryMap.get(order.id) ?? []
-            const activeDeliveries = orderDeliveries.filter((delivery) => delivery.status !== "cancelled")
-            const tripDestinationFallback = activeDeliveries.find((delivery) => delivery.tripDestination)?.tripDestination ?? null
-            const orderWithOptionalTripDestination = order as typeof order & { tripDestination?: string | null }
-            const effectiveOrder = {
-                ...order,
-                tripDestination: orderWithOptionalTripDestination.tripDestination || tripDestinationFallback,
+    // 2. Batch fetch all sales order items with products in ONE query
+    const allItems = await db.query.salesOrderItems.findMany({
+        where: inArray(salesOrderItems.salesOrderId, orderIds),
+        with: {
+            product: true,
+        },
+    })
+
+    const itemsMap = new Map<number, typeof allItems>()
+    for (const item of allItems) {
+        const current = itemsMap.get(item.salesOrderId) ?? []
+        current.push(item)
+        itemsMap.set(item.salesOrderId, current)
+    }
+
+    // 3. Batch fetch delivered quantities in ONE query
+    const allItemIds = allItems.map((item) => item.id)
+    const deliveredQuantities = new Map<number, number>()
+
+    if (allItemIds.length > 0) {
+        const deliveredRows = await db.select({
+            salesOrderItemId: deliveryItems.salesOrderItemId,
+            totalDelivered: sql<number>`COALESCE(SUM(${deliveryItems.deliveredQuantity}), 0)`,
+        })
+            .from(deliveryItems)
+            .innerJoin(deliveries, eq(deliveryItems.deliveryId, deliveries.id))
+            .where(and(
+                inArray(deliveryItems.salesOrderItemId, allItemIds),
+                sql`${deliveries.status} != 'cancelled'`,
+            ))
+            .groupBy(deliveryItems.salesOrderItemId)
+
+        for (const row of deliveredRows) {
+            if (row.salesOrderItemId != null) {
+                deliveredQuantities.set(row.salesOrderItemId, Number(row.totalDelivered))
             }
-            const deliveredQuantities = new Map<number, number>()
+        }
+    }
 
-            if (items.length > 0) {
-                const salesOrderItemIds = items.map((item) => item.id)
-                const deliveredRows = await db.select({
-                    salesOrderItemId: deliveryItems.salesOrderItemId,
-                    totalDelivered: sql<number>`COALESCE(SUM(${deliveryItems.deliveredQuantity}), 0)`,
-                })
-                    .from(deliveryItems)
-                    .innerJoin(deliveries, eq(deliveryItems.deliveryId, deliveries.id))
-                    .where(and(
-                        inArray(deliveryItems.salesOrderItemId, salesOrderItemIds),
-                        sql`${deliveries.status} != 'cancelled'`,
-                    ))
-                    .groupBy(deliveryItems.salesOrderItemId)
+    // 4. Batch fetch warehouse stock for all warehouses referenced in ONE query
+    const warehouseIds = [...new Set(orders.map((o) => o.warehouseId).filter((id): id is number => id != null))]
+    const stockMap = new Map<string, number>()
 
-                for (const row of deliveredRows) {
-                    if (row.salesOrderItemId != null) {
-                        deliveredQuantities.set(row.salesOrderItemId, Number(row.totalDelivered))
-                    }
-                }
-            }
+    if (warehouseIds.length > 0) {
+        const stockRows = await db.select({
+            warehouseId: stockLevels.warehouseId,
+            materialNumber: products.materialNumber,
+            totalStock: sql<number>`COALESCE(SUM(${stockLevels.totalStock}), 0)`,
+        })
+            .from(stockLevels)
+            .innerJoin(products, eq(stockLevels.productId, products.id))
+            .where(inArray(stockLevels.warehouseId, warehouseIds))
+            .groupBy(stockLevels.warehouseId, products.materialNumber)
 
-            const hasOutstandingDeliveryItems = items.some((item) => {
+        for (const row of stockRows) {
+            stockMap.set(`${row.warehouseId}_${row.materialNumber}`, Number(row.totalStock))
+        }
+    }
+
+    // 5. Assemble all orders in memory
+    const ordersWithItems = orders.map((order) => {
+        const items = itemsMap.get(order.id) ?? []
+        const orderDeliveries = deliveryMap.get(order.id) ?? []
+        const activeDeliveries = orderDeliveries.filter((delivery) => delivery.status !== "cancelled")
+        const tripDestinationFallback = activeDeliveries.find((delivery) => delivery.tripDestination)?.tripDestination ?? null
+        const orderWithOptionalTripDestination = order as typeof order & { tripDestination?: string | null }
+        const effectiveOrder = {
+            ...order,
+            tripDestination: orderWithOptionalTripDestination.tripDestination || tripDestinationFallback,
+        }
+
+        const hasOutstandingDeliveryItems = items.some((item) => {
+            const delivered = deliveredQuantities.get(item.id) ?? 0
+            return item.quantity - delivered > 0
+        })
+
+        const outstandingItems = items
+            .map((item) => {
                 const delivered = deliveredQuantities.get(item.id) ?? 0
-                return item.quantity - delivered > 0
-            })
+                const remainingQuantity = Math.max(item.quantity - delivered, 0)
+                const matNum = item.product?.materialNumber
+                const availableStock = (order.warehouseId && matNum) ? (stockMap.get(`${order.warehouseId}_${matNum}`) ?? 0) : 0
+                const stockStatus = remainingQuantity <= 0
+                    ? "done"
+                    : availableStock >= remainingQuantity
+                        ? "ready"
+                        : availableStock > 0
+                            ? "partial"
+                            : "empty"
 
-            const stockMap = new Map<number, number>()
-
-            if (order.warehouseId) {
-                const uniqueProductIds = [...new Set(
-                    items.map((item) => item.productId).filter((productId): productId is number => productId != null)
-                )]
-
-                await Promise.all(uniqueProductIds.map(async (productId) => {
-                    const availableStock = await getSalesOrderWarehouseStock(order.warehouseId!, productId)
-                    stockMap.set(productId, availableStock)
-                }))
-            }
-
-            const outstandingItems = items
-                .map((item) => {
-                    const delivered = deliveredQuantities.get(item.id) ?? 0
-                    const remainingQuantity = Math.max(item.quantity - delivered, 0)
-                    const availableStock = item.productId ? (stockMap.get(item.productId) ?? 0) : 0
-                    const stockStatus = remainingQuantity <= 0
-                        ? "done"
-                        : availableStock >= remainingQuantity
-                            ? "ready"
-                            : availableStock > 0
-                                ? "partial"
-                                : "empty"
-
-                    return {
-                        itemId: item.id,
-                        productId: item.productId,
-                        productName: item.product?.materialDescription || item.product?.materialNumber || item.description || "Unknown Product",
-                        materialNumber: item.product?.materialNumber || "-",
-                        orderedQuantity: item.quantity,
-                        deliveredQuantity: delivered,
-                        remainingQuantity,
-                        availableStock,
-                        stockStatus,
-                    }
-                })
-                .filter((item) => item.remainingQuantity > 0)
-
-            const hasReadyAll = outstandingItems.length > 0 && outstandingItems.every((item) => item.stockStatus === "ready")
-            const hasAnyPartial = outstandingItems.some((item) => item.stockStatus === "partial")
-            const hasAnyReady = outstandingItems.some((item) => item.stockStatus === "ready")
-            const outstandingDays = order.poReceive
-                ? Math.max(0, Math.floor((Date.now() - new Date(order.poReceive).getTime()) / (1000 * 60 * 60 * 24)))
-                : null
-
-            const remarks = outstandingItems.length === 0
-                ? {
-                    status: "complete",
-                    label: "Complete",
-                    outstandingDays,
-                    outstandingItemsCount: 0,
-                    outstandingQty: 0,
-                    items: [],
+                return {
+                    itemId: item.id,
+                    productId: item.productId,
+                    productName: item.product?.materialDescription || item.product?.materialNumber || item.description || "Unknown Product",
+                    materialNumber: item.product?.materialNumber || "-",
+                    orderedQuantity: item.quantity,
+                    deliveredQuantity: delivered,
+                    remainingQuantity,
+                    availableStock,
+                    stockStatus,
                 }
-                : hasReadyAll
+            })
+            .filter((item) => item.remainingQuantity > 0)
+
+        const hasReadyAll = outstandingItems.length > 0 && outstandingItems.every((item) => item.stockStatus === "ready")
+        const hasAnyPartial = outstandingItems.some((item) => item.stockStatus === "partial")
+        const hasAnyReady = outstandingItems.some((item) => item.stockStatus === "ready")
+        const outstandingDays = order.poReceive
+            ? Math.max(0, Math.floor((Date.now() - new Date(order.poReceive).getTime()) / (1000 * 60 * 60 * 24)))
+            : null
+
+        const remarks = outstandingItems.length === 0
+            ? {
+                status: "complete",
+                label: "Complete",
+                outstandingDays,
+                outstandingItemsCount: 0,
+                outstandingQty: 0,
+                items: [],
+            }
+            : hasReadyAll
+                ? {
+                    status: "ready",
+                    label: "Stock Ready",
+                    outstandingDays,
+                    outstandingItemsCount: outstandingItems.length,
+                    outstandingQty: outstandingItems.reduce((sum, item) => sum + item.remainingQuantity, 0),
+                    items: outstandingItems,
+                }
+                : hasAnyPartial || hasAnyReady
                     ? {
-                        status: "ready",
-                        label: "Stock Ready",
+                        status: "partial",
+                        label: "Partial Stock",
                         outstandingDays,
                         outstandingItemsCount: outstandingItems.length,
                         outstandingQty: outstandingItems.reduce((sum, item) => sum + item.remainingQuantity, 0),
                         items: outstandingItems,
                     }
-                    : hasAnyPartial || hasAnyReady
-                        ? {
-                            status: "partial",
-                            label: "Partial Stock",
-                            outstandingDays,
-                            outstandingItemsCount: outstandingItems.length,
-                            outstandingQty: outstandingItems.reduce((sum, item) => sum + item.remainingQuantity, 0),
-                            items: outstandingItems,
-                        }
-                        : {
-                            status: "empty",
-                            label: "No Stock",
-                            outstandingDays,
-                            outstandingItemsCount: outstandingItems.length,
-                            outstandingQty: outstandingItems.reduce((sum, item) => sum + item.remainingQuantity, 0),
-                            items: outstandingItems,
-                        }
+                    : {
+                        status: "empty",
+                        label: "No Stock",
+                        outstandingDays,
+                        outstandingItemsCount: outstandingItems.length,
+                        outstandingQty: outstandingItems.reduce((sum, item) => sum + item.remainingQuantity, 0),
+                        items: outstandingItems,
+                    }
 
-            const normalizedOrder = normalizeSalesOrderRecord(effectiveOrder, hasPicColumn, hasTripDestinationColumn)
+        const normalizedOrder = normalizeSalesOrderRecord(effectiveOrder, hasPicColumn, hasTripDestinationColumn)
 
-            return {
-                ...normalizedOrder,
-                items,
-                remarks,
-                deliverySummary: {
-                    totalCount: orderDeliveries.length,
-                    activeCount: activeDeliveries.length,
-                    cancelledCount: orderDeliveries.filter((delivery) => delivery.status === "cancelled").length,
-                    latestStatus: orderDeliveries[0]?.status ?? null,
-                    latestDeliveryNumber: orderDeliveries[0]?.deliveryNumber ?? null,
-                    hasOutstandingDeliveryItems,
-                },
-            }
-        })
-    )
+        return {
+            ...normalizedOrder,
+            items,
+            remarks,
+            deliverySummary: {
+                totalCount: orderDeliveries.length,
+                activeCount: activeDeliveries.length,
+                cancelledCount: orderDeliveries.filter((delivery) => delivery.status === "cancelled").length,
+                latestStatus: orderDeliveries[0]?.status ?? null,
+                latestDeliveryNumber: orderDeliveries[0]?.deliveryNumber ?? null,
+                hasOutstandingDeliveryItems,
+            },
+        }
+    })
 
     return ordersWithItems
 }

@@ -25,7 +25,9 @@ import {
     Calendar,
     Hash,
     Layers,
-    FileSpreadsheet
+    FileSpreadsheet,
+    Clock,
+    Timer
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -59,6 +61,10 @@ export default function OcrUploadPage() {
     const [error, setError] = useState<string | null>(null)
     const [isProcessing, setIsProcessing] = useState(false)
     const [engineUsed, setEngineUsed] = useState<string | null>(null)
+    const [extractDurationMs, setExtractDurationMs] = useState<number | null>(null)
+    const [extractElapsedSec, setExtractElapsedSec] = useState(0)
+    const [mappingDurationMs, setMappingDurationMs] = useState<number | null>(null)
+    const [mappingElapsedSec, setMappingElapsedSec] = useState(0)
     const [basicResult, setBasicResult] = useState<{
         customer_name: string
         po_number: string
@@ -74,13 +80,15 @@ export default function OcrUploadPage() {
     const [isMapping, setIsMapping] = useState(false)
     const inputRef = useRef<HTMLInputElement | null>(null)
     const progressIntervalRef = useRef<NodeJS.Timeout | null>(null)
+    const extractTimerRef = useRef<NodeJS.Timeout | null>(null)
+    const mappingTimerRef = useRef<NodeJS.Timeout | null>(null)
 
     // Cleanup interval on unmount
     useEffect(() => {
         return () => {
-            if (progressIntervalRef.current) {
-                clearInterval(progressIntervalRef.current)
-            }
+            if (progressIntervalRef.current) clearInterval(progressIntervalRef.current)
+            if (extractTimerRef.current) clearInterval(extractTimerRef.current)
+            if (mappingTimerRef.current) clearInterval(mappingTimerRef.current)
         }
     }, [])
 
@@ -161,9 +169,20 @@ export default function OcrUploadPage() {
         const file = files[0]
         const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")
 
-        if (progressIntervalRef.current) {
-            clearInterval(progressIntervalRef.current)
-        }
+        if (progressIntervalRef.current) clearInterval(progressIntervalRef.current)
+        if (extractTimerRef.current) clearInterval(extractTimerRef.current)
+        if (mappingTimerRef.current) clearInterval(mappingTimerRef.current)
+
+        const startTime = performance.now()
+        const startTimeStamp = Date.now()
+        setExtractDurationMs(null)
+        setExtractElapsedSec(0)
+        setMappingDurationMs(null)
+        setMappingElapsedSec(0)
+
+        extractTimerRef.current = setInterval(() => {
+            setExtractElapsedSec(Number(((Date.now() - startTimeStamp) / 1000).toFixed(1)))
+        }, 100)
 
         setIsProcessing(true)
         setCurrentStep("uploading")
@@ -221,10 +240,13 @@ export default function OcrUploadPage() {
                 throw new Error("Sistem belum berhasil membaca data PO dari dokumen ini. Pastikan dokumen terbaca jelas.")
             }
 
-            // Selesai dengan sukses -> Set progress ke 100%
-            if (progressIntervalRef.current) {
-                clearInterval(progressIntervalRef.current)
-            }
+            // Selesai dengan sukses -> Set progress ke 100% dan catat durasi
+            if (progressIntervalRef.current) clearInterval(progressIntervalRef.current)
+            if (extractTimerRef.current) clearInterval(extractTimerRef.current)
+            
+            const durationMs = Math.max(100, Math.round(performance.now() - startTime))
+            setExtractDurationMs(durationMs)
+            
             setProgress(100)
             setCurrentStep("ready")
             setStatusMessage("Ekstraksi Berhasil!")
@@ -241,12 +263,11 @@ export default function OcrUploadPage() {
                 toast.info("Catatan Pemrosesan", { description: responseData.providerWarning })
             }
             toast.success("Dokumen Berhasil Diekstrak", { 
-                description: `Data PO (${responseData.basic.po_number || "PO Terdeteksi"}) berhasil dipetakan. Silakan periksa hasil di sebelah kanan.` 
+                description: `Data PO (${responseData.basic.po_number || "PO Terdeteksi"}) diekstrak dalam ${(durationMs / 1000).toFixed(1)} detik. Silakan periksa hasil di sebelah kanan.` 
             })
         } catch (err) {
-            if (progressIntervalRef.current) {
-                clearInterval(progressIntervalRef.current)
-            }
+            if (progressIntervalRef.current) clearInterval(progressIntervalRef.current)
+            if (extractTimerRef.current) clearInterval(extractTimerRef.current)
             const message = err instanceof Error ? (err.name === "AbortError" ? "Waktu ekstraksi habis (Timeout). Silakan coba lagi." : err.message) : "Gagal memproses OCR."
             setError(message)
             setCurrentStep("idle")
@@ -261,6 +282,15 @@ export default function OcrUploadPage() {
     async function continueToMagicMapping() {
         if (!basicResult || !uploadedMeta) return
         
+        const mapStartTime = performance.now()
+        const mapStartTimeStamp = Date.now()
+        setMappingElapsedSec(0)
+        
+        if (mappingTimerRef.current) clearInterval(mappingTimerRef.current)
+        mappingTimerRef.current = setInterval(() => {
+            setMappingElapsedSec(Number(((Date.now() - mapStartTimeStamp) / 1000).toFixed(1)))
+        }, 100)
+
         setIsMapping(true)
         setError(null)
         try {
@@ -279,6 +309,11 @@ export default function OcrUploadPage() {
                 signal: mapController.signal,
             }).finally(() => clearTimeout(mapTimeout))
             const body = await response.json().catch(() => null)
+            
+            if (mappingTimerRef.current) clearInterval(mappingTimerRef.current)
+            const mapDurationMs = Math.max(100, Math.round(performance.now() - mapStartTime))
+            setMappingDurationMs(mapDurationMs)
+            
             if (!response.ok) {
                 setError(body?.error || "Gagal proses mapping MAGIC")
                 toast.error("Mapping Gagal", { description: body?.error || "MAGIC gagal memetakan produk." })
@@ -288,9 +323,13 @@ export default function OcrUploadPage() {
                 setError("Session hasil mapping tidak ditemukan")
                 return
             }
-            toast.success("Mapping MAGIC Selesai", { description: "Mengalihkan ke halaman validasi..." })
+            const totalSec = (((extractDurationMs || 0) + mapDurationMs) / 1000).toFixed(1)
+            toast.success("Mapping MAGIC Selesai", { 
+                description: `Mapping selesai dalam ${(mapDurationMs / 1000).toFixed(1)}s (Total Waktu: ${totalSec}s). Mengalihkan...` 
+            })
             router.push(`/dashboard/sales-orders/ocr-validate?session=${body.sessionId}`)
         } catch {
+            if (mappingTimerRef.current) clearInterval(mappingTimerRef.current)
             setError("Mapping MAGIC timeout / service lambat. Silakan coba lagi.")
         } finally {
             setIsMapping(false)
@@ -426,12 +465,25 @@ export default function OcrUploadPage() {
                             {(isProcessing || progress > 0) && (
                                 <div className="space-y-3 rounded-xl border border-slate-200/80 bg-slate-50/70 p-4 transition-all">
                                     <div className="flex items-center justify-between text-xs">
-                                        <span className="font-semibold text-slate-700">
+                                        <span className="font-semibold text-slate-700 flex items-center gap-1.5">
                                             {statusMessage || "Memproses..."}
+                                            {isProcessing && (
+                                                <span className="font-mono text-[11px] text-indigo-600 font-normal">
+                                                    ({extractElapsedSec.toFixed(1)}s)
+                                                </span>
+                                            )}
                                         </span>
-                                        <span className="font-mono font-bold text-indigo-600">
-                                            {progress}%
-                                        </span>
+                                        <div className="flex items-center gap-2">
+                                            {extractDurationMs && !isProcessing && (
+                                                <span className="font-mono text-[11px] font-semibold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded flex items-center gap-1">
+                                                    <Clock className="h-3 w-3" />
+                                                    {(extractDurationMs / 1000).toFixed(1)}s
+                                                </span>
+                                            )}
+                                            <span className="font-mono font-bold text-indigo-600">
+                                                {progress}%
+                                            </span>
+                                        </div>
                                     </div>
                                     
                                     <Progress value={progress} className="h-2 rounded-full bg-slate-200" />
@@ -454,7 +506,9 @@ export default function OcrUploadPage() {
                                             progress >= 100 ? "bg-emerald-100 font-bold text-emerald-900" : progress >= 70 ? "bg-indigo-50 text-indigo-800 font-semibold animate-pulse" : "text-slate-400"
                                         }`}>
                                             <Sparkles className="h-3 w-3 shrink-0" />
-                                            <span className="truncate">3. Selesai</span>
+                                            <span className="truncate">
+                                                3. Selesai {extractDurationMs ? `(${(extractDurationMs / 1000).toFixed(1)}s)` : ""}
+                                            </span>
                                         </div>
                                     </div>
                                 </div>
@@ -525,7 +579,7 @@ export default function OcrUploadPage() {
                             <CardHeader className="border-b border-slate-100 bg-emerald-50/30 pb-4">
                                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                     <div>
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex flex-wrap items-center gap-2">
                                             <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1 text-[11px] font-semibold py-0.5">
                                                 <CheckCircle2 className="h-3.5 w-3.5" />
                                                 Ekstraksi Berhasil
@@ -533,6 +587,12 @@ export default function OcrUploadPage() {
                                             {engineUsed && (
                                                 <Badge variant="outline" className="border-emerald-200 bg-white text-emerald-800 text-[10px] font-mono">
                                                     {engineUsed}
+                                                </Badge>
+                                            )}
+                                            {extractDurationMs && (
+                                                <Badge variant="outline" className="border-indigo-200 bg-indigo-50 text-indigo-700 text-[10px] font-mono font-semibold flex items-center gap-1">
+                                                    <Clock className="h-3 w-3 text-indigo-500" />
+                                                    Ekstrak: {(extractDurationMs / 1000).toFixed(1)}s
                                                 </Badge>
                                             )}
                                         </div>
@@ -548,7 +608,7 @@ export default function OcrUploadPage() {
                                         {isMapping ? (
                                             <>
                                                 <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                                                Mapping MAGIC...
+                                                Mapping MAGIC ({mappingElapsedSec.toFixed(1)}s)...
                                             </>
                                         ) : (
                                             <>
@@ -593,6 +653,33 @@ export default function OcrUploadPage() {
                                             {basicResult.date || "-"}
                                         </p>
                                     </div>
+                                </div>
+
+                                {/* Timeline & Duration Metric Banner */}
+                                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-indigo-100 bg-indigo-50/50 px-3.5 py-2.5 text-xs text-indigo-950">
+                                    <div className="flex items-center gap-2">
+                                        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-100 text-indigo-700 shrink-0">
+                                            <Timer className="h-4 w-4" />
+                                        </div>
+                                        <div>
+                                            <span className="font-semibold text-slate-900">Durasi Pemrosesan:</span>
+                                            <span className="ml-1.5 text-slate-600">
+                                                Ekstraksi OCR <b>{extractDurationMs ? `${(extractDurationMs / 1000).toFixed(2)}s` : "-"}</b>
+                                                {mappingDurationMs ? (
+                                                    <> &bull; Mapping MAGIC <b>{(mappingDurationMs / 1000).toFixed(2)}s</b> (Total: <b>{(((extractDurationMs || 0) + mappingDurationMs) / 1000).toFixed(2)}s</b>)</>
+                                                ) : isMapping ? (
+                                                    <> &bull; Sedang Mapping MAGIC (<b>{mappingElapsedSec.toFixed(1)}s</b>...)</>
+                                                ) : (
+                                                    <> &bull; Klik tombol di atas untuk melanjutkan mapping</>
+                                                )}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    {extractDurationMs && (
+                                        <span className="text-[11px] font-medium text-indigo-700 bg-white border border-indigo-200/80 px-2 py-0.5 rounded-md shadow-2xs font-mono">
+                                            {extractDurationMs < 2000 ? "⚡ Ekstraksi Cepat (< 2s)" : "⏱️ Selesai"}
+                                        </span>
+                                    )}
                                 </div>
 
                                 {/* Table of Extracted Items */}
