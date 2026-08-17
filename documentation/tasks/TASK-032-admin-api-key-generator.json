@@ -1,0 +1,12 @@
+{
+  "id": "TASK-032",
+  "status": "completed",
+  "priority": "P0",
+  "title": "Halaman Admin API Key Generator & Management",
+  "description": "Menambahkan skema database api_keys, server actions untuk CRUD/generate/revoke API key, halaman UI di admin (/dashboard/admin/api-keys), integrasi otentikasi API dengan database, dan pendaftaran menu navigasi.",
+  "createdAt": "2026-08-17T10:50:00.000Z",
+  "updatedAt": "2026-08-17T11:48:26.759Z",
+  "startedAt": "2026-08-17T10:49:55.770Z",
+  "completedAt": "2026-08-17T11:48:26.759Z",
+  "completionDetails": "Implementasi Halaman Admin API Key Generator & Management (/dashboard/admin/api-keys), skema database api_keys, server actions CRUD/revoke/regenerate, verifikasi otentikasi API terpusat, dan integrasi dengan Swagger UI serta Redoc."
+}

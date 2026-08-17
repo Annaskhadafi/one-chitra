@@ -1,0 +1,12 @@
+{
+  "id": "TASK-031",
+  "status": "completed",
+  "priority": "P0",
+  "title": "Implementasi Redoc & Peningkatan Swagger API Documentation",
+  "description": "Menyediakan antarmuka Redoc API docs (/api/redoc), navigasi switch antara Swagger UI (/api/docs) dan Redoc, otentikasi API key terpadu, dan pengayaan spesifikasi OpenAPI 3.0.",
+  "createdAt": "2026-08-17T10:42:00.000Z",
+  "updatedAt": "2026-08-17T10:46:59.289Z",
+  "startedAt": "2026-08-17T10:42:14.953Z",
+  "completedAt": "2026-08-17T10:46:59.289Z",
+  "completionDetails": "Implementasi Redoc API docs (/api/redoc), navigasi switch antara Swagger UI (/api/docs) dan Redoc, otentikasi API key terpadu, dan pengayaan spesifikasi OpenAPI 3.0."
+}

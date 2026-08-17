@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server"
 
-import { requireWipRepairApiKey } from "@/lib/api/wip-repair-auth"
-
 const nullableString = { type: "string", nullable: true }
 
 const openApiDocument = {
@@ -9,14 +7,42 @@ const openApiDocument = {
   info: {
     title: "One Chitra API",
     version: "1.0.0",
-    description: "API documentation for One Chitra operational data.",
+    description: "Dokumentasi REST API terpadu untuk operasional One Chitra (Stok, Sales Revenue SAP, WIP Repair, RFID Tracking, dan OCR Services).",
+    contact: {
+      name: "One Chitra Engineering Team",
+      email: "infochitraparatama@gmail.com",
+    },
   },
   servers: [
     { url: "https://one.chitraparatama.com", description: "Production" },
     { url: "http://localhost:3000", description: "Local development" },
   ],
   paths: {
-      "/api/stocks": {
+    "/api/health": {
+      get: {
+        tags: ["System Health"],
+        summary: "Cek status kesehatan server",
+        description: "Mengembalikan status uptime server dan timestamp saat ini. Endpoint ini tidak memerlukan API key.",
+        responses: {
+          "200": {
+            description: "Server beroperasi normal",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    status: { type: "string", example: "healthy" },
+                    timestamp: { type: "string", format: "date-time" },
+                    uptime: { type: "number", example: 12345.67 },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/stocks": {
       get: {
         tags: ["Stocks"],
         summary: "Get stock levels",
@@ -110,6 +136,97 @@ const openApiDocument = {
         },
       },
     },
+    "/api/rfid/find-by-epc": {
+      get: {
+        tags: ["RFID"],
+        summary: "Cari data Ban & RFID berdasarkan EPC Tag",
+        description: "Endpoint publik untuk scanner handheld atau sistem eksternal mencari serial number, material, dan plant berdasarkan nomor EPC RFID.",
+        parameters: [
+          { name: "epc", in: "query", required: true, schema: { type: "string" }, description: "Kode EPC RFID tag yang dipindai" },
+        ],
+        responses: {
+          "200": {
+            description: "Data RFID ditemukan",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    status: { type: "string", example: "OK" },
+                    result: {
+                      type: "object",
+                      properties: {
+                        sn: nullableString,
+                        material: nullableString,
+                        description: nullableString,
+                        epc: { type: "string" },
+                        plant: nullableString,
+                        stockLocation: nullableString,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "404": {
+            description: "RFID belum terdaftar",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    status: { type: "string", example: "NOT_FOUND" },
+                    message: { type: "string", example: "RFID belum terdaftar" },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/do-scan-ocr": {
+      post: {
+        tags: ["OCR & Document Scanning"],
+        summary: "Ekstraksi OCR Delivery Order (DO) & Serial Number Ban",
+        description: "Mengekstrak nomor internal / serial number dan metadata dari dokumen DO yang diunggah menggunakan engine Vision OCR.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  fileUrl: { type: "string", description: "URL file dokumen / gambar yang diunggah" },
+                  filename: { type: "string", description: "Nama file dokumen" },
+                  pages: { type: "string", default: "all", description: "Nomor halaman atau 'all'" },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Hasil ekstraksi OCR",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    internalNo: nullableString,
+                    detectionSource: { type: "string", example: "label" },
+                    rawText: { type: "string" },
+                    model: { type: "string" },
+                    pagesProcessed: { type: "integer" },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
   },
   components: {
     securitySchemes: {
@@ -117,6 +234,7 @@ const openApiDocument = {
         type: "apiKey",
         in: "header",
         name: "x-api-key",
+        description: "API Key operasional One Chitra. Dikirim via header 'x-api-key'.",
       },
     },
     schemas: {
@@ -342,10 +460,12 @@ const openApiDocument = {
   },
 }
 
+import { verifyApiKey } from "@/lib/api/verify-api-key"
+
 export async function GET(request: Request) {
-  const unauthorized = requireWipRepairApiKey(request)
-  if (unauthorized) {
-    return unauthorized
+  const authResult = await verifyApiKey(request, "openapi")
+  if (!authResult.authorized) {
+    return authResult.response || NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
   return NextResponse.json(openApiDocument)

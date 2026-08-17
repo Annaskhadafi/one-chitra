@@ -584,10 +584,13 @@ export const navigationConfig: NavSection[] = [
                         url: "/dashboard/admin/operational-activity-log",
                         resource: "admin",
                     },
+                    {
+                        title: "API Keys",
+                        url: "/dashboard/admin/api-keys",
+                        resource: "api-keys",
+                    },
                 ],
             },
         ],
     },
 ]
-
-
