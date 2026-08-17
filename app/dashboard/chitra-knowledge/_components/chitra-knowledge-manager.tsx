@@ -2,9 +2,14 @@
 
 import React, { useMemo, useRef, useState, useTransition } from "react"
 import {
+    ArrowRight,
+    Award,
     BookOpen,
     Bot,
     Brain,
+    BrainCircuit,
+    Check,
+    CheckCircle,
     CheckCircle2,
     Clock,
     Database,
@@ -12,19 +17,30 @@ import {
     FileCheck,
     FileSpreadsheet,
     FileText,
+    Filter,
+    GraduationCap,
     History,
     Layers,
+    Lightbulb,
     ListTree,
     Loader2,
     MessageSquare,
+    MessageSquareCode,
+    MessageSquareQuote,
     Pencil,
+    PlusCircle,
     Power,
     RefreshCw,
+    RotateCcw,
     Search,
     Send,
     Sparkles,
+    Tag,
+    ThumbsDown,
+    ThumbsUp,
     Trash2,
     UploadCloud,
+    User,
     Zap,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -35,6 +51,15 @@ import {
     trainHelpDeskFromPage,
 } from "@/app/actions/helpdesk-ai"
 import {
+    deleteMemoryFactAction,
+    getMemoryFactsAction,
+    getRagSessionMessagesAction,
+    getRagSessionsAction,
+    learnMemoryFactAction,
+    submitRagFeedbackAction,
+    toggleMemoryFactAction,
+} from "@/app/actions/rag-growth"
+import {
     chatKnowledgeBaseAction,
     deleteKnowledgeDocumentAction,
     getKnowledgeDocumentChunksAction,
@@ -42,7 +67,14 @@ import {
     searchKnowledgeBaseAction,
     uploadToKnowledgeBase,
 } from "@/app/actions/upload-knowledge"
-import { type RagChunk, type RagDocument, type RagSearchChunk } from "@/lib/raray-rag"
+import {
+    type RagChunk,
+    type RagDocument,
+    type RagMemoryFactItem,
+    type RagSearchChunk,
+    type RagSessionItem,
+    type RagSessionMessageItem,
+} from "@/lib/raray-rag"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -50,6 +82,7 @@ import {
     Dialog,
     DialogContent,
     DialogDescription,
+    DialogFooter,
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
@@ -109,6 +142,9 @@ type Props = {
         groq_model?: string
         vector_dimensions?: number
     }
+    initialMemoryFacts?: RagMemoryFactItem[]
+    initialTotalMemoryFacts?: number
+    initialSessions?: RagSessionItem[]
 }
 
 type FormState = {
@@ -138,6 +174,17 @@ const emptyForm: FormState = {
     faq: "",
     examples: "",
 }
+
+const FACT_TOPIC_PRESETS = [
+    "Aturan Bisnis",
+    "Alur Sales Order",
+    "SOP Delivery & Logistik",
+    "Master Data & Stok Ban",
+    "RFID & Tracking Ban",
+    "FAQ & Masalah Umum",
+    "Konfigurasi Sistem",
+    "Umum",
+]
 
 function formatDateTime(value: string | null | undefined) {
     if (!value) return "Belum ada"
@@ -198,8 +245,11 @@ export function ChitraKnowledgeManager({
     ragTotalDocuments: initialTotalDocs,
     ragTotalChunks: initialTotalChunks,
     ragInfo,
+    initialMemoryFacts = [],
+    initialTotalMemoryFacts = 0,
+    initialSessions = [],
 }: Props) {
-    // RAG State
+    // RAG Document State
     const [ragDocs, setRagDocs] = useState<RagDocument[]>(initialRagDocs)
     const [totalRagDocs, setTotalRagDocs] = useState(initialTotalDocs)
     const [totalRagChunks, setTotalRagChunks] = useState(initialTotalChunks)
@@ -222,12 +272,50 @@ export function ChitraKnowledgeManager({
     const [isChatting, setIsChatting] = useState(false)
     const [chatHistory, setChatHistory] = useState<
         Array<{
+            id?: string | number
             role: "user" | "assistant"
             content: string
             sources?: Array<{ filename?: string; heading?: string; similarity_score?: number; s3_url?: string }>
             latency_ms?: number
+            userQuery?: string
         }>
     >([])
+
+    // Feedback & Self Growth Vote Tracking
+    const [votedFeedbacks, setVotedFeedbacks] = useState<Record<number, "positive" | "negative">>({})
+    const [feedbackModalOpen, setFeedbackModalOpen] = useState(false)
+    const [feedbackTarget, setFeedbackTarget] = useState<{
+        chatIndex: number
+        query: string
+        answer: string
+    } | null>(null)
+    const [feedbackRating, setFeedbackRating] = useState<"positive" | "negative">("negative")
+    const [feedbackCorrection, setFeedbackCorrection] = useState("")
+    const [feedbackAutoLearn, setFeedbackAutoLearn] = useState(true)
+    const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false)
+
+    // Smart Memory State (Self-Growth)
+    const [memoryFacts, setMemoryFacts] = useState<RagMemoryFactItem[]>(initialMemoryFacts)
+    const [totalMemoryFacts, setTotalMemoryFacts] = useState(initialTotalMemoryFacts)
+    const [selectedMemoryTopic, setSelectedMemoryTopic] = useState<string>("all")
+    const [memorySearch, setMemorySearch] = useState("")
+    const [isRefreshingFacts, setIsRefreshingFacts] = useState(false)
+
+    // New Fact Form State
+    const [newFactTopic, setNewFactTopic] = useState("Aturan Bisnis")
+    const [newFactCustomTopic, setNewFactCustomTopic] = useState("")
+    const [newFactContent, setNewFactContent] = useState("")
+    const [newFactTags, setNewFactTags] = useState("")
+    const [newFactSyncVector, setNewFactSyncVector] = useState(true)
+    const [isLearningFact, setIsLearningFact] = useState(false)
+
+    // Sessions & Chat History State
+    const [sessions, setSessions] = useState<RagSessionItem[]>(initialSessions)
+    const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
+        initialSessions.length > 0 ? initialSessions[0].session_id : null
+    )
+    const [sessionMessages, setSessionMessages] = useState<RagSessionMessageItem[]>([])
+    const [isLoadingSessionMessages, setIsLoadingSessionMessages] = useState(false)
 
     // Local Knowledge Builder State
     const [form, setForm] = useState<FormState>(emptyForm)
@@ -247,6 +335,18 @@ export function ChitraKnowledgeManager({
                 .includes(keyword)
         })
     }, [activeFilter, search, sources])
+
+    const filteredMemoryFacts = useMemo(() => {
+        const keyword = memorySearch.trim().toLowerCase()
+        return memoryFacts.filter((fact) => {
+            if (selectedMemoryTopic !== "all" && fact.topic !== selectedMemoryTopic) return false
+            if (!keyword) return true
+            return [fact.topic, fact.fact, fact.source, (fact.tags || []).join(" ")]
+                .join(" ")
+                .toLowerCase()
+                .includes(keyword)
+        })
+    }, [memoryFacts, selectedMemoryTopic, memorySearch])
 
     const generatedContent = useMemo(() => buildKnowledgeContent(form), [form])
 
@@ -273,6 +373,55 @@ export function ChitraKnowledgeManager({
         }
     }
 
+    // Refresh Memory Facts list
+    const refreshMemoryFacts = async () => {
+        setIsRefreshingFacts(true)
+        try {
+            const res = await getMemoryFactsAction()
+            if (res.status === "success") {
+                setMemoryFacts(res.facts)
+                setTotalMemoryFacts(res.total_facts)
+                toast.success("Daftar fakta memori pintar diperbarui")
+            }
+        } catch {
+            toast.error("Gagal mengambil data memori fakta")
+        } finally {
+            setIsRefreshingFacts(false)
+        }
+    }
+
+    // Refresh Sessions list
+    const refreshSessions = async () => {
+        try {
+            const res = await getRagSessionsAction()
+            if (res.status === "success") {
+                setSessions(res.sessions)
+                toast.success("Daftar riwayat sesi diperbarui")
+            }
+        } catch {
+            toast.error("Gagal mengambil data sesi")
+        }
+    }
+
+    // Load Session Messages
+    const handleSelectSession = async (sessionId: string) => {
+        setSelectedSessionId(sessionId)
+        setIsLoadingSessionMessages(true)
+        setSessionMessages([])
+        try {
+            const res = await getRagSessionMessagesAction(sessionId)
+            if (res.status === "success") {
+                setSessionMessages(res.messages)
+            } else {
+                toast.error("Gagal memuat histori chat sesi")
+            }
+        } catch {
+            toast.error("Gagal mengambil riwayat pesan sesi")
+        } finally {
+            setIsLoadingSessionMessages(false)
+        }
+    }
+
     // Upload & Ingest Document to RAG
     const handleUploadToRag = async (file: File | null) => {
         if (!file) return
@@ -293,7 +442,6 @@ export function ChitraKnowledgeManager({
                 `Berhasil di-ingest! ${result.data?.total_chunks ?? ""} chunks vektor disimpan ke database.`
             )
 
-            // Refresh document list
             await refreshRagDocuments()
         } catch (error) {
             toast.error(error instanceof Error ? error.message : "Gagal mengunggah dokumen ke RAG")
@@ -388,6 +536,7 @@ export function ChitraKnowledgeManager({
                         content: res.data?.answer || "Tidak ada jawaban yang dihasilkan.",
                         sources: res.data?.sources,
                         latency_ms: res.data?.latency_ms,
+                        userQuery: prompt,
                     },
                 ])
             } else {
@@ -396,6 +545,7 @@ export function ChitraKnowledgeManager({
                     {
                         role: "assistant",
                         content: `Error: ${res.error || "RAG API gagal merespons"}`,
+                        userQuery: prompt,
                     },
                 ])
             }
@@ -405,10 +555,151 @@ export function ChitraKnowledgeManager({
                 {
                     role: "assistant",
                     content: `Error: ${error instanceof Error ? error.message : "Gagal memproses jawaban"}`,
+                    userQuery: prompt,
                 },
             ])
         } finally {
             setIsChatting(false)
+        }
+    }
+
+    // Direct Feedback Quick Vote (Thumbs Up / Down)
+    const handleQuickFeedback = async (
+        chatIndex: number,
+        item: { content: string; userQuery?: string },
+        rating: "positive" | "negative"
+    ) => {
+        const query = item.userQuery || "Pertanyaan umum seputar sistem One Chitra"
+        const answer = item.content
+
+        if (rating === "negative") {
+            // Open correction modal for negative rating
+            setFeedbackTarget({ chatIndex, query, answer })
+            setFeedbackRating("negative")
+            setFeedbackCorrection("")
+            setFeedbackAutoLearn(true)
+            setFeedbackModalOpen(true)
+            return
+        }
+
+        // Direct thumbs up
+        setVotedFeedbacks((prev) => ({ ...prev, [chatIndex]: "positive" }))
+        try {
+            const res = await submitRagFeedbackAction({
+                query,
+                answer,
+                rating: "positive",
+            })
+            if (res.status === "success") {
+                toast.success("Terima kasih! Rating positif Anda telah dicatat.")
+            }
+        } catch {
+            toast.error("Gagal mengirim penilaian")
+        }
+    }
+
+    // Submit Feedback & Correction Modal
+    const handleSubmitFeedbackModal = async () => {
+        if (!feedbackTarget) return
+        setIsSubmittingFeedback(true)
+        try {
+            const res = await submitRagFeedbackAction({
+                query: feedbackTarget.query,
+                answer: feedbackTarget.answer,
+                rating: feedbackRating,
+                correction: feedbackCorrection.trim() || undefined,
+                autoLearnCorrection: feedbackAutoLearn,
+            })
+
+            if (res.status === "success") {
+                setVotedFeedbacks((prev) => ({ ...prev, [feedbackTarget.chatIndex]: feedbackRating }))
+                toast.success(res.message || "Feedback berhasil dikirim!")
+                setFeedbackModalOpen(false)
+                if (feedbackCorrection.trim() && feedbackAutoLearn) {
+                    await refreshMemoryFacts()
+                }
+            } else {
+                toast.error(res.message || "Gagal mengirim feedback")
+            }
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Gagal memproses feedback")
+        } finally {
+            setIsSubmittingFeedback(false)
+        }
+    }
+
+    // Handle Learn Fact Submission (Self-Growth Form)
+    const handleLearnFactSubmit = async (e: React.FormEvent) => {
+        e.preventDefault()
+        const factText = newFactContent.trim()
+        if (!factText) {
+            toast.error("Isi fakta / aturan wajib diisi")
+            return
+        }
+
+        const effectiveTopic = newFactTopic === "Lainnya" ? newFactCustomTopic.trim() || "Umum" : newFactTopic
+        setIsLearningFact(true)
+        try {
+            const res = await learnMemoryFactAction({
+                topic: effectiveTopic,
+                fact: factText,
+                source: "Self-Growth UI Form",
+                tags: newFactTags,
+                syncToVector: newFactSyncVector,
+            })
+
+            if (res.status === "success") {
+                toast.success("AI Berhasil Mempelajari Fakta Baru!")
+                setNewFactContent("")
+                setNewFactTags("")
+                setNewFactCustomTopic("")
+                await refreshMemoryFacts()
+            } else {
+                toast.error(res.message || "Gagal mengajari AI fakta baru")
+            }
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Terjadi kesalahan saat menyimpan fakta")
+        } finally {
+            setIsLearningFact(false)
+        }
+    }
+
+    // Handle Toggle Fact Active
+    const handleToggleFact = async (fact: RagMemoryFactItem) => {
+        const newStatus = !(fact.isActive ?? fact.is_active)
+        try {
+            const res = await toggleMemoryFactAction(fact.id, newStatus)
+            if (res.success) {
+                setMemoryFacts((prev) =>
+                    prev.map((f) => (f.id === fact.id ? { ...f, isActive: newStatus, is_active: newStatus } : f))
+                )
+                toast.success(res.message)
+            } else {
+                toast.error(res.message || "Gagal mengubah status")
+            }
+        } catch {
+            toast.error("Gagal mengubah status fakta")
+        }
+    }
+
+    // Handle Delete Fact
+    const handleDeleteFact = async (fact: RagMemoryFactItem) => {
+        if (typeof window !== "undefined") {
+            const confirmed = window.confirm(`Hapus fakta/aturan "${fact.fact.slice(0, 60)}..." dari memori AI?`)
+            if (!confirmed) return
+        }
+
+        try {
+            const res = await deleteMemoryFactAction(fact.id)
+            if (res.success) {
+                setMemoryFacts((prev) => prev.filter((f) => f.id !== fact.id))
+                setTotalMemoryFacts((prev) => Math.max(0, prev - 1))
+                toast.success("Fakta berhasil dihapus dari memori")
+            } else {
+                toast.error(res.message || "Gagal menghapus fakta")
+            }
+        } catch {
+            toast.error("Gagal menghapus fakta")
         }
     }
 
@@ -473,13 +764,13 @@ export function ChitraKnowledgeManager({
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div>
                     <div className="flex items-center gap-2">
-                        <h1 className="text-2xl font-bold tracking-tight">Chitra Genius Knowledge Base</h1>
+                        <h1 className="text-2xl font-bold tracking-tight">Chitra Genius Knowledge & Self-Growth</h1>
                         <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20 flex items-center gap-1">
-                            <Zap className="h-3 w-3" /> RAG & pgvector Active
+                            <Zap className="h-3 w-3" /> Smart Memory & pgvector Active
                         </Badge>
                     </div>
                     <p className="text-sm text-muted-foreground mt-1">
-                        Pusat pengelolaan materi pengetahuan dokumen (PDF, Office, Gambar) dan mesin RAG AI untuk Chitra Genius Chatbot.
+                        Pusat pengelolaan materi pengetahuan dokumen, riwayat sesi percakapan, dan mesin pembelajaran mandiri (Self-Growth) Chitra Genius.
                     </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -503,7 +794,7 @@ export function ChitraKnowledgeManager({
                         ) : (
                             <>
                                 <UploadCloud className="mr-2 h-4 w-4" />
-                                Upload & Ingest Dokumen
+                                Upload Dokumen RAG
                             </>
                         )}
                     </Button>
@@ -522,44 +813,44 @@ export function ChitraKnowledgeManager({
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold text-slate-900 dark:text-slate-100">{totalRagDocs}</div>
-                        <p className="text-xs text-muted-foreground mt-1">Dokumen tersimpan di pgvector</p>
+                        <p className="text-xs text-muted-foreground mt-1">{totalRagChunks} vector chunks pgvector</p>
                     </CardContent>
                 </Card>
 
                 <Card className="border-border/60 bg-gradient-to-br from-card to-card/50 shadow-sm">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Vector Chunks</CardTitle>
-                        <Layers className="h-4 w-4 text-indigo-500" />
+                        <CardTitle className="text-sm font-medium">Memori Fakta Pintar</CardTitle>
+                        <GraduationCap className="h-4 w-4 text-indigo-500" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold text-slate-900 dark:text-slate-100">{totalRagChunks}</div>
-                        <p className="text-xs text-muted-foreground mt-1">Pecahan vektor dengan cosine similarity</p>
+                        <div className="text-2xl font-bold text-slate-900 dark:text-slate-100">{totalMemoryFacts}</div>
+                        <p className="text-xs text-muted-foreground mt-1">Fakta terpelajari tanpa upload file</p>
                     </CardContent>
                 </Card>
 
                 <Card className="border-border/60 bg-gradient-to-br from-card to-card/50 shadow-sm">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Active LLM Engine</CardTitle>
-                        <Bot className="h-4 w-4 text-emerald-500" />
+                        <CardTitle className="text-sm font-medium">Riwayat Sesi Chat</CardTitle>
+                        <MessageSquareQuote className="h-4 w-4 text-emerald-500" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold text-slate-900 dark:text-slate-100">{sessions.length}</div>
+                        <p className="text-xs text-muted-foreground mt-1">Sesi percakapan pengguna aktif</p>
+                    </CardContent>
+                </Card>
+
+                <Card className="border-border/60 bg-gradient-to-br from-card to-card/50 shadow-sm">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Active LLM & Self-Growth</CardTitle>
+                        <BrainCircuit className="h-4 w-4 text-amber-500" />
                     </CardHeader>
                     <CardContent>
                         <div className="text-sm font-bold truncate text-slate-900 dark:text-slate-100">
                             {ragInfo?.active_llm || "Groq LPU (qwen3.6)"}
                         </div>
-                        <p className="text-xs text-muted-foreground mt-1">Fast inference latency</p>
-                    </CardContent>
-                </Card>
-
-                <Card className="border-border/60 bg-gradient-to-br from-card to-card/50 shadow-sm">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Embedding Model</CardTitle>
-                        <Database className="h-4 w-4 text-amber-500" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-sm font-bold truncate text-slate-900 dark:text-slate-100">
-                            {ragInfo?.local_embedding_model ? "BGE-Small-EN (384d)" : "BAAI/bge-small-en"}
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-1">Vector dims: {ragInfo?.vector_dimensions || 384}</p>
+                        <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium mt-1 flex items-center gap-1">
+                            <Sparkles className="h-3 w-3" /> Auto-Growth Enabled
+                        </p>
                     </CardContent>
                 </Card>
             </div>
@@ -578,8 +869,11 @@ export function ChitraKnowledgeManager({
             ) : null}
 
             {/* Main Tabs */}
-            <Tabs defaultValue="documents" className="space-y-4">
-                <TabsList className="grid w-full grid-cols-3 max-w-md">
+            <Tabs defaultValue="smart-memory" className="space-y-4">
+                <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 max-w-2xl">
+                    <TabsTrigger value="smart-memory" className="flex items-center gap-2">
+                        <GraduationCap className="h-4 w-4 text-indigo-500" /> Riwayat & Memori Pintar
+                    </TabsTrigger>
                     <TabsTrigger value="documents" className="flex items-center gap-2">
                         <BookOpen className="h-4 w-4" /> Dokumen RAG
                     </TabsTrigger>
@@ -590,6 +884,405 @@ export function ChitraKnowledgeManager({
                         <Brain className="h-4 w-4" /> Manual Seed
                     </TabsTrigger>
                 </TabsList>
+
+                {/* TAB 0: RIWAYAT & MEMORI PINTAR (SELF-GROWTH & SESSIONS) */}
+                <TabsContent value="smart-memory" className="space-y-6">
+                    <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+                        {/* LEFT COLUMN: SELF-GROWTH MEMORY FACTS */}
+                        <div className="space-y-6">
+                            {/* Card: Form Cepat Ajari AI Fakta Baru */}
+                            <Card className="border-indigo-100 dark:border-indigo-950/70 shadow-sm">
+                                <CardHeader className="pb-3 bg-gradient-to-r from-indigo-50/50 to-blue-50/30 dark:from-indigo-950/20 dark:to-blue-950/10 border-b">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <div className="p-2 rounded-lg bg-indigo-600 text-white">
+                                                <Lightbulb className="h-4 w-4" />
+                                            </div>
+                                            <div>
+                                                <CardTitle className="text-base font-semibold">Ajari AI Fakta Baru</CardTitle>
+                                                <CardDescription className="text-xs">
+                                                    Input aturan bisnis, alur SOP, atau jawaban spesifik tanpa perlu upload file PDF.
+                                                </CardDescription>
+                                            </div>
+                                        </div>
+                                        <Badge variant="secondary" className="bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 text-xs">
+                                            Self-Growth Input
+                                        </Badge>
+                                    </div>
+                                </CardHeader>
+                                <CardContent className="pt-4">
+                                    <form onSubmit={handleLearnFactSubmit} className="space-y-4">
+                                        <div className="grid gap-3 sm:grid-cols-2">
+                                            <div className="space-y-1.5">
+                                                <Label htmlFor="fact-topic" className="text-xs font-semibold">Kategori / Topik</Label>
+                                                <select
+                                                    id="fact-topic"
+                                                    value={newFactTopic}
+                                                    onChange={(e) => setNewFactTopic(e.target.value)}
+                                                    className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                                >
+                                                    {FACT_TOPIC_PRESETS.map((top) => (
+                                                        <option key={top} value={top}>{top}</option>
+                                                    ))}
+                                                    <option value="Lainnya">+ Tambah Topik Lain</option>
+                                                </select>
+                                            </div>
+
+                                            {newFactTopic === "Lainnya" ? (
+                                                <div className="space-y-1.5">
+                                                    <Label htmlFor="custom-topic" className="text-xs font-semibold">Nama Topik Baru</Label>
+                                                    <Input
+                                                        id="custom-topic"
+                                                        placeholder="e.g. Diskon Khusus, Retur"
+                                                        value={newFactCustomTopic}
+                                                        onChange={(e) => setNewFactCustomTopic(e.target.value)}
+                                                        className="h-9"
+                                                    />
+                                                </div>
+                                            ) : (
+                                                <div className="space-y-1.5">
+                                                    <Label htmlFor="fact-tags" className="text-xs font-semibold">Kata Kunci / Tags (Opsional)</Label>
+                                                    <Input
+                                                        id="fact-tags"
+                                                        placeholder="sales, diskon, approval"
+                                                        value={newFactTags}
+                                                        onChange={(e) => setNewFactTags(e.target.value)}
+                                                        className="h-9"
+                                                    />
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="space-y-1.5">
+                                            <Label htmlFor="fact-content" className="text-xs font-semibold">
+                                                Isi Fakta / Aturan Baru <span className="text-red-500">*</span>
+                                            </Label>
+                                            <Textarea
+                                                id="fact-content"
+                                                rows={4}
+                                                placeholder="Contoh: Batas maksimal diskon sales order tanpa approval Direksi adalah 5%. Jika lebih dari 5%, wajib approval Manager Marketing dan Direksi..."
+                                                value={newFactContent}
+                                                onChange={(e) => setNewFactContent(e.target.value)}
+                                                className="text-sm resize-none"
+                                            />
+                                        </div>
+
+                                        <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                                            <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={newFactSyncVector}
+                                                    onChange={(e) => setNewFactSyncVector(e.target.checked)}
+                                                    className="rounded border-input text-indigo-600 focus:ring-indigo-500"
+                                                />
+                                                <span>Sinkronkan ke pgvector (Semantik Semantic Search)</span>
+                                            </label>
+
+                                            <Button
+                                                type="submit"
+                                                disabled={isLearningFact || !newFactContent.trim()}
+                                                className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs h-9 px-4 shadow-sm"
+                                            >
+                                                {isLearningFact ? (
+                                                    <>
+                                                        <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                                                        Memproses Pembelajaran...
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+                                                        Ajari AI Sekarang
+                                                    </>
+                                                )}
+                                            </Button>
+                                        </div>
+                                    </form>
+                                </CardContent>
+                            </Card>
+
+                            {/* Card: Daftar Fakta yang Sudah Dipelajari */}
+                            <Card>
+                                <CardHeader className="pb-3 border-b">
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                        <div>
+                                            <CardTitle className="text-base font-semibold">
+                                                Daftar Memori Fakta Terpelajari ({filteredMemoryFacts.length})
+                                            </CardTitle>
+                                            <CardDescription className="text-xs">
+                                                Fakta dan aturan yang aktif digunakan Chitra Genius saat menjawab user.
+                                            </CardDescription>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="h-8 text-xs"
+                                                onClick={refreshMemoryFacts}
+                                                disabled={isRefreshingFacts}
+                                            >
+                                                <RefreshCw className={cn("h-3.5 w-3.5 mr-1", isRefreshingFacts && "animate-spin")} />
+                                                Refresh
+                                            </Button>
+                                        </div>
+                                    </div>
+
+                                    {/* Filter & Search Bar */}
+                                    <div className="flex flex-col sm:flex-row items-center gap-2 pt-3">
+                                        <div className="relative flex-1 w-full">
+                                            <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                                            <Input
+                                                placeholder="Cari fakta, topik, atau kata kunci..."
+                                                value={memorySearch}
+                                                onChange={(e) => setMemorySearch(e.target.value)}
+                                                className="pl-8 h-8 text-xs w-full"
+                                            />
+                                        </div>
+                                        <select
+                                            value={selectedMemoryTopic}
+                                            onChange={(e) => setSelectedMemoryTopic(e.target.value)}
+                                            className="h-8 rounded-md border border-input bg-background px-2.5 py-0.5 text-xs shadow-sm w-full sm:w-auto"
+                                        >
+                                            <option value="all">Semua Topik</option>
+                                            {Array.from(new Set(memoryFacts.map((f) => f.topic))).map((t) => (
+                                                <option key={t} value={t}>{t}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </CardHeader>
+
+                                <CardContent className="p-0">
+                                    <ScrollArea className="h-[460px]">
+                                        {filteredMemoryFacts.length === 0 ? (
+                                            <div className="text-center py-16 text-muted-foreground p-4">
+                                                <GraduationCap className="h-10 w-10 mx-auto mb-2 opacity-40 text-indigo-500" />
+                                                <p className="text-sm font-medium">Belum Ada Fakta Memori</p>
+                                                <p className="text-xs opacity-75 mt-1">
+                                                    Gunakan form di atas untuk mengajari Chitra Genius aturan atau fakta baru.
+                                                </p>
+                                            </div>
+                                        ) : (
+                                            <div className="divide-y">
+                                                {filteredMemoryFacts.map((fact) => {
+                                                    const isActive = fact.isActive ?? fact.is_active ?? true
+                                                    return (
+                                                        <div
+                                                            key={fact.id}
+                                                            className={cn(
+                                                                "p-4 space-y-2.5 transition-colors hover:bg-muted/30",
+                                                                !isActive && "opacity-60 bg-muted/10"
+                                                            )}
+                                                        >
+                                                            <div className="flex items-start justify-between gap-2">
+                                                                <div className="flex flex-wrap items-center gap-1.5">
+                                                                    <Badge variant="outline" className="text-xs bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 font-semibold">
+                                                                        {fact.topic}
+                                                                    </Badge>
+                                                                    <Badge variant="secondary" className="text-[10px] bg-muted text-muted-foreground">
+                                                                        {fact.source}
+                                                                    </Badge>
+                                                                    {fact.ragDocumentId || fact.rag_document_id ? (
+                                                                        <Badge variant="outline" className="text-[10px] text-emerald-600 border-emerald-300 dark:border-emerald-800">
+                                                                            pgvector synced
+                                                                        </Badge>
+                                                                    ) : null}
+                                                                </div>
+
+                                                                <div className="flex items-center gap-1 shrink-0">
+                                                                    <Button
+                                                                        variant="ghost"
+                                                                        size="sm"
+                                                                        className={cn(
+                                                                            "h-7 px-2 text-xs",
+                                                                            isActive ? "text-emerald-600" : "text-muted-foreground"
+                                                                        )}
+                                                                        onClick={() => handleToggleFact(fact)}
+                                                                        title={isActive ? "Nonaktifkan" : "Aktifkan"}
+                                                                    >
+                                                                        <Power className="h-3.5 w-3.5 mr-1" />
+                                                                        {isActive ? "Aktif" : "Mati"}
+                                                                    </Button>
+                                                                    <Button
+                                                                        variant="ghost"
+                                                                        size="sm"
+                                                                        className="h-7 w-7 p-0 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950"
+                                                                        onClick={() => handleDeleteFact(fact)}
+                                                                        title="Hapus Fakta"
+                                                                    >
+                                                                        <Trash2 className="h-3.5 w-3.5" />
+                                                                    </Button>
+                                                                </div>
+                                                            </div>
+
+                                                            <p className="text-xs text-slate-800 dark:text-slate-200 whitespace-pre-wrap leading-relaxed bg-muted/20 p-2.5 rounded-lg border font-mono">
+                                                                {fact.fact}
+                                                            </p>
+
+                                                            <div className="flex flex-wrap items-center justify-between text-[11px] text-muted-foreground pt-0.5">
+                                                                <div className="flex items-center gap-2">
+                                                                    {fact.tags && fact.tags.length > 0 ? (
+                                                                        <div className="flex items-center gap-1">
+                                                                            <Tag className="h-3 w-3" />
+                                                                            <span>{fact.tags.join(", ")}</span>
+                                                                        </div>
+                                                                    ) : null}
+                                                                    <span>Oleh: {fact.creatorName || "Admin"}</span>
+                                                                </div>
+                                                                <span className="flex items-center gap-1">
+                                                                    <Clock className="h-3 w-3" />
+                                                                    {formatDateTime(fact.created_at)}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    )
+                                                })}
+                                            </div>
+                                        )}
+                                    </ScrollArea>
+                                </CardContent>
+                            </Card>
+                        </div>
+
+                        {/* RIGHT COLUMN: SESSIONS & CHAT HISTORIES */}
+                        <div className="space-y-6">
+                            <Card className="flex flex-col h-full min-h-[640px]">
+                                <CardHeader className="pb-3 border-b">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <div className="p-2 rounded-lg bg-blue-600 text-white">
+                                                <History className="h-4 w-4" />
+                                            </div>
+                                            <div>
+                                                <CardTitle className="text-base font-semibold">Riwayat Sesi Percakapan</CardTitle>
+                                                <CardDescription className="text-xs">
+                                                    Daftar sesi chat pengguna dan histori percakapan lengkap.
+                                                </CardDescription>
+                                            </div>
+                                        </div>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="h-8 text-xs"
+                                            onClick={refreshSessions}
+                                        >
+                                            <RefreshCw className="h-3.5 w-3.5" />
+                                        </Button>
+                                    </div>
+                                </CardHeader>
+
+                                <CardContent className="p-0 flex-1 flex flex-col">
+                                    {/* Sessions List */}
+                                    <div className="p-3 border-b bg-muted/20">
+                                        <Label className="text-xs font-semibold mb-2 block">Pilih Sesi Pengguna:</Label>
+                                        <ScrollArea className="h-36 pr-2">
+                                            {sessions.length === 0 ? (
+                                                <p className="text-xs text-muted-foreground py-4 text-center">Belum ada riwayat sesi tercatat.</p>
+                                            ) : (
+                                                <div className="space-y-1.5">
+                                                    {sessions.map((sess) => (
+                                                        <button
+                                                            key={sess.session_id}
+                                                            type="button"
+                                                            onClick={() => handleSelectSession(sess.session_id)}
+                                                            className={cn(
+                                                                "w-full text-left p-2 rounded-lg border text-xs transition-all flex items-center justify-between gap-2",
+                                                                selectedSessionId === sess.session_id
+                                                                    ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                                                                    : "bg-background hover:bg-muted/50 border-border/80"
+                                                            )}
+                                                        >
+                                                            <div className="min-w-0 flex-1">
+                                                                <p className="font-semibold truncate">
+                                                                    {sess.title || `Sesi #${sess.session_id}`}
+                                                                </p>
+                                                                <p className={cn(
+                                                                    "text-[10px] truncate opacity-80",
+                                                                    selectedSessionId === sess.session_id ? "text-primary-foreground/90" : "text-muted-foreground"
+                                                                )}>
+                                                                    {sess.last_message || "Aktif"}
+                                                                </p>
+                                                            </div>
+                                                            <div className="text-right shrink-0">
+                                                                <Badge variant="outline" className={cn(
+                                                                    "text-[10px] px-1.5 py-0 h-4",
+                                                                    selectedSessionId === sess.session_id ? "border-primary-foreground/40 text-primary-foreground" : ""
+                                                                )}>
+                                                                    {sess.message_count} pesan
+                                                                </Badge>
+                                                                <p className={cn(
+                                                                    "text-[9px] mt-0.5 opacity-70",
+                                                                    selectedSessionId === sess.session_id ? "text-primary-foreground/90" : "text-muted-foreground"
+                                                                )}>
+                                                                    {formatDateTime(sess.last_active_at).split(",")[0]}
+                                                                </p>
+                                                            </div>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </ScrollArea>
+                                    </div>
+
+                                    {/* Session Messages Viewer */}
+                                    <div className="flex-1 p-4 flex flex-col justify-between overflow-hidden">
+                                        <div className="flex items-center justify-between pb-2 border-b text-xs text-muted-foreground">
+                                            <span className="font-semibold">
+                                                {selectedSessionId ? `Histori Pesan (Sesi: ${selectedSessionId})` : "Histori Pesan"}
+                                            </span>
+                                            <span>{sessionMessages.length} Percakapan</span>
+                                        </div>
+
+                                        <ScrollArea className="flex-1 pr-3 my-3">
+                                            {isLoadingSessionMessages ? (
+                                                <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+                                                    <Loader2 className="h-6 w-6 animate-spin text-blue-600 mb-2" />
+                                                    <p className="text-xs">Memuat riwayat percakapan sesi...</p>
+                                                </div>
+                                            ) : sessionMessages.length === 0 ? (
+                                                <div className="text-center py-16 text-muted-foreground">
+                                                    <MessageSquare className="h-8 w-8 mx-auto mb-2 opacity-40" />
+                                                    <p className="text-xs font-medium">Pilih sesi di atas untuk melihat isi percakapan</p>
+                                                </div>
+                                            ) : (
+                                                <div className="space-y-3">
+                                                    {sessionMessages.map((msg, idx) => (
+                                                        <div
+                                                            key={idx}
+                                                            className={cn(
+                                                                "flex flex-col gap-1 max-w-[90%]",
+                                                                msg.role === "user" ? "ml-auto items-end" : "mr-auto items-start"
+                                                            )}
+                                                        >
+                                                            <div className="flex items-center gap-1 text-[10px] text-muted-foreground px-1">
+                                                                {msg.role === "user" ? (
+                                                                    <span>Pengguna</span>
+                                                                ) : (
+                                                                    <span className="text-indigo-600 dark:text-indigo-400 font-semibold flex items-center gap-1">
+                                                                        <Bot className="h-3 w-3" /> Chitra Genius
+                                                                    </span>
+                                                                )}
+                                                                <span>• {formatDateTime(msg.created_at)}</span>
+                                                            </div>
+                                                            <div
+                                                                className={cn(
+                                                                    "rounded-2xl px-3.5 py-2 text-xs shadow-sm leading-relaxed",
+                                                                    msg.role === "user"
+                                                                        ? "bg-primary text-primary-foreground rounded-br-none"
+                                                                        : "bg-muted/70 border rounded-bl-none text-slate-800 dark:text-slate-100"
+                                                                )}
+                                                            >
+                                                                <p className="whitespace-pre-wrap">{msg.content}</p>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </ScrollArea>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </div>
+                    </div>
+                </TabsContent>
 
                 {/* TAB 1: RAG DOCUMENTS TABLE */}
                 <TabsContent value="documents" className="space-y-4">
@@ -719,7 +1412,7 @@ export function ChitraKnowledgeManager({
                                     </Badge>
                                 </div>
                                 <CardDescription>
-                                    Uji kemampuan Chitra Genius menjawab pertanyaan berdasarkan dokumen pgvector.
+                                    Uji kemampuan Chitra Genius menjawab pertanyaan dan beri feedback 👍/👎 untuk melatih AI secara mandiri.
                                 </CardDescription>
                             </CardHeader>
 
@@ -740,7 +1433,7 @@ export function ChitraKnowledgeManager({
                                             <div
                                                 key={index}
                                                 className={cn(
-                                                    "flex flex-col gap-1 max-w-[85%]",
+                                                    "flex flex-col gap-1 max-w-[88%]",
                                                     item.role === "user" ? "ml-auto items-end" : "mr-auto items-start"
                                                 )}
                                             >
@@ -755,6 +1448,7 @@ export function ChitraKnowledgeManager({
                                                     <p className="whitespace-pre-wrap">{item.content}</p>
                                                 </div>
 
+                                                {/* Citations */}
                                                 {item.sources && item.sources.length > 0 ? (
                                                     <div className="mt-1 space-y-1 text-xs text-muted-foreground">
                                                         <p className="font-semibold flex items-center gap-1 text-[11px] text-indigo-600 dark:text-indigo-400">
@@ -778,10 +1472,70 @@ export function ChitraKnowledgeManager({
                                                     </div>
                                                 ) : null}
 
-                                                {typeof item.latency_ms === "number" ? (
-                                                    <span className="text-[10px] text-muted-foreground font-mono">
-                                                        Latency: {Math.round(item.latency_ms)}ms
-                                                    </span>
+                                                {/* Latency & Feedback Action Buttons (Only for Assistant) */}
+                                                {item.role === "assistant" ? (
+                                                    <div className="flex flex-wrap items-center justify-between w-full gap-2 pt-1">
+                                                        <div className="flex items-center gap-1.5">
+                                                            <Button
+                                                                type="button"
+                                                                size="sm"
+                                                                variant={votedFeedbacks[index] === "positive" ? "default" : "outline"}
+                                                                className={cn(
+                                                                    "h-6 px-2 text-[11px] rounded-md",
+                                                                    votedFeedbacks[index] === "positive"
+                                                                        ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                                                                        : "text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/50"
+                                                                )}
+                                                                onClick={() => handleQuickFeedback(index, item, "positive")}
+                                                                title="Jawaban Sesuai & Tepat"
+                                                            >
+                                                                <ThumbsUp className="h-3 w-3 mr-1" /> Sesuai
+                                                            </Button>
+
+                                                            <Button
+                                                                type="button"
+                                                                size="sm"
+                                                                variant={votedFeedbacks[index] === "negative" ? "destructive" : "outline"}
+                                                                className={cn(
+                                                                    "h-6 px-2 text-[11px] rounded-md",
+                                                                    votedFeedbacks[index] === "negative"
+                                                                        ? ""
+                                                                        : "text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/50"
+                                                                )}
+                                                                onClick={() => handleQuickFeedback(index, item, "negative")}
+                                                                title="Jawaban Kurang Tepat / Perlu Perbaikan"
+                                                            >
+                                                                <ThumbsDown className="h-3 w-3 mr-1" /> Kurang
+                                                            </Button>
+
+                                                            <Button
+                                                                type="button"
+                                                                size="sm"
+                                                                variant="ghost"
+                                                                className="h-6 px-2 text-[11px] text-indigo-600 hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-950/50 rounded-md"
+                                                                onClick={() => {
+                                                                    setFeedbackTarget({
+                                                                        chatIndex: index,
+                                                                        query: item.userQuery || "Pertanyaan percakapan",
+                                                                        answer: item.content,
+                                                                    })
+                                                                    setFeedbackRating("negative")
+                                                                    setFeedbackCorrection("")
+                                                                    setFeedbackAutoLearn(true)
+                                                                    setFeedbackModalOpen(true)
+                                                                }}
+                                                            >
+                                                                <Lightbulb className="h-3 w-3 mr-1 text-amber-500" />
+                                                                Beri Masukan / Koreksi
+                                                            </Button>
+                                                        </div>
+
+                                                        {typeof item.latency_ms === "number" ? (
+                                                            <span className="text-[10px] text-muted-foreground font-mono">
+                                                                {Math.round(item.latency_ms)}ms
+                                                            </span>
+                                                        ) : null}
+                                                    </div>
                                                 ) : null}
                                             </div>
                                         ))}
@@ -1141,6 +1895,123 @@ export function ChitraKnowledgeManager({
                             </ScrollArea>
                         )}
                     </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* MODAL: FEEDBACK & KOREKSI JAWABAN (SELF-GROWTH INPUT) */}
+            <Dialog open={feedbackModalOpen} onOpenChange={setFeedbackModalOpen}>
+                <DialogContent className="sm:max-w-lg">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2 text-base">
+                            <Lightbulb className="h-5 w-5 text-amber-500" />
+                            Beri Koreksi & Masukan Jawaban AI
+                        </DialogTitle>
+                        <DialogDescription className="text-xs">
+                            Koreksi Anda akan langsung dijadikan memori pintar agar Chitra Genius semakin akurat di masa depan.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    {feedbackTarget ? (
+                        <div className="space-y-4 py-2">
+                            {/* Question Context */}
+                            <div className="rounded-xl border p-3 bg-muted/30 text-xs space-y-1.5">
+                                <span className="font-semibold text-muted-foreground block text-[11px]">Pertanyaan User:</span>
+                                <p className="font-medium text-slate-800 dark:text-slate-200">
+                                    &ldquo;{feedbackTarget.query}&rdquo;
+                                </p>
+                            </div>
+
+                            {/* Answer Context */}
+                            <div className="rounded-xl border p-3 bg-muted/20 text-xs space-y-1.5">
+                                <span className="font-semibold text-muted-foreground block text-[11px]">Jawaban Asisten Saat Ini:</span>
+                                <p className="text-slate-700 dark:text-slate-300 line-clamp-3 italic">
+                                    {feedbackTarget.answer}
+                                </p>
+                            </div>
+
+                            {/* Rating Selector */}
+                            <div className="space-y-1.5">
+                                <Label className="text-xs font-semibold">Penilaian Jawaban:</Label>
+                                <div className="flex items-center gap-2">
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        variant={feedbackRating === "positive" ? "default" : "outline"}
+                                        className={cn(
+                                            "flex-1 text-xs h-8",
+                                            feedbackRating === "positive" ? "bg-emerald-600 hover:bg-emerald-700" : ""
+                                        )}
+                                        onClick={() => setFeedbackRating("positive")}
+                                    >
+                                        <ThumbsUp className="h-3.5 w-3.5 mr-1" /> Jawaban Tepat
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        variant={feedbackRating === "negative" ? "destructive" : "outline"}
+                                        className="flex-1 text-xs h-8"
+                                        onClick={() => setFeedbackRating("negative")}
+                                    >
+                                        <ThumbsDown className="h-3.5 w-3.5 mr-1" /> Perlu Koreksi
+                                    </Button>
+                                </div>
+                            </div>
+
+                            {/* Correction Textarea */}
+                            <div className="space-y-1.5">
+                                <Label htmlFor="feedback-correction" className="text-xs font-semibold">
+                                    Koreksi atau Jawaban yang Seharusnya (Opsional):
+                                </Label>
+                                <Textarea
+                                    id="feedback-correction"
+                                    rows={3}
+                                    placeholder="Tuliskan jawaban atau aturan yang benar untuk pertanyaan ini..."
+                                    value={feedbackCorrection}
+                                    onChange={(e) => setFeedbackCorrection(e.target.value)}
+                                    className="text-xs resize-none"
+                                />
+                            </div>
+
+                            {/* Auto Learn Toggle */}
+                            <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+                                <input
+                                    type="checkbox"
+                                    checked={feedbackAutoLearn}
+                                    onChange={(e) => setFeedbackAutoLearn(e.target.checked)}
+                                    className="rounded border-input text-indigo-600 focus:ring-indigo-500"
+                                />
+                                <span>Otomatis simpan koreksi ke Memori Pintar Self-Growth AI</span>
+                            </label>
+                        </div>
+                    ) : null}
+
+                    <DialogFooter className="gap-2 sm:gap-0">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setFeedbackModalOpen(false)}
+                            disabled={isSubmittingFeedback}
+                        >
+                            Batal
+                        </Button>
+                        <Button
+                            type="button"
+                            size="sm"
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                            onClick={handleSubmitFeedbackModal}
+                            disabled={isSubmittingFeedback}
+                        >
+                            {isSubmittingFeedback ? (
+                                <>
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                                    Menyimpan...
+                                </>
+                            ) : (
+                                "Kirim Koreksi & Latih AI"
+                            )}
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
         </div>

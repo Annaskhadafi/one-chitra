@@ -3,11 +3,12 @@
 import Image from "next/image"
 import { usePathname } from "next/navigation"
 import React, { useCallback, useEffect, useRef, useState } from "react"
-import { Archive, ArchiveRestore, Bell, BellOff, Bot, ChevronLeft, Compass, FileImage, FileText, Loader2, MessageCircle, Mic, Paperclip, Pencil, Pin, PinOff, Plus, Reply, Search, Send, SmilePlus, Sparkles, ShoppingCart, Trash2, Truck, Users, X } from "lucide-react"
+import { Archive, ArchiveRestore, Bell, BellOff, Bot, ChevronLeft, Compass, FileImage, FileText, Lightbulb, Loader2, MessageCircle, Mic, Paperclip, Pencil, Pin, PinOff, Plus, Reply, Search, Send, SmilePlus, Sparkles, ShoppingCart, ThumbsDown, ThumbsUp, Trash2, Truck, Users, X } from "lucide-react"
 import { toast } from "sonner"
 
 import { createGroupRoom, deleteChatRoom, deleteMessage, deleteUserSticker, editMessage, generateHelpDeskReplyForRoom, getChatUsers, getOrCreateDmRoom, getRoomMessages, getUserRooms, getUserSavedStickers, saveUserSticker, searchDocumentsForMention, searchRoomMessages, sendMessage, toggleMessageReaction, togglePinMessage, updateRoomPreferences, updateTypingStatus, type ChatAttachment, type ChatMessage, type ChatRoomSnapshot, type ChatRoomWithMeta, type ChatSavedSticker } from "@/app/actions/chat"
 import { ensureHelpDeskRoom, getHelpDeskStarterPrompts } from "@/app/actions/helpdesk-ai"
+import { submitRagFeedbackAction } from "@/app/actions/rag-growth"
 import { uploadFile } from "@/app/actions/upload"
 import { HELP_DESK_CONFIG } from "@/lib/helpdesk-config"
 import { navigationConfig } from "@/lib/navigation"
@@ -367,6 +368,46 @@ function MessageBubble({
                     {msg.editedAt ? <span>Diedit</span> : null}
                     {isOwn && msg.readBy.length > 1 ? <span title={msg.readBy.filter((entry) => entry.userId !== currentUserId).map((entry) => entry.name).join(", ")}>Dibaca {msg.readBy.length - 1}</span> : null}
                     {isMentioned && !isOwn ? <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold text-amber-700">Mention</span> : null}
+                    {msg.senderId === "ai-helpdesk-bot" ? (
+                        <div className="flex items-center gap-1">
+                            <button
+                                type="button"
+                                onClick={async () => {
+                                    await submitRagFeedbackAction({
+                                        query: "Pertanyaan HelpDesk AI",
+                                        answer: msg.content,
+                                        rating: "positive",
+                                        messageId: String(msg.id),
+                                    })
+                                    toast.success("Terima kasih atas rating positif Anda!")
+                                }}
+                                title="Jawaban Sesuai"
+                                className="opacity-0 transition-opacity group-hover:opacity-100 hover:text-emerald-600"
+                            >
+                                <ThumbsUp className="h-3 w-3" />
+                            </button>
+                            <button
+                                type="button"
+                                onClick={async () => {
+                                    const correction = window.prompt("Berikan masukan / koreksi untuk meningkatkan kepintaran AI:")
+                                    if (correction !== null) {
+                                        await submitRagFeedbackAction({
+                                            query: "Pertanyaan HelpDesk AI",
+                                            answer: msg.content,
+                                            rating: "negative",
+                                            correction: correction.trim() || undefined,
+                                            messageId: String(msg.id),
+                                        })
+                                        toast.success("Terima kasih! Koreksi dicatat untuk melatih AI.")
+                                    }
+                                }}
+                                title="Beri Masukan / Koreksi"
+                                className="opacity-0 transition-opacity group-hover:opacity-100 hover:text-red-600"
+                            >
+                                <ThumbsDown className="h-3 w-3" />
+                            </button>
+                        </div>
+                    ) : null}
                     <button type="button" onClick={() => onReply(msg)} className="opacity-0 transition-opacity group-hover:opacity-100 hover:text-foreground"><Reply className="h-3 w-3" /></button>
                     <button type="button" onClick={() => onTogglePin(msg)} className="opacity-0 transition-opacity group-hover:opacity-100 hover:text-foreground"><Pin className="h-3 w-3" /></button>
                     {MESSAGE_REACTION_PRESETS.slice(0, 3).map((emoji) => <button key={`${msg.id}-quick-${emoji}`} type="button" onClick={() => onToggleReaction(msg.id, emoji)} className="opacity-0 transition-opacity group-hover:opacity-100 hover:text-foreground">{emoji}</button>)}

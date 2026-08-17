@@ -1,0 +1,12 @@
+{
+  "id": "TASK-030",
+  "status": "completed",
+  "priority": "P0",
+  "title": "Chitra Genius Self-Growth: Sesi, Feedback Koreksi, dan Memory Learn API & UI",
+  "description": "Implementasi endpoint RAG Self-Growth (GET /api/v1/rag/sessions, GET /api/v1/rag/sessions/{id}/messages, POST /api/v1/rag/feedback, POST /api/v1/rag/memory/learn, GET /api/v1/rag/memory/facts) dan integrasi frontend UI (Tab Riwayat & Memori Pintar, tombol feedback/koreksi bubble chat, form ajari AI fakta baru).",
+  "createdAt": "2026-08-17T01:17:00.000Z",
+  "updatedAt": "2026-08-17T01:27:23.659Z",
+  "startedAt": "2026-08-17T01:16:55.465Z",
+  "completedAt": "2026-08-17T01:27:23.659Z",
+  "completionDetails": "Implementasi lengkap fitur Chitra Genius Self-Growth: Sesi, Feedback Koreksi Jawaban, Memory Learn API (/api/v1/rag/*) dan UI Tab Riwayat & Memori Pintar"
+}

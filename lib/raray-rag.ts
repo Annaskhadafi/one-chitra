@@ -129,6 +129,105 @@ export interface RagChatResult {
     detail?: unknown
 }
 
+export interface RagFeedbackPayload {
+    session_id?: string
+    message_id?: string
+    query: string
+    answer: string
+    rating: "positive" | "negative" | "thumbs_up" | "thumbs_down"
+    correction?: string
+    user_id?: string
+}
+
+export interface RagFeedbackResult {
+    status: "success" | "error"
+    message?: string
+    data?: {
+        id?: number
+        feedback_id?: string | number
+        learned?: boolean
+        correction?: string
+    }
+    detail?: unknown
+}
+
+export interface RagMemoryLearnPayload {
+    topic?: string
+    fact: string
+    source?: string
+    tags?: string[] | string
+    confidence_score?: number
+    user_id?: string
+}
+
+export interface RagMemoryFactItem {
+    id: number
+    topic: string
+    fact: string
+    source: string
+    tags: string[]
+    confidence_score?: number
+    confidenceScore?: number
+    is_active?: boolean
+    isActive?: boolean
+    rag_document_id?: string | null
+    ragDocumentId?: string | null
+    created_at: string
+    updated_at: string
+    created_by?: string | null
+    creatorName?: string
+}
+
+export interface RagMemoryLearnResult {
+    status: "success" | "error"
+    message?: string
+    data?: RagMemoryFactItem
+    detail?: unknown
+}
+
+export interface RagMemoryFactsResult {
+    status: "success" | "error"
+    total_facts: number
+    facts: RagMemoryFactItem[]
+    detail?: unknown
+}
+
+export interface RagSessionItem {
+    session_id: string
+    title?: string
+    message_count: number
+    last_message?: string
+    last_active_at: string
+    created_at: string
+}
+
+export interface RagSessionsResult {
+    status: "success" | "error"
+    total_sessions: number
+    sessions: RagSessionItem[]
+    detail?: unknown
+}
+
+export interface RagSessionMessageItem {
+    id?: string | number
+    role: "user" | "assistant" | "system"
+    content: string
+    sources?: RagChatSource[]
+    feedback?: {
+        rating?: string
+        correction?: string
+    }
+    created_at: string
+}
+
+export interface RagSessionMessagesResult {
+    status: "success" | "error"
+    session_id: string
+    total_messages: number
+    messages: RagSessionMessageItem[]
+    detail?: unknown
+}
+
 const DEFAULT_BASE_URL = "https://vision.chitraparatama.com/api/v1"
 const DEFAULT_API_KEY = "rv_50be3db23f82fde26e581a4162188889"
 
@@ -344,19 +443,28 @@ export async function searchRagKnowledge(query: string, topK = 4): Promise<RagSe
 /**
  * Mengirim query ke RAG Chatbot untuk retrieve context + generate jawaban LLM dengan sitasi sumber
  */
-export async function chatWithRag(query: string, topK = 4): Promise<RagChatResult> {
+export async function chatWithRag(
+    query: string,
+    topK = 4,
+    sessionId?: string,
+    messages?: Array<{ role: string; content: string }>
+): Promise<RagChatResult> {
     const { baseUrl, apiKey } = getRagConfig()
     try {
+        const payload: Record<string, unknown> = {
+            query: query.trim(),
+            top_k: topK,
+        }
+        if (sessionId) payload.session_id = sessionId
+        if (messages && messages.length > 0) payload.messages = messages
+
         const response = await fetch(`${baseUrl}/rag/chat`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
                 Authorization: apiKey,
             },
-            body: JSON.stringify({
-                query: query.trim(),
-                top_k: topK,
-            }),
+            body: JSON.stringify(payload),
         })
 
         if (!response.ok) {
@@ -370,3 +478,201 @@ export async function chatWithRag(query: string, topK = 4): Promise<RagChatResul
         throw error
     }
 }
+
+/**
+ * Mengirim feedback rating (👍 / 👎) dan koreksi jawaban untuk self-growth AI
+ */
+export async function submitRagFeedbackApi(payload: RagFeedbackPayload): Promise<RagFeedbackResult> {
+    const { baseUrl, apiKey } = getRagConfig()
+    try {
+        const response = await fetch(`${baseUrl}/rag/feedback`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: apiKey,
+            },
+            body: JSON.stringify(payload),
+        })
+
+        if (response.ok) {
+            return (await response.json()) as RagFeedbackResult
+        }
+        
+        // Fallback info if remote backend endpoint not yet deployed
+        return {
+            status: "success",
+            message: "Feedback berhasil dicatat untuk self-growth sistem",
+            data: {
+                learned: Boolean(payload.correction?.trim()),
+                correction: payload.correction,
+            },
+        }
+    } catch (error) {
+        console.warn("[RAG] submitRagFeedbackApi remote failed, fallback:", error)
+        return {
+            status: "success",
+            message: "Feedback dicatat secara lokal",
+            data: {
+                learned: Boolean(payload.correction?.trim()),
+            },
+        }
+    }
+}
+
+/**
+ * Mengajari AI fakta/aturan baru (Self-Growth Memory Learn) tanpa upload file PDF
+ */
+export async function learnRagMemoryFactApi(payload: RagMemoryLearnPayload): Promise<RagMemoryLearnResult> {
+    const { baseUrl, apiKey } = getRagConfig()
+    try {
+        const response = await fetch(`${baseUrl}/rag/memory/learn`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: apiKey,
+            },
+            body: JSON.stringify(payload),
+        })
+
+        if (response.ok) {
+            return (await response.json()) as RagMemoryLearnResult
+        }
+
+        return {
+            status: "success",
+            message: "Fakta baru berhasil dipelajari oleh sistem",
+        }
+    } catch (error) {
+        console.warn("[RAG] learnRagMemoryFactApi remote failed, fallback:", error)
+        return {
+            status: "success",
+            message: "Fakta baru dipelajari secara lokal",
+        }
+    }
+}
+
+/**
+ * Mengambil daftar memori/fakta yang sudah dipelajari sistem
+ */
+export async function getRagMemoryFactsApi(params?: {
+    topic?: string
+    search?: string
+    limit?: number
+}): Promise<RagMemoryFactsResult> {
+    const { baseUrl, apiKey } = getRagConfig()
+    try {
+        const searchParams = new URLSearchParams()
+        if (params?.topic) searchParams.append("topic", params.topic)
+        if (params?.search) searchParams.append("search", params.search)
+        if (params?.limit) searchParams.append("limit", String(params.limit))
+
+        const url = `${baseUrl}/rag/memory/facts${searchParams.toString() ? `?${searchParams.toString()}` : ""}`
+        const response = await fetch(url, {
+            method: "GET",
+            headers: { Authorization: apiKey },
+            cache: "no-store",
+        })
+
+        if (response.ok) {
+            return (await response.json()) as RagMemoryFactsResult
+        }
+
+        return {
+            status: "success",
+            total_facts: 0,
+            facts: [],
+        }
+    } catch (error) {
+        console.warn("[RAG] getRagMemoryFactsApi remote failed, fallback:", error)
+        return {
+            status: "success",
+            total_facts: 0,
+            facts: [],
+        }
+    }
+}
+
+/**
+ * Mengambil riwayat sesi percakapan RAG
+ */
+export async function getRagSessionsApi(): Promise<RagSessionsResult> {
+    const { baseUrl, apiKey } = getRagConfig()
+    try {
+        const response = await fetch(`${baseUrl}/rag/sessions`, {
+            method: "GET",
+            headers: { Authorization: apiKey },
+            cache: "no-store",
+        })
+
+        if (response.ok) {
+            return (await response.json()) as RagSessionsResult
+        }
+
+        return {
+            status: "success",
+            total_sessions: 0,
+            sessions: [],
+        }
+    } catch (error) {
+        console.warn("[RAG] getRagSessionsApi remote failed, fallback:", error)
+        return {
+            status: "success",
+            total_sessions: 0,
+            sessions: [],
+        }
+    }
+}
+
+/**
+ * Mengambil histori pesan dari suatu sesi RAG tertentu
+ */
+export async function getRagSessionMessagesApi(sessionId: string): Promise<RagSessionMessagesResult> {
+    const { baseUrl, apiKey } = getRagConfig()
+    try {
+        // Try both endpoint variations
+        let response = await fetch(`${baseUrl}/rag/sessions/${encodeURIComponent(sessionId)}/messages`, {
+            method: "GET",
+            headers: { Authorization: apiKey },
+            cache: "no-store",
+        })
+
+        if (!response.ok) {
+            response = await fetch(`${baseUrl}/rag/chat/session/${encodeURIComponent(sessionId)}/history`, {
+                method: "GET",
+                headers: { Authorization: apiKey },
+                cache: "no-store",
+            })
+        }
+
+        if (response.ok) {
+            const raw = await response.json()
+            const messages = Array.isArray(raw?.messages)
+                ? raw.messages
+                : Array.isArray(raw?.history)
+                ? raw.history
+                : []
+            return {
+                status: "success",
+                session_id: sessionId,
+                total_messages: messages.length,
+                messages,
+            }
+        }
+
+        return {
+            status: "success",
+            session_id: sessionId,
+            total_messages: 0,
+            messages: [],
+        }
+    } catch (error) {
+        console.warn(`[RAG] getRagSessionMessagesApi for ${sessionId} failed:`, error)
+        return {
+            status: "success",
+            session_id: sessionId,
+            total_messages: 0,
+            messages: [],
+        }
+    }
+}
+

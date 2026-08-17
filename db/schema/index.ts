@@ -206,6 +206,12 @@ export {
     helpdeskKnowledgeChunksRelations,
     helpdeskTrainingLogsRelations,
 } from "./helpdesk-ai";
+export {
+    ragMemoryFacts,
+    ragFeedbacks,
+    ragMemoryFactsRelations,
+    ragFeedbacksRelations,
+} from "./rag-growth";
 export { businessCards } from "./business-cards";
 
 // Core Auth Table Relations
