@@ -1,0 +1,12 @@
+{
+  "id": "TASK-033",
+  "status": "completed",
+  "priority": "P0",
+  "title": "Fix Generate Voucher VHS Site CK & Support BAN 12.00-24 MAXAM",
+  "description": "Memperbaiki isu gagal generate voucher di halaman VHS Site CK khususnya untuk ban jenis BAN 12.00-24 MAXAM, memastikan data terkirim dengan benar, dan memverifikasi integrasi form input voucher.",
+  "createdAt": "2026-08-21T09:02:00.000Z",
+  "startedAt": "2026-08-21T01:02:34.730Z",
+  "updatedAt": "2026-08-21T01:35:47.974Z",
+  "completedAt": "2026-08-21T01:35:47.974Z",
+  "completionDetails": "Memperbaiki isu gagal generate voucher ban MAXAM dengan menyesuaikan rumus availableQty berdasarkan sourceType"
+}

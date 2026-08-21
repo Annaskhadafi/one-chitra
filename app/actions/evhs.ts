@@ -703,11 +703,11 @@ export async function createEvhsVoucher(data: z.infer<typeof _voucherSchema>) {
                     .reduce((total, voucherItem) => total + voucherItem.qty, 0)
 
                 const warehouseStockQty = legacyStockByProduct.get(item.productId)
-                const availableQty = warehouseStockQty !== undefined
-                    ? Math.max(warehouseStockQty - usedQty, 0)
+                const sourceType = item.sourceType || "receipt"
+                const availableQty = sourceType === "legacy-stock"
+                    ? (warehouseStockQty !== undefined ? Math.max(warehouseStockQty - usedQty, 0) : 0)
                     : Math.max(receivedQty - usedQty, 0)
                 const normalizedSerial = normalizeSerialNumber(item.serialNumber)
-                const sourceType = item.sourceType || "receipt"
                 const nextRequestedQty = (requestedQtyByProduct.get(item.productId) || 0) + item.qty
 
                 if (
@@ -804,8 +804,9 @@ export async function createEvhsVoucher(data: z.infer<typeof _voucherSchema>) {
                     .reduce((total, voucherItem) => total + voucherItem.qty, 0)
 
                 const warehouseStockQty = legacyStockByProduct.get(item.productId)
-                const availableQtyBeforeInsert = warehouseStockQty !== undefined
-                    ? Math.max(warehouseStockQty - usedQtyBeforeInsert, 0)
+                const sourceType = item.sourceType || "receipt"
+                const availableQtyBeforeInsert = sourceType === "legacy-stock"
+                    ? (warehouseStockQty !== undefined ? Math.max(warehouseStockQty - usedQtyBeforeInsert, 0) : 0)
                     : Math.max(receivedQty - usedQtyBeforeInsert, 0)
                 const alreadyInsertedQty = insertedQtyByProduct.get(item.productId) || 0
                 const remainingAfterInsert = Math.max(availableQtyBeforeInsert - alreadyInsertedQty - item.qty, 0)
@@ -1303,8 +1304,16 @@ export async function completeEvhsDraftVoucher(data: z.infer<typeof _completeDra
                     .reduce((t, vi) => t + vi.qty, 0)
 
                 const warehouseStockQty = legacyStockByProduct.get(item.productId)
-                const availableQty = warehouseStockQty !== undefined
-                    ? Math.max(warehouseStockQty - usedQty, 0)
+                const normalizedSerial = normalizeSerialNumber(item.serialNumber)
+                const serialExistsInWarehouse = relevantReceiptItems.some(receiptItem =>
+                    parseSerialNumbers(receiptItem.serialNumbers).includes(normalizedSerial)
+                )
+                const sourceType = normalizedSerial
+                    ? (serialExistsInWarehouse ? "receipt" : "legacy-stock")
+                    : (warehouseStockQty !== undefined ? "legacy-stock" : "receipt")
+
+                const availableQty = sourceType === "legacy-stock"
+                    ? (warehouseStockQty !== undefined ? Math.max(warehouseStockQty - usedQty, 0) : 0)
                     : Math.max(receivedQty - usedQty, 0)
 
                 const nextRequested = (requestedQtyByProduct.get(item.productId) || 0) + item.qty
