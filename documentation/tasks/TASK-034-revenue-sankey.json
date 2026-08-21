@@ -1,0 +1,12 @@
+{
+  "id": "TASK-034",
+  "status": "completed",
+  "priority": "P1",
+  "title": "Add Sankey Customer tab in Revenue Forecast",
+  "description": "Create a new tab 'Top Sankey Customer' in /dashboard/revenue-forecast processing sales_revenue_sap table, currency toggle, filters, summary, and scorecards.",
+  "createdAt": "2026-08-21T17:20:00.000Z",
+  "startedAt": "2026-08-21T09:20:07.237Z",
+  "updatedAt": "2026-08-21T09:37:18.222Z",
+  "completedAt": "2026-08-21T09:37:18.222Z",
+  "completionDetails": "Menambahkan tab Top Sankey Customer di halaman /dashboard/revenue-forecast dengan diagram Sankey, scorecard, filter interaktif, tabel summary, detail transaksi, dan ekspor CSV"
+}

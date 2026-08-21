@@ -5,7 +5,10 @@ import {
 } from "@/lib/server/dashboard-revenue"
 import { RevenueClient } from "./_components/revenue-client"
 import { SalesRevenueTable } from "./_components/sales-revenue-table"
+import { getSankeyFilters } from "@/app/actions/revenue-sankey"
+import { SankeyClient } from "./_components/sankey-client"
 import { format } from "date-fns"
+import Link from "next/link"
 
 export const metadata = {
     title: "Sales Revenue Dashboard - One Chitra",
@@ -14,9 +17,46 @@ export const metadata = {
 export const dynamic = "force-dynamic"
 export const revalidate = 0
 
-export default async function RevenueForecastPage({ searchParams }: { searchParams: Promise<{ period?: string }> }) {
+export default async function RevenueForecastPage({ 
+    searchParams 
+}: { 
+    searchParams: Promise<{ period?: string; tab?: string }> 
+}) {
     const params = await searchParams;
     const period = params.period || format(new Date(), 'MM.yyyy')
+    const tab = params.tab || "forecast"
+
+    if (tab === "sankey") {
+        const filterRes = await getSankeyFilters()
+        const initialFilters = filterRes.success ? {
+            years: filterRes.years || [],
+            materialGroups: filterRes.materialGroups || []
+        } : { years: [], materialGroups: [] }
+
+        return (
+            <div className="flex-1 p-4 md:p-6 pt-4 relative flex flex-col bg-muted/20 min-h-screen">
+                <div className="flex-1 min-h-0 space-y-4">
+                    {/* Tab Navigation Header */}
+                    <div className="flex justify-between items-center bg-card border rounded-xl p-3 shadow-sm">
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Mode Tampilan:</span>
+                            <div className="flex gap-1.5 bg-muted p-1 rounded-lg border">
+                                <Link href={`/dashboard/revenue-forecast?tab=forecast&period=${period}`}>
+                                    <span className="px-3.5 py-1 text-xs font-bold rounded-md transition-all cursor-pointer text-muted-foreground hover:text-foreground">
+                                        Forecast & Analysis
+                                    </span>
+                                </Link>
+                                <span className="px-3.5 py-1 text-xs font-bold rounded-md bg-card text-foreground shadow-sm border border-border/10 cursor-default">
+                                    Top Sankey Customer
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    <SankeyClient initialFilters={initialFilters} />
+                </div>
+            </div>
+        )
+    }
 
     const response = await getDashboardRevenueForecastData({ period })
     const salesRevenueResponse = await getAllSalesRevenueDataForPage({ period })
@@ -55,6 +95,23 @@ export default async function RevenueForecastPage({ searchParams }: { searchPara
     return (
         <div className="flex-1 p-4 md:p-6 pt-4 relative flex flex-col bg-muted/20 min-h-screen">
             <div className="flex-1 min-h-0 space-y-4">
+                {/* Tab Navigation Header */}
+                <div className="flex justify-between items-center bg-card border rounded-xl p-3 shadow-sm">
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Mode Tampilan:</span>
+                        <div className="flex gap-1.5 bg-muted p-1 rounded-lg border">
+                            <span className="px-3.5 py-1 text-xs font-bold rounded-md bg-card text-foreground shadow-sm border border-border/10 cursor-default">
+                                Forecast & Analysis
+                            </span>
+                            <Link href={`/dashboard/revenue-forecast?tab=sankey&period=${period}`}>
+                                <span className="px-3.5 py-1 text-xs font-bold rounded-md transition-all cursor-pointer text-muted-foreground hover:text-foreground">
+                                    Top Sankey Customer
+                                </span>
+                            </Link>
+                        </div>
+                    </div>
+                </div>
+
                 <RevenueClient initialData={data} selectedPeriod={period} inventoryData={inventoryData} />
                 <SalesRevenueTable 
                     data={salesRevenueData} 
