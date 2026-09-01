@@ -125,7 +125,7 @@ export async function getSankeyDashboardData(filters: SankeyFilters) {
       // Classification logic: Prime Product vs PA vs Service
       let category = "Service"
       if (revTypeUpper === "TRADING") {
-        const isTire = matGrpUpper.includes("TIRE") || matGrpUpper.includes("TYRE") || matGrpUpper.includes("TYR")
+        const isTire = (matGrpUpper.includes("TIRE") || matGrpUpper.includes("TYRE") || matGrpUpper.includes("TYR")) && !matGrpUpper.includes("ACCESS")
         if (isTire) {
           category = "Prime Product"
         } else {

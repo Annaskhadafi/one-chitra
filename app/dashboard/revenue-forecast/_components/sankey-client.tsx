@@ -59,6 +59,55 @@ const MONTHS = [
   { key: "12", label: "Desember" }
 ]
 
+const SANKEY_CATEGORY_COLORS: Record<string, string> = {
+  "Prime Product": "#6366f1",
+  PA: "#10b981",
+  Service: "#f59e0b"
+}
+
+function CustomSankeyNode(props: any) {
+  const { x, y, width, height, payload } = props
+  const isCategory = ["Prime Product", "PA", "Service"].includes(payload.name)
+  const h = Math.max(height, 2)
+
+  let fill = "#3b82f6"
+  if (SANKEY_CATEGORY_COLORS[payload.name]) fill = SANKEY_CATEGORY_COLORS[payload.name]
+  else if (payload.name === "OTHERS") fill = "#94a3b8"
+
+  return (
+    <g>
+      <rect x={x} y={y} width={width} height={h} fill={fill} fillOpacity={0.85} rx={2} className="stroke-background stroke-1" />
+      <text
+        x={isCategory ? x + width + 8 : x - 8}
+        y={y + h / 2}
+        dy=".35em"
+        textAnchor={isCategory ? "start" : "end"}
+        fontSize={10}
+        fontWeight={isCategory ? 700 : 600}
+        fill="#475569"
+        className="dark:fill-slate-300"
+      >
+        {payload.name}
+      </text>
+    </g>
+  )
+}
+
+function CustomSankeyLink(props: any) {
+  const { sourceX, sourceY, sourceControlX, targetX, targetY, targetControlX, linkWidth, payload } = props
+  const stroke = SANKEY_CATEGORY_COLORS[payload?.target?.name] || "#94a3b8"
+
+  return (
+    <path
+      d={`M${sourceX},${sourceY} C${sourceControlX},${sourceY} ${targetControlX},${targetY} ${targetX},${targetY}`}
+      fill="none"
+      stroke={stroke}
+      strokeOpacity={0.48}
+      strokeWidth={linkWidth}
+    />
+  )
+}
+
 export function SankeyClient({ initialFilters }: SankeyClientProps) {
   const [isPending, startTransition] = useTransition()
   
@@ -150,7 +199,6 @@ export function SankeyClient({ initialFilters }: SankeyClientProps) {
 
   useEffect(() => {
     loadData()
-    setCurrentPage(1)
   }, [loadData])
 
   useEffect(() => {
@@ -254,47 +302,6 @@ export function SankeyClient({ initialFilters }: SankeyClientProps) {
       console.error(err)
       toast.error("Gagal mengekspor data.")
     }
-  }
-
-  // Sankey Custom Node Renderer
-  const CustomSankeyNode = (props: any) => {
-    const { x, y, width, height, payload } = props
-    const isCategory = ["Prime Product", "PA", "Service"].includes(payload.name)
-    const h = Math.max(height, 2)
-    
-    // Theme colors
-    let fill = "#3b82f6" // blue for customers
-    if (payload.name === "Prime Product") fill = "#6366f1" // indigo
-    else if (payload.name === "PA") fill = "#10b981" // emerald
-    else if (payload.name === "Service") fill = "#f59e0b" // amber
-    else if (payload.name === "OTHERS") fill = "#94a3b8" // gray
-
-    return (
-      <g>
-        <rect 
-          x={x} 
-          y={y} 
-          width={width} 
-          height={h} 
-          fill={fill} 
-          fillOpacity={0.85} 
-          rx={2} 
-          className="stroke-background stroke-1"
-        />
-        <text
-          x={isCategory ? x + width + 8 : x - 8}
-          y={y + h / 2}
-          dy=".35em"
-          textAnchor={isCategory ? "start" : "end"}
-          fontSize={10}
-          fontWeight={isCategory ? 700 : 600}
-          fill="#475569"
-          className="dark:fill-slate-300"
-        >
-          {payload.name}
-        </text>
-      </g>
-    )
   }
 
   return (
@@ -467,7 +474,15 @@ export function SankeyClient({ initialFilters }: SankeyClientProps) {
               <Layers className="h-4 w-4 text-primary" />
               Sankey Flow Chart (Customer ➔ Category)
             </CardTitle>
-            {isPending && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+            <div className="flex items-center gap-3 text-[10px] font-semibold text-muted-foreground">
+              {Object.entries(SANKEY_CATEGORY_COLORS).map(([category, color]) => (
+                <span key={category} className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
+                  {category}
+                </span>
+              ))}
+              {isPending && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+            </div>
           </CardHeader>
           <CardContent className="p-6">
             {dashboardData?.sankeyData && dashboardData.sankeyData.nodes.length > 0 ? (
@@ -477,8 +492,8 @@ export function SankeyClient({ initialFilters }: SankeyClientProps) {
                     data={dashboardData.sankeyData}
                     nodePadding={18}
                     nodeWidth={12}
-                    node={<CustomSankeyNode />}
-                    link={{ stroke: "#a5b4fc", strokeOpacity: 0.25 }}
+                    node={CustomSankeyNode}
+                    link={CustomSankeyLink}
                     margin={{ left: 130, right: 100, top: 20, bottom: 20 }}
                   >
                     <Tooltip 
