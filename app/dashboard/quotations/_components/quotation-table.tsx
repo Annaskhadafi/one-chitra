@@ -544,6 +544,7 @@ function QuotationTableInner({ data: initialData }: QuotationTableProps) {
     const queryClient = useQueryClient()
     const searchParams = useSearchParams()
     const { data: session } = useSession()
+    const currentUserId = session?.user?.id
     const mounted = useMounted()
     const [showSuccessDialog, setShowSuccessDialog] = useState(false)
     const [successMessage, setSuccessMessage] = useState("")
