@@ -503,17 +503,9 @@ function MultiSelectFilter(props: {
 }
 
 /**
- * Wrapper component to avoid "No QueryClient set" error during SSR.
+ * Wrapper component for Quotation table.
  */
 export function QuotationTable(props: QuotationTableProps) {
-    const mounted = useMounted()
-    if (!mounted) {
-        return (
-            <div className="flex h-96 items-center justify-center">
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </div>
-        )
-    }
     return <QuotationTableInner {...props} />
 }
 
@@ -553,8 +545,43 @@ function QuotationTableInner({ data: initialData }: QuotationTableProps) {
     const { data: session } = useSession()
     const currentUserId = session?.user?.id
     const mounted = useMounted()
+
+    const { hasResourcePermission } = usePermissions()
+    const canEdit = hasResourcePermission('quotations', 'edit')
+    const canDelete = hasResourcePermission('quotations', 'delete')
+
     const [showSuccessDialog, setShowSuccessDialog] = useState(false)
     const [successMessage, setSuccessMessage] = useState("")
+    const [sorting, setSorting] = useState<SortingState>([{ id: "quotationDate", desc: true }])
+    const [productRowSort, setProductRowSort] = useState<{ key: ProductRowSortKey; direction: SortDirection }>({
+        key: "quotationDate",
+        direction: "desc",
+    })
+    const [expandedItemSort, setExpandedItemSort] = useState<{ key: ExpandedItemSortKey; direction: SortDirection }>({
+        key: "index",
+        direction: "asc",
+    })
+    const [activeTab, setActiveTab] = useState("quotations")
+    const [globalFilter, setGlobalFilter] = useState("")
+    const [searchSelections, setSearchSelections] = useState<SearchSelection[]>([])
+    const [statusFilters, setStatusFilters] = useState<string[]>([])
+    const [userFilters, setUserFilters] = useState<string[]>([])
+    const [customerFilters, setCustomerFilters] = useState<string[]>([])
+    const [quotationDateRange, setQuotationDateRange] = useState<DateRange | undefined>(undefined)
+    const [rowSelection, setRowSelection] = useState({})
+    const [previewQuotation, setPreviewQuotation] = useState<QuotationWithRelations | null>(null)
+    const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+    const [isDuplicating, setIsDuplicating] = useState<number | null>(null)
+    const [isSearchFocused, setIsSearchFocused] = useState(false)
+    const [poDialogQuotation, setPoDialogQuotation] = useState<QuotationWithRelations | null>(null)
+    const [poFile, setPoFile] = useState<File | null>(null)
+    const [isUploadingPo, setIsUploadingPo] = useState(false)
+    const [deliveryDialogQuotation, setDeliveryDialogQuotation] = useState<QuotationWithRelations | null>(null)
+    const [expandedQuotationIds, setExpandedQuotationIds] = useState<number[]>([])
+    const [customerPoFileUrl, setCustomerPoFileUrl] = useState<string | null>(null)
+    const [isCustomerPoPreviewOpen, setIsCustomerPoPreviewOpen] = useState(false)
+    const [blockedDialog, setBlockedDialog] = useState<ActionBlockedDetails | null>(null)
+    const [isProductSearchOpen, setIsProductSearchOpen] = useState(false)
 
     const { data: quotations = initialData, isLoading, refetch } = useQuery({
         queryKey: ["quotations"],
@@ -643,42 +670,6 @@ function QuotationTableInner({ data: initialData }: QuotationTableProps) {
             cancelled = true
         }
     }, [focusId, queryClient, refetch, refreshToken])
-
-    const { hasResourcePermission } = usePermissions()
-    const canEdit = hasResourcePermission('quotations', 'edit')
-    const canDelete = hasResourcePermission('quotations', 'delete')
-
-    const [sorting, setSorting] = useState<SortingState>([{ id: "quotationDate", desc: true }])
-    const [productRowSort, setProductRowSort] = useState<{ key: ProductRowSortKey; direction: SortDirection }>({
-        key: "quotationDate",
-        direction: "desc",
-    })
-    const [expandedItemSort, setExpandedItemSort] = useState<{ key: ExpandedItemSortKey; direction: SortDirection }>({
-        key: "index",
-        direction: "asc",
-    })
-    const [activeTab, setActiveTab] = useState("quotations")
-    const [globalFilter, setGlobalFilter] = useState("")
-    const [searchSelections, setSearchSelections] = useState<SearchSelection[]>([])
-    const [statusFilters, setStatusFilters] = useState<string[]>([])
-    const [userFilters, setUserFilters] = useState<string[]>([])
-
-    const [customerFilters, setCustomerFilters] = useState<string[]>([])
-    const [quotationDateRange, setQuotationDateRange] = useState<DateRange | undefined>(undefined)
-    const [rowSelection, setRowSelection] = useState({})
-    const [previewQuotation, setPreviewQuotation] = useState<QuotationWithRelations | null>(null)
-    const [isPreviewOpen, setIsPreviewOpen] = useState(false)
-    const [isDuplicating, setIsDuplicating] = useState<number | null>(null)
-    const [isSearchFocused, setIsSearchFocused] = useState(false)
-    const [poDialogQuotation, setPoDialogQuotation] = useState<QuotationWithRelations | null>(null)
-    const [poFile, setPoFile] = useState<File | null>(null)
-    const [isUploadingPo, setIsUploadingPo] = useState(false)
-    const [deliveryDialogQuotation, setDeliveryDialogQuotation] = useState<QuotationWithRelations | null>(null)
-    const [expandedQuotationIds, setExpandedQuotationIds] = useState<number[]>([])
-    const [customerPoFileUrl, setCustomerPoFileUrl] = useState<string | null>(null)
-    const [isCustomerPoPreviewOpen, setIsCustomerPoPreviewOpen] = useState(false)
-    const [blockedDialog, setBlockedDialog] = useState<ActionBlockedDetails | null>(null)
-    const [isProductSearchOpen, setIsProductSearchOpen] = useState(false)
 
     const toggleProductRowSort = useCallback((key: ProductRowSortKey) => {
         setProductRowSort((current) => (
