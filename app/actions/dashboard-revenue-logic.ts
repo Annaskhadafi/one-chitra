@@ -1,12 +1,11 @@
 import { db } from "@/db"
 import { salesRevenueSap, zmc9StockSap } from "@/db/schema/sap"
 import { forecasts } from "@/db/schema/forecasts"
-import { eq, sql, and, isNotNull, or, isNull, notIlike, ilike } from "drizzle-orm"
+import { eq, sql, and, isNotNull, or, isNull, notIlike, ilike, not } from "drizzle-orm"
 import { settings } from "@/db/schema/settings"
 import { normalizeRevenueReportConfig, type RevenueReportConfig } from "@/lib/revenue-report-config"
 import { mergeRevenueTypeTotals } from "@/lib/revenue-type"
 import { salesRevenueCountableQty } from "@/lib/sales-revenue-sql"
-
 
 export interface DashboardRevenueFilters {
     period: string; // MM.YYYY or YYYY
@@ -19,35 +18,21 @@ function getPeriodBounds(period: string) {
     if (isYearlyView) {
         const year = Number(period);
         return {
-            startDate: new Date(year, 0, 1),
-            endDate: new Date(year, 11, 31),
+            startDate: `${year}-01-01`,
+            endDate: `${year}-12-31`,
         };
     }
 
     const [monthStr, yearStr] = period.split(".");
     const month = Number(monthStr);
     const year = Number(yearStr);
+    const lastDay = new Date(year, month, 0).getDate();
 
     return {
-        startDate: new Date(year, month - 1, 1),
-        endDate: new Date(year, month, 0),
+        startDate: `${yearStr}-${monthStr.padStart(2, "0")}-01`,
+        endDate: `${yearStr}-${monthStr.padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`,
     };
 }
-
-// Mat grp desc for Prime Product (Tires)
-const PRIME_PRODUCT_MAT_GRPS = [
-    'TRUCK&BUS TIRES R24', 'TRUCK&BUS TIRES R20', 'TRUCK&BUS TIRES R16', 'TRUCK&BUS TIRES R10',
-    'PASSENGER TIRES R16',
-    'INDUSTRIAL TIRES R15', 'INDUSTRIAL TIRES R22', 'INDUSTRIAL TIRES R20', 'INDUSTRIAL TIRES R18',
-    'INDUSTRIAL TIRES R11', 'INDUSTRIAL TIRES R12',
-    'EARTHMOVER TIRES R63', 'EARTHMOVER TIRES R57', 'EARTHMOVER TIRES R51', 'EARTHMOVER TIRES R49',
-    'EARTHMOVER TIRES R45', 'EARTHMOVER TIRES R35', 'EARTHMOVER TIRES R33', 'EARTHMOVER TIRES R25'
-]
-
-// Mat grp desc for PA (Product Accessories)
-const PA_MAT_GRPS = [
-    'CP ACCESSORIES', 'CP TOOLS', 'CP WHEEL & RIM', 'CP CONSUMEABLE', 'CP EQUIPMENT', 'CP SERVICE'
-]
 
 export async function fetchDashboardRevenueForecast(filters: DashboardRevenueFilters) {
     const periodStr = filters.period;
@@ -55,8 +40,8 @@ export async function fetchDashboardRevenueForecast(filters: DashboardRevenueFil
     const [, year] = isYearlyView ? ["", periodStr] : periodStr.split('.');
     const { startDate, endDate } = getPeriodBounds(periodStr);
     const rangeDateFilter = and(
-        sql`${salesRevenueSap.billingDate} >= ${startDate.toISOString().slice(0, 10)}`,
-        sql`${salesRevenueSap.billingDate} <= ${endDate.toISOString().slice(0, 10)}`,
+        sql`${salesRevenueSap.billingDate} >= ${startDate}`,
+        sql`${salesRevenueSap.billingDate} <= ${endDate}`,
     );
 
     // 1. Fetch Forecast for the requested period
@@ -86,9 +71,14 @@ export async function fetchDashboardRevenueForecast(filters: DashboardRevenueFil
     );
 
     // ─── A. Revenue Prime Product ───────────────────────────────────────────
-    const primeProdMatGrpFilter = sql`upper(trim(${salesRevenueSap.matGrpDesc})) = ANY(ARRAY[${sql.raw(
-        PRIME_PRODUCT_MAT_GRPS.map(g => `'${g}'`).join(', ')
-    )}]::text[])`;
+    const primeProdMatGrpFilter = and(
+        or(
+            ilike(salesRevenueSap.matGrpDesc, '%TIRE%'),
+            ilike(salesRevenueSap.matGrpDesc, '%TYRE%'),
+            ilike(salesRevenueSap.matGrpDesc, '%TYR%')
+        ),
+        not(ilike(salesRevenueSap.matGrpDesc, '%ACCESS%'))
+    );
 
     const primeProductData = await db.select({
         total: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInLocCurr}, 0))`
@@ -109,9 +99,7 @@ export async function fetchDashboardRevenueForecast(filters: DashboardRevenueFil
     const revenueService = Number(serviceData[0]?.total || 0);
 
     // ─── C. Revenue PA (Product Accessories) ───────────────────────────────
-    const paMtGrpFilter = sql`upper(trim(${salesRevenueSap.matGrpDesc})) = ANY(ARRAY[${sql.raw(
-        PA_MAT_GRPS.map(g => `'${g}'`).join(', ')
-    )}]::text[])`;
+    const paMtGrpFilter = not(primeProdMatGrpFilter);
 
     const paData = await db.select({
         total: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInLocCurr}, 0))`
@@ -364,8 +352,8 @@ export async function fetchAllSalesRevenueData(filters: DashboardRevenueFilters)
         const dateFormat = isYearlyView ? 'YYYY' : 'MM.YYYY';
         const dateFilter = sql`to_char(${salesRevenueSap.billingDate}, ${dateFormat}) = ${periodStr}`;
         const rangeDateFilter = and(
-            sql`${salesRevenueSap.billingDate} >= ${startDate.toISOString().slice(0, 10)}`,
-            sql`${salesRevenueSap.billingDate} <= ${endDate.toISOString().slice(0, 10)}`,
+            sql`${salesRevenueSap.billingDate} >= ${startDate}`,
+            sql`${salesRevenueSap.billingDate} <= ${endDate}`,
         );
         const salesRevenueFilter = and(
             isNotNull(salesRevenueSap.billingDate),

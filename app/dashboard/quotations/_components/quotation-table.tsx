@@ -516,6 +516,7 @@ function isDateWithinRange(dateValue: Date | string, range?: DateRange) {
 
     const date = new Date(dateValue)
     if (Number.isNaN(date.getTime())) {
+
         return false
     }
 
@@ -543,8 +544,6 @@ function QuotationTableInner({ data: initialData }: QuotationTableProps) {
     const queryClient = useQueryClient()
     const searchParams = useSearchParams()
     const { data: session } = useSession()
-    const currentUserId = session?.user?.id
-
     const mounted = useMounted()
     const [showSuccessDialog, setShowSuccessDialog] = useState(false)
     const [successMessage, setSuccessMessage] = useState("")
@@ -556,12 +555,9 @@ function QuotationTableInner({ data: initialData }: QuotationTableProps) {
             return result as QuotationWithRelations[]
         },
         initialData,
-        initialDataUpdatedAt: 0,
-        staleTime: 0,
-        refetchOnMount: true,
-        refetchOnWindowFocus: true,
-        refetchInterval: 15_000,
-        refetchIntervalInBackground: true,
+        staleTime: 60_000,
+        refetchOnMount: false,
+        refetchOnWindowFocus: false,
     })
     const refreshToken = searchParams.get("refresh")
     const focusId = useMemo(() => {
