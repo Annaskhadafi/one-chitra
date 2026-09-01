@@ -836,7 +836,10 @@ type ConvertQuotationOptions = {
 }
 
 export async function getQuotations() {
-    await syncExpiredQuotations(false)
+    // Jalankan auto-expire di background secara non-blocking agar tidak menahan query utama
+    void syncExpiredQuotations(false).catch((error) => {
+        console.error("Background quotation expiry sync failed:", error)
+    })
 
     const rows = await db.query.quotations.findMany({
         with: {
@@ -897,7 +900,10 @@ export async function getQuotations() {
 }
 
 export async function getQuotation(id: number | string) {
-    await syncExpiredQuotations(false)
+    // Jalankan auto-expire di background secara non-blocking agar tidak menahan query detail
+    void syncExpiredQuotations(false).catch((error) => {
+        console.error("Background quotation expiry sync failed:", error)
+    })
 
     const safeId = toValidQuotationId(id)
     if (safeId === null) {
