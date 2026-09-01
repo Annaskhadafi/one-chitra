@@ -291,3 +291,16 @@ export async function adminResetPassword(userId: string, newPassword: string) {
     }
 }
 
+export async function getQuotationUsers() {
+    return await db.select({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        image: user.image,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+        emailVerified: user.emailVerified,
+    }).from(user).orderBy(user.name)
+}
+

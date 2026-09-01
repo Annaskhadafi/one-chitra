@@ -1,6 +1,6 @@
 import { getCustomers } from "@/app/actions/customer"
-import { getProducts } from "@/app/actions/product"
-import { getUsers } from "@/app/actions/users"
+import { getProductsForQuotation } from "@/app/actions/product"
+import { getQuotationUsers } from "@/app/actions/users"
 import { getVendorQuotations } from "@/app/actions/vendor-quotation"
 import { QuotationForm } from "../_components/quotation-form"
 import { auth } from "@/lib/auth"
@@ -13,10 +13,10 @@ export default async function CreateQuotationPage() {
 
     const [customers, products, users, vendorQuotations] = await Promise.all([
         getCustomers(),
-        getProducts(),
-        getUsers(),
-        getVendorQuotations(),
+        getProductsForQuotation(),
+        getQuotationUsers(),
+        getVendorQuotations(50),
     ])
 
-    return <QuotationForm customers={customers} products={products} users={users} vendorQuotations={vendorQuotations} currentUserId={session?.user.id} />
+    return <QuotationForm customers={customers} products={products} users={users as any} vendorQuotations={vendorQuotations} currentUserId={session?.user.id} />
 }

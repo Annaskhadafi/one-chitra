@@ -506,6 +506,14 @@ function MultiSelectFilter(props: {
  * Wrapper component to avoid "No QueryClient set" error during SSR.
  */
 export function QuotationTable(props: QuotationTableProps) {
+    const mounted = useMounted()
+    if (!mounted) {
+        return (
+            <div className="flex h-96 items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+        )
+    }
     return <QuotationTableInner {...props} />
 }
 
@@ -516,7 +524,6 @@ function isDateWithinRange(dateValue: Date | string, range?: DateRange) {
 
     const date = new Date(dateValue)
     if (Number.isNaN(date.getTime())) {
-
         return false
     }
 

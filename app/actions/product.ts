@@ -609,3 +609,7 @@ export async function importMaterialPtro(data: { materialNumber: string, materia
         return { success: false, error: `Failed to import PTRO mappings: ${msg}` }
     }
 }
+
+export async function getProductsForQuotation() {
+    return await db.select().from(products).orderBy(products.materialNumber)
+}

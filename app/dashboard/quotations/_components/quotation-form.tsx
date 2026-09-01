@@ -570,8 +570,11 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
             .filter((item) => item.itemName.trim().length > 0 && item.unitPrice > 0),
         [vendorQuotations]
     )
-    const vendorQuotationFuse = useMemo(
-        () => new Fuse(vendorQuotationCandidates, {
+    const vendorQuotationFuse = useMemo(() => {
+        if (!vendorSearchQuery || vendorSearchQuery.trim().length < 2) {
+            return null
+        }
+        return new Fuse(vendorQuotationCandidates, {
             includeScore: true,
             threshold: 0.35,
             ignoreLocation: true,
@@ -582,9 +585,8 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                 { name: "vendorName", weight: 0.1 },
                 { name: "quoteNumber", weight: 0.1 },
             ],
-        }),
-        [vendorQuotationCandidates]
-    )
+        })
+    }, [vendorQuotationCandidates, vendorSearchQuery])
     const vendorMatchResults = useMemo(() => {
         const query = vendorSearchQuery.trim()
         if (!query) {
@@ -638,8 +640,8 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
             .map((entry) => entry.candidate)
 
         const fuseMatches = vendorQuotationFuse
-            .search(query)
-            .map((result) => result.item)
+            ? vendorQuotationFuse.search(query).map((result) => result.item)
+            : []
 
         const combinedMatches = [...tokenMatches, ...fuseMatches]
         const uniqueMatches = combinedMatches.filter((candidate, index, array) => (

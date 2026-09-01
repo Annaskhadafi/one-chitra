@@ -33,9 +33,10 @@ function mapToSerializable(row: VendorQuotationRow): VendorQuotationWithItems {
     }
 }
 
-export async function getVendorQuotations(): Promise<VendorQuotationWithItems[]> {
+export async function getVendorQuotations(limit?: number): Promise<VendorQuotationWithItems[]> {
     const rows = await db.query.vendorQuotations.findMany({
         orderBy: [desc(vendorQuotations.createdAt)],
+        ...(limit ? { limit } : {}),
         with: {
             items: true,
         },
