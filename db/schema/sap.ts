@@ -140,7 +140,13 @@ export const salesRevenueSap = pgTable("sales_revenue_sap", {
     costOfSales: doublePrecision("cost_of_sales"),
     profitMargin: doublePrecision("profit_margin"),
     extractedAt: timestamp("extracted_at"),
-});
+}, (table) => ({
+    billingDateIdx: index("sales_revenue_sap_billing_date_idx").on(table.billingDate),
+    revTypeIdx: index("sales_revenue_sap_rev_type_idx").on(table.revType),
+    customerIdx: index("sales_revenue_sap_customer_idx").on(table.customer),
+    materialNoIdx: index("sales_revenue_sap_material_no_idx").on(table.materialNo),
+    matGrpDescIdx: index("sales_revenue_sap_mat_grp_desc_idx").on(table.matGrpDesc),
+}));
 
 export const iw39PmoReportSap = pgTable("iw39_pmo_report_sap", {
     pmoReportId: integer("pmo_report_id").primaryKey(),

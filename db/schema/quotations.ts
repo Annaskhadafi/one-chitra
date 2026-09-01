@@ -1,4 +1,4 @@
-import { pgTable, serial, varchar, integer, numeric, text, timestamp, boolean, jsonb, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, serial, varchar, integer, numeric, text, timestamp, boolean, jsonb, uniqueIndex, index } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { user } from "./auth";
 import { customers } from "./customers";
@@ -149,7 +149,12 @@ export const quotations = pgTable("quotations", {
     poValidationSummary: jsonb("po_validation_summary").$type<QuotationPoValidationSummary>(),
     autoConvertedAt: timestamp("auto_converted_at"),
     autoConvertedBy: varchar("auto_converted_by").references(() => user.id),
-});
+}, (table) => ({
+    customerIdIdx: index("quotations_customer_id_idx").on(table.customerId),
+    createdByIdx: index("quotations_created_by_idx").on(table.createdBy),
+    statusIdx: index("quotations_status_idx").on(table.status),
+    quotationDateIdx: index("quotations_quotation_date_idx").on(table.quotationDate),
+}));
 
 export const quotationItems = pgTable("quotation_items", {
     id: serial("id").primaryKey(),
@@ -161,7 +166,10 @@ export const quotationItems = pgTable("quotation_items", {
     unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).notNull(),
     discount: numeric("discount", { precision: 12, scale: 2 }).default("0").notNull(),
     tax: numeric("tax", { precision: 12, scale: 2 }).default("0").notNull(),
-});
+}, (table) => ({
+    quotationIdIdx: index("quotation_items_quotation_id_idx").on(table.quotationId),
+    productIdIdx: index("quotation_items_product_id_idx").on(table.productId),
+}));
 
 export const quotationAttachments = pgTable("quotation_attachments", {
     id: serial("id").primaryKey(),
@@ -176,7 +184,9 @@ export const quotationAttachments = pgTable("quotation_attachments", {
     includeInPdf: boolean("include_in_pdf").default(true).notNull(),
     uploadedBy: varchar("uploaded_by").references(() => user.id).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => ({
+    quotationIdIdx: index("quotation_attachments_quotation_id_idx").on(table.quotationId),
+}));
 
 export const quotationRevisions = pgTable("quotation_revisions", {
     id: serial("id").primaryKey(),

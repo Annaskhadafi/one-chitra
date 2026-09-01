@@ -1,4 +1,4 @@
-import { pgTable, serial, varchar, integer, numeric, text, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, varchar, integer, numeric, text, timestamp, index } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { user } from "./auth";
 import { customers } from "./customers";
@@ -39,7 +39,14 @@ export const salesOrders = pgTable("sales_orders", {
     createdBy: varchar("created_by").references(() => user.id),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (table) => ({
+    customerIdIdx: index("sales_orders_customer_id_idx").on(table.customerId),
+    salesPersonIdIdx: index("sales_orders_sales_person_id_idx").on(table.salesPersonId),
+    warehouseIdIdx: index("sales_orders_warehouse_id_idx").on(table.warehouseId),
+    statusIdx: index("sales_orders_status_idx").on(table.status),
+    salesDateIdx: index("sales_orders_sales_date_idx").on(table.salesDate),
+    quotationIdIdx: index("sales_orders_quotation_id_idx").on(table.quotationId),
+}));
 
 export const salesOrderItems = pgTable("sales_order_items", {
     id: serial("id").primaryKey(),
@@ -52,7 +59,10 @@ export const salesOrderItems = pgTable("sales_order_items", {
     unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).default("0").notNull(),
     discount: numeric("discount", { precision: 12, scale: 2 }).default("0").notNull(),
     tax: numeric("tax", { precision: 12, scale: 2 }).default("0").notNull(),
-});
+}, (table) => ({
+    salesOrderIdIdx: index("sales_order_items_sales_order_id_idx").on(table.salesOrderId),
+    productIdIdx: index("sales_order_items_product_id_idx").on(table.productId),
+}));
 
 export const salesOrdersRelations = relations(salesOrders, ({ one, many }) => ({
     customer: one(customers, {

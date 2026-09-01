@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, varchar, text, timestamp, boolean, decimal } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, varchar, text, timestamp, boolean, decimal, index } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { salesOrders, salesOrderItems } from "./sales-orders";
 import { warehouses } from "./warehouses";
@@ -58,7 +58,13 @@ export const deliveries = pgTable("deliveries", {
     createdBy: varchar("created_by").references(() => user.id),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (table) => ({
+    salesOrderIdIdx: index("deliveries_sales_order_id_idx").on(table.salesOrderId),
+    statusIdx: index("deliveries_status_idx").on(table.status),
+    scheduledDateIdx: index("deliveries_scheduled_date_idx").on(table.scheduledDate),
+    deliveryDateIdx: index("deliveries_delivery_date_idx").on(table.deliveryDate),
+    doStatusIdx: index("deliveries_do_status_idx").on(table.doStatus),
+}));
 
 export const deliveryItems = pgTable("delivery_items", {
     id: serial("id").primaryKey(),
@@ -68,7 +74,10 @@ export const deliveryItems = pgTable("delivery_items", {
     orderedQuantity: integer("ordered_quantity").default(0).notNull(),
     deliveredQuantity: integer("delivered_quantity").default(0).notNull(),
     serialNumbers: text("serial_numbers").array(),
-});
+}, (table) => ({
+    deliveryIdIdx: index("delivery_items_delivery_id_idx").on(table.deliveryId),
+    productIdIdx: index("delivery_items_product_id_idx").on(table.productId),
+}));
 
 // Import fleetTrips here to avoid circular dependency issues in table definition if possible, 
 // but for relations it's fine.
