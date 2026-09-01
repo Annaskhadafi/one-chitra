@@ -2,13 +2,6 @@
 FROM node:22-bookworm-slim AS deps
 WORKDIR /app
 
-# Install build dependencies
-RUN apt-get update && apt-get install -y \
-    python3 \
-    make \
-    g++ \
-    && rm -rf /var/lib/apt/lists/*
-
 COPY package.json package-lock.json ./
 RUN npm ci
 
@@ -21,6 +14,7 @@ COPY . .
 # Set environment variables for build
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
+ENV NODE_OPTIONS="--max-old-space-size=2048"
 
 RUN npm run build
 
@@ -34,21 +28,12 @@ ENV HOME=/app
 ENV XDG_CONFIG_HOME=/app/.config
 ENV XDG_CACHE_HOME=/app/.cache
 
-# Install system libraries for Chromium/Puppeteer
-RUN apt-get update && apt-get install -y \
+# Install Chromium and required fonts for Puppeteer using --no-install-recommends
+# This avoids installing 250MB+ of unnecessary desktop/printer/samba packages
+RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
-    libnss3 \
-    libatk1.0-0 \
-    libatk-bridge2.0-0 \
-    libcups2 \
-    libgbm1 \
-    libasound2 \
-    libpangocairo-1.0-0 \
-    libxss1 \
-    libgtk-3-0 \
-    libxshmfence1 \
-    libglu1 \
     chromium \
+    fonts-freefont-ttf \
     && rm -rf /var/lib/apt/lists/*
 
 # Set Puppeteer to use the installed Chromium
@@ -71,7 +56,6 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 # IMPORTANT: Copy the db folder (schema) and drizzle folder (migrations)
-# drizzle-kit push needs the schema files to work!
 COPY --from=builder --chown=nextjs:nodejs /app/db ./db
 COPY --from=builder --chown=nextjs:nodejs /app/drizzle ./drizzle
 COPY --from=builder --chown=nextjs:nodejs /app/drizzle.config.ts ./drizzle.config.ts

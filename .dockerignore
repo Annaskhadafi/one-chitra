@@ -1,0 +1,33 @@
+node_modules
+.next
+.git
+.gitignore
+.dockerignore
+Dockerfile*
+docker-compose*
+README.md
+*.md
+
+# Local assets and uploads (mounted via persistent bind mount on Dokploy)
+public/uploads/*
+!public/uploads/.gitkeep
+uploads
+backups
+scratch
+graphify-out
+
+# Documentation and large binaries
+documentation
+*.pdf
+*.xlsx
+*.sql
+*.tar.gz
+*.zip
+*.log
+
+# Environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
