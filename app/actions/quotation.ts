@@ -684,9 +684,18 @@ async function generateSalesOrderNumber(tx: DbTransaction) {
     return `${prefix}-${String(nextNum).padStart(4, "0")}`
 }
 
+let lastExpirySyncTimestamp = 0
+const EXPIRY_SYNC_COOLDOWN_MS = 15 * 60 * 1000 // 15 menit
+
 async function syncExpiredQuotations(shouldRevalidate = true) {
     try {
         const now = new Date()
+        // Throttle background check agar tidak terus menerus menjalankan query/transaksi database saat browsing
+        if (!shouldRevalidate && now.getTime() - lastExpirySyncTimestamp < EXPIRY_SYNC_COOLDOWN_MS) {
+            return { success: true as const, expired: 0 }
+        }
+        lastExpirySyncTimestamp = now.getTime()
+
         const staleQuotations = await db.query.quotations.findMany({
             where: and(
                 inArray(quotations.status, ["draft", "sent", "approved"]),
@@ -851,12 +860,6 @@ export async function getQuotations() {
                     product: true,
                 },
             },
-            attachments: {
-                with: {
-                    uploadedByUser: true,
-                },
-                orderBy: [desc(quotationAttachments.createdAt)],
-            },
         },
         orderBy: [desc(quotations.createdAt)],
     })
@@ -872,6 +875,7 @@ export async function getQuotations() {
     if (salesOrderIds.length === 0) {
         return rows.map((quotation) => ({
             ...quotation,
+            attachments: [],
             relatedDeliveries: [],
         }))
     }
@@ -880,7 +884,6 @@ export async function getQuotations() {
         where: inArray(deliveries.salesOrderId, salesOrderIds),
         with: {
             warehouse: true,
-            createdByUser: true,
             items: true,
         },
         orderBy: [desc(deliveries.scheduledDate), desc(deliveries.createdAt)],
@@ -895,6 +898,7 @@ export async function getQuotations() {
 
     return rows.map((quotation) => ({
         ...quotation,
+        attachments: [],
         relatedDeliveries: quotation.salesOrderId ? (deliveryMap.get(quotation.salesOrderId) ?? []) : [],
     }))
 }

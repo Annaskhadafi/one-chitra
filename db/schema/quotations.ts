@@ -154,6 +154,9 @@ export const quotations = pgTable("quotations", {
     createdByIdx: index("quotations_created_by_idx").on(table.createdBy),
     statusIdx: index("quotations_status_idx").on(table.status),
     quotationDateIdx: index("quotations_quotation_date_idx").on(table.quotationDate),
+    createdAtIdx: index("quotations_created_at_idx").on(table.createdAt),
+    salesOrderIdIdx: index("quotations_sales_order_id_idx").on(table.salesOrderId),
+    validUntilIdx: index("quotations_valid_until_idx").on(table.validUntil),
 }));
 
 export const quotationItems = pgTable("quotation_items", {

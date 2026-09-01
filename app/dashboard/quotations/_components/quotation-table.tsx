@@ -142,7 +142,7 @@ interface QuotationWithRelations {
             sloc: string | null
             description: string | null
         } | null
-        createdByUser: { id: string; name: string; email: string } | null
+        createdByUser?: { id: string; name: string; email: string } | null
         items: {
             id: number
             orderedQuantity: number
