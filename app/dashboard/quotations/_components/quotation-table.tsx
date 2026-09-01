@@ -174,6 +174,8 @@ interface QuotationWithRelations {
 
 interface QuotationTableProps {
     data: QuotationWithRelations[]
+    currentUserId?: string | null
+    availableCreators?: { id: string; name: string }[]
 }
 
 type ProductQuotationRow = {
@@ -538,12 +540,12 @@ function isDateWithinRange(dateValue: Date | string, range?: DateRange) {
     return true
 }
 
-function QuotationTableInner({ data: initialData }: QuotationTableProps) {
+function QuotationTableInner({ data: initialData, currentUserId: serverUserId, availableCreators = [] }: QuotationTableProps) {
     const router = useRouter()
     const queryClient = useQueryClient()
     const searchParams = useSearchParams()
     const { data: session } = useSession()
-    const currentUserId = session?.user?.id
+    const currentUserId = serverUserId || session?.user?.id
     const mounted = useMounted()
 
     const { hasResourcePermission } = usePermissions()
@@ -565,7 +567,7 @@ function QuotationTableInner({ data: initialData }: QuotationTableProps) {
     const [globalFilter, setGlobalFilter] = useState("")
     const [searchSelections, setSearchSelections] = useState<SearchSelection[]>([])
     const [statusFilters, setStatusFilters] = useState<string[]>([])
-    const [userFilters, setUserFilters] = useState<string[]>([])
+    const [userFilters, setUserFilters] = useState<string[]>(() => (serverUserId ? [serverUserId] : []))
     const [customerFilters, setCustomerFilters] = useState<string[]>([])
     const [quotationDateRange, setQuotationDateRange] = useState<DateRange | undefined>(undefined)
     const [rowSelection, setRowSelection] = useState({})
@@ -583,13 +585,20 @@ function QuotationTableInner({ data: initialData }: QuotationTableProps) {
     const [blockedDialog, setBlockedDialog] = useState<ActionBlockedDetails | null>(null)
     const [isProductSearchOpen, setIsProductSearchOpen] = useState(false)
 
+    const isFilteredToCurrentOnly = userFilters.length === 1 && userFilters[0] === currentUserId
+    const isAllUsers = userFilters.length === 0
+    const targetUserId = isFilteredToCurrentOnly ? currentUserId : (isAllUsers ? undefined : userFilters[0])
+
     const { data: quotations = initialData, isLoading, refetch } = useQuery({
-        queryKey: ["quotations"],
+        queryKey: ["quotations", isAllUsers ? "all" : (targetUserId || "all")],
         queryFn: async () => {
-            const result = await getQuotations()
+            const result = await getQuotations({
+                userId: isAllUsers ? undefined : targetUserId,
+                all: isAllUsers,
+            })
             return result as QuotationWithRelations[]
         },
-        initialData,
+        initialData: isFilteredToCurrentOnly ? initialData : undefined,
         staleTime: 60_000,
         refetchOnMount: false,
         refetchOnWindowFocus: false,
@@ -604,23 +613,17 @@ function QuotationTableInner({ data: initialData }: QuotationTableProps) {
     }, [searchParams])
 
     useEffect(() => {
-        const queryState = queryClient.getQueryState<QuotationWithRelations[]>(["quotations"])
-        const cachedQuotations = queryClient.getQueryData<QuotationWithRelations[]>(["quotations"])
+        const queryState = queryClient.getQueryState<QuotationWithRelations[]>(["quotations", isAllUsers ? "all" : (targetUserId || "all")])
+        const cachedQuotations = queryClient.getQueryData<QuotationWithRelations[]>(["quotations", isAllUsers ? "all" : (targetUserId || "all")])
 
         if ((queryState?.dataUpdatedAt ?? 0) > 0 && (cachedQuotations?.length ?? 0) >= initialData.length) {
             return
         }
 
-        queryClient.setQueryData<QuotationWithRelations[]>(["quotations"], initialData)
-    }, [initialData, queryClient])
-
-    useEffect(() => {
-        if (!currentUserId) {
-            return
+        if (isFilteredToCurrentOnly) {
+            queryClient.setQueryData<QuotationWithRelations[]>(["quotations", currentUserId || "all"], initialData)
         }
-
-        setUserFilters((current) => current.length > 0 ? current : [currentUserId])
-    }, [currentUserId])
+    }, [currentUserId, initialData, isAllUsers, isFilteredToCurrentOnly, queryClient, targetUserId])
 
     useEffect(() => {
         if (!refreshToken) return
@@ -700,6 +703,9 @@ function QuotationTableInner({ data: initialData }: QuotationTableProps) {
     // Extract unique users for filter
     const uniqueUsers = useMemo(() => {
         const users = new Map<string, string>()
+        availableCreators.forEach((creator) => {
+            users.set(creator.id, creator.name)
+        })
         quotations.forEach(q => {
             if (q.createdByUser) {
                 users.set(q.createdByUser.id, q.createdByUser.name)
@@ -708,7 +714,7 @@ function QuotationTableInner({ data: initialData }: QuotationTableProps) {
             }
         })
         return Array.from(users.entries()).map(([id, name]) => ({ id, name }))
-    }, [quotations])
+    }, [availableCreators, quotations])
 
     const uniqueCustomers = useMemo(() => {
         const customers = new Map<number, { id: number; name: string }>()

@@ -11,9 +11,10 @@ import {
     salesDocuments,
     salesOrderItems,
     salesOrders,
+    user,
 } from "@/db/schema"
 import type { QuotationPoValidationSummary, QuotationRevisionSnapshot } from "@/db/schema/quotations"
-import { and, desc, eq, inArray, isNotNull, lt, sql } from "drizzle-orm"
+import { and, asc, desc, eq, inArray, isNotNull, lt, or, sql } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { quotationSchema } from "@/lib/schemas"
@@ -844,13 +845,24 @@ type ConvertQuotationOptions = {
     poReceivedAt?: Date | null
 }
 
-export async function getQuotations() {
+export interface GetQuotationsOptions {
+    userId?: string | null
+    all?: boolean
+}
+
+export async function getQuotations(options?: GetQuotationsOptions) {
     // Jalankan auto-expire di background secara non-blocking agar tidak menahan query utama
     void syncExpiredQuotations(false).catch((error) => {
         console.error("Background quotation expiry sync failed:", error)
     })
 
+    const shouldFilterUser = Boolean(options?.userId && !options?.all)
+    const userWhereCondition = shouldFilterUser && options?.userId
+        ? or(eq(quotations.createdBy, options.userId), eq(quotations.salesPersonId, options.userId))
+        : undefined
+
     const rows = await db.query.quotations.findMany({
+        where: userWhereCondition,
         with: {
             customer: true,
             salesPerson: true,
@@ -901,6 +913,24 @@ export async function getQuotations() {
         attachments: [],
         relatedDeliveries: quotation.salesOrderId ? (deliveryMap.get(quotation.salesOrderId) ?? []) : [],
     }))
+}
+
+export async function getQuotationCreators() {
+    try {
+        const rows = await db
+            .selectDistinct({
+                id: user.id,
+                name: user.name,
+            })
+            .from(quotations)
+            .innerJoin(user, eq(quotations.createdBy, user.id))
+            .orderBy(asc(user.name))
+
+        return rows
+    } catch (error) {
+        console.error("Failed to get quotation creators:", error)
+        return []
+    }
 }
 
 export async function getQuotation(id: number | string) {

@@ -1,16 +1,32 @@
 import { Suspense } from "react"
-import { getQuotations } from "@/app/actions/quotation"
+import { getQuotations, getQuotationCreators } from "@/app/actions/quotation"
 import { QuotationTable } from "./_components/quotation-table"
 import { QuotationTableSkeleton } from "./_components/quotation-table-skeleton"
 import { PageHeader } from "@/components/page-header"
 import { CreateQuotationButton } from "./_components/create-quotation-button"
 import { FileText } from "lucide-react"
 
+import { auth } from "@/lib/auth"
+import { headers } from "next/headers"
+
 export const dynamic = "force-dynamic"
 
 async function QuotationTableContainer() {
-    const quotations = await getQuotations()
-    return <QuotationTable data={quotations as Parameters<typeof QuotationTable>[0]["data"]} />
+    const session = await auth.api.getSession({ headers: await headers() })
+    const currentUserId = session?.user?.id || null
+
+    const [quotations, availableCreators] = await Promise.all([
+        getQuotations({ userId: currentUserId }),
+        getQuotationCreators(),
+    ])
+
+    return (
+        <QuotationTable
+            data={quotations as Parameters<typeof QuotationTable>[0]["data"]}
+            currentUserId={currentUserId}
+            availableCreators={availableCreators}
+        />
+    )
 }
 
 export default function QuotationsPage() {
