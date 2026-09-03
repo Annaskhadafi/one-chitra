@@ -97,6 +97,11 @@ export const navigationConfig: NavSection[] = [
                         resource: "good-receive-manual",
                     },
                     {
+                        title: "No Stock Monitoring",
+                        url: "/dashboard/no-stock-monitoring",
+                        resource: "no-stock-monitoring",
+                    },
+                    {
                         title: "Database Quotation Vendor",
                         url: "/dashboard/vendor-quotations",
                         resource: "vendor-quotations",

@@ -35,7 +35,7 @@ async function seed() {
     // 2. Seed Permissions
     const resources = [
         'inventory', 'quotations', 'deliveries', 'billing', 'reports', 'admin', 'users', 'roles',
-        'stock-alerts', 'stock-opname', 'abc-analysis', 'price-management', 'rfid',
+        'stock-alerts', 'stock-opname', 'abc-analysis', 'price-management', 'rfid', 'no-stock-monitoring',
         // Security management resources
         'security',
     ];
@@ -58,6 +58,9 @@ async function seed() {
             .values(perm)
             .onConflictDoNothing();
     }
+    await db.insert(permissions)
+        .values({ resource: 'no-stock-monitoring', action: 'edit', description: 'Can edit no-stock-monitoring' })
+        .onConflictDoNothing();
     console.log('✅ Permissions seeded');
 
     // 3. Assign Permissions to Roles logic
@@ -114,6 +117,11 @@ async function seed() {
     await assign(salesId, 'quotations', ['view', 'create', 'update']);
     await assign(salesId, 'inventory', ['view']);
     await assign(salesId, 'price-management', ['view', 'create', 'update', 'delete']);
+
+    // No Stock Monitoring is available to every seeded role.
+    for (const role of await db.select({ id: roles.id }).from(roles)) {
+        await assign(role.id, 'no-stock-monitoring', ['view', 'edit']);
+    }
 
     console.log('✅ Role Permissions assigned');
     console.log('🎉 Seeding complete!');

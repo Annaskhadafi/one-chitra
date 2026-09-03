@@ -32,6 +32,7 @@ export const dashboardRoutePermissionRules: DashboardRoutePermissionRule[] = [
     { prefix: "/dashboard/delivery-cost-request", resource: "delivery-cost-request" },
     { prefix: "/dashboard/do-monitoring", resource: "deliveries" },
     { prefix: "/dashboard/epr-integrasi", resource: "good-receive-manual" },
+    { prefix: "/dashboard/no-stock-monitoring", resource: "no-stock-monitoring" },
     { prefix: "/dashboard/evhs", resource: "evhs" },
     { prefix: "/dashboard/external-frame", resource: "admin" },
     { prefix: "/dashboard/fleet-management", resource: "fleet-management" },

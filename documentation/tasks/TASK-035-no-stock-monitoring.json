@@ -1,0 +1,12 @@
+{
+  "id": "TASK-035",
+  "status": "completed",
+  "priority": "P1",
+  "title": "Add No Stock Monitoring with EPR and Vendor PO Tracking",
+  "description": "Create grouped No Stock Monitoring for Sales Orders with PO Customer, local vendor PO allocations, EPR read-only linkage, and SAP/manual Good Receive status.",
+  "createdAt": "2026-09-03T00:00:00.000Z",
+  "updatedAt": "2026-09-03T07:58:21.444Z",
+  "startedAt": "2026-09-03T07:37:25.615Z",
+  "completedAt": "2026-09-03T07:58:21.444Z",
+  "completionDetails": "Implemented No Stock Monitoring with EPR, vendor PO allocations, GR status, permissions, migration, and tests"
+}

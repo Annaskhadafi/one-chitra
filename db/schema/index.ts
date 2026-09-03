@@ -185,6 +185,7 @@ export {
     emailGroupMembersRelations,
 } from "./email-contacts";
 export { userNotificationReads } from "./user-notifications";
+export { noStockMonitoringAllocations } from "./no-stock-monitoring";
 export { pushSubscriptions } from "./push-subscriptions";
 export {
     chatRooms,
