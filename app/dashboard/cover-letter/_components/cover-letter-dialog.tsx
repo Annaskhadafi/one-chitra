@@ -7,6 +7,7 @@ import { ExternalLink, ImageIcon, X } from "lucide-react";
 import { CoverLetterPreview, type PreviewInvoiceItem } from "./cover-letter-preview";
 import type { CoverLetterCustomer } from "@/app/actions/cover-letter";
 import { normalizeCodeValue } from "@/lib/formatters";
+import { sortCoverLetterItems } from "@/lib/cover-letter";
 
 interface CoverLetterDialogProps {
     open: boolean;
@@ -44,15 +45,16 @@ function buildPrintHTML(
     location: string = "balikpapan",
     withBackground: boolean = false
 ): string {
-    const grandTotal = items.reduce((acc, inv) => acc + inv.amountIncludeTax, 0);
+    const sortedItems = sortCoverLetterItems(items);
+    const grandTotal = sortedItems.reduce((acc, inv) => acc + inv.amountIncludeTax, 0);
     const addressLines = [
         customer?.address1, customer?.address2, customer?.address3,
         customer?.address4, customer?.address5,
     ].filter(Boolean);
 
-    const tableRows = items.length === 0
+    const tableRows = sortedItems.length === 0
         ? `<tr><td colspan="6" style="border:1px solid #ccc;padding:6pt;text-align:center;color:#999;font-style:italic;">Belum ada invoice</td></tr>`
-        : items.map((inv, idx) => `
+        : sortedItems.map((inv, idx) => `
             <tr>
                 <td style="border:1px solid #ccc;padding:3pt 2pt;text-align:center;">${idx + 1}</td>
                 <td style="border:1px solid #ccc;padding:3pt 4pt;text-align:center;">${normalizeCodeValue(inv.noInvSap) || "-"}</td>

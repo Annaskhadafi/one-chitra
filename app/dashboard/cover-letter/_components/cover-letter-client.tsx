@@ -28,7 +28,7 @@ import { CoverLetterDialog } from "./cover-letter-dialog";
 import type { PreviewInvoiceItem } from "./cover-letter-preview";
 import { toast } from "sonner";
 import { normalizeCodeValue } from "@/lib/formatters";
-import { buildCoverLetterItemKey } from "@/lib/cover-letter";
+import { buildCoverLetterItemKey, sortCoverLetterItems } from "@/lib/cover-letter";
 
 interface Props {
     customers: CoverLetterCustomer[];
@@ -300,7 +300,7 @@ export function CoverLetterClient({ customers, savedLetters: initialSavedLetters
         if (!selectedCustomer) { setBillingData([]); setSelectedInvoiceKeys(new Set()); return; }
         startFetching(async () => {
             const result = await getCoverLetterBillingData(selectedCustomer.customerCode, editingId ?? undefined);
-            setBillingData(result);
+            setBillingData(sortCoverLetterItems(result));
             setSelectedInvoiceKeys(new Set());
         });
     }, [selectedCustomer, editingId]);
@@ -318,11 +318,11 @@ export function CoverLetterClient({ customers, savedLetters: initialSavedLetters
     };
 
     const selectedInvoiceData = billingData.filter(d => selectedInvoiceKeys.has(d.selectionKey));
-    const previewItems: PreviewInvoiceItem[] = selectedInvoiceData.map(inv => ({
+    const previewItems: PreviewInvoiceItem[] = sortCoverLetterItems(selectedInvoiceData.map(inv => ({
         poNo: inv.poNo, noInvSap: normalizeCodeValue(inv.noInvSap) ?? "", dateInvoice: inv.dateInvoice, datePo: inv.datePo,
         amountBeforeTax: calcBeforeAmount(inv.totalLocCurr),
         amountIncludeTax: calcAccAmount(inv.totalLocCurr),
-    }));
+    })));
     const grandTotal = previewItems.reduce((acc, inv) => acc + inv.amountIncludeTax, 0);
 
     // Auto-generate ref number saat lokasi berubah (hanya ketika membuat baru, bukan edit)
@@ -359,7 +359,7 @@ export function CoverLetterClient({ customers, savedLetters: initialSavedLetters
         setShowForm(true);
         startFetching(async () => {
             const result = await getCoverLetterBillingData(letter.custId ?? undefined, letter.id);
-            setBillingData(result);
+            setBillingData(sortCoverLetterItems(result));
             setSelectedInvoiceKeys(new Set(
                 letter.items.map(i => buildCoverLetterItemKey(i.poNo, i.noInvSap))
             ));
@@ -408,12 +408,12 @@ export function CoverLetterClient({ customers, savedLetters: initialSavedLetters
         setLetterDate(letter.letterDate ? new Date(letter.letterDate).toISOString().slice(0, 10) : getTodayStr());
         setSavedPreviewForDialog({
             cust,
-            items: letter.items.map(item => ({
+            items: sortCoverLetterItems(letter.items.map(item => ({
                 poNo: item.poNo ?? "", noInvSap: normalizeCodeValue(item.noInvSap) ?? "",
                 dateInvoice: item.dateInvoice, datePo: item.datePo,
                 amountBeforeTax: parseFloat(item.amountBeforeTax ?? "0"),
                 amountIncludeTax: parseFloat(item.amountIncludeTax ?? "0"),
-            })),
+            }))),
             location: letter.location ?? "balikpapan",
         });
         setPreviewOpen(true);

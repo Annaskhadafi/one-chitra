@@ -3,6 +3,7 @@
 import React from "react";
 import type { CoverLetterCustomer } from "@/app/actions/cover-letter";
 import { normalizeCodeValue } from "@/lib/formatters";
+import { sortCoverLetterItems } from "@/lib/cover-letter";
 
 export type PreviewInvoiceItem = {
     poNo: string;
@@ -39,7 +40,8 @@ function formatDateLong(dateStr: string): string {
 }
 
 export function CoverLetterPreview({ customer, items, refNumber, letterDate, signerName, signerTitle, location = "balikpapan", withBackground = false }: CoverLetterPreviewProps) {
-    const grandTotal = items.reduce((acc, inv) => acc + inv.amountIncludeTax, 0);
+    const sortedItems = React.useMemo(() => sortCoverLetterItems(items), [items]);
+    const grandTotal = sortedItems.reduce((acc, inv) => acc + inv.amountIncludeTax, 0);
 
     const addressLines = [
         customer?.address1, customer?.address2, customer?.address3,
@@ -137,14 +139,14 @@ export function CoverLetterPreview({ customer, items, refNumber, letterDate, sig
                         </tr>
                     </thead>
                     <tbody>
-                        {items.length === 0 ? (
+                        {sortedItems.length === 0 ? (
                             <tr>
                                 <td colSpan={6} style={{ border: "1px solid #ccc", padding: "6pt", textAlign: "center", color: "#999", fontStyle: "italic" }}>
                                     Belum ada invoice dipilih
                                 </td>
                             </tr>
-                        ) : items.map((inv, idx) => (
-                            <tr key={inv.poNo}>
+                        ) : sortedItems.map((inv, idx) => (
+                            <tr key={`${inv.poNo}-${inv.noInvSap}-${idx}`}>
                                 <td style={{ border: "1px solid #ccc", padding: "3pt 2pt", textAlign: "center" }}>{idx + 1}</td>
                                 <td style={{ border: "1px solid #ccc", padding: "3pt 4pt", textAlign: "center" }}>{normalizeCodeValue(inv.noInvSap) || "-"}</td>
                                 <td style={{ border: "1px solid #ccc", padding: "3pt 4pt", textAlign: "center" }}>{formatDate(inv.dateInvoice)}</td>

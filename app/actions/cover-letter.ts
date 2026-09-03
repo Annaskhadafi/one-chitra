@@ -5,7 +5,7 @@ import { billingRecords, salesRevenueSap as historyOrders, customers, coverLette
 import { eq, isNotNull, ne, and, sql, desc, like } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { normalizeCodeValue } from "@/lib/formatters";
-import { buildCoverLetterItemKey } from "@/lib/cover-letter";
+import { buildCoverLetterItemKey, sortCoverLetterItems } from "@/lib/cover-letter";
 
 /**
  * Generate nomor referensi surat otomatis.
@@ -166,7 +166,7 @@ export async function getCoverLetterBillingData(
         selectionKey: buildCoverLetterItemKey(row.poNo, row.noInvSap),
     }));
 
-    return normalized as CoverLetterBillingItem[];
+    return sortCoverLetterItems(normalized) as CoverLetterBillingItem[];
 }
 
 /** Ambil semua cover letter yang sudah tersimpan (dengan item-nya) */
@@ -176,10 +176,10 @@ export async function getSavedCoverLetters(): Promise<SavedCoverLetter[]> {
     for (const letter of letters) {
         const items = await db.select().from(coverLetterItems)
             .where(eq(coverLetterItems.coverLetterId, letter.id));
-        const normalizedItems = items.map(item => ({
+        const normalizedItems = sortCoverLetterItems(items.map(item => ({
             ...item,
             noInvSap: normalizeCodeValue(item.noInvSap),
-        }));
+        })));
         result.push({ ...letter, items: normalizedItems });
     }
     return result;
@@ -215,8 +215,9 @@ export async function saveCoverLetter(data: {
         }).returning({ id: coverLetters.id });
 
         if (data.items.length > 0) {
+            const sortedItems = sortCoverLetterItems(data.items);
             await db.insert(coverLetterItems).values(
-                data.items.map(item => ({
+                sortedItems.map(item => ({
                     coverLetterId: letter.id,
                     poNo: item.poNo,
                     noInvSap: normalizeCodeValue(item.noInvSap) ?? item.noInvSap,
@@ -269,8 +270,9 @@ export async function updateCoverLetter(id: number, data: {
         // Hapus items lama, insert baru
         await db.delete(coverLetterItems).where(eq(coverLetterItems.coverLetterId, id));
         if (data.items.length > 0) {
+            const sortedItems = sortCoverLetterItems(data.items);
             await db.insert(coverLetterItems).values(
-                data.items.map(item => ({
+                sortedItems.map(item => ({
                     coverLetterId: id,
                     poNo: item.poNo,
                     noInvSap: normalizeCodeValue(item.noInvSap) ?? item.noInvSap,
