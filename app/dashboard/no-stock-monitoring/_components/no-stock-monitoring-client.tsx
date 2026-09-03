@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { toast } from "sonner"
-import { AlertTriangle, ChevronDown, Download, ExternalLink, Plus, RefreshCw, Save, Search, Trash2, X } from "lucide-react"
+import { AlertTriangle, Download, ExternalLink, Plus, RefreshCw, Save, Search, Trash2, X } from "lucide-react"
 import * as XLSX from "xlsx"
 import { deleteNoStockMonitoringAllocation, saveNoStockMonitoringAllocation } from "@/app/actions/no-stock-monitoring"
 import type { getNoStockMonitoringData } from "@/app/actions/no-stock-monitoring"
@@ -35,16 +35,6 @@ function formatNumber(value: number) {
 
 function FilterSelect({ label, value, options, onChange }: { label: string; value: string; options: string[]; onChange: (value: string) => void }) {
     return <select aria-label={`Filter ${label}`} value={value} onChange={(event) => onChange(event.target.value)} className="h-10 rounded-md border bg-background px-3 text-sm"><option key={`${label}-all`} value="all">Semua {label}</option>{options.map((option) => <option key={`${label}-${option}`} value={option}>{option}</option>)}</select>
-}
-
-function groupRows(rows: MonitoringData) {
-    const groups = new Map<number, { orderId: number; invoiceNumber: string | null; customerPo: string | null; customerName: string; salesPersonName: string; warehouseId: number | null; salesDate: Date; items: MonitoringItem[] }>()
-    for (const row of rows) {
-        const current = groups.get(row.orderId)
-        if (current) current.items.push(row)
-        else groups.set(row.orderId, { orderId: row.orderId, invoiceNumber: row.invoiceNumber, customerPo: row.customerPo, customerName: row.customerName, salesPersonName: row.salesPersonName, warehouseId: row.warehouseId, salesDate: row.salesDate, items: [row] })
-    }
-    return Array.from(groups.values())
 }
 
 function AllocationEditor({ itemId, allocation, onComplete }: { itemId: number; allocation?: Allocation; onComplete: () => void }) {
@@ -108,6 +98,10 @@ function ItemTableRow({ item, selected, onSelect }: { item: MonitoringItem; sele
     return (
         <tr className="align-top hover:bg-muted/20">
             <td className="p-3"><input type="checkbox" checked={selected} onChange={onSelect} aria-label={`Pilih item ${item.itemId}`} /></td>
+            <td className="whitespace-nowrap p-3"><Link href={`/dashboard/sales-orders/${item.orderId}/edit`} className="font-mono text-indigo-600 hover:underline">{item.invoiceNumber || `SO-${item.orderId}`}</Link></td>
+            <td className="whitespace-nowrap p-3">{item.customerPo || "-"}</td>
+            <td className="min-w-[160px] p-3">{item.customerName}</td>
+            <td className="min-w-[140px] p-3">{item.salesPersonName}</td>
             <td className="whitespace-nowrap p-3">{statusBadge(item.status)}<div className="mt-1 text-xs text-muted-foreground">Item #{item.itemId}</div></td>
             <td className="min-w-[220px] p-3"><p className="font-mono font-semibold">{item.materialNumber}</p><p className="text-xs text-muted-foreground">{item.materialDescription}</p></td>
             <td className="whitespace-nowrap p-3 text-right font-medium">{formatNumber(item.outstandingQty)}</td>
@@ -132,7 +126,6 @@ export function NoStockMonitoringClient({ data, warning }: { data: MonitoringDat
     const [salesFilter, setSalesFilter] = useState("all")
     const [materialFilter, setMaterialFilter] = useState("all")
     const [selectedItemIds, setSelectedItemIds] = useState<Set<number>>(new Set())
-    const [collapsedOrders, setCollapsedOrders] = useState<Set<number>>(new Set())
     const activeRows = data.filter((row) => (row.isNoStock || row.allocations.length > 0) && row.status !== "GR Selesai")
     const historyRows = data.filter((row) => row.allocations.length > 0 && !activeRows.includes(row))
     const visibleRows = tab === "active" ? activeRows : historyRows
@@ -146,7 +139,6 @@ export function NoStockMonitoringClient({ data, warning }: { data: MonitoringDat
             return (!query || searchable.includes(query)) && (customerFilter === "all" || row.customerName === customerFilter) && (salesFilter === "all" || row.salesPersonName === salesFilter) && (materialFilter === "all" || row.materialNumber === materialFilter)
         })
     }, [customerFilter, materialFilter, salesFilter, search, visibleRows])
-    const groups = useMemo(() => groupRows(filteredRows), [filteredRows])
     const conflictCount = data.filter((row) => row.status === "Konflik").length
     const statusSummary = ["Belum Diisi", "PR Terhubung", "PO Terbit", "GR Parsial", "GR Selesai", "Konflik"].map((status) => ({ status, count: filteredRows.filter((row) => row.status === status).length }))
     const maxStatusCount = Math.max(...statusSummary.map((entry) => entry.count), 1)
@@ -200,13 +192,6 @@ export function NoStockMonitoringClient({ data, warning }: { data: MonitoringDat
         return next
     })
 
-    const toggleGroup = (orderId: number) => setCollapsedOrders((current) => {
-        const next = new Set(current)
-        if (next.has(orderId)) next.delete(orderId)
-        else next.add(orderId)
-        return next
-    })
-
     return (
         <div className="space-y-4 p-4 sm:p-6">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -228,7 +213,7 @@ export function NoStockMonitoringClient({ data, warning }: { data: MonitoringDat
 
             <div className="flex flex-wrap items-center gap-2"><div className="relative min-w-[220px] flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input className="pl-9" placeholder="Cari SO, customer, sales, barang, PO..." value={search} onChange={(event) => setSearch(event.target.value)} /></div><FilterSelect label="Customer" value={customerFilter} options={customers} onChange={setCustomerFilter} /><FilterSelect label="Sales" value={salesFilter} options={salesPeople} onChange={setSalesFilter} /><FilterSelect label="Barang" value={materialFilter} options={materials} onChange={setMaterialFilter} />{(search || customerFilter !== "all" || salesFilter !== "all" || materialFilter !== "all") && <Button type="button" variant="ghost" size="sm" onClick={clearFilters}><X className="mr-1 h-4 w-4" />Reset</Button>}</div>
 
-            {groups.length === 0 ? <div className="rounded-lg border py-12 text-center text-sm text-muted-foreground">Tidak ada data yang sesuai.</div> : <div className="overflow-x-auto rounded-lg border"><table className="w-full min-w-[1200px] text-sm"><thead className="bg-muted/50"><tr className="border-b text-left"><th className="p-3"><input type="checkbox" checked={filteredRows.length > 0 && filteredRows.every((row) => selectedItemIds.has(row.itemId))} onChange={toggleAllVisible} aria-label="Pilih semua item yang tampil" /></th><th className="p-3">Status</th><th className="p-3">Barang</th><th className="p-3 text-right">Outstanding</th><th className="p-3 text-right">Stok</th><th className="p-3 text-right">Alokasi</th><th className="p-3">PR / PO Vendor</th><th className="p-3">EPR / GR</th></tr></thead>{groups.map((group) => { const collapsed = collapsedOrders.has(group.orderId); return <tbody key={group.orderId} className="divide-y"><tr className="bg-muted/30"><td colSpan={8} className="p-3"><div className="flex flex-wrap items-center gap-x-4 gap-y-1"><button type="button" onClick={() => toggleGroup(group.orderId)} aria-expanded={!collapsed} className="inline-flex items-center gap-1 font-mono font-semibold hover:text-primary"><ChevronDown className={`h-4 w-4 transition-transform ${collapsed ? "-rotate-90" : ""}`} />{group.invoiceNumber || `SO-${group.orderId}`}</button><Link href={`/dashboard/sales-orders/${group.orderId}/edit`} className="text-indigo-600 hover:underline">Buka SO</Link><span>PO Customer: {group.customerPo || "-"}</span><span>{group.customerName}</span><span>Sales: {group.salesPersonName}</span><Badge variant="secondary">{group.items.length} item</Badge></div></td></tr>{!collapsed && group.items.map((item) => <ItemTableRow key={item.itemId} item={item} selected={selectedItemIds.has(item.itemId)} onSelect={() => toggleItem(item.itemId)} />)}</tbody> })}</table></div>}
+            {filteredRows.length === 0 ? <div className="rounded-lg border py-12 text-center text-sm text-muted-foreground">Tidak ada data yang sesuai.</div> : <div className="overflow-x-auto rounded-lg border"><table className="w-full min-w-[1900px] text-sm"><thead className="bg-muted/50"><tr className="border-b text-left"><th className="p-3"><input type="checkbox" checked={filteredRows.length > 0 && filteredRows.every((row) => selectedItemIds.has(row.itemId))} onChange={toggleAllVisible} aria-label="Pilih semua item yang tampil" /></th><th className="p-3">Sales Order</th><th className="p-3">PO Customer</th><th className="p-3">Customer</th><th className="p-3">Sales</th><th className="p-3">Status</th><th className="p-3">Barang</th><th className="p-3 text-right">Outstanding</th><th className="p-3 text-right">Stok</th><th className="p-3 text-right">Alokasi</th><th className="p-3">PR / PO Vendor</th><th className="p-3">EPR / GR</th></tr></thead><tbody className="divide-y">{filteredRows.map((item) => <ItemTableRow key={item.itemId} item={item} selected={selectedItemIds.has(item.itemId)} onSelect={() => toggleItem(item.itemId)} />)}</tbody></table></div>}
         </div>
     )
 }
