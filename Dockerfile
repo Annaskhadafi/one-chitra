@@ -14,9 +14,11 @@ COPY . .
 # Set environment variables for build
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
-ENV NODE_OPTIONS="--max-old-space-size=2048"
+# Increase memory limit for large projects; use webpack (no --turbopack) for stable Docker builds
+ENV NODE_OPTIONS="--max-old-space-size=4096"
 
-RUN npm run build
+# Build using webpack (without --turbopack) for stable, memory-efficient Docker builds
+RUN npx next build
 
 # Stage 3: Runner
 FROM node:22-bookworm-slim AS runner
