@@ -279,9 +279,14 @@ export default async function DashboardLayout({
 
   // Fetch session server-side
   const requestHeaders = await headers()
-  const session = await auth.api.getSession({
-    headers: requestHeaders
-  })
+  let session = null
+  try {
+    session = await auth.api.getSession({
+      headers: requestHeaders
+    })
+  } catch (err) {
+    console.error("[Dashboard Layout] Error getting session:", err)
+  }
 
   // Redirect unauthenticated users (defense-in-depth — middleware also handles this)
   if (!session?.user?.id) {

@@ -141,7 +141,7 @@ export async function getNoStockMonitoringData() {
                 }
             })
             const status = getAggregateNoStockStatus({ allocations: itemAllocations, outstandingQty: outstanding?.remainingQuantity ?? 0 })
-            return { orderId: order.id, invoiceNumber: order.invoiceNumber, customerPo: order.customerPo, customerName: order.customer?.name ?? "-", salesPersonName: order.salesPerson?.name ?? order.createdByUser?.name ?? "-", warehouseId: order.warehouseId, salesDate: order.salesDate, itemId: item.id, materialNumber: item.product?.materialNumber ?? "-", materialDescription: item.product?.materialDescription ?? item.description ?? "-", outstandingQty: outstanding?.remainingQuantity ?? 0, availableStock: outstanding?.availableStock ?? 0, isNoStock: outstanding?.stockStatus === "empty", allocations: itemAllocations, status }
+            return { orderId: order.id, invoiceNumber: order.invoiceNumber, customerPo: order.customerPo, poReceive: order.poReceive, poDocument: order.poDocument ?? null, customerName: order.customer?.name ?? "-", salesPersonName: order.salesPerson?.name ?? order.createdByUser?.name ?? "-", warehouseId: order.warehouseId, salesDate: order.salesDate, itemId: item.id, materialNumber: item.product?.materialNumber ?? "-", materialDescription: item.product?.materialDescription ?? item.description ?? "-", outstandingQty: outstanding?.remainingQuantity ?? 0, availableStock: outstanding?.availableStock ?? 0, isNoStock: outstanding?.stockStatus === "empty", allocations: itemAllocations, status }
         }))
 
     return {

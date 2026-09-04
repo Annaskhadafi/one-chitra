@@ -12,6 +12,8 @@ import { sendSalesOrderCreatedNotification } from "@/lib/delivery-notifications"
 import { sendEmail } from "@/lib/email"
 import { recordActivity } from "@/lib/audit"
 import { restoreStockBookingsForDelivery } from "@/lib/stock-bookings"
+import { notifyNewOrderWithEmptyStock } from "@/app/actions/no-stock-notifications"
+import type { EmptyStockItemSummary } from "@/lib/no-stock-notifications"
 
 let hasSalesPersonColumnCache: boolean | null = null
 const salesOrderColumnCache = new Map<string, boolean>()
@@ -627,6 +629,62 @@ export async function createSalesOrder(data: z.infer<typeof salesOrderSchema>) {
                 }
             } catch (error) {
                 console.error(`[SO EMAIL] Unexpected error for SO ${result.id}:`, error)
+            }
+
+            // Pemicu Notifikasi SO Baru dengan Barang Stok Kosong (No Stock Alert)
+            try {
+                const createdOrder = await db.query.salesOrders.findFirst({
+                    where: eq(salesOrders.id, result.id),
+                    with: {
+                        customer: true,
+                        salesPerson: true,
+                        items: {
+                            with: {
+                                product: true,
+                            },
+                        },
+                    },
+                })
+
+                if (createdOrder && createdOrder.items && createdOrder.items.length > 0) {
+                    const emptyItems: EmptyStockItemSummary[] = []
+
+                    for (const orderItem of createdOrder.items) {
+                        if (!orderItem.productId) continue
+                        const stock = await db.query.stockLevels.findFirst({
+                            where: and(
+                                eq(stockLevels.productId, orderItem.productId),
+                                createdOrder.warehouseId ? eq(stockLevels.warehouseId, createdOrder.warehouseId) : undefined
+                            ),
+                        })
+
+                        const currentStock = Number(stock?.totalStock ?? 0)
+                        const orderedQty = Number(orderItem.quantity ?? 0)
+
+                        if (currentStock <= 0 || currentStock < orderedQty) {
+                            emptyItems.push({
+                                materialNumber: orderItem.product?.materialNumber || `PROD-${orderItem.productId}`,
+                                materialDescription: orderItem.product?.materialDescription || orderItem.product?.name || "-",
+                                orderedQuantity: orderedQty,
+                                availableStock: Math.max(0, currentStock),
+                                shortageQuantity: Math.max(0, orderedQty - Math.max(0, currentStock)),
+                            })
+                        }
+                    }
+
+                    if (emptyItems.length > 0) {
+                        await notifyNewOrderWithEmptyStock({
+                            invoiceNumber: createdOrder.invoiceNumber,
+                            customerName: createdOrder.customer?.name || "Customer",
+                            customerPo: createdOrder.customerPo,
+                            salesPersonName: createdOrder.salesPerson?.name || "Sales",
+                            hasCustomerPo: Boolean(createdOrder.customerPo?.trim()),
+                            emptyItems,
+                        })
+                    }
+                }
+            } catch (noStockErr) {
+                console.error("[NoStockNotification] Failed to trigger empty stock notification:", noStockErr)
             }
         }
 
