@@ -38,6 +38,12 @@ export async function fetchDashboardRevenueForecast(filters: DashboardRevenueFil
     const periodStr = filters.period;
     const isYearlyView = !periodStr.includes('.');
     const [, year] = isYearlyView ? ["", periodStr] : periodStr.split('.');
+    const requestedPeriodKey = isYearlyView
+        ? Number(year) * 12 + 11
+        : Number(year) * 12 + Number(periodStr.split('.')[0]) - 1;
+    const now = new Date();
+    const currentPeriodKey = now.getFullYear() * 12 + now.getMonth();
+    const combineMaFq = requestedPeriodKey >= currentPeriodKey;
     const { startDate, endDate } = getPeriodBounds(periodStr);
     const rangeDateFilter = and(
         sql`${salesRevenueSap.billingDate} >= ${startDate}`,
@@ -280,6 +286,7 @@ export async function fetchDashboardRevenueForecast(filters: DashboardRevenueFil
         data: {
             period: periodStr,
             isYearlyView,
+            combineMaFq,
             targets: {
                 consolidate: { revenue: revenueConsolidate, forecast: forecastConsolidate },
                 primeProduct: { revenue: revenuePrimeProduct, forecast: forecastPrime },
@@ -295,7 +302,10 @@ export async function fetchDashboardRevenueForecast(filters: DashboardRevenueFil
                 ma_ws: { revenue: salesmanRevenue.ma_ws, forecast: targetMap.get("MA WIS") || targetMap.get("MA WS") || 0 },
                 ma_fq: { revenue: salesmanRevenue.ma_fq, forecast: targetMap.get("MA FQ") || 0 },
                 ma_br: { revenue: salesmanRevenue.ma_br, forecast: targetMap.get("MA BUR") || targetMap.get("MA BR") || 0 },
-                ma_ag: { revenue: salesmanRevenue.ma_ag, forecast: targetMap.get("MA AG") || 0 },
+                ma_ag: {
+                    revenue: salesmanRevenue.ma_ag + (combineMaFq ? salesmanRevenue.ma_fq : 0),
+                    forecast: (targetMap.get("MA AG") || 0) + (combineMaFq ? (targetMap.get("MA FQ") || 0) : 0)
+                },
                 ma_mc: { revenue: salesmanRevenue.ma_mc, forecast: targetMap.get("MA MIC") || targetMap.get("MA MC") || 0 },
             },
             materials: materialsData.map(m => ({

@@ -38,6 +38,7 @@ export default async function RevenueSnapshotPage({
     const defaultData: SnapshotRevenueData = {
         period,
         isYearlyView: false,
+        combineMaFq: false,
         targets: {
             consolidate: { revenue: 0, forecast: 0 },
             primeProduct: { revenue: 0, forecast: 0 },

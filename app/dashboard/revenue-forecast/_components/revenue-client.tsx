@@ -13,6 +13,7 @@ interface RevenueClientProps {
     initialData: {
         period: string
         isYearlyView: boolean
+        combineMaFq: boolean
         targets: {
             consolidate: TargetData
             primeProduct: TargetData
@@ -535,7 +536,7 @@ export function RevenueClient({ initialData, selectedPeriod, inventoryData, isEx
                     <SalesmanCard label="MA WS" data={targets.ma_ws} isExporting={isExporting || isExportingJpg} />
                     <SalesmanCard label="MA AG" data={targets.ma_ag} isExporting={isExporting || isExportingJpg} />
                     <SalesmanCard label="MA BR" data={targets.ma_br} isExporting={isExporting || isExportingJpg} />
-                    <SalesmanCard label="MA FQ" data={targets.ma_fq} isExporting={isExporting || isExportingJpg} />
+                    {!initialData.combineMaFq && <SalesmanCard label="MA FQ" data={targets.ma_fq} isExporting={isExporting || isExportingJpg} />}
                     <SalesmanCard label="MA MC" data={targets.ma_mc} isExporting={isExporting || isExportingJpg} />
                 </div>
 
