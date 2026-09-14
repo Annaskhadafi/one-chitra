@@ -23,7 +23,7 @@ import { restrictToVerticalAxis } from "@dnd-kit/modifiers"
 import { createQuotation, getQuotation, updateQuotation } from "@/app/actions/quotation"
 import { getBundleItemsForExpansion } from "@/app/actions/product-bundle"
 import { getSetting } from "@/app/actions/settings"
-import { uploadFile } from "@/app/actions/upload"
+import { uploadFileToObjectStorage } from "@/lib/client-upload"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -1253,10 +1253,7 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
         const toastId = toast.loading("Mengunggah file...")
 
         try {
-            const formData = new FormData()
-            formData.append("file", file)
-
-            const result = await uploadFile(formData)
+            const result = await uploadFileToObjectStorage(file)
             if (result.success && result.url) {
                 setTempFileUrl(result.url)
                 setTempFileName(file.name)
