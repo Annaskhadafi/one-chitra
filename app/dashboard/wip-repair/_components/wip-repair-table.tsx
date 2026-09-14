@@ -361,18 +361,7 @@ function parseMinutes(value: string | null) {
 
 function formatDurationFromMinutes(value: number) {
   const totalMinutes = Math.max(0, Math.round(value))
-  const hours = Math.floor(totalMinutes / 60)
-  const minutes = totalMinutes % 60
-
-  if (hours > 0 && minutes > 0) {
-    return `${hours.toLocaleString("id-ID")} jam ${minutes.toLocaleString("id-ID")} menit`
-  }
-
-  if (hours > 0) {
-    return `${hours.toLocaleString("id-ID")} jam`
-  }
-
-  return `${minutes.toLocaleString("id-ID")} menit`
+  return `${(totalMinutes / 60).toLocaleString("id-ID", { maximumFractionDigits: 2 })} Jam`
 }
 
 function formatMinutes(value: string | null) {
