@@ -1,8 +1,7 @@
 services:
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/annaskhadafi/one-chitra:latest
+    pull_policy: always
     container_name: one-chitra-app
     restart: unless-stopped
     depends_on:
