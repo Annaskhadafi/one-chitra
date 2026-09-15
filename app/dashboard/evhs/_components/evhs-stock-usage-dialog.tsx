@@ -9,6 +9,7 @@ import {
     DialogFooter,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -28,6 +29,7 @@ const usageSchema = z.object({
     qty: z.number().min(1, "Qty harus minimal 1"),
     materialNumberCk: z.string().optional(),
     serialNumber: z.string().optional(),
+    serialNumbers: z.array(z.string()).optional(),
     pos: z.string().optional(),
     unitId: z.string().optional(),
     remark: z.string().optional(),
@@ -56,6 +58,7 @@ type TrackingDialogItem = {
     materialNumberCp: string
     materialNumberCk?: string | null
     sn: string
+    serialNumbers?: string[]
     qty?: number
     availableQty?: number
     cpDo?: string | null
@@ -77,6 +80,8 @@ export function EvhsStockUsageDialog({
     trackingItem: TrackingDialogItem | null
 }) {
     const [isSubmitting, setIsSubmitting] = useState(false)
+    const [submitError, setSubmitError] = useState<string | null>(null)
+    const [selectedSerialNumbers, setSelectedSerialNumbers] = useState<string[]>([])
     const router = useRouter()
     const { data } = useQuery({
         queryKey: ["evhs-master-prices"],
@@ -105,6 +110,7 @@ export function EvhsStockUsageDialog({
             qty: 1,
             materialNumberCk: "",
             serialNumber: "",
+            serialNumbers: [""],
             pos: "",
             unitId: "",
             remark: "",
@@ -131,6 +137,7 @@ export function EvhsStockUsageDialog({
     // Update form when tracking item changes
     useEffect(() => {
         if (trackingItem) {
+            setSelectedSerialNumbers([])
             const availableQty = trackingItem.availableQty ?? trackingItem.qty ?? 1
             const isLegacyTyre = trackingItem.sourceType === "legacy-stock" && trackingItem.product.category?.toUpperCase() === "TYRE"
 
@@ -141,6 +148,7 @@ export function EvhsStockUsageDialog({
                     ? trackingItem.materialNumberCk
                     : (suggestedMaterialCk || trackingItem.product.materialNumberCk || ""),
                 serialNumber: trackingItem.sn !== "-" && trackingItem.sn !== "N/A" ? trackingItem.sn : "",
+                serialNumbers: Array.from({ length: isLegacyTyre ? 1 : Math.max(availableQty, 1) }, (_, index) => trackingItem.serialNumbers?.[index] || (index === 0 && trackingItem.sn !== "-" && trackingItem.sn !== "N/A" ? trackingItem.sn : "")),
                 pos: "",
                 unitId: "",
                 remark: "",
@@ -153,11 +161,21 @@ export function EvhsStockUsageDialog({
 
     const onSubmit = async (values: UsageValues) => {
         if (!trackingItem) return
+        setSubmitError(null)
 
         const availableQty = trackingItem.availableQty ?? trackingItem.qty ?? 0
 
         if (values.qty > availableQty) {
             toast.error(`Qty melebihi stok tersedia. Tersedia ${availableQty}.`)
+            return
+        }
+
+        const serialNumbers = trackingItem.serialNumbers?.length
+            ? selectedSerialNumbers.slice(0, values.qty)
+            : (values.serialNumbers || [values.serialNumber || ""]).map((serial) => serial.trim()).filter(Boolean).slice(0, values.qty)
+
+        if (trackingItem.serialNumbers?.length && selectedSerialNumbers.length > values.qty) {
+            toast.error(`Pilih maksimal ${values.qty} SN sesuai Qty.`)
             return
         }
 
@@ -170,16 +188,28 @@ export function EvhsStockUsageDialog({
                 remark: values.remark,
                 approvedByName: values.approvedByName,
                 receivedByName: values.receivedByName,
-                items: [{
-                    productId: trackingItem.productId,
-                    qty: values.qty,
-                    serialNumber: values.serialNumber,
-                    sourceType: trackingItem.sourceType || "receipt",
-                    materialNumberCk: values.materialNumberCk || "",
-                    pos: values.pos,
-                    unitId: values.unitId,
-                    stockBalance: 0, // No longer strictly needed or calculated properly here
-                }]
+                items: [
+                    ...serialNumbers.map((serialNumber) => ({
+                        productId: trackingItem.productId,
+                        qty: 1,
+                        serialNumber,
+                        sourceType: trackingItem.sourceType || "receipt",
+                        materialNumberCk: values.materialNumberCk || "",
+                        pos: values.pos,
+                        unitId: values.unitId,
+                        stockBalance: 0,
+                    })),
+                    ...(values.qty > serialNumbers.length ? [{
+                        productId: trackingItem.productId,
+                        qty: values.qty - serialNumbers.length,
+                        serialNumber: "",
+                        sourceType: trackingItem.sourceType || "receipt",
+                        materialNumberCk: values.materialNumberCk || "",
+                        pos: values.pos,
+                        unitId: values.unitId,
+                        stockBalance: 0,
+                    }] : []),
+                ]
             }
 
             if (values.additionalItems && values.additionalItems.length > 0) {
@@ -189,7 +219,7 @@ export function EvhsStockUsageDialog({
                         voucherData.items.push({
                             productId: item.productId,
                             qty: item.qty,
-                            serialNumber: "",
+                    serialNumber: "",
                             sourceType: "receipt", // Defaults to receipt for additional non-tyre parts, as tracking them strictly to legacy isn't easily done here without explicit mapping
                             materialNumberCk: stockRef.materialNumberCk || "",
                             pos: values.pos,
@@ -207,10 +237,16 @@ export function EvhsStockUsageDialog({
                 form.reset()
                 router.refresh()
             } else {
-                toast.error(result.error || "Gagal membuat voucher")
+                const message = result.error || "Server menolak pembuatan voucher."
+                setSubmitError(message)
+                toast.error(message)
             }
-        } catch {
-            toast.error("Terjadi kesalahan")
+        } catch (error) {
+            const message = error instanceof Error && error.message
+                ? error.message
+                : "Server tidak dapat memproses voucher. Coba refresh halaman lalu ulangi."
+            setSubmitError(message)
+            toast.error(message)
         } finally {
             setIsSubmitting(false)
         }
@@ -268,13 +304,28 @@ export function EvhsStockUsageDialog({
                     </div>
 
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <div className="space-y-2">
-                            <Label htmlFor="serialNumber">Serial Number (jika Ban)</Label>
-                            <Input
-                                id="serialNumber"
-                                placeholder="Masukan SN..."
-                                {...form.register("serialNumber")}
-                            />
+                        <div className="space-y-2 sm:col-span-2">
+                            <Label>{trackingItem.serialNumbers?.length ? "Pilih Serial Number sesuai Qty" : "Serial Number (opsional per Qty)"}</Label>
+                            {trackingItem.serialNumbers?.length ? (
+                                <div className="space-y-2 rounded-md border p-2">
+                                    {trackingItem.serialNumbers.map((serial) => (
+                                        <label key={serial} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted">
+                                            <Checkbox
+                                                checked={selectedSerialNumbers.includes(serial)}
+                                                onCheckedChange={(checked) => setSelectedSerialNumbers((current) => checked === true ? [...current, serial] : current.filter((value) => value !== serial))}
+                                            />
+                                            <span className="font-mono">{serial}</span>
+                                        </label>
+                                    ))}
+                                    <p className="text-xs text-muted-foreground">{selectedSerialNumbers.length} SN dipilih dari Qty {form.watch("qty") || 0}. SN yang tidak dipilih tetap dapat dikosongkan.</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-2 rounded-md border p-2">
+                                    {Array.from({ length: Math.max(Number(form.watch("qty")) || 1, 1) }, (_, index) => (
+                                        <Input key={index} placeholder={`SN ${index + 1} (opsional)`} {...form.register(`serialNumbers.${index}` as const)} />
+                                    ))}
+                                </div>
+                            )}
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="materialNumberCk">Material Number Customer (CK)</Label>
@@ -379,6 +430,12 @@ export function EvhsStockUsageDialog({
                         <Label htmlFor="remark">Remark</Label>
                         <Textarea id="remark" placeholder="Keterangan tambahan..." {...form.register("remark")} />
                     </div>
+
+                    {submitError && (
+                        <div role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                            <strong>Voucher belum dibuat:</strong> {submitError}
+                        </div>
+                    )}
 
                     <DialogFooter className="pt-4 flex-col-reverse gap-2 sm:flex-row">
                         <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>

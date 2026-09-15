@@ -115,7 +115,7 @@ export default async function EvhsPage({ searchParams }: { searchParams: Promise
                         <CardHeader>
                             <CardTitle>Stock All VHS</CardTitle>
                             <CardDescription>
-                                Data Stok Local (stok fisik aktual dari Inventory) yang ditampilkan terpisah bersisian dengan data perhitungan Available EVHS (rekonsil).
+                                Data Stok Local (stok fisik aktual dari Inventory) yang ditampilkan terpisah bersisian dengan data perhitungan Variants (rekonsil).
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="px-3 pb-4 pt-0 sm:px-6 sm:pb-6">

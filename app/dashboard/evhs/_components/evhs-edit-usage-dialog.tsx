@@ -15,11 +15,12 @@ import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { toast } from "sonner"
-import { updateEvhsUsage } from "@/app/actions/evhs"
+import { updateEvhsUsage, updateEvhsVoucherItemSerialNumber } from "@/app/actions/evhs"
 import { useRouter } from "next/navigation"
 
 const editSchema = z.object({
     woNo: z.string().min(1, "Nomor WO wajib diisi"),
+    sn: z.string().optional(),
     materialNumberCk: z.string().optional(),
     pos: z.string().optional(),
     unitId: z.string().optional(),
@@ -58,6 +59,7 @@ export function EvhsEditUsageDialog({
         resolver: zodResolver(editSchema),
         defaultValues: {
             woNo: "",
+            sn: "",
             materialNumberCk: "",
             pos: "",
             unitId: "",
@@ -68,6 +70,7 @@ export function EvhsEditUsageDialog({
         if (trackingItem && open) {
             form.reset({
                 woNo: trackingItem.woNo || "",
+                sn: trackingItem.sn && trackingItem.sn !== "-" ? trackingItem.sn : "",
                 materialNumberCk: trackingItem.materialNumberCk && trackingItem.materialNumberCk !== "-"
                     ? trackingItem.materialNumberCk
                     : "",
@@ -89,12 +92,30 @@ export function EvhsEditUsageDialog({
                 voucherId: trackingItem.voucherId,
                 voucherItemId: trackingItem.voucherItemId,
                 woNo: values.woNo,
+                sn: values.sn?.trim() || "",
                 materialNumberCk: values.materialNumberCk || "",
                 pos: values.pos,
                 unitId: values.unitId,
             }
 
-            const result = await updateEvhsUsage(data)
+            const serialResult = await updateEvhsVoucherItemSerialNumber({
+                voucherId: data.voucherId,
+                voucherItemId: data.voucherItemId,
+                serialNumber: values.sn?.trim() || "",
+            })
+            if (!serialResult.success) {
+                toast.error(serialResult.error)
+                return
+            }
+
+            const result = await updateEvhsUsage({
+                voucherId: data.voucherId,
+                voucherItemId: data.voucherItemId,
+                woNo: values.woNo,
+                materialNumberCk: values.materialNumberCk || "",
+                pos: values.pos,
+                unitId: values.unitId,
+            })
 
             if (result.success) {
                 toast.success("Data penggunaan stok berhasil diperbarui")
@@ -127,8 +148,8 @@ export function EvhsEditUsageDialog({
                                 <span className="font-bold font-mono text-xs">{trackingItem.voucherNo}</span>
                             </div>
                             <div>
-                                <span className="text-muted-foreground mr-2 text-xs">S/N:</span>
-                                <span className="font-bold font-mono text-xs text-emerald-700">{trackingItem.sn}</span>
+                                <span className="text-muted-foreground mr-2 text-xs">S/N saat ini:</span>
+                                <span className="font-bold font-mono text-xs text-emerald-700">{trackingItem.sn || "-"}</span>
                             </div>
                         </div>
                     </div>
@@ -141,6 +162,11 @@ export function EvhsEditUsageDialog({
                         {form.formState.errors.woNo && (
                             <p className="text-xs text-red-500">{form.formState.errors.woNo.message}</p>
                         )}
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label htmlFor="sn" className="text-xs">Serial Number (SN)</Label>
+                        <Input id="sn" placeholder="Contoh: SN-001" {...form.register("sn")} className="h-8 text-sm" />
                     </div>
 
                     <div className="space-y-2">

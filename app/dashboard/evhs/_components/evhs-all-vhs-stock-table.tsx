@@ -75,6 +75,7 @@ type EvhsAllVhsStockRow = {
     category: string
     sapStock: number
     totalStock: number
+    totalSupply: number
     usedQty: number
     availableQty: number
     detailRows: EvhsAllVhsDetailRow[]
@@ -107,13 +108,14 @@ type SortKey =
     | "warehouseDescription"
     | "sapStock"
     | "totalStock"
+    | "totalSupply"
     | "usedQty"
     | "availableQty"
     | "status"
 
 type SortDirection = "asc" | "desc"
 
-const MAIN_TABLE_COLUMN_COUNT = 14
+const MAIN_TABLE_COLUMN_COUNT = 15
 
 function getWarehouseLabel(warehouse: { sloc: string; description?: string | null }) {
     return warehouse.description ? `${warehouse.sloc} - ${warehouse.description}` : warehouse.sloc
@@ -159,6 +161,9 @@ function sortRows(left: EvhsAllVhsStockRow, right: EvhsAllVhsStockRow, key: Sort
             break
         case "totalStock":
             result = compareNumber(left.totalStock, right.totalStock)
+            break
+        case "totalSupply":
+            result = compareNumber(left.totalSupply, right.totalSupply)
             break
         case "sapStock":
             result = compareNumber(left.sapStock, right.sapStock)
@@ -297,7 +302,7 @@ export function EvhsAllVhsStockTable({ rows }: { rows: EvhsAllVhsStockRow[] }) {
         ? getWarehouseLabel(selectedBatchRows[0].warehouse)
         : null
 
-    const selectableRowsInView = sortedRows.filter((row) => row.availableQty > 0)
+    const selectableRowsInView = sortedRows.filter((row) => row.totalStock > 0)
     const selectableRowsForLockedWarehouse = selectableRowsInView.filter((row) => (
         !lockedWarehouseId || row.warehouseId === lockedWarehouseId
     ))
@@ -369,9 +374,9 @@ export function EvhsAllVhsStockTable({ rows }: { rows: EvhsAllVhsStockRow[] }) {
             materialNumberCp: row.materialNumber,
             materialNumberCk: row.materialNumberCk,
             sn: "-",
-            qty: row.availableQty,
-            availableQty: row.availableQty,
-            defaultQty: row.category.toUpperCase() === "TYRE" ? 1 : row.availableQty,
+            qty: row.totalStock,
+            availableQty: row.totalStock,
+            defaultQty: row.category.toUpperCase() === "TYRE" ? 1 : row.totalStock,
             cpDo: "LEGACY STOCK",
             sourceType: "legacy-stock",
             product: {
@@ -413,8 +418,9 @@ export function EvhsAllVhsStockTable({ rows }: { rows: EvhsAllVhsStockRow[] }) {
             "SLoc Description": row.warehouse.description || "-",
             "Stock SAP": row.sapStock,
             "Stock Local": row.totalStock,
+            "Total Supply": row.totalSupply,
             "Used EVHS": row.usedQty,
-            "Available EVHS": row.availableQty,
+            "Variants": row.availableQty,
             "Status": getStatusLabel(row)
         }))
         exportToExcel(exportData, `Stock_All_VHS_${format(new Date(), "yyyyMMdd_HHmmss")}`)
@@ -459,7 +465,7 @@ export function EvhsAllVhsStockTable({ rows }: { rows: EvhsAllVhsStockRow[] }) {
                 <Card className="border-slate-200 shadow-sm">
                     <CardContent className="flex items-center justify-between p-4">
                         <div>
-                            <p className="text-sm text-slate-500">Available EVHS</p>
+                            <p className="text-sm text-slate-500">Variants</p>
                             <p className="text-2xl font-bold text-emerald-600">{stats.availableQty}</p>
                         </div>
                         <div className="rounded-full bg-emerald-50 p-3">
@@ -577,10 +583,13 @@ export function EvhsAllVhsStockTable({ rows }: { rows: EvhsAllVhsStockRow[] }) {
                                     <SortableHeader label="Stock Local" active={sortKey === "totalStock"} direction={sortDirection} onClick={() => requestSort("totalStock")} className="justify-end" />
                                 </TableHead>
                                 <TableHead className="text-right">
+                                    <SortableHeader label="Total Supply" active={sortKey === "totalSupply"} direction={sortDirection} onClick={() => requestSort("totalSupply")} className="justify-end" />
+                                </TableHead>
+                                <TableHead className="text-right">
                                     <SortableHeader label="Used EVHS" active={sortKey === "usedQty"} direction={sortDirection} onClick={() => requestSort("usedQty")} className="justify-end" />
                                 </TableHead>
                                 <TableHead className="text-right">
-                                    <SortableHeader label="Available EVHS" active={sortKey === "availableQty"} direction={sortDirection} onClick={() => requestSort("availableQty")} className="justify-end" />
+                                    <SortableHeader label="Variants" active={sortKey === "availableQty"} direction={sortDirection} onClick={() => requestSort("availableQty")} className="justify-end" />
                                 </TableHead>
                                 <TableHead>
                                     <SortableHeader label="Status" active={sortKey === "status"} direction={sortDirection} onClick={() => requestSort("status")} />
@@ -612,7 +621,7 @@ export function EvhsAllVhsStockTable({ rows }: { rows: EvhsAllVhsStockRow[] }) {
                                         <Fragment key={row.id}>
                                             <TableRow key={row.id} className={`whitespace-nowrap text-xs ${isSelected ? "bg-blue-50/50" : ""}`}>
                                                 <TableCell className="text-center">
-                                                    {row.availableQty > 0 ? (
+                                                    {row.totalStock > 0 ? (
                                                         <Checkbox
                                                             checked={isSelected}
                                                             disabled={selectionLockedByOtherWarehouse}
@@ -653,13 +662,14 @@ export function EvhsAllVhsStockTable({ rows }: { rows: EvhsAllVhsStockRow[] }) {
                                                 <TableCell>{row.warehouse.description || "-"}</TableCell>
                                                 <TableCell className="text-right font-mono text-slate-700">{row.sapStock}</TableCell>
                                                 <TableCell className="text-right font-mono font-bold">{row.totalStock}</TableCell>
+                                                <TableCell className="text-right font-mono font-bold text-indigo-700">{row.totalSupply}</TableCell>
                                                 <TableCell className="text-right font-mono text-amber-700">{row.usedQty}</TableCell>
                                                 <TableCell className="text-right font-mono text-emerald-700">{row.availableQty}</TableCell>
                                                 <TableCell>
                                                     <Badge className={statusVariant}>{statusLabel}</Badge>
                                                 </TableCell>
                                                 <TableCell className="text-right">
-                                                    {row.availableQty > 0 ? (
+                                                    {row.totalStock > 0 ? (
                                                         <Button
                                                             size="sm"
                                                             className={isTyre ? "bg-indigo-600 hover:bg-indigo-700" : ""}
@@ -822,7 +832,7 @@ export function EvhsAllVhsStockTable({ rows }: { rows: EvhsAllVhsStockRow[] }) {
                 open={multipleUsageDialogOpen}
                 onOpenChange={setMultipleUsageDialogOpen}
                 trackingItems={rows
-                    .filter((row) => selectedItemsForBatch.includes(row.id) && row.availableQty > 0)
+                    .filter((row) => selectedItemsForBatch.includes(row.id) && row.totalStock > 0)
                     .map((row) => ({
                         id: row.id,
                         warehouseId: row.warehouseId,
@@ -831,8 +841,8 @@ export function EvhsAllVhsStockTable({ rows }: { rows: EvhsAllVhsStockRow[] }) {
                         materialNumberCp: row.materialNumber,
                         materialNumberCk: row.materialNumberCk,
                         sn: "-",
-                        qty: row.availableQty,
-                        availableQty: row.availableQty,
+                        qty: row.totalStock,
+                        availableQty: row.totalStock,
                         defaultQty: 1,
                         sourceType: "legacy-stock" as const,
                         product: {

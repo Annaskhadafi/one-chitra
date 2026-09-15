@@ -107,6 +107,18 @@ export const evhsMasterPrices = pgTable("evhs_master_prices", {
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// 6. EVHS supply adjustments (append-only; does not change voucher usage)
+export const evhsStockAdjustments = pgTable("evhs_stock_adjustments", {
+    id: serial("id").primaryKey(),
+    warehouseId: integer("warehouse_id").references(() => warehouses.id).notNull(),
+    productId: integer("product_id").references(() => products.id).notNull(),
+    quantity: integer("quantity").notNull(),
+    serialNumbers: text("serial_numbers").array(),
+    notes: text("notes"),
+    createdBy: varchar("created_by").references(() => user.id),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // Relations
 export const evhsReceiptsRelations = relations(evhsReceipts, ({ one, many }) => ({
     transfer: one(stockTransfers, {
@@ -173,5 +185,20 @@ export const evhsMasterPricesRelations = relations(evhsMasterPrices, ({ one }) =
     warehouse: one(warehouses, {
         fields: [evhsMasterPrices.warehouseId],
         references: [warehouses.id],
+    }),
+}));
+
+export const evhsStockAdjustmentsRelations = relations(evhsStockAdjustments, ({ one }) => ({
+    warehouse: one(warehouses, {
+        fields: [evhsStockAdjustments.warehouseId],
+        references: [warehouses.id],
+    }),
+    product: one(products, {
+        fields: [evhsStockAdjustments.productId],
+        references: [products.id],
+    }),
+    createdByUser: one(user, {
+        fields: [evhsStockAdjustments.createdBy],
+        references: [user.id],
     }),
 }));

@@ -30,7 +30,7 @@ export type WarehouseAccessContext = {
 
 type WarehouseAccessExecutor = Pick<typeof db, "delete" | "insert">;
 
-const GLOBAL_WAREHOUSE_ROLES = new Set(["admin", "superuser"]);
+const GLOBAL_WAREHOUSE_ROLES = new Set(["admin", "superuser", "super admin", "super-admin", "super_admin"]);
 let ensureUserWarehouseAccessTablePromise: Promise<void> | null = null;
 
 function normalizeRole(role?: string | null) {

@@ -159,6 +159,7 @@ export {
     evhsGiItems,
     evhsMrko,
     evhsMasterPrices,
+    evhsStockAdjustments,
     evhsReceiptsRelations,
     evhsReceiptItemsRelations,
     evhsVouchersRelations,
@@ -166,6 +167,7 @@ export {
     evhsGiRecordsRelations,
     evhsGiItemsRelations,
     evhsMasterPricesRelations,
+    evhsStockAdjustmentsRelations,
 } from "./evhs";
 export { ocrExtractions } from "./ocr-extractions";
 export {

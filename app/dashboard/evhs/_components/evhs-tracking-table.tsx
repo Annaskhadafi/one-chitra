@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { format } from "date-fns"
-import { Search, Edit2, Package, CheckCircle2, Factory, Download } from "lucide-react"
+import { Search, Edit2, Trash2, Package, CheckCircle2, Factory, Download, SlidersHorizontal } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { EvhsStockUsageDialog } from "./evhs-stock-usage-dialog"
 import { EvhsEditUsageDialog } from "./evhs-edit-usage-dialog"
@@ -22,6 +22,11 @@ import { Checkbox } from "@/components/ui/checkbox"
 import type { CheckedState } from "@radix-ui/react-checkbox"
 import { toast } from "sonner"
 import { exportToExcel } from "@/lib/export-excel"
+import { deleteEvhsReceiptItem, deleteEvhsReceiptSerialNumber, deleteEvhsStockAdjustment, deleteEvhsVoucherItem } from "@/app/actions/evhs"
+import { EvhsEditReceiptSnDialog } from "./evhs-edit-receipt-sn-dialog"
+import { EvhsEditAdjustmentSnDialog } from "./evhs-edit-adjustment-sn-dialog"
+import { EvhsBulkEditReceiptSnDialog } from "./evhs-bulk-edit-receipt-sn-dialog"
+import { EvhsStockAdjustmentDialog } from "./evhs-stock-adjustment-dialog"
 
 type WarehouseOption = {
     id: number
@@ -31,6 +36,9 @@ type WarehouseOption = {
 
 type TrackingRow = {
     id: string
+    receiptItemId?: number
+    adjustmentId?: number
+    serialNumbers?: string[]
     dateIn?: Date | string | null
     cpDo?: string | null
     materialNumberCp: string
@@ -66,6 +74,7 @@ type TrackingDialogItem = {
     materialNumberCp: string
     materialNumberCk?: string | null
     sn: string
+    serialNumbers?: string[]
     qty?: number
     availableQty?: number
     cpDo?: string | null
@@ -90,10 +99,49 @@ export function EvhsTrackingTable({ trackingData }: { trackingData: TrackingRow[
     const [multipleUsageDialogOpen, setMultipleUsageDialogOpen] = useState(false)
     const [selectedItemsForBatch, setSelectedItemsForBatch] = useState<string[]>([])
     const [warehouseFilter, setWarehouseFilter] = useState("all")
+    const [adjustmentDialogOpen, setAdjustmentDialogOpen] = useState(false)
+    const [deletingUsageId, setDeletingUsageId] = useState<number | null>(null)
+    const [editReceiptSnOpen, setEditReceiptSnOpen] = useState(false)
+    const [bulkEditReceiptSnOpen, setBulkEditReceiptSnOpen] = useState(false)
+    const [editAdjustmentSnOpen, setEditAdjustmentSnOpen] = useState(false)
+    const [deletingReceiptSn, setDeletingReceiptSn] = useState<string | null>(null)
 
     const uniqueWarehouses = Array.from(new Map(trackingData.map((item) => [item.warehouseId, item.warehouse])).values()).filter(Boolean) as WarehouseOption[]
+    const uniqueProducts = Array.from(new Map(trackingData.map((item) => [item.productId, item.product])).entries())
+        .filter(([, product]) => product)
+        .map(([id, product]) => ({
+            id,
+            materialNumber: trackingData.find((item) => item.productId === id)?.materialNumberCp || "-",
+            materialNumberCk: product?.materialNumberCk,
+            materialDescription: product?.materialDescription,
+        }))
 
-    const warehouseFilteredData = trackingData.filter(item =>
+    const displayTrackingData = useMemo(() => {
+        const grouped = new Map<number, TrackingRow>()
+        const result: TrackingRow[] = []
+        for (const item of trackingData) {
+            if (!item.adjustmentId) {
+                result.push(item)
+                continue
+            }
+            const current = grouped.get(item.adjustmentId)
+            if (!current) {
+                const serialNumbers = item.sn && item.sn !== "-" && (item.availableQty || 0) > 0 ? [item.sn] : []
+                const groupedItem = { ...item, id: `adjustment-${item.adjustmentId}-group`, sn: "-", serialNumbers }
+                grouped.set(item.adjustmentId, groupedItem)
+                result.push(groupedItem)
+                continue
+            }
+            current.qty = (current.qty || 0) + (item.qty || 0)
+            current.receivedQty = (current.receivedQty || 0) + (item.receivedQty || 0)
+            current.availableQty = (current.availableQty || 0) + (item.availableQty || 0)
+            current.usedQty = (current.usedQty || 0) + (item.usedQty || 0)
+            if (item.sn && item.sn !== "-" && (item.availableQty || 0) > 0) current.serialNumbers = [...(current.serialNumbers || []), item.sn]
+        }
+        return result
+    }, [trackingData])
+
+    const warehouseFilteredData = displayTrackingData.filter(item =>
         warehouseFilter === "all" || item.warehouseId?.toString() === warehouseFilter
     )
 
@@ -111,6 +159,7 @@ export function EvhsTrackingTable({ trackingData }: { trackingData: TrackingRow[
             materialNumberCp: item.materialNumberCp,
             materialNumberCk: item.materialNumberCk,
             sn: item.sn ?? "-",
+            serialNumbers: item.serialNumbers,
             qty: item.qty,
             availableQty: item.availableQty,
             cpDo: item.cpDo,
@@ -142,6 +191,7 @@ export function EvhsTrackingTable({ trackingData }: { trackingData: TrackingRow[
         const query = searchQuery.toLowerCase()
         return (
             item.sn?.toLowerCase().includes(query) ||
+            item.serialNumbers?.some((serial) => serial.toLowerCase().includes(query)) ||
             item.materialNumberCp?.toLowerCase().includes(query) ||
             item.cpDo?.toLowerCase().includes(query) ||
             item.woNo?.toLowerCase().includes(query) ||
@@ -150,8 +200,8 @@ export function EvhsTrackingTable({ trackingData }: { trackingData: TrackingRow[
     })
 
     const selectedBatchItems = useMemo(() => (
-        trackingData.filter((item) => selectedItemsForBatch.includes(item.id))
-    ), [trackingData, selectedItemsForBatch])
+        displayTrackingData.filter((item) => selectedItemsForBatch.includes(item.id))
+    ), [displayTrackingData, selectedItemsForBatch])
 
     const lockedWarehouseId = selectedBatchItems[0]?.warehouseId || null
     const selectedDialogItem = selectedItem ? toTrackingDialogItem(selectedItem) : null
@@ -233,6 +283,82 @@ export function EvhsTrackingTable({ trackingData }: { trackingData: TrackingRow[
         exportToExcel(exportData, `Stock_VHS_WO_${format(new Date(), "yyyyMMdd_HHmmss")}`)
     }
 
+    const handleBulkDelete = async () => {
+        let deleted = 0
+        for (const item of selectedBatchItems) {
+            if (typeof item.adjustmentId === "number") {
+                const result = await deleteEvhsStockAdjustment({ adjustmentId: item.adjustmentId })
+                if (result.success) deleted++
+                else toast.error(result.error)
+                continue
+            }
+            const adjustmentIdFromRow = Number(item.id.match(/^adjustment-(\d+)/)?.[1])
+            if (Number.isInteger(adjustmentIdFromRow) && adjustmentIdFromRow > 0) {
+                const result = await deleteEvhsStockAdjustment({ adjustmentId: adjustmentIdFromRow })
+                if (result.success) deleted++
+                else toast.error(result.error)
+                continue
+            }
+            if (typeof item.receiptItemId !== "number") continue
+            const result = item.sn && item.sn !== "-"
+                ? await deleteEvhsReceiptSerialNumber({ receiptItemId: item.receiptItemId, serialNumber: item.sn })
+                : await deleteEvhsReceiptItem({ receiptItemId: item.receiptItemId })
+            if (result.success) deleted++
+            else toast.error(result.error)
+        }
+        if (deleted) {
+            toast.success(`${deleted} baris berhasil dihapus`)
+            setSelectedItemsForBatch([])
+            window.location.reload()
+        } else {
+            toast.error("Baris terpilih tidak dapat dihapus")
+        }
+    }
+
+    const handleDeleteUsage = async (item: TrackingRow) => {
+        if (!item.voucherItemId || !window.confirm(`Hapus usage SN ${item.sn || "-"}? Stok akan dikembalikan.`)) return
+
+        setDeletingUsageId(item.voucherItemId)
+        try {
+            const result = await deleteEvhsVoucherItem({
+                voucherId: item.voucherId!,
+                voucherItemId: item.voucherItemId,
+            })
+            if (result.success) {
+                toast.success("Usage EVHS berhasil dihapus")
+                window.location.reload()
+            } else {
+                toast.error("error" in result ? result.error : "Gagal menghapus usage")
+            }
+        } catch (_error) {
+            toast.error("Terjadi kesalahan sistem")
+        } finally {
+            setDeletingUsageId(null)
+        }
+    }
+
+    const handleDeleteReceiptSn = async (item: TrackingRow) => {
+        if (!item.receiptItemId || !item.sn || item.sn === "-" || !window.confirm(`Hapus SN ${item.sn} dari supply receipt?`)) return
+
+        setDeletingReceiptSn(item.id)
+        try {
+            const result = await deleteEvhsReceiptSerialNumber({
+                receiptItemId: item.receiptItemId,
+                serialNumber: item.sn,
+            })
+            if (result.success) {
+                toast.success("SN receipt berhasil dihapus")
+                window.location.reload()
+            } else {
+                toast.error(result.error)
+            }
+        } catch (_error) {
+            toast.error("Terjadi kesalahan sistem")
+        } finally {
+            setDeletingReceiptSn(null)
+        }
+    }
+
     return (
         <div className="space-y-4">
             <div className="grid gap-4 md:grid-cols-3 mb-6">
@@ -301,6 +427,10 @@ export function EvhsTrackingTable({ trackingData }: { trackingData: TrackingRow[
                         <Download className="mr-2 h-4 w-4" />
                         Export Excel
                     </Button>
+                    <Button variant="outline" size="sm" onClick={() => setAdjustmentDialogOpen(true)} className="h-9">
+                        <SlidersHorizontal className="mr-2 h-4 w-4" />
+                        Adjustment
+                    </Button>
                 </div>
             </div>
 
@@ -328,6 +458,12 @@ export function EvhsTrackingTable({ trackingData }: { trackingData: TrackingRow[
                         >
                             Generate Multiple Voucher
                         </Button>
+                        <Button variant="outline" size="sm" className="bg-white" onClick={() => setBulkEditReceiptSnOpen(true)}>
+                            Bulk Edit SN
+                        </Button>
+                        <Button variant="outline" size="sm" className="bg-white text-red-600 hover:bg-red-50 hover:text-red-700" onClick={handleBulkDelete}>
+                            Delete Baris
+                        </Button>
                     </div>
                 </div>
             )}
@@ -347,6 +483,7 @@ export function EvhsTrackingTable({ trackingData }: { trackingData: TrackingRow[
                             <TableHead>SITE VHS</TableHead>
                             <TableHead>CP DO</TableHead>
                             <TableHead>MATERIAL NUMBER CP</TableHead>
+                            <TableHead>NAME DESCRIPTION</TableHead>
                             <TableHead>MATERIAL NUMBER CK</TableHead>
                             <TableHead>SN</TableHead>
                             <TableHead>QTY</TableHead>
@@ -364,7 +501,7 @@ export function EvhsTrackingTable({ trackingData }: { trackingData: TrackingRow[
                     <TableBody>
                         {filteredData.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={18} className="h-24 text-center text-muted-foreground">
+                                <TableCell colSpan={19} className="h-24 text-center text-muted-foreground">
                                     Tidak ada data pelacakan.
                                 </TableCell>
                             </TableRow>
@@ -388,8 +525,18 @@ export function EvhsTrackingTable({ trackingData }: { trackingData: TrackingRow[
                                     </TableCell>
                                     <TableCell>{item.cpDo || "-"}</TableCell>
                                     <TableCell className="font-semibold">{item.materialNumberCp}</TableCell>
+                                    <TableCell className="max-w-[220px] truncate" title={item.product?.materialDescription || "-"}>{item.product?.materialDescription || "-"}</TableCell>
                                     <TableCell>{item.materialNumberCk || "-"}</TableCell>
-                                    <TableCell className="font-mono font-medium">{item.sn}</TableCell>
+                                    <TableCell className="font-mono font-medium">
+                                        {item.serialNumbers && item.serialNumbers.length > 0 ? (
+                                            <details>
+                                                <summary className="cursor-pointer text-indigo-700">{item.serialNumbers.length} SN</summary>
+                                                <div className="mt-1 max-h-28 min-w-[150px] overflow-y-auto rounded border bg-muted p-1 text-[10px]">
+                                                    {item.serialNumbers.map((serial, serialIndex) => <div key={`${serial}-${serialIndex}`}>{serial}</div>)}
+                                                </div>
+                                            </details>
+                                        ) : item.sn}
+                                    </TableCell>
                                     <TableCell className="text-right font-mono">
                                         {item.receivedQty ? `${getAvailableQty(item)} / ${getReceivedQty(item)}` : item.qty}
                                     </TableCell>
@@ -409,37 +556,77 @@ export function EvhsTrackingTable({ trackingData }: { trackingData: TrackingRow[
                                     <TableCell>{item.inv || "-"}</TableCell>
                                     <TableCell>
                                         {getAvailableQty(item) > 0 ? (
-                                            <Button
-                                                size="sm"
-                                                variant="default"
-                                                className="h-7 text-xs bg-indigo-600 hover:bg-indigo-700"
-                                                onClick={() => {
-                                                    if (typeof item.warehouseId !== "number") {
-                                                        toast("Warehouse item ini belum terdeteksi, jadi usage belum bisa diinput.")
-                                                        return
-                                                    }
-                                                    setSelectedItem(item)
-                                                    setUsageDialogOpen(true)
-                                                }}
-                                            >
-                                                Input Usage
-                                            </Button>
+                                            <div className="flex flex-col gap-1 items-center justify-center">
+                                                <Button
+                                                    size="sm"
+                                                    variant="default"
+                                                    className="h-7 text-xs bg-indigo-600 hover:bg-indigo-700"
+                                                    onClick={() => {
+                                                        if (typeof item.warehouseId !== "number") {
+                                                            toast("Warehouse item ini belum terdeteksi, jadi usage belum bisa diinput.")
+                                                            return
+                                                        }
+                                                        setSelectedItem(item)
+                                                        setUsageDialogOpen(true)
+                                                    }}
+                                                >
+                                                    Input Usage
+                                                </Button>
+                                                {(item.receiptItemId || item.adjustmentId) && (
+                                                    <>
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            className="h-6 text-xs text-amber-600 hover:bg-amber-50 hover:text-amber-700 w-full"
+                                                            onClick={() => {
+                                                                setSelectedItem(item)
+                                                                item.adjustmentId ? setEditAdjustmentSnOpen(true) : setEditReceiptSnOpen(true)
+                                                            }}
+                                                        >
+                                                            <Edit2 className="h-3 w-3 mr-1" />
+                                                            {item.sn && item.sn !== "-" ? "Edit SN" : "Input SN"}
+                                                        </Button>
+                                                            {item.receiptItemId && item.sn && item.sn !== "-" && <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            className="h-6 text-xs text-red-600 hover:bg-red-50 hover:text-red-700 w-full"
+                                                            disabled={deletingReceiptSn === item.id}
+                                                            onClick={() => handleDeleteReceiptSn(item)}
+                                                        >
+                                                            <Trash2 className="h-3 w-3 mr-1" />
+                                                            {deletingReceiptSn === item.id ? "Menghapus..." : "Delete SN"}
+                                                        </Button>}
+                                                            </>
+                                                        )}
+                                            </div>
                                         ) : (
                                             <div className="flex flex-col gap-2 items-center justify-center">
                                                 <Badge variant="outline" className="text-emerald-600 bg-emerald-50 border-emerald-200">Used / Inputted</Badge>
                                                 {item.voucherItemId && (
-                                                    <Button
-                                                        size="sm"
-                                                        variant="ghost"
-                                                        className="h-6 text-xs text-amber-600 hover:text-amber-700 hover:bg-amber-50 w-full"
-                                                        onClick={() => {
-                                                            setSelectedItem(item)
-                                                            setEditUsageDialogOpen(true)
-                                                        }}
-                                                    >
-                                                        <Edit2 className="h-3 w-3 mr-1" />
-                                                        Edit
-                                                    </Button>
+                                                    <div className="flex w-full flex-col gap-1">
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            className="h-6 text-xs text-amber-600 hover:text-amber-700 hover:bg-amber-50 w-full"
+                                                            onClick={() => {
+                                                                setSelectedItem(item)
+                                                                setEditUsageDialogOpen(true)
+                                                            }}
+                                                        >
+                                                            <Edit2 className="h-3 w-3 mr-1" />
+                                                            Edit
+                                                        </Button>
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            className="h-6 text-xs text-red-600 hover:bg-red-50 hover:text-red-700 w-full"
+                                                            disabled={deletingUsageId === item.voucherItemId}
+                                                            onClick={() => handleDeleteUsage(item)}
+                                                        >
+                                                            <Trash2 className="h-3 w-3 mr-1" />
+                                                            {deletingUsageId === item.voucherItemId ? "Menghapus..." : "Delete"}
+                                                        </Button>
+                                                    </div>
                                                 )}
                                             </div>
                                         )}
@@ -469,6 +656,35 @@ export function EvhsTrackingTable({ trackingData }: { trackingData: TrackingRow[
                 open={editUsageDialogOpen}
                 onOpenChange={setEditUsageDialogOpen}
                 trackingItem={selectedItem}
+            />
+
+            <EvhsEditReceiptSnDialog
+                open={editReceiptSnOpen}
+                onOpenChange={setEditReceiptSnOpen}
+                trackingItem={selectedItem}
+            />
+
+            <EvhsBulkEditReceiptSnDialog
+                open={bulkEditReceiptSnOpen}
+                onOpenChange={setBulkEditReceiptSnOpen}
+                items={selectedBatchItems}
+                onSuccess={() => {
+                    setSelectedItemsForBatch([])
+                    window.location.reload()
+                }}
+            />
+
+            <EvhsEditAdjustmentSnDialog
+                open={editAdjustmentSnOpen}
+                onOpenChange={setEditAdjustmentSnOpen}
+                trackingItem={selectedItem}
+            />
+
+            <EvhsStockAdjustmentDialog
+                open={adjustmentDialogOpen}
+                onOpenChange={setAdjustmentDialogOpen}
+                warehouses={uniqueWarehouses}
+                products={uniqueProducts}
             />
         </div>
     )

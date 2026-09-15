@@ -49,7 +49,7 @@ const isMissingSourceColumnError = (error: unknown) => {
     return message.toLowerCase().includes("source") && message.toLowerCase().includes("stock_movements")
 }
 
-const ensureStockMovementSourceColumn = async () => {
+export const ensureStockMovementSourceColumn = async () => {
     if (!ensureSourceColumnPromise) {
         ensureSourceColumnPromise = (async () => {
             await db.execute(sql`

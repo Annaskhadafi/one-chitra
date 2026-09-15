@@ -9,6 +9,7 @@ import {
     evhsGiRecords,
     evhsGiItems,
     evhsMasterPrices,
+    evhsStockAdjustments,
     products,
     stockLevels,
     stockTransfers,
@@ -26,7 +27,7 @@ import {
     getWarehouseAccessContextForUserId,
 } from "@/lib/warehouse-access"
 import { findCkMasterPriceSuggestion, type CkMasterPriceReference } from "@/lib/ck-master-price"
-import { recordStockMovement } from "@/app/actions/stock-movement"
+import { ensureStockMovementSourceColumn, recordStockMovement } from "@/app/actions/stock-movement"
 import { syncStockTransferReceipt } from "@/app/actions/stock-transfer"
 import { expandSlocLookupKeys, formatWarehouseLabel, normalizeSloc, normalizeSlocFields } from "@/lib/sloc"
 
@@ -98,6 +99,7 @@ type EvhsMatchedVoucher = {
 
 type EvhsTrackingRow = {
     id: string
+    adjustmentId?: number
     dateIn: Date | string | null
     cpDo: string | null
     materialNumberCp: string
@@ -579,6 +581,7 @@ export async function createEvhsVoucher(data: z.infer<typeof _voucherSchema>) {
         const userId = session.user.id
         await assertCurrentUserHasWarehouseAccess(data.warehouseId, "edit")
         const voucherDate = formatEvhsVoucherDateInput(data.date)
+        await ensureStockMovementSourceColumn()
 
         // Generate VHS Number: VHS/CP/CK/YYYYMMDD-Random
         const dateStr = voucherDate.replace(/-/g, "")
@@ -603,6 +606,9 @@ export async function createEvhsVoucher(data: z.infer<typeof _voucherSchema>) {
                     transfer: true,
                     items: true,
                 },
+            })
+            const warehouseAdjustments = await tx.query.evhsStockAdjustments.findMany({
+                where: eq(evhsStockAdjustments.warehouseId, data.warehouseId),
             })
 
             const existingVouchers = await tx.query.evhsVouchers.findMany({
@@ -677,6 +683,10 @@ export async function createEvhsVoucher(data: z.infer<typeof _voucherSchema>) {
             const legacyStockByProduct = new Map<number, number>(
                 legacyStockLevels.map((stockLevel) => [stockLevel.productId, Number(stockLevel.totalStock || 0)])
             )
+            const adjustmentStockByProduct = new Map<number, number>()
+            for (const adjustment of warehouseAdjustments) {
+                adjustmentStockByProduct.set(adjustment.productId, (adjustmentStockByProduct.get(adjustment.productId) || 0) + Number(adjustment.quantity || 0))
+            }
             const productById = new Map<number, { id: number; category: string; materialNumber: string; materialNumberCk?: string | null }>(
                 requestedProducts.map((product) => [
                     product.id,
@@ -688,6 +698,16 @@ export async function createEvhsVoucher(data: z.infer<typeof _voucherSchema>) {
                     }
                 ])
             )
+
+            const resolveSourceType = (
+                item: (typeof data.items)[number],
+                receivedQty: number,
+                warehouseStockQty: number | undefined,
+                usedQty: number,
+            ) => {
+                // Voucher issuance is controlled by the local inventory balance.
+                return "legacy-stock"
+            }
 
             for (const item of data.items) {
                 const productMeta = productById.get(item.productId)
@@ -703,15 +723,17 @@ export async function createEvhsVoucher(data: z.infer<typeof _voucherSchema>) {
                     .reduce((total, voucherItem) => total + voucherItem.qty, 0)
 
                 const warehouseStockQty = legacyStockByProduct.get(item.productId)
-                const sourceType = item.sourceType || "receipt"
+                const adjustmentStockQty = adjustmentStockByProduct.get(item.productId) || 0
+                const sourceType = resolveSourceType(item, receivedQty, warehouseStockQty, usedQty)
                 const availableQty = sourceType === "legacy-stock"
-                    ? (warehouseStockQty !== undefined ? Math.max(warehouseStockQty - usedQty, 0) : 0)
-                    : Math.max(receivedQty - usedQty, 0)
+                    ? Math.max((warehouseStockQty || 0) + adjustmentStockQty - usedQty, 0)
+                    : 0
                 const normalizedSerial = normalizeSerialNumber(item.serialNumber)
                 const nextRequestedQty = (requestedQtyByProduct.get(item.productId) || 0) + item.qty
 
                 if (
                     sourceType === "legacy-stock" &&
+                    adjustmentStockQty === 0 &&
                     productMeta?.category?.toUpperCase() === "TYRE" &&
                     !normalizedSerial
                 ) {
@@ -804,10 +826,10 @@ export async function createEvhsVoucher(data: z.infer<typeof _voucherSchema>) {
                     .reduce((total, voucherItem) => total + voucherItem.qty, 0)
 
                 const warehouseStockQty = legacyStockByProduct.get(item.productId)
-                const sourceType = item.sourceType || "receipt"
+                const sourceType = resolveSourceType(item, receivedQty, warehouseStockQty, usedQtyBeforeInsert)
                 const availableQtyBeforeInsert = sourceType === "legacy-stock"
-                    ? (warehouseStockQty !== undefined ? Math.max(warehouseStockQty - usedQtyBeforeInsert, 0) : 0)
-                    : Math.max(receivedQty - usedQtyBeforeInsert, 0)
+                    ? (warehouseStockQty !== undefined ? Math.max(warehouseStockQty, 0) : 0)
+                    : 0
                 const alreadyInsertedQty = insertedQtyByProduct.get(item.productId) || 0
                 const remainingAfterInsert = Math.max(availableQtyBeforeInsert - alreadyInsertedQty - item.qty, 0)
                 const unitPrice = getEvhsVoucherItemUnitPrice(
@@ -862,6 +884,450 @@ const _editUsageSchema = z.object({
     pos: z.string().optional(),
     unitId: z.string().optional(),
 })
+
+const _editVoucherItemSerialSchema = z.object({
+    voucherId: z.number(),
+    voucherItemId: z.number(),
+    serialNumber: z.string().trim().optional(),
+})
+
+/** Update one voucher item's SN after confirming it belongs to this warehouse's receipt stock. */
+export async function updateEvhsVoucherItemSerialNumber(
+    input: z.infer<typeof _editVoucherItemSerialSchema>,
+) {
+    try {
+        const data = _editVoucherItemSerialSchema.parse(input)
+        await getAuthenticatedSession("evhs", "edit")
+
+        return await db.transaction(async (tx) => {
+            const voucher = await tx.query.evhsVouchers.findFirst({
+                where: eq(evhsVouchers.id, data.voucherId),
+                with: { items: true },
+            })
+
+            if (!voucher) return { success: false as const, error: "Voucher tidak ditemukan" }
+
+            await assertCurrentUserHasWarehouseAccess(voucher.warehouseId, "edit")
+
+            const voucherItem = voucher.items.find((item) => item.id === data.voucherItemId)
+            if (!voucherItem) return { success: false as const, error: "Item voucher tidak ditemukan" }
+
+            const serialNumber = normalizeSerialNumber(data.serialNumber)
+            if (serialNumber) {
+                const receipts = await tx.query.evhsReceipts.findMany({
+                    with: { transfer: true, items: true },
+                })
+                const serialInReceipt = receipts.some((receipt) => (
+                    receipt.transfer?.toWarehouseId === voucher.warehouseId &&
+                    receipt.items.some((item) => (
+                        item.productId === voucherItem.productId &&
+                        parseSerialNumbers(item.serialNumbers).includes(serialNumber)
+                    ))
+                ))
+
+                if (!serialInReceipt) {
+                    return {
+                        success: false as const,
+                        error: `Serial number ${serialNumber} tidak ditemukan pada receipt warehouse EVHS ini.`,
+                    }
+                }
+
+                const vouchers = await tx.query.evhsVouchers.findMany({
+                    with: { items: true },
+                })
+                const alreadyUsed = vouchers.some((candidate) => candidate.items.some((item) => (
+                    item.id !== data.voucherItemId &&
+                    item.productId === voucherItem.productId &&
+                    normalizeSerialNumber(item.serialNumber) === serialNumber
+                )))
+
+                if (alreadyUsed) {
+                    return {
+                        success: false as const,
+                        error: `Serial number ${serialNumber} sudah dipakai pada voucher lain.`,
+                    }
+                }
+            }
+
+            await tx.update(evhsVoucherItems)
+                .set({ serialNumber: serialNumber || null })
+                .where(and(
+                    eq(evhsVoucherItems.id, data.voucherItemId),
+                    eq(evhsVoucherItems.voucherId, data.voucherId),
+                ))
+
+            return {
+                success: true as const,
+                data: {
+                    voucherId: data.voucherId,
+                    voucherItemId: data.voucherItemId,
+                    serialNumber: serialNumber || null,
+                },
+            }
+        })
+    } catch (error) {
+        console.error("Error updating EVHS voucher item serial number:", error)
+        return {
+            success: false as const,
+            error: error instanceof Error ? error.message : "Gagal memperbarui serial number voucher",
+        }
+    } finally {
+        revalidatePath("/dashboard/evhs")
+    }
+}
+
+const _updateAdjustmentSerialsSchema = z.object({
+    adjustmentId: z.number(),
+    serialNumbers: z.array(z.string()),
+})
+
+export async function updateEvhsAdjustmentSerialNumbers(input: z.infer<typeof _updateAdjustmentSerialsSchema>) {
+    try {
+        const data = _updateAdjustmentSerialsSchema.parse(input)
+        await getAuthenticatedSession("evhs", "edit")
+        const adjustment = await db.query.evhsStockAdjustments.findFirst({ where: eq(evhsStockAdjustments.id, data.adjustmentId) })
+        if (!adjustment) return { success: false as const, error: "Adjustment tidak ditemukan" }
+        await assertCurrentUserHasWarehouseAccess(adjustment.warehouseId, "edit")
+        const vouchers = await db.query.evhsVouchers.findMany({
+            where: eq(evhsVouchers.warehouseId, adjustment.warehouseId),
+            with: { items: true },
+        })
+        const usedSerials = vouchers.flatMap((voucher) => voucher.items)
+            .filter((item) => item.productId === adjustment.productId && normalizeSerialNumber(item.serialNumber))
+            .map((item) => normalizeSerialNumber(item.serialNumber))
+        const serialNumbers = data.serialNumbers.map(normalizeSerialNumber).filter(Boolean).slice(0, adjustment.quantity)
+        await db.update(evhsStockAdjustments).set({ serialNumbers: Array.from(new Set([...usedSerials, ...serialNumbers])).slice(0, adjustment.quantity) }).where(eq(evhsStockAdjustments.id, data.adjustmentId))
+        revalidatePath("/dashboard/evhs")
+        return { success: true as const }
+    } catch (error) {
+        return { success: false as const, error: error instanceof Error ? error.message : "Gagal memperbarui SN adjustment" }
+    }
+}
+
+const _receiptSerialSchema = z.object({
+    receiptItemId: z.number(),
+    currentSerialNumber: z.string(),
+    serialNumber: z.string().trim().min(1),
+})
+
+export async function updateEvhsReceiptSerialNumber(input: z.infer<typeof _receiptSerialSchema>) {
+    try {
+        const data = _receiptSerialSchema.parse(input)
+        await getAuthenticatedSession("evhs", "edit")
+
+        return await db.transaction(async (tx) => {
+            const item = await tx.query.evhsReceiptItems.findFirst({
+                where: eq(evhsReceiptItems.id, data.receiptItemId),
+                with: { receipt: { with: { transfer: true } } },
+            })
+            const warehouseId = item?.receipt.transfer?.toWarehouseId
+            if (!item || !warehouseId) return { success: false as const, error: "Data receipt tidak ditemukan" }
+            await assertCurrentUserHasWarehouseAccess(warehouseId, "edit")
+
+            const current = normalizeSerialNumber(data.currentSerialNumber)
+            const next = normalizeSerialNumber(data.serialNumber)
+            const serials = parseSerialNumbers(item.serialNumbers)
+            const index = serials.indexOf(current)
+            if (!current && serials.length >= Number(item.confirmedQty || 0)) {
+                return { success: false as const, error: "Jumlah SN sudah sesuai dengan quantity receipt" }
+            }
+            if (current && index < 0) return { success: false as const, error: "SN saat ini tidak ditemukan" }
+
+            const duplicate = await tx.query.evhsVoucherItems.findFirst({
+                where: sql`upper(trim(${evhsVoucherItems.serialNumber})) = ${next.toUpperCase()}`,
+            })
+            if (duplicate) return { success: false as const, error: "SN baru sudah dipakai pada voucher" }
+
+            if (index < 0) serials.push(next)
+            else serials[index] = next
+            await tx.update(evhsReceiptItems)
+                .set({ serialNumbers: serials })
+                .where(eq(evhsReceiptItems.id, data.receiptItemId))
+
+            return { success: true as const }
+        })
+    } catch (error) {
+        console.error("Error updating EVHS receipt serial number:", error)
+        return { success: false as const, error: error instanceof Error ? error.message : "Gagal memperbarui SN receipt" }
+    } finally {
+        revalidatePath("/dashboard/evhs")
+    }
+}
+
+const _deleteReceiptSerialSchema = z.object({
+    receiptItemId: z.number(),
+    serialNumber: z.string().min(1),
+})
+
+export async function deleteEvhsReceiptSerialNumber(input: z.infer<typeof _deleteReceiptSerialSchema>) {
+    try {
+        const data = _deleteReceiptSerialSchema.parse(input)
+        await getAuthenticatedSession("evhs", "delete")
+
+        return await db.transaction(async (tx) => {
+            const item = await tx.query.evhsReceiptItems.findFirst({
+                where: eq(evhsReceiptItems.id, data.receiptItemId),
+                with: { receipt: { with: { transfer: true } } },
+            })
+            const warehouseId = item?.receipt.transfer?.toWarehouseId
+            if (!item || !warehouseId) return { success: false as const, error: "Data receipt tidak ditemukan" }
+            await assertCurrentUserHasWarehouseAccess(warehouseId, "edit")
+
+            const serial = normalizeSerialNumber(data.serialNumber)
+            const serials = parseSerialNumbers(item.serialNumbers)
+            if (!serials.includes(serial)) return { success: false as const, error: "SN tidak ditemukan" }
+
+            const used = await tx.query.evhsVoucherItems.findFirst({
+                where: sql`upper(trim(${evhsVoucherItems.serialNumber})) = ${serial.toUpperCase()}`,
+            })
+            if (used) return { success: false as const, error: "SN sudah dipakai, hapus usage voucher terlebih dahulu" }
+
+            const nextSerials = serials.filter((value) => value !== serial)
+            const nextQty = Math.max(Number(item.confirmedQty || 0) - 1, 0)
+            if (nextQty === 0) {
+                await tx.delete(evhsReceiptItems).where(eq(evhsReceiptItems.id, data.receiptItemId))
+            } else {
+                await tx.update(evhsReceiptItems)
+                    .set({ confirmedQty: nextQty, serialNumbers: nextSerials })
+                    .where(eq(evhsReceiptItems.id, data.receiptItemId))
+            }
+
+            await recordStockMovement(tx, {
+                productId: item.productId,
+                warehouseId,
+                quantity: 1,
+                type: "ADJUSTMENT",
+                source: "ADJUSTMENT",
+                referenceNumber: `EVHS-RECEIPT-DELETE-${data.receiptItemId}`,
+                recordedBy: session.user.id,
+                notes: `Hapus SN EVHS ${serial} dari receipt`,
+            })
+
+            return { success: true as const }
+        })
+    } catch (error) {
+        console.error("Error deleting EVHS receipt serial number:", error)
+        return { success: false as const, error: error instanceof Error ? error.message : "Gagal menghapus SN receipt" }
+    } finally {
+        revalidatePath("/dashboard/evhs")
+        revalidatePath("/dashboard/stock-movements")
+    }
+}
+
+const _deleteReceiptItemSchema = z.object({ receiptItemId: z.number() })
+
+export async function deleteEvhsReceiptItem(input: z.infer<typeof _deleteReceiptItemSchema>) {
+    try {
+        const data = _deleteReceiptItemSchema.parse(input)
+        const session = await getAuthenticatedSession("evhs", "delete")
+
+        return await db.transaction(async (tx) => {
+            const item = await tx.query.evhsReceiptItems.findFirst({
+                where: eq(evhsReceiptItems.id, data.receiptItemId),
+                with: { receipt: { with: { transfer: true } } },
+            })
+            const warehouseId = item?.receipt.transfer?.toWarehouseId
+            if (!item || !warehouseId) return { success: false as const, error: "Data receipt tidak ditemukan" }
+            await assertCurrentUserHasWarehouseAccess(warehouseId, "delete")
+
+            const used = await tx.query.evhsVoucherItems.findFirst({
+                where: sql`exists (select 1 from evhs_vouchers v where v.id = ${evhsVoucherItems.voucherId} and v.warehouse_id = ${warehouseId}) and ${evhsVoucherItems.productId} = ${item.productId}`,
+            })
+            if (used) return { success: false as const, error: "Baris sudah memiliki usage voucher" }
+
+            await tx.delete(evhsReceiptItems).where(eq(evhsReceiptItems.id, data.receiptItemId))
+            await recordStockMovement(tx, {
+                productId: item.productId,
+                warehouseId,
+                quantity: Number(item.confirmedQty || 0),
+                type: "ADJUSTMENT",
+                source: "ADJUSTMENT",
+                referenceNumber: `EVHS-RECEIPT-ROW-DELETE-${data.receiptItemId}`,
+                recordedBy: session.user.id,
+                notes: `Hapus baris receipt EVHS ${data.receiptItemId}`,
+            })
+            return { success: true as const }
+        })
+    } catch (error) {
+        console.error("Error deleting EVHS receipt item:", error)
+        return { success: false as const, error: error instanceof Error ? error.message : "Gagal menghapus baris receipt" }
+    } finally {
+        revalidatePath("/dashboard/evhs")
+        revalidatePath("/dashboard/stock-movements")
+    }
+}
+
+const _deleteAdjustmentSchema = z.object({ adjustmentId: z.number() })
+
+export async function deleteEvhsStockAdjustment(input: z.infer<typeof _deleteAdjustmentSchema>) {
+    try {
+        const data = _deleteAdjustmentSchema.parse(input)
+        await getAuthenticatedSession("evhs", "edit")
+        return await db.transaction(async (tx) => {
+            const adjustment = await tx.query.evhsStockAdjustments.findFirst({ where: eq(evhsStockAdjustments.id, data.adjustmentId) })
+            if (!adjustment) return { success: false as const, error: "Adjustment tidak ditemukan" }
+            await assertCurrentUserHasWarehouseAccess(adjustment.warehouseId, "edit")
+            await tx.delete(evhsStockAdjustments).where(eq(evhsStockAdjustments.id, data.adjustmentId))
+            return { success: true as const }
+        })
+    } catch (error) {
+        return { success: false as const, error: error instanceof Error ? error.message : "Gagal menghapus adjustment" }
+    } finally {
+        revalidatePath("/dashboard/evhs")
+        revalidatePath("/dashboard/stock-movements")
+    }
+}
+
+const _deleteVoucherItemSchema = z.object({
+    voucherId: z.number(),
+    voucherItemId: z.number(),
+})
+
+/** Delete one voucher item and reverse its completed-voucher stock movement atomically. */
+export async function deleteEvhsVoucherItem(input: z.infer<typeof _deleteVoucherItemSchema>) {
+    try {
+        const data = _deleteVoucherItemSchema.parse(input)
+        const session = await getAuthenticatedSession("evhs", "delete")
+        const userId = session.user.id
+
+        return await db.transaction(async (tx) => {
+            const voucher = await tx.query.evhsVouchers.findFirst({
+                where: eq(evhsVouchers.id, data.voucherId),
+                with: { items: true, warehouse: true },
+            })
+
+            if (!voucher) return { success: false as const, error: "Voucher tidak ditemukan" }
+
+            const access = await getWarehouseAccessContextForUserId(userId, "edit")
+            if (!access.isGlobal && !access.warehouseIds.includes(voucher.warehouseId)) {
+                return { success: false as const, error: "Anda tidak memiliki akses edit ke warehouse voucher ini." }
+            }
+
+            const voucherItem = voucher.items.find((item) => item.id === data.voucherItemId)
+            if (!voucherItem) return { success: false as const, error: "Item voucher tidak ditemukan" }
+
+            const reversesStockMovement = voucher.status === "completed"
+            if (reversesStockMovement) {
+                const movement = await recordStockMovement(tx, {
+                    productId: voucherItem.productId,
+                    warehouseId: voucher.warehouseId,
+                    quantity: Math.abs(Number(voucherItem.qty || 0)),
+                    type: "DELIVERY",
+                    referenceNumber: voucher.vhsNo,
+                    recordedBy: userId,
+                    customerId: voucher.warehouse?.customerId ?? undefined,
+                    notes: `Reversal EVHS voucher item ${voucher.vhsNo} (#${voucherItem.id})`,
+                })
+                if (!movement.success) throw new Error(movement.error || "Gagal merekam kompensasi stock movement")
+            }
+
+            await tx.delete(evhsVoucherItems)
+                .where(and(
+                    eq(evhsVoucherItems.id, data.voucherItemId),
+                    eq(evhsVoucherItems.voucherId, data.voucherId),
+                ))
+
+            const headerDeleted = voucher.items.length === 1
+            if (headerDeleted) {
+                await tx.delete(evhsVouchers).where(eq(evhsVouchers.id, data.voucherId))
+            }
+
+            return {
+                success: true as const,
+                data: {
+                    voucherId: data.voucherId,
+                    voucherItemId: data.voucherItemId,
+                    deletedQty: Number(voucherItem.qty || 0),
+                    stockMovementReversed: reversesStockMovement,
+                    headerDeleted,
+                },
+            }
+        })
+    } catch (error) {
+        console.error("Error deleting EVHS voucher item:", error)
+        return {
+            success: false as const,
+            error: error instanceof Error ? error.message : "Gagal menghapus item voucher",
+        }
+    } finally {
+        revalidatePath("/dashboard/evhs")
+        revalidatePath("/dashboard/stock-movements")
+    }
+}
+
+const _evhsStockAdjustmentSchema = z.object({
+    warehouseId: z.number(),
+    productId: z.number(),
+    quantity: z.number().int().positive(),
+    notes: z.string().trim().max(500).optional(),
+})
+
+/** Add receipt-like EVHS supply without changing voucher usage totals. */
+export async function createEvhsStockAdjustment(
+    input: z.infer<typeof _evhsStockAdjustmentSchema>,
+) {
+    try {
+        const data = _evhsStockAdjustmentSchema.parse(input)
+        const session = await getAuthenticatedSession("evhs", "edit")
+        await assertCurrentUserHasWarehouseAccess(data.warehouseId, "edit")
+        await ensureStockMovementSourceColumn()
+
+        return await db.transaction(async (tx) => {
+            const warehouse = await tx.query.warehouses.findFirst({
+                where: eq(warehouses.id, data.warehouseId),
+            })
+            if (!isEvhsDestinationWarehouse(warehouse)) {
+                return { success: false as const, error: "Warehouse bukan Warehouse VHS EVHS yang valid." }
+            }
+
+            const product = await tx.query.products.findFirst({
+                where: eq(products.id, data.productId),
+                columns: { id: true },
+            })
+            if (!product) return { success: false as const, error: "Product tidak ditemukan" }
+
+            const [adjustment] = await tx.insert(evhsStockAdjustments).values({
+                warehouseId: data.warehouseId,
+                productId: data.productId,
+                quantity: data.quantity,
+                notes: data.notes || null,
+                createdBy: session.user.id,
+            }).returning({ id: evhsStockAdjustments.id })
+
+            const movement = await recordStockMovement(tx, {
+                productId: data.productId,
+                warehouseId: data.warehouseId,
+                quantity: data.quantity,
+                type: "ADJUSTMENT",
+                source: "ADJUSTMENT",
+                referenceNumber: `EVHS-ADJ-${adjustment.id}`,
+                recordedBy: session.user.id,
+                customerId: warehouse.customerId ?? undefined,
+                notes: data.notes || `Penyesuaian supply EVHS #${adjustment.id}`,
+            })
+            if (!movement.success) throw new Error(movement.error || "Gagal merekam stock adjustment")
+
+            return {
+                success: true as const,
+                data: {
+                    adjustmentId: adjustment.id,
+                    warehouseId: data.warehouseId,
+                    productId: data.productId,
+                    quantity: data.quantity,
+                },
+            }
+        })
+    } catch (error) {
+        console.error("Error creating EVHS stock adjustment:", error)
+        return {
+            success: false as const,
+            error: error instanceof Error ? error.message : "Gagal menambahkan stock adjustment EVHS",
+        }
+    } finally {
+        revalidatePath("/dashboard/evhs")
+        revalidatePath("/dashboard/stock-movements")
+    }
+}
 
 export async function updateEvhsUsage(data: z.infer<typeof _editUsageSchema>) {
     try {
@@ -1758,6 +2224,7 @@ export async function getEvhsMrkoData() {
                 : undefined,
             with: { items: true }
         })
+
         const relevantMaterialNumbers = Array.from(new Set(
             vouchers
                 .flatMap((voucher) => voucher.items)
@@ -1896,6 +2363,14 @@ export async function getEvhsTrackingData() {
             with: { items: true }
         })
 
+        const adjustments = await db.query.evhsStockAdjustments.findMany({
+            where: allowedWarehouseIds
+                ? inArray(evhsStockAdjustments.warehouseId, allowedWarehouseIds)
+                : undefined,
+            with: { product: true, warehouse: true },
+            orderBy: [desc(evhsStockAdjustments.createdAt)],
+        })
+
         const filteredReceipts = filterEvhsReceiptRowsByWarehouse(receipts, allowedWarehouseIds)
 
         const trackingRows: EvhsTrackingRow[] = []
@@ -1935,6 +2410,7 @@ export async function getEvhsTrackingData() {
 
                         trackingRows.push({
                             id: `${item.id}-${sn}`,
+                            receiptItemId: item.id,
                             dateIn: receipt.receivedDate,
                             cpDo: receipt.doChitraNo,
                             materialNumberCp: item.product.materialNumber,
@@ -1988,6 +2464,7 @@ export async function getEvhsTrackingData() {
 
                     trackingRows.push({
                         id: `${item.id}-bulk`,
+                        receiptItemId: item.id,
                         dateIn: receipt.receivedDate,
                         cpDo: receipt.doChitraNo,
                         materialNumberCp: item.product.materialNumber,
@@ -2016,6 +2493,83 @@ export async function getEvhsTrackingData() {
                         warehouse: receipt.transfer?.toWarehouse
                     })
                 }
+            }
+        }
+
+        for (const adjustment of adjustments) {
+            const serials = parseSerialNumbers(adjustment.serialNumbers)
+            const adjustmentUsages = vouchers
+                .filter((voucher) => voucher.warehouseId === adjustment.warehouseId)
+                .flatMap((voucher) => voucher.items
+                    .filter((item) => item.productId === adjustment.productId)
+                    .map((item) => ({ voucher, item })))
+            for (const serial of serials) {
+                const usage = adjustmentUsages.find(({ item }) => normalizeSerialNumber(item.serialNumber) === serial)
+                if (usage) trackedVoucherItemIds.add(usage.item.id)
+                trackingRows.push({
+                    id: `adjustment-${adjustment.id}-${serial}`,
+                    adjustmentId: adjustment.id,
+                    dateIn: adjustment.createdAt,
+                    cpDo: "EVHS ADJUSTMENT",
+                    materialNumberCp: adjustment.product.materialNumber,
+                    materialNumberCk: adjustment.product.materialNumberCk || "-",
+                    sn: serial,
+                    qty: 1,
+                    receivedQty: 1,
+                    availableQty: usage ? 0 : 1,
+                    usedQty: usage ? 1 : 0,
+                    installDate: usage?.voucher.date || null,
+                    pos: usage?.item.pos || "",
+                    unitId: usage?.item.unitId || "",
+                    voucherNo: usage?.voucher.vhsNo || "",
+                    voucherId: usage?.voucher.id || null,
+                    voucherItemId: usage?.item.id || null,
+                    woNo: usage?.voucher.woNo || "",
+                    giNumber: "",
+                    mrko: usage?.voucher.mrkoStatus === "SETTLED" ? "SETTLED" : (usage ? "OPEN" : ""),
+                    inv: usage?.voucher.sapInvoiceNo || "",
+                    date: usage?.voucher.settledDate || null,
+                    productId: adjustment.productId,
+                    product: adjustment.product,
+                    warehouseId: adjustment.warehouseId,
+                    warehouse: adjustment.warehouse,
+                })
+            }
+            const usedBulkQty = adjustmentUsages
+                .filter(({ item }) => !normalizeSerialNumber(item.serialNumber))
+                .reduce((total, { item }) => total + Number(item.qty || 0), 0)
+            const bulkQty = Math.max(Number(adjustment.quantity || 0) - serials.length - usedBulkQty, 0)
+            if (bulkQty > 0 || usedBulkQty > 0) {
+                const latestUsage = adjustmentUsages.filter(({ item }) => !normalizeSerialNumber(item.serialNumber)).at(-1)
+                if (latestUsage) trackedVoucherItemIds.add(latestUsage.item.id)
+                trackingRows.push({
+                    id: `adjustment-${adjustment.id}-bulk`,
+                    adjustmentId: adjustment.id,
+                    dateIn: adjustment.createdAt,
+                    cpDo: "EVHS ADJUSTMENT",
+                    materialNumberCp: adjustment.product.materialNumber,
+                    materialNumberCk: adjustment.product.materialNumberCk || "-",
+                    sn: "-",
+                    qty: bulkQty,
+                    receivedQty: Number(adjustment.quantity || 0) - serials.length,
+                    availableQty: bulkQty,
+                    usedQty: usedBulkQty,
+                    installDate: latestUsage?.voucher.date || null,
+                    pos: latestUsage?.item.pos || "",
+                    unitId: latestUsage?.item.unitId || "",
+                    voucherNo: latestUsage?.voucher.vhsNo || "",
+                    voucherId: latestUsage?.voucher.id || null,
+                    voucherItemId: latestUsage?.item.id || null,
+                    woNo: latestUsage?.voucher.woNo || "",
+                    giNumber: "",
+                    mrko: latestUsage?.voucher.mrkoStatus === "SETTLED" ? "SETTLED" : (latestUsage ? "OPEN" : ""),
+                    inv: latestUsage?.voucher.sapInvoiceNo || "",
+                    date: latestUsage?.voucher.settledDate || null,
+                    productId: adjustment.productId,
+                    product: adjustment.product,
+                    warehouseId: adjustment.warehouseId,
+                    warehouse: adjustment.warehouse,
+                })
             }
         }
 
@@ -2107,6 +2661,7 @@ type EvhsAllVhsStockRow = {
     category: string
     sapStock: number
     totalStock: number
+    totalSupply: number
     usedQty: number
     availableQty: number
     detailRows: EvhsAllVhsStockDetailRow[]
@@ -2159,7 +2714,7 @@ export async function getEvhsAllVhsStockData(): Promise<EvhsAllVhsStockRow[]> {
             return []
         }
 
-        const [stockRows, trackingRows, vouchers, giRecords] = await Promise.all([
+        const [stockRows, trackingRows, receipts, adjustments, vouchers, giRecords] = await Promise.all([
             db.query.stockLevels.findMany({
                 where: allowedWarehouseIds
                     ? inArray(stockLevels.warehouseId, allowedWarehouseIds)
@@ -2170,6 +2725,18 @@ export async function getEvhsAllVhsStockData(): Promise<EvhsAllVhsStockRow[]> {
                 },
             }),
             getEvhsTrackingData(),
+            db.query.evhsReceipts.findMany({
+                with: {
+                    transfer: true,
+                    items: true,
+                },
+            }),
+            db.query.evhsStockAdjustments.findMany({
+                where: allowedWarehouseIds
+                    ? inArray(evhsStockAdjustments.warehouseId, allowedWarehouseIds)
+                    : undefined,
+                with: { product: true, warehouse: true },
+            }),
             db.query.evhsVouchers.findMany({
                 where: allowedWarehouseIds
                     ? inArray(evhsVouchers.warehouseId, allowedWarehouseIds)
@@ -2197,6 +2764,20 @@ export async function getEvhsAllVhsStockData(): Promise<EvhsAllVhsStockRow[]> {
         const filteredStocks = stockRows.filter((stockRow) =>
             stockRow.totalStock > 0 && isCkVhsWarehouse(stockRow.warehouse)
         )
+        const outputStockKeys = new Set(filteredStocks.map((stockRow) => `${stockRow.warehouseId}:${stockRow.productId}`))
+        const outputStockRows = [...filteredStocks]
+        for (const adjustment of adjustments) {
+            const warehouseKey = `${adjustment.warehouseId}:${adjustment.productId}`
+            if (outputStockKeys.has(warehouseKey) || !isCkVhsWarehouse(adjustment.warehouse)) continue
+            outputStockKeys.add(warehouseKey)
+            outputStockRows.push({
+                warehouseId: adjustment.warehouseId,
+                productId: adjustment.productId,
+                totalStock: 0,
+                product: adjustment.product,
+                warehouse: adjustment.warehouse,
+            } as typeof filteredStocks[number])
+        }
         const relevantSlocs = Array.from(new Set(
             filteredStocks
                 .flatMap((stockRow) => expandSlocLookupKeys(stockRow.warehouse?.sloc))
@@ -2235,6 +2816,7 @@ export async function getEvhsAllVhsStockData(): Promise<EvhsAllVhsStockRow[]> {
         const sapStockBySlocKey = new Map<string, number>()
 
         const usedQtyByKey = new Map<string, number>()
+        const totalSupplyByKey = new Map<string, number>()
         const detailRowsByKey = new Map<string, EvhsAllVhsStockDetailRow[]>()
         const trackedVoucherItemIds = new Set<number>()
 
@@ -2265,6 +2847,27 @@ export async function getEvhsAllVhsStockData(): Promise<EvhsAllVhsStockRow[]> {
                 const currentUsedQty = usedQtyByKey.get(warehouseKey) || 0
                 usedQtyByKey.set(warehouseKey, currentUsedQty + Number(voucherItem.qty || 0))
             }
+        }
+
+        for (const receipt of receipts) {
+            const warehouseId = receipt.transfer?.toWarehouseId
+            if (!warehouseId || (allowedWarehouseIds && !allowedWarehouseIds.includes(warehouseId))) continue
+
+            for (const item of receipt.items) {
+                const warehouseKey = `${warehouseId}:${item.productId}`
+                totalSupplyByKey.set(
+                    warehouseKey,
+                    (totalSupplyByKey.get(warehouseKey) || 0) + Number(item.confirmedQty || 0),
+                )
+            }
+        }
+
+        for (const adjustment of adjustments) {
+            const warehouseKey = `${adjustment.warehouseId}:${adjustment.productId}`
+            totalSupplyByKey.set(
+                warehouseKey,
+                (totalSupplyByKey.get(warehouseKey) || 0) + Number(adjustment.quantity || 0),
+            )
         }
 
         for (const trackingRow of trackingRows) {
@@ -2336,10 +2939,11 @@ export async function getEvhsAllVhsStockData(): Promise<EvhsAllVhsStockRow[]> {
             }
         }
 
-        return normalizeSlocFields(filteredStocks
+        return normalizeSlocFields(outputStockRows
             .map((stockRow) => {
                 const warehouseKey = `${stockRow.warehouseId}:${stockRow.productId}`
                 const usedQty = usedQtyByKey.get(warehouseKey) || 0
+                const totalSupply = totalSupplyByKey.get(warehouseKey) || 0
                 const materialKey = normalizeEvhsMaterialKey(stockRow.product?.materialNumber)
                 const warehouseDescKey = normalizeEvhsWarehouseDescriptionKey(stockRow.warehouse?.description)
                 const slocKey = normalizeEvhsSapSlocKey(stockRow.warehouse?.sloc)
@@ -2373,8 +2977,9 @@ export async function getEvhsAllVhsStockData(): Promise<EvhsAllVhsStockRow[]> {
                     category: stockRow.product?.category || "-",
                     sapStock,
                     totalStock: stockRow.totalStock,
+                    totalSupply,
                     usedQty,
-                    availableQty: Math.max(stockRow.totalStock - usedQty, 0),
+                    availableQty: Math.max(totalSupply - usedQty, 0),
                     detailRows,
                 }
             })
