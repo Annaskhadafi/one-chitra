@@ -37,17 +37,17 @@ export async function getCompetitorInfo() {
         // Map CSV headers to our interface keys
         const formattedData: CompetitorItem[] = data.map((item) => ({
             timestamp: String(item["Timestamp"] ?? ""),
-            customer: String(item["Nama Customer"] ?? ""),
-            size_tire: String(item["Size Tire"] ?? "").replace(/\s+/g, ""),
+            customer: String(item["Nama Customer"] ?? item["Customer"] ?? ""),
+            size_tire: String(item["Size Tire / Product"] ?? item["Size Tire"] ?? item["Size"] ?? "").replace(/\s+/g, ""),
             brand: String(item["Brand"] ?? ""),
-            category_tire: String(item["Category Tire"] ?? ""),
+            category_tire: String(item["Category Tire"] ?? item["Category"] ?? ""),
             supplier: String(item["Supplier"] ?? ""),
             currency: String(item["Currency"] ?? ""),
-            price: String(item["Price"] ?? ""),
-            remark: String(item["Remark / Delivery Drop Point"] ?? ""),
-            tanggal_informasi: String(item["Tanggal Informasi"] ?? ""),
-            business_consultant: String(item["Business Consultant"] ?? ""),
-            price_formatted: formatPrice(String(item["Price"] ?? ""), String(item["Currency"] ?? ""))
+            price: String(item["Price"] ?? item["PRICE"] ?? ""),
+            remark: String(item["Remark / Delivery Drop Point"] ?? item["Remark"] ?? ""),
+            tanggal_informasi: String(item["Tanggal Informasi"] ?? item["Timestamp"] ?? ""),
+            business_consultant: String(item["Business Consultant"] ?? item["Consultant"] ?? ""),
+            price_formatted: formatPrice(String(item["Price"] ?? item["PRICE"] ?? ""), String(item["Currency"] ?? ""))
         }));
 
         return { success: true, data: formattedData };

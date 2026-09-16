@@ -315,10 +315,10 @@ export async function syncCompetitorPricesFromApi() {
         let skippedCount = 0
 
         for (const item of data as { [key: string]: string | undefined }[]) {
-            const customerName = item['Nama Customer'] || ''
-            const productSize = (item['Size Tire'] || '').replace(/\s+/g, '')
+            const customerName = item['Nama Customer'] || item['Customer'] || ''
+            const productSize = (item['Size Tire / Product'] || item['Size Tire'] || item['Size'] || '').replace(/\s+/g, '')
             const brand = item['Brand'] || ''
-            const infoDateRaw = item['Tanggal Informasi'] || ''
+            const infoDateRaw = item['Tanggal Informasi'] || item['Timestamp'] || ''
 
             if (!customerName || !productSize || !brand) continue
 

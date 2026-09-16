@@ -149,24 +149,24 @@ async function fetchSheet(gid: string) {
 }
 
 function parsePrice(row: SheetRow, index: number, companyMapping: Record<string, string>): CompetitorPriceRecord | null {
-    const rawCustomer = getField(row, ["Nama Customer"])
-    const size = getField(row, ["Size Tire"])
+    const rawCustomer = getField(row, ["Nama Customer", "Customer"])
+    const size = getField(row, ["Size Tire / Product", "Size Tire", "Size", "Product Size", "Tire Size"]).replace(/\s+/g, "")
     const brand = getField(row, ["Brand"])
     const rawSupplier = getField(row, ["Supplier"])
     if (!rawCustomer || !size || !brand) return null
     return {
         id: `price-${index}`,
-        date: parseDateValue(getField(row, ["Tanggal Informasi"])),
-        consultant: getField(row, ["Business Consultant"]),
+        date: parseDateValue(getField(row, ["Tanggal Informasi"])) || parseDateValue(getField(row, ["Timestamp"])),
+        consultant: getField(row, ["Business Consultant", "Consultant"]),
         customer: companyMapping[rawCustomer] || rawCustomer,
         size,
         brand: normalizeBrand(brand),
-        category: getField(row, ["Category Tire"]),
+        category: getField(row, ["Category Tire", "Category"]),
         supplier: companyMapping[rawSupplier] || rawSupplier,
         currency: getField(row, ["Currency"]) || "IDR",
         price: parseMoney(getField(row, ["PRICE", "Price"])),
         status: "",
-        deliveryPoint: getField(row, ["Remark / Delivery Drop Point"]),
+        deliveryPoint: getField(row, ["Remark / Delivery Drop Point", "Remark"]),
     }
 }
 

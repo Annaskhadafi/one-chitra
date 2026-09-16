@@ -350,24 +350,24 @@ function renderPieLabel({ name, percent, value }: { name?: string; percent?: num
 
 function parsePriceRows(rows: SheetRow[], companyMapping: Record<string, string>) {
     return rows.map((row, index): PriceRecord | null => {
-        const rawCustomer = cleanText(row["Nama Customer"])
-        const size = cleanText(row["Size Tire"]).replace(/\s+/g, "")
-        const brand = cleanText(row["Brand"])
+        const rawCustomer = cleanText(row["Nama Customer"] || row.Customer)
+        const size = cleanText(row["Size Tire / Product"] || row["Size Tire"] || row["Size"] || row["Tire Size"]).replace(/\s+/g, "")
+        const brand = cleanText(row.Brand)
         const rawSupplier = cleanText(row.Supplier)
         if (!rawCustomer || !size || !brand) return null
         return {
             id: `price-${index}`,
             timestamp: parseDateValue(row.Timestamp),
-            infoDate: parseDateValue(row["Tanggal Informasi"]),
+            infoDate: parseDateValue(row["Tanggal Informasi"]) || parseDateValue(row.Timestamp),
             customer: companyMapping[rawCustomer] || rawCustomer,
             size,
             brand: normalizeBrand(brand),
-            category: cleanText(row["Category Tire"]),
+            category: cleanText(row["Category Tire"] || row.Category),
             supplier: companyMapping[rawSupplier] || rawSupplier,
             currency: cleanText(row.Currency) || "IDR",
             price: parseMoney(row.PRICE || row.Price),
-            deliveryPoint: cleanText(row["Remark / Delivery Drop Point"]),
-            consultant: cleanText(row["Business Consultant"]),
+            deliveryPoint: cleanText(row["Remark / Delivery Drop Point"] || row.Remark),
+            consultant: cleanText(row["Business Consultant"] || row.Consultant),
         }
     }).filter(Boolean).sort((a, b) => {
         const dateA = a?.infoDate?.getTime() ?? 0

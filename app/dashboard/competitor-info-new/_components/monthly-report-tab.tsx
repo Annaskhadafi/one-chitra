@@ -454,21 +454,21 @@ function parsePriceRows(rows: SheetRow[]) {
     const companyMapping = normalizeNames(rawCompanyNames)
 
     return rows.map((row, index): PriceRecord | null => {
-        const rawCustomer = cleanText(row["Nama Customer"])
-        const size = cleanText(row["Size Tire"]).replace(/\s+/g, "")
+        const rawCustomer = cleanText(row["Nama Customer"] || row.Customer)
+        const size = cleanText(row["Size Tire / Product"] || row["Size Tire"] || row["Size"] || row["Tire Size"]).replace(/\s+/g, "")
         const brand = cleanText(row.Brand)
         const rawSupplier = cleanText(row.Supplier)
         if (!rawCustomer || !size || !brand) return null
         return {
             id: `price-${index}`,
-            infoDate: parseDateValue(row["Tanggal Informasi"]),
+            infoDate: parseDateValue(row["Tanggal Informasi"]) || parseDateValue(row.Timestamp),
             customer: companyMapping[rawCustomer] || rawCustomer,
             size,
             brand: normalizeBrand(brand),
             supplier: companyMapping[rawSupplier] || rawSupplier,
-            remark: getField(row, "Remark / DDP", "Remark/DDP", "Remark", "DDP"),
+            remark: getField(row, "Remark / Delivery Drop Point", "Remark / DDP", "Remark/DDP", "Remark", "DDP"),
             price: parseMoney(row.PRICE || row.Price),
-            consultant: cleanText(row["Business Consultant"]),
+            consultant: cleanText(row["Business Consultant"] || row.Consultant),
         }
     }).filter((row): row is PriceRecord => Boolean(row))
 }
