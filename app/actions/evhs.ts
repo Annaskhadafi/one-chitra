@@ -751,9 +751,9 @@ export async function createEvhsVoucher(data: z.infer<typeof _voucherSchema>) {
                 )
 
                 const totalSupply = receivedQty + adjustmentStockQty
-                const availableQty = totalSupply > 0
-                    ? Math.max(totalSupply - usedQty, 0)
-                    : Math.max((warehouseStockQty || 0) - usedQty, 0)
+                const evhsBalance = Math.max(totalSupply - usedQty, 0)
+                const localBalance = warehouseStockQty !== undefined ? Math.max(warehouseStockQty, 0) : 0
+                let availableQty = Math.max(evhsBalance, localBalance)
 
                 const nextRequestedQty = (requestedQtyByProduct.get(item.productId) || 0) + item.qty
 
@@ -812,6 +812,10 @@ export async function createEvhsVoucher(data: z.infer<typeof _voucherSchema>) {
                         }
                     }
 
+                    if (serialExistsInWarehouse && !serialAlreadyUsed && availableQty < 1) {
+                        availableQty = 1
+                    }
+
                     requestedSerials.add(serialKey)
                 }
 
@@ -866,9 +870,16 @@ export async function createEvhsVoucher(data: z.infer<typeof _voucherSchema>) {
                     relevantReceiptItems,
                 )
                 const totalSupply = receivedQty + adjustmentStockQty
-                const availableQtyBeforeInsert = totalSupply > 0
-                    ? Math.max(totalSupply - usedQtyBeforeInsert, 0)
-                    : Math.max((warehouseStockQty || 0) - usedQtyBeforeInsert, 0)
+                const evhsBalanceBeforeInsert = Math.max(totalSupply - usedQtyBeforeInsert, 0)
+                const localBalanceBeforeInsert = warehouseStockQty !== undefined ? Math.max(warehouseStockQty, 0) : 0
+                let availableQtyBeforeInsert = Math.max(evhsBalanceBeforeInsert, localBalanceBeforeInsert)
+                if (
+                    normalizedSerial &&
+                    relevantReceiptItems.some(ri => parseSerialNumbers(ri.serialNumbers).includes(normalizedSerial)) &&
+                    availableQtyBeforeInsert < 1
+                ) {
+                    availableQtyBeforeInsert = 1
+                }
                 const alreadyInsertedQty = insertedQtyByProduct.get(item.productId) || 0
                 const remainingAfterInsert = Math.max(availableQtyBeforeInsert - alreadyInsertedQty - item.qty, 0)
                 const unitPrice = getEvhsVoucherItemUnitPrice(
@@ -1816,9 +1827,12 @@ export async function completeEvhsDraftVoucher(data: z.infer<typeof _completeDra
                     ? (serialExistsInWarehouse ? "receipt" : "legacy-stock")
                     : (warehouseStockQty !== undefined ? "legacy-stock" : "receipt")
 
-                const availableQty = sourceType === "legacy-stock"
-                    ? (warehouseStockQty !== undefined ? Math.max(warehouseStockQty - usedQty, 0) : 0)
-                    : Math.max(receivedQty - usedQty, 0)
+                const evhsBalance = Math.max(receivedQty - usedQty, 0)
+                const localBalance = warehouseStockQty !== undefined ? Math.max(warehouseStockQty, 0) : 0
+                let availableQty = Math.max(evhsBalance, localBalance)
+                if (normalizedSerial && serialExistsInWarehouse && availableQty < 1) {
+                    availableQty = 1
+                }
 
                 const nextRequested = (requestedQtyByProduct.get(item.productId) || 0) + item.qty
 
@@ -2817,17 +2831,17 @@ export async function getEvhsAllVhsStockData(): Promise<EvhsAllVhsStockRow[]> {
             } as typeof filteredStocks[number])
         }
         const relevantSlocs = Array.from(new Set(
-            filteredStocks
+            outputStockRows
                 .flatMap((stockRow) => expandSlocLookupKeys(stockRow.warehouse?.sloc))
                 .filter(Boolean)
         ))
         const relevantWarehouseDescriptions = Array.from(new Set(
-            filteredStocks
+            outputStockRows
                 .map((stockRow) => normalizeEvhsWarehouseDescriptionKey(stockRow.warehouse?.description))
                 .filter(Boolean)
         ))
         const relevantMaterialNumbers = new Set(
-            filteredStocks
+            outputStockRows
                 .map((stockRow) => normalizeEvhsMaterialKey(stockRow.product?.materialNumber))
                 .filter(Boolean)
         )
@@ -3017,7 +3031,7 @@ export async function getEvhsAllVhsStockData(): Promise<EvhsAllVhsStockRow[]> {
                     totalStock: stockRow.totalStock,
                     totalSupply,
                     usedQty,
-                    availableQty: Math.max(totalSupply - usedQty, 0),
+                    availableQty: Math.max(Math.max(totalSupply - usedQty, 0), stockRow.totalStock ? Math.max(stockRow.totalStock, 0) : 0),
                     detailRows,
                 }
             })

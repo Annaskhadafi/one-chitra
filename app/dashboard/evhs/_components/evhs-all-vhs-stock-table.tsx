@@ -97,6 +97,7 @@ type UsageTrackingItem = {
         materialNumberCk?: string | null
         category?: string | null
     }
+    detailRows?: EvhsAllVhsDetailRow[]
 }
 
 type SortKey =
@@ -125,8 +126,9 @@ function getCategoryPriority(category: string) {
     return category.toUpperCase() === "TYRE" ? 0 : 1
 }
 
-function getStatusLabel(row: Pick<EvhsAllVhsStockRow, "availableQty" | "usedQty">) {
-    if (row.availableQty === 0) return "Used Out"
+function getStatusLabel(row: Pick<EvhsAllVhsStockRow, "availableQty" | "usedQty" | "totalStock">) {
+    const effectiveAvailable = (row.availableQty && row.availableQty > 0) ? row.availableQty : (row.totalStock || 0)
+    if (effectiveAvailable === 0) return "Used Out"
     if (row.usedQty > 0) return "Partial"
     return "Ready"
 }
@@ -610,7 +612,8 @@ export function EvhsAllVhsStockTable({ rows }: { rows: EvhsAllVhsStockRow[] }) {
                                 sortedRows.map((row, index) => {
                                     const isTyre = row.category.toUpperCase() === "TYRE"
                                     const isExpanded = expandedRows.includes(row.id)
-                                    const statusVariant = row.availableQty === 0
+                                    const effectiveAvailable = (row.availableQty && row.availableQty > 0) ? row.availableQty : (row.totalStock || 0)
+                                    const statusVariant = effectiveAvailable === 0
                                         ? "bg-slate-100 text-slate-700 border-slate-200"
                                         : row.usedQty > 0
                                             ? "bg-amber-100 text-amber-700 border-amber-200"
@@ -623,7 +626,7 @@ export function EvhsAllVhsStockTable({ rows }: { rows: EvhsAllVhsStockRow[] }) {
                                         <Fragment key={row.id}>
                                             <TableRow key={row.id} className={`whitespace-nowrap text-xs ${isSelected ? "bg-blue-50/50" : ""}`}>
                                                 <TableCell className="text-center">
-                                                    {row.totalStock > 0 ? (
+                                                    {(row.availableQty > 0 || row.totalStock > 0) ? (
                                                         <Checkbox
                                                             checked={isSelected}
                                                             disabled={selectionLockedByOtherWarehouse}
@@ -671,7 +674,7 @@ export function EvhsAllVhsStockTable({ rows }: { rows: EvhsAllVhsStockRow[] }) {
                                                     <Badge className={statusVariant}>{statusLabel}</Badge>
                                                 </TableCell>
                                                 <TableCell className="text-right">
-                                                    {row.totalStock > 0 ? (
+                                                    {(row.availableQty > 0 || row.totalStock > 0) ? (
                                                         <Button
                                                             size="sm"
                                                             className={isTyre ? "bg-indigo-600 hover:bg-indigo-700" : ""}

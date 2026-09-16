@@ -1,7 +1,7 @@
 # Graph Report - one-chitra  (2026-09-16)
 
 ## Corpus Check
-- 1318 files · ~1,155,102 words
+- 1318 files · ~1,155,292 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
