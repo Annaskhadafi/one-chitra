@@ -702,10 +702,25 @@ export async function createEvhsVoucher(data: z.infer<typeof _voucherSchema>) {
             const resolveSourceType = (
                 item: (typeof data.items)[number],
                 receivedQty: number,
+                adjustmentStockQty: number,
                 warehouseStockQty: number | undefined,
                 usedQty: number,
+                normalizedSerial?: string | null,
+                relevantReceiptItems?: typeof warehouseReceipts[number]["items"],
             ) => {
-                // Voucher issuance is controlled by the local inventory balance.
+                if (item.sourceType) {
+                    return item.sourceType
+                }
+                if (normalizedSerial && relevantReceiptItems) {
+                    const existsInReceipt = relevantReceiptItems.some(ri =>
+                        parseSerialNumbers(ri.serialNumbers).includes(normalizedSerial)
+                    )
+                    if (existsInReceipt) return "receipt"
+                }
+                const totalSupply = receivedQty + adjustmentStockQty
+                if (totalSupply > usedQty) {
+                    return "receipt"
+                }
                 return "legacy-stock"
             }
 
@@ -724,16 +739,28 @@ export async function createEvhsVoucher(data: z.infer<typeof _voucherSchema>) {
 
                 const warehouseStockQty = legacyStockByProduct.get(item.productId)
                 const adjustmentStockQty = adjustmentStockByProduct.get(item.productId) || 0
-                const sourceType = resolveSourceType(item, receivedQty, warehouseStockQty, usedQty)
-                const availableQty = sourceType === "legacy-stock"
-                    ? Math.max((warehouseStockQty || 0) + adjustmentStockQty - usedQty, 0)
-                    : 0
                 const normalizedSerial = normalizeSerialNumber(item.serialNumber)
+                const sourceType = resolveSourceType(
+                    item,
+                    receivedQty,
+                    adjustmentStockQty,
+                    warehouseStockQty,
+                    usedQty,
+                    normalizedSerial,
+                    relevantReceiptItems,
+                )
+
+                const totalSupply = receivedQty + adjustmentStockQty
+                const availableQty = totalSupply > 0
+                    ? Math.max(totalSupply - usedQty, 0)
+                    : Math.max((warehouseStockQty || 0) - usedQty, 0)
+
                 const nextRequestedQty = (requestedQtyByProduct.get(item.productId) || 0) + item.qty
 
                 if (
                     sourceType === "legacy-stock" &&
                     adjustmentStockQty === 0 &&
+                    totalSupply === 0 &&
                     productMeta?.category?.toUpperCase() === "TYRE" &&
                     !normalizedSerial
                 ) {
@@ -814,11 +841,12 @@ export async function createEvhsVoucher(data: z.infer<typeof _voucherSchema>) {
             const insertedQtyByProduct = new Map<number, number>()
 
             for (const item of data.items) {
-                const receivedQty = warehouseReceipts
+                const relevantReceiptItems = warehouseReceipts
                     .filter(receipt => receipt.transfer?.toWarehouseId === data.warehouseId)
                     .flatMap(receipt => receipt.items)
                     .filter(receiptItem => receiptItem.productId === item.productId)
-                    .reduce((total, receiptItem) => total + receiptItem.confirmedQty, 0)
+
+                const receivedQty = relevantReceiptItems.reduce((total, receiptItem) => total + receiptItem.confirmedQty, 0)
 
                 const usedQtyBeforeInsert = existingVouchers
                     .flatMap(voucher => voucher.items)
@@ -826,10 +854,21 @@ export async function createEvhsVoucher(data: z.infer<typeof _voucherSchema>) {
                     .reduce((total, voucherItem) => total + voucherItem.qty, 0)
 
                 const warehouseStockQty = legacyStockByProduct.get(item.productId)
-                const sourceType = resolveSourceType(item, receivedQty, warehouseStockQty, usedQtyBeforeInsert)
-                const availableQtyBeforeInsert = sourceType === "legacy-stock"
-                    ? (warehouseStockQty !== undefined ? Math.max(warehouseStockQty, 0) : 0)
-                    : 0
+                const adjustmentStockQty = adjustmentStockByProduct.get(item.productId) || 0
+                const normalizedSerial = normalizeSerialNumber(item.serialNumber)
+                const sourceType = resolveSourceType(
+                    item,
+                    receivedQty,
+                    adjustmentStockQty,
+                    warehouseStockQty,
+                    usedQtyBeforeInsert,
+                    normalizedSerial,
+                    relevantReceiptItems,
+                )
+                const totalSupply = receivedQty + adjustmentStockQty
+                const availableQtyBeforeInsert = totalSupply > 0
+                    ? Math.max(totalSupply - usedQtyBeforeInsert, 0)
+                    : Math.max((warehouseStockQty || 0) - usedQtyBeforeInsert, 0)
                 const alreadyInsertedQty = insertedQtyByProduct.get(item.productId) || 0
                 const remainingAfterInsert = Math.max(availableQtyBeforeInsert - alreadyInsertedQty - item.qty, 0)
                 const unitPrice = getEvhsVoucherItemUnitPrice(
@@ -868,7 +907,6 @@ export async function createEvhsVoucher(data: z.infer<typeof _voucherSchema>) {
             return { success: true, vhsNo }
         })
     } catch (error) {
-        console.error("Error creating VHS voucher:", error)
         return { success: false, error: error instanceof Error ? error.message : "Failed to create voucher" }
     } finally {
         revalidatePath("/dashboard/evhs")

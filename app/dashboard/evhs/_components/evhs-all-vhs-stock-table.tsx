@@ -368,17 +368,19 @@ export function EvhsAllVhsStockTable({ rows }: { rows: EvhsAllVhsStockRow[] }) {
     }
 
     const openLegacyUsage = (row: EvhsAllVhsStockRow) => {
+        const availableStock = row.availableQty > 0 ? row.availableQty : row.totalStock
+        const isEvhsSupply = row.totalSupply > 0
         setSelectedUsageItem({
             warehouseId: row.warehouseId,
             productId: row.productId,
             materialNumberCp: row.materialNumber,
             materialNumberCk: row.materialNumberCk,
             sn: "-",
-            qty: row.totalStock,
-            availableQty: row.totalStock,
-            defaultQty: row.category.toUpperCase() === "TYRE" ? 1 : row.totalStock,
-            cpDo: "LEGACY STOCK",
-            sourceType: "legacy-stock",
+            qty: availableStock,
+            availableQty: availableStock,
+            defaultQty: row.category.toUpperCase() === "TYRE" ? 1 : availableStock,
+            cpDo: isEvhsSupply ? "EVHS SUPPLY" : "LEGACY STOCK",
+            sourceType: isEvhsSupply ? "receipt" : "legacy-stock",
             product: {
                 materialDescription: row.materialDescription,
                 materialNumberCk: row.materialNumberCk,
