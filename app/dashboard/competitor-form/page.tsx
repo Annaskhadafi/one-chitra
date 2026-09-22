@@ -22,7 +22,7 @@ export default function CompetitorFormPage() {
                     <TabsContent value="price" className="flex-1 w-full mt-0">
                         <div className="w-full h-[80vh] rounded-md border overflow-hidden bg-white">
                             <iframe 
-                                src="https://docs.google.com/forms/d/1UQwpOtvqu-rcfmAGxpwgRc6nuw8x8SRB91GYdrjBDGE/viewform?embedded=true" 
+                                src="https://docs.google.com/forms/d/1s_Hrh3e99c3SEsfBIwirixavOk97lbi-Lp1CPygjilg/viewform?embedded=true"
                                 width="100%" 
                                 height="100%" 
                                 frameBorder="0" 
