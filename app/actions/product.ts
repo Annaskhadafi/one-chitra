@@ -613,3 +613,19 @@ export async function importMaterialPtro(data: { materialNumber: string, materia
 export async function getProductsForQuotation() {
     return await db.select().from(products).orderBy(products.materialNumber)
 }
+
+export async function getProductOptions() {
+    const rows = await db
+        .select({
+            id: products.id,
+            materialNumber: products.materialNumber,
+            materialDescription: products.materialDescription,
+            oldMaterialNo: products.oldMaterialNo,
+            materialNumberCk: products.materialNumberCk,
+            sloc: products.sloc,
+        })
+        .from(products)
+        .orderBy(products.materialNumber)
+
+    return normalizeSlocFields(rows)
+}

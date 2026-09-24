@@ -80,6 +80,25 @@ export async function getWarehouses() {
     })
 }
 
+export async function getWarehouseOptions() {
+    const allowedWarehouseIds = await getAllowedWarehouseIdsForCurrentUser("view")
+
+    if (allowedWarehouseIds && allowedWarehouseIds.length === 0) {
+        return []
+    }
+
+    const data = await db
+        .select({
+            id: warehouses.id,
+            sloc: warehouses.sloc,
+            description: warehouses.description,
+        })
+        .from(warehouses)
+        .where(allowedWarehouseIds ? inArray(warehouses.id, allowedWarehouseIds) : undefined)
+
+    return normalizeSlocFields(data).sort((a, b) => a.sloc.localeCompare(b.sloc))
+}
+
 export async function createWarehouse(data: z.infer<typeof warehouseSchema>) {
     try {
         const normalizedData = normalizeWarehouseInput(data)

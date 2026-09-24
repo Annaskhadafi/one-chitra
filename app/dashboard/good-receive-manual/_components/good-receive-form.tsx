@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useForm, useFieldArray, type Resolver } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
@@ -8,7 +8,7 @@ import { format } from "date-fns"
 import { CalendarIcon, Loader2, PackagePlus, FileText, Check, ChevronsUpDown, ImageIcon, Mail, ExternalLink, Trash2 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { createGoodReceiveManual } from "@/app/actions/good-receive-manual"
+import { createGoodReceiveManual, getManualGoodReceiveEmailCcMap } from "@/app/actions/good-receive-manual"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
@@ -78,6 +78,8 @@ export function GoodReceiveForm({
 }: GoodReceiveFormProps) {
     const router = useRouter()
     const [poOpen, setPoOpen] = useState(false)
+    const [poSearch, setPoSearch] = useState("")
+    const [isMobileLayout, setIsMobileLayout] = useState(false)
     const [isUploadingVendorDo, setIsUploadingVendorDo] = useState(false)
     const [vendorDoUploadProgress, setVendorDoUploadProgress] = useState(0)
     const defaultNotifyRoles = notificationRoles.filter((role) => {
@@ -107,13 +109,45 @@ export function GoodReceiveForm({
 
     const selectedPoNumber = form.watch("poNumber")
     const selectedWarehouseId = form.watch("warehouseId")
-    const selectedPo = poOptions.find((po) => po.poNumber === selectedPoNumber)
-    const selectedWarehouse = warehouses.find((warehouse) => warehouse.id === selectedWarehouseId)
-    const availableLines = poLineOptions.filter((line) => line.poNumber === selectedPoNumber)
-    const productMap = new Map(productOptions.map((product) => [product.id, product]))
+    const selectedPo = useMemo(
+        () => poOptions.find((po) => po.poNumber === selectedPoNumber),
+        [poOptions, selectedPoNumber],
+    )
+    const selectedWarehouse = useMemo(
+        () => warehouses.find((warehouse) => warehouse.id === selectedWarehouseId),
+        [warehouses, selectedWarehouseId],
+    )
+    const availableLines = useMemo(
+        () => poLineOptions.filter((line) => line.poNumber === selectedPoNumber),
+        [poLineOptions, selectedPoNumber],
+    )
+    const availableLineByItem = useMemo(
+        () => new Map(availableLines.map((line) => [line.poItem, line])),
+        [availableLines],
+    )
+    const productMap = useMemo(
+        () => new Map(productOptions.map((product) => [product.id, product])),
+        [productOptions],
+    )
+    const filteredPoOptions = useMemo(() => {
+        const query = poSearch.trim().toLowerCase()
+        if (!query) return poOptions.slice(0, 100)
+
+        return poOptions
+            .filter((po) => `${po.poNumber} ${po.vendorName} ${po.poDate ?? ""}`.toLowerCase().includes(query))
+            .slice(0, 100)
+    }, [poOptions, poSearch])
     const vendorDoUrl = form.watch("vendorDoUrl")
     const selectedNotifyRoles = form.watch("notifyRoles") ?? []
     const selectedNotifyUserIds = form.watch("notifyUserIds") ?? []
+
+    useEffect(() => {
+        const media = window.matchMedia("(max-width: 767px)")
+        const updateLayout = () => setIsMobileLayout(media.matches)
+        updateLayout()
+        media.addEventListener("change", updateLayout)
+        return () => media.removeEventListener("change", updateLayout)
+    }, [])
 
     useEffect(() => {
         if (!selectedPoNumber) {
@@ -157,9 +191,19 @@ export function GoodReceiveForm({
             replace(nextItems)
         }
 
-        const nextEmailCc = eprEmailCcByPo[selectedPoNumber] ?? ""
-        if ((form.getValues("emailCc") ?? "") !== nextEmailCc) {
-            form.setValue("emailCc", nextEmailCc, { shouldDirty: true })
+        const nextEmailCc = eprEmailCcByPo[selectedPoNumber]
+        form.setValue("emailCc", nextEmailCc ?? "", { shouldDirty: false })
+        if (nextEmailCc !== undefined) return
+
+        let cancelled = false
+        void getManualGoodReceiveEmailCcMap([selectedPoNumber]).then((emailMap) => {
+            if (!cancelled && !form.getFieldState("emailCc").isDirty && form.getValues("poNumber") === selectedPoNumber) {
+                form.setValue("emailCc", emailMap[selectedPoNumber] ?? "", { shouldDirty: false })
+            }
+        }).catch(() => undefined)
+
+        return () => {
+            cancelled = true
         }
     }, [availableLines, eprEmailCcByPo, form, replace, selectedPoNumber])
 
@@ -248,7 +292,13 @@ export function GoodReceiveForm({
                                     render={({ field }) => (
                                         <FormItem>
                                             <FormLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">PO Number</FormLabel>
-                                            <Popover open={poOpen} onOpenChange={setPoOpen}>
+                                            <Popover
+                                                open={poOpen}
+                                                onOpenChange={(open) => {
+                                                    setPoOpen(open)
+                                                    if (!open) setPoSearch("")
+                                                }}
+                                            >
                                                 <PopoverTrigger asChild>
                                                     <FormControl>
                                                         <Button
@@ -271,12 +321,16 @@ export function GoodReceiveForm({
                                                     </FormControl>
                                                 </PopoverTrigger>
                                                 <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-                                                    <Command>
-                                                        <CommandInput placeholder="Search PO number or supplier..." />
+                                                    <Command shouldFilter={false}>
+                                                        <CommandInput
+                                                            placeholder="Search PO number or supplier..."
+                                                            value={poSearch}
+                                                            onValueChange={setPoSearch}
+                                                        />
                                                         <CommandList>
                                                             <CommandEmpty>No PO found.</CommandEmpty>
                                                             <CommandGroup>
-                                                                {poOptions.map((po) => (
+                                                                {filteredPoOptions.map((po) => (
                                                                     <CommandItem
                                                                         key={po.poNumber}
                                                                         value={`${po.poNumber} ${po.vendorName} ${po.poDate ?? ""}`}
@@ -530,10 +584,10 @@ export function GoodReceiveForm({
                         <Separator />
                         <CardContent className="pt-0 px-0 pb-0">
                             <div className="rounded-b-lg overflow-hidden">
-                                <div className="divide-y md:hidden">
+                                 {isMobileLayout && <div className="divide-y">
                                     {fields.map((field, index) => {
                                         const selectedPoItem = form.watch(`items.${index}.poItem`)
-                                        const selectedLine = availableLines.find((line) => line.poItem === selectedPoItem)
+                                        const selectedLine = availableLineByItem.get(selectedPoItem)
                                         const selectedProduct = productMap.get(form.watch(`items.${index}.productId`))
 
                                         return (
@@ -682,9 +736,9 @@ export function GoodReceiveForm({
                                             </div>
                                         )
                                     })}
-                                </div>
+                                </div>}
 
-                                <div className="hidden md:block">
+                                {!isMobileLayout && <div>
                                 <Table>
                                     <TableHeader>
                                         <TableRow className="bg-muted/50 hover:bg-muted/50">
@@ -700,7 +754,7 @@ export function GoodReceiveForm({
                                     <TableBody>
                                         {fields.map((field, index) => {
                                             const selectedPoItem = form.watch(`items.${index}.poItem`)
-                                            const selectedLine = availableLines.find((line) => line.poItem === selectedPoItem)
+                                            const selectedLine = availableLineByItem.get(selectedPoItem)
                                             const selectedProduct = productMap.get(form.watch(`items.${index}.productId`))
 
                                             return (
@@ -813,7 +867,7 @@ export function GoodReceiveForm({
                                         })}
                                     </TableBody>
                                 </Table>
-                                </div>
+                                </div>}
                             </div>
                             {!selectedPoNumber && (
                                 <p className="px-4 py-3 text-sm text-muted-foreground">
