@@ -23,7 +23,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { ProductDialog } from "@/app/dashboard/products/_components/product-dialog"
 import { cn } from "@/lib/utils"
 import { Progress } from "@/components/ui/progress"
-import { optimizeImageForUpload, uploadFileToObjectStorage } from "@/lib/client-upload"
+import { optimizeImageForUpload, uploadFileToObjectStorage, validateManualGrDocument } from "@/lib/client-upload"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 const formSchema = z.object({
@@ -243,24 +243,31 @@ export function GoodReceiveForm({
         const file = event.target.files?.[0]
         if (!file) return
 
+        const validationError = validateManualGrDocument(file)
+        if (validationError) {
+            toast.error(validationError)
+            event.target.value = ""
+            return
+        }
+
         setIsUploadingVendorDo(true)
         setVendorDoUploadProgress(0)
         try {
             const optimizedFile = await optimizeImageForUpload(file)
             const result = await uploadFileToObjectStorage(optimizedFile, setVendorDoUploadProgress)
             if (!result.success || !result.url) {
-                toast.error(result.error || "Failed to upload Foto DO Vendor")
+                toast.error(result.error || "Failed to upload Dokumen DO Vendor")
                 return
             }
 
             form.setValue("vendorDoUrl", result.url, { shouldDirty: true, shouldValidate: true })
             toast.success(
                 optimizedFile !== file
-                    ? "Foto DO Vendor uploaded dengan optimasi ukuran"
-                    : "Foto DO Vendor uploaded",
+                    ? "Dokumen DO Vendor uploaded dengan optimasi ukuran"
+                    : "Dokumen DO Vendor uploaded",
             )
         } catch {
-            toast.error("An error occurred while uploading Foto DO Vendor")
+            toast.error("An error occurred while uploading Dokumen DO Vendor")
         } finally {
             setTimeout(() => {
                 setIsUploadingVendorDo(false)
@@ -480,11 +487,11 @@ export function GoodReceiveForm({
                                     name="vendorDoUrl"
                                     render={() => (
                                         <FormItem className="md:col-span-2">
-                                            <FormLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Foto DO Vendor</FormLabel>
+                                            <FormLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Dokumen DO Vendor</FormLabel>
                                             <div className="rounded-lg border border-dashed p-4 space-y-3">
                                                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                                     <div className="space-y-1">
-                                                        <p className="text-sm font-medium">Upload foto atau PDF DO vendor</p>
+                                                        <p className="text-sm font-medium">Upload dokumen DO vendor (gambar atau PDF)</p>
                                                         <p className="text-xs text-muted-foreground">
                                                             File ini akan tampil di tabel GR Manual dan ikut dikirim sebagai attachment email jika notifikasi dipilih.
                                                         </p>
@@ -549,7 +556,7 @@ export function GoodReceiveForm({
                                                             // eslint-disable-next-line @next/next/no-img-element
                                                             <img
                                                                 src={vendorDoUrl}
-                                                                alt="Foto DO Vendor"
+                                                                alt="Dokumen DO Vendor"
                                                                 className="max-h-[320px] rounded-md border object-contain bg-white"
                                                             />
                                                         )}
@@ -898,7 +905,7 @@ export function GoodReceiveForm({
                                                 <CardTitle className="text-base">Email Notification</CardTitle>
                                             </div>
                                             <CardDescription className="mt-2 text-xs">
-                                                Pilih penerima email. Ringkasan hasil GR manual dan file Foto DO Vendor akan ikut dikirim saat submit.
+                                                Pilih penerima email. Ringkasan hasil GR manual dan dokumen DO Vendor akan ikut dikirim saat submit.
                                             </CardDescription>
                                         </div>
                                     </AccordionTrigger>

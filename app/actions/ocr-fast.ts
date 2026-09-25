@@ -29,6 +29,7 @@ type DeliveryOrderBoxFields = {
 
 import { extractPdfViaInspector } from "@/lib/vision-pdf-inspector"
 import { structurePoFromMarkdown } from "@/lib/ai-document-structurer"
+import { tryHeuristicPoParse } from "@/lib/heuristic-document-parser"
 
 type DetectionSource = "label" | "pattern" | "none"
 
@@ -48,11 +49,13 @@ export async function triggerSalesOrderBasicOcrFast(formData: FormData) {
 
         const buffer = Buffer.from(await file.arrayBuffer())
         const filename = createManagedUploadFilename(file.name)
-        const savedUpload = await saveManagedUpload({
+        const savedUploadPromise = saveManagedUpload({
             filename,
             buffer,
             contentType: file.type,
         })
+        // Keep the background write observed if OCR fails before its result is needed.
+        savedUploadPromise.catch(() => undefined)
 
         let basic: BasicOcrResult | null = null
         let rawText = ""
@@ -74,19 +77,34 @@ export async function triggerSalesOrderBasicOcrFast(formData: FormData) {
                 pagesProcessed = inspectorResult.data?.page_count || 1
 
                 if (markdown.trim()) {
-                    console.log(`[SO-OCR] Structuring extracted PDF markdown via Fast Engine...`)
-                    const structured = await structurePoFromMarkdown(markdown)
-                    basic = {
-                        customer_name: sanitizeText(structured.customer_company_name),
-                        po_number: sanitizeText(structured.po_number),
-                        date: sanitizeText(structured.document_date),
-                        items: (structured.products || []).map((p) => ({
-                            product: sanitizeText(p.name),
-                            qty: Number(p.qty) || 0,
-                            price: Number(p.unit_price) || 0,
-                        })),
+                    const heuristic = tryHeuristicPoParse(markdown)
+                    if (heuristic.success && heuristic.data?.products && heuristic.data.products.length > 0) {
+                        basic = {
+                            customer_name: sanitizeText(heuristic.data.customer_company_name),
+                            po_number: sanitizeText(heuristic.data.po_number),
+                            date: sanitizeText(heuristic.data.document_date),
+                            items: heuristic.data.products.map((p) => ({
+                                product: sanitizeText(p.name),
+                                qty: Number(p.qty) || 0,
+                                price: Number(p.unit_price) || 0,
+                            })),
+                        }
+                        model = `pdf-inspector-heuristic (${inspectorResult.data?.pdf_type || "fast"})`
+                    } else {
+                        console.log(`[SO-OCR] Structuring extracted PDF markdown via Fast Engine...`)
+                        const structured = await structurePoFromMarkdown(markdown)
+                        basic = {
+                            customer_name: sanitizeText(structured.customer_company_name),
+                            po_number: sanitizeText(structured.po_number),
+                            date: sanitizeText(structured.document_date),
+                            items: (structured.products || []).map((p) => ({
+                                product: sanitizeText(p.name),
+                                qty: Number(p.qty) || 0,
+                                price: Number(p.unit_price) || 0,
+                            })),
+                        }
+                        model = `pdf-inspector-ai (${inspectorResult.data?.pdf_type || "fast"})`
                     }
-                    model = `pdf-inspector (${inspectorResult.data?.pdf_type || "fast"})`
                 }
             } catch (microserviceErr) {
                 console.warn("[SO-OCR] PDF Inspector failed, falling back to legacy Vision OCR:", microserviceErr)
@@ -113,7 +131,7 @@ export async function triggerSalesOrderBasicOcrFast(formData: FormData) {
                     if (hasMeaningfulBasicResult(fastBasic)) {
                         return {
                             success: true as const,
-                            fileUrl: savedUpload.url,
+                            fileUrl: (await savedUploadPromise).url,
                             fileName: file.name,
                             fileType: file.type,
                             basic: fastBasic,
@@ -171,14 +189,14 @@ export async function triggerSalesOrderBasicOcrFast(formData: FormData) {
             return {
                 success: false as const,
                 error: "OCR belum berhasil membaca data PO. Coba file yang lebih jelas atau ulangi proses.",
-                fileUrl: savedUpload.url,
+                fileUrl: (await savedUploadPromise).url,
                 rawText: sanitizeText(rawText),
             }
         }
 
         return {
             success: true as const,
-            fileUrl: savedUpload.url,
+            fileUrl: (await savedUploadPromise).url,
             fileName: file.name,
             fileType: file.type,
             basic,

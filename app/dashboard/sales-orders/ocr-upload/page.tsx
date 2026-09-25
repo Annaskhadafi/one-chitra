@@ -7,7 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { useRouter } from "next/navigation"
-import { uploadFile } from "@/app/actions/upload"
+import { triggerSalesOrderBasicOcrFast } from "@/app/actions/ocr-fast"
+import { optimizeImageForUpload } from "@/lib/client-upload"
 import { 
     FileText, 
     Upload, 
@@ -195,18 +196,7 @@ export default function OcrUploadPage() {
         setEngineUsed(null)
 
         try {
-            // Langkah 1: Upload File ke Persistent Storage
-            const uploadFormData = new FormData()
-            uploadFormData.append("file", file)
-
-            const uploadRes = await uploadFile(uploadFormData)
-            if (!uploadRes.success || !uploadRes.url) {
-                throw new Error(uploadRes.error || "Gagal mengunggah file ke server.")
-            }
-
-            const uploadedFileUrl = uploadRes.url
-
-            // Langkah 2: Ekstraksi Dokumen via PDF Inspector / Vision
+            // Upload and extraction share one server action and one request.
             setCurrentStep("inspecting")
             setSmoothProgress(70, 25)
             if (isPdf) {
@@ -215,25 +205,26 @@ export default function OcrUploadPage() {
                 setStatusMessage("Tahap 2/3: Ekstraksi gambar via Vision Engine OCR...")
             }
 
-            // Langkah 3: Structured Mapping
             setCurrentStep("structuring")
             setSmoothProgress(90, 30)
             setStatusMessage("Tahap 3/3: Memetakan struktur PO ke data sistem...")
 
-            const extractController = new AbortController()
-            const extractTimeout = setTimeout(() => extractController.abort(), 25000)
+            const extractFormData = new FormData()
+            const uploadFile = await optimizeImageForUpload(file)
+            extractFormData.append("file", uploadFile)
+            let timeoutId: ReturnType<typeof setTimeout> | undefined
+            const timeoutPromise = new Promise<never>((_, reject) => {
+                timeoutId = setTimeout(() => reject(new Error("Waktu OCR habis (45 detik). Silakan coba lagi.")), 45_000)
+            })
+            const responseData = await Promise.race([
+                triggerSalesOrderBasicOcrFast(extractFormData),
+                timeoutPromise,
+            ]).finally(() => {
+                if (timeoutId) clearTimeout(timeoutId)
+            })
 
-            const apiResponse = await fetch("/api/ocr-extract-basic", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ fileUrl: uploadedFileUrl, pages: "1,2,3" }),
-                signal: extractController.signal,
-            }).finally(() => clearTimeout(extractTimeout))
-
-            const responseData = await apiResponse.json().catch(() => null)
-
-            if (!apiResponse.ok || !responseData) {
-                throw new Error(responseData?.error || `Ekstraksi gagal (HTTP ${apiResponse.status})`)
+            if (!responseData.success) {
+                throw new Error(responseData.error || "Ekstraksi gagal")
             }
 
             if (!responseData.basic || !hasMeaningfulBasicResult(responseData.basic)) {
@@ -253,9 +244,9 @@ export default function OcrUploadPage() {
             setEngineUsed(responseData.model ? (responseData.model.includes("heuristic") ? "Heuristic Fast Engine" : responseData.model) : (isPdf ? "PDF Inspector Microservice" : "Vision Engine"))
             setBasicResult(responseData.basic)
             setUploadedMeta({
-                fileUrl: uploadedFileUrl,
-                fileName: file.name,
-                fileType: file.type,
+                fileUrl: responseData.fileUrl,
+                fileName: responseData.fileName || file.name,
+                fileType: responseData.fileType || file.type,
                 rawText: responseData.rawText || "",
             })
 

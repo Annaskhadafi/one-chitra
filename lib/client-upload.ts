@@ -7,6 +7,24 @@ type UploadResponse = {
     error?: string
 }
 
+const MAX_MANUAL_GR_DOCUMENT_SIZE = 15 * 1024 * 1024
+const IMAGE_FILE_EXTENSION = /\.(?:avif|bmp|gif|heic|heif|jpe?g|png|svg|tiff?|webp)$/i
+
+export function validateManualGrDocument(file: File) {
+    const isPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name)
+    const isImage = file.type.startsWith("image/") || IMAGE_FILE_EXTENSION.test(file.name)
+
+    if (!isPdf && !isImage) {
+        return "Dokumen harus berupa PDF atau gambar."
+    }
+
+    if (file.size > MAX_MANUAL_GR_DOCUMENT_SIZE) {
+        return "Ukuran dokumen maksimal 15 MB."
+    }
+
+    return null
+}
+
 function replaceFileExtension(filename: string, nextExtension: string) {
     const normalized = filename.replace(/\.[^.]+$/, "")
     return `${normalized}.${nextExtension}`
