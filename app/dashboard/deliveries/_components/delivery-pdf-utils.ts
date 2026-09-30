@@ -66,8 +66,8 @@ export function formatDate(date: Date | null | undefined) {
 export function estimateItemHeight(item: DeliveryPdfData["items"][0]): number {
     const isTyre = item.product.category?.toUpperCase() === "TYRE"
     const descLength = item.product.materialDescription?.length || 0
-    const descLines = Math.max(1, Math.ceil(descLength / 35))
-    const baseRowHeight = 24 + descLines * 15 // ~39px for 1 line, ~54px for 2 lines
+    const descLines = Math.max(1, Math.ceil(descLength / 40))
+    const baseRowHeight = 16 + descLines * 14 // ~30px for 1 line, ~44px for 2 lines
 
     if (!isTyre || !item.deliveredQuantity || Number(item.deliveredQuantity) <= 0) {
         return baseRowHeight
@@ -75,9 +75,9 @@ export function estimateItemHeight(item: DeliveryPdfData["items"][0]): number {
 
     const snCount = Number(item.deliveredQuantity)
     const snRows = Math.ceil(snCount / 5)
-    const snHeaderHeight = 22
-    const snRowHeight = 22
-    const snMargin = 16
+    const snHeaderHeight = 20
+    const snRowHeight = 18
+    const snMargin = 10
 
     return baseRowHeight + snHeaderHeight + (snRows * snRowHeight) + snMargin
 }
@@ -91,8 +91,10 @@ export interface PaginationConfig {
 
 /**
  * Paginates delivery items into discrete pages.
- * Handles single-page and multi-page flows gracefully,
- * ensuring signatures & notes fit on the final page without overflow.
+ * Uses a robust forward-allocation algorithm with lookahead balancing to ensure:
+ * 1. Pages are filled naturally without awkward single-item pages or massive blank gaps.
+ * 2. If items can fit with the footer on page 2, it won't prematurely spill over to page 3.
+ * 3. Multi-page documents distribute items reasonably across pages.
  */
 export function paginateDeliveryOrder(
     delivery: DeliveryPdfData,
@@ -105,13 +107,13 @@ export function paginateDeliveryOrder(
     // Continuous Form (Rangkap standard 11"): 215mm x 279.4mm -> 813 x 1056px
     const pageTotalHeight = config.paperSize === "continuous" ? 1056 : 1123
     const topPadding = config.withBackground ? 159 : 132 // 42mm vs 35mm
-    const bottomPadding = 90 // ~24mm (margin bawah yang lega agar tidak menimpa logo di footer kertas)
+    const bottomPadding = 90 // ~24mm (margin bawah aman untuk logo footer kop kertas)
     const pageIndicatorHeight = 26
     const headerHeight = 175 // Ship to + DO Box
     const tableHeaderHeight = 36 // Table header <th>
 
-    const noteExtra = config.hasNotes ? Math.min(Math.ceil(config.notesLength / 60) * 16, 80) : 0
-    const footerHeight = 265 + noteExtra // Signatures (170) + condition (35) + divider (15) + notes (45+)
+    const noteExtra = config.hasNotes ? Math.min(Math.ceil(config.notesLength / 60) * 16, 60) : 0
+    const footerHeight = 240 + noteExtra // Note + Condition + Divider + Signatures
 
     const maxContentWithoutFooter = Math.max(
         200,
@@ -132,88 +134,98 @@ export function paginateDeliveryOrder(
         ]
     }
 
-    // Check if everything fits on a single page
-    const totalItemsHeight = printableItems.reduce((sum, item) => sum + estimateItemHeight(item), 0)
-    if (totalItemsHeight <= maxContentWithFooter) {
-        return [
-            {
-                pageNumber: 1,
-                totalPages: 1,
-                items: printableItems.map((item, idx) => ({
-                    itemIndex: idx + 1,
-                    item,
-                    isTyre: item.product.category?.toUpperCase() === "TYRE",
-                })),
-                showSignatures: true,
-                isLastPage: true,
-            },
-        ]
-    }
+    const itemsWithIndex = printableItems.map((item, idx) => ({
+        itemIndex: idx + 1,
+        item,
+        isTyre: item.product.category?.toUpperCase() === "TYRE",
+        height: estimateItemHeight(item),
+    }))
 
-    // Multi-page distribution
     const pagesItems: DeliveryPdfItemSlice[][] = []
-    let currentPage: DeliveryPdfItemSlice[] = []
-    let currentHeight = 0
+    let cursor = 0
+    const totalCount = itemsWithIndex.length
 
-    printableItems.forEach((item, idx) => {
-        const itemHeight = estimateItemHeight(item)
-        const isTyre = item.product.category?.toUpperCase() === "TYRE"
+    while (cursor < totalCount) {
+        // Cek sisa item dari cursor sampai selesai
+        const remainingItems = itemsWithIndex.slice(cursor)
+        const remainingHeight = remainingItems.reduce((sum, it) => sum + it.height, 0)
 
-        // If adding this item exceeds maxContentWithoutFooter and current page is not empty, start a new page
-        if (currentHeight + itemHeight > maxContentWithoutFooter && currentPage.length > 0) {
-            pagesItems.push(currentPage)
-            currentPage = []
-            currentHeight = 0
+        // 1. Jika SEMUA sisa item muat bersama footer di halaman ini:
+        // Maka halaman ini menjadi halaman penutup terakhir.
+        if (remainingHeight <= maxContentWithFooter) {
+            pagesItems.push(
+                remainingItems.map(({ itemIndex, item, isTyre }) => ({
+                    itemIndex,
+                    item,
+                    isTyre,
+                }))
+            )
+            cursor = totalCount
+            break
         }
 
-        currentPage.push({
-            itemIndex: idx + 1,
-            item,
-            isTyre,
-        })
-        currentHeight += itemHeight
-    })
+        // 2. Jika sisa item muat di halaman ini TANPA footer (namun tidak muat jika dipaksakan dengan footer):
+        // Ini adalah skenario 2 halaman penutup! Bagi item secara proporsional dan seimbang
+        // antara halaman ini dan halaman terakhir, sehingga halaman terakhir memiliki baris yang cukup
+        // dan tidak ada halaman yang hanya berisi 1 item dengan gap raksasa.
+        if (remainingHeight <= maxContentWithoutFooter) {
+            const countForThisPage = Math.ceil(remainingItems.length / 2)
+            const firstSlice = remainingItems.slice(0, countForThisPage)
+            const secondSlice = remainingItems.slice(countForThisPage)
 
-    if (currentPage.length > 0) {
-        pagesItems.push(currentPage)
-    }
-
-    // Now evaluate the last page: Can it fit the footer?
-    const lastPageIndex = pagesItems.length - 1
-    const lastPageItems = pagesItems[lastPageIndex]
-    const lastPageItemsHeight = lastPageItems.reduce((sum, slice) => sum + estimateItemHeight(slice.item), 0)
-
-    if (lastPageItemsHeight > maxContentWithFooter) {
-        // Last page cannot fit the footer along with all its items.
-        // If last page has more than 1 item, try to push some items to a new final page
-        if (lastPageItems.length > 1) {
-            const newFinalPageItems: DeliveryPdfItemSlice[] = []
-            let newFinalHeight = 0
-
-            // Pull items from the end of lastPageItems while newFinalHeight + itemHeight <= maxContentWithFooter
-            while (lastPageItems.length > 1) {
-                const candidate = lastPageItems[lastPageItems.length - 1]
-                const candidateHeight = estimateItemHeight(candidate.item)
-
-                if (newFinalHeight + candidateHeight <= maxContentWithFooter) {
-                    newFinalPageItems.unshift(lastPageItems.pop()!)
-                    newFinalHeight += candidateHeight
-                } else {
-                    break
-                }
-            }
-
-            if (newFinalPageItems.length > 0) {
-                pagesItems.push(newFinalPageItems)
-            } else {
-                // If even 1 item couldn't fit with footer, push 1 item to the new final page
-                const popped = lastPageItems.pop()!
-                pagesItems.push([popped])
-            }
-        } else {
-            // Only 1 huge item on last page. Add a dedicated signatures page
-            pagesItems.push([])
+            pagesItems.push(
+                firstSlice.map(({ itemIndex, item, isTyre }) => ({
+                    itemIndex,
+                    item,
+                    isTyre,
+                }))
+            )
+            pagesItems.push(
+                secondSlice.map(({ itemIndex, item, isTyre }) => ({
+                    itemIndex,
+                    item,
+                    isTyre,
+                }))
+            )
+            cursor = totalCount
+            break
         }
+
+        // 3. Jika sisa item lebih banyak dari kapasitas satu halaman penuh:
+        // Isi halaman saat ini semaksimal mungkin hingga batas maxContentWithoutFooter.
+        const pageSlices: typeof itemsWithIndex = []
+        let currentHeight = 0
+
+        while (cursor < totalCount) {
+            const nextItem = itemsWithIndex[cursor]
+            if (currentHeight + nextItem.height > maxContentWithoutFooter && pageSlices.length > 0) {
+                break
+            }
+            pageSlices.push(nextItem)
+            currentHeight += nextItem.height
+            cursor++
+        }
+
+        // Cek sisa item yang belum kebagian setelah halaman ini diisi:
+        const unassignedCount = totalCount - cursor
+
+        // Jika sisa item hanya 1 atau 2 dan halaman ini punya cukup banyak item (> 6):
+        // Pindahkan item ke halaman berikutnya agar halaman berikutnya memiliki minimal 3 item (seimbang).
+        if (unassignedCount > 0 && unassignedCount <= 2 && pageSlices.length > 6) {
+            const transferCount = 3 - unassignedCount
+            for (let t = 0; t < transferCount; t++) {
+                pageSlices.pop()
+                cursor--
+            }
+        }
+
+        pagesItems.push(
+            pageSlices.map(({ itemIndex, item, isTyre }) => ({
+                itemIndex,
+                item,
+                isTyre,
+            }))
+        )
     }
 
     const totalPages = pagesItems.length
