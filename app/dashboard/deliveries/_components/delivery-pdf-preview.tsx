@@ -248,7 +248,7 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                     .serial-grid th { background-color: #f3f4f6; border: 1px solid #000; padding: 2px 4px; font-size: 7.5pt; text-align: center; }
                     .serial-grid td { text-align: center; font-size: 7.5pt; padding: 2px 4px; border: 1px solid #000; }
                     .footer-section { margin-top: 18px; padding-top: 4px; }
-                    .note-section { margin-top: 8px; font-size: 8.5pt; }
+                    .note-section { margin-top: 8px; margin-bottom: 12px; font-size: 8.5pt; }
                     .note-label { font-weight: bold; margin-bottom: 2px; }
                     .received-condition { font-size: 8pt; line-height: 1.35; margin-bottom: 8px; }
                     .divider-line { border-top: 1px solid #000; margin-bottom: 8px; }
@@ -456,7 +456,7 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                                             .pdf-wrapper .serial-grid td { text-align: center; font-size: 7.5pt; padding: 2px 4px; border: 1px solid #000; }
                                             
                                             .pdf-wrapper .footer-section { margin-top: 18px; padding-top: 4px; }
-                                            .pdf-wrapper .note-section { margin-top: 8px; font-size: 8.5pt; }
+                                            .pdf-wrapper .note-section { margin-top: 8px; margin-bottom: 12px; font-size: 8.5pt; }
                                             .pdf-wrapper .note-label { font-weight: bold; margin-bottom: 2px; }
                                             .pdf-wrapper .received-condition { font-size: 8pt; line-height: 1.35; margin-bottom: 8px; }
                                             .pdf-wrapper .divider-line { border-top: 1px solid #000; margin-bottom: 8px; }

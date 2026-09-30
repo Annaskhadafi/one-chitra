@@ -300,7 +300,7 @@ function DeliverySinglePageView({
                     .pdf-page .serial-grid th { background-color: #f3f4f6; border: 1px solid #000; padding: 2px 4px; font-size: 7.5pt; text-align: center; }
                     .pdf-page .serial-grid td { text-align: center; font-size: 7.5pt; padding: 2px 4px; border: 1px solid #000; }
                     .pdf-page .footer-section { margin-top: 18px; padding-top: 4px; }
-                    .pdf-page .note-section { margin-top: 8px; font-size: 8.5pt; }
+                    .pdf-page .note-section { margin-top: 8px; margin-bottom: 12px; font-size: 8.5pt; }
                     .pdf-page .note-label { font-weight: bold; margin-bottom: 2px; }
                     .pdf-page .received-condition { font-size: 8pt; line-height: 1.35; margin-bottom: 8px; }
                     .pdf-page .divider-line { border-top: 1px solid #000; margin-bottom: 8px; }

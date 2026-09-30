@@ -113,7 +113,7 @@ export function paginateDeliveryOrder(
     const tableHeaderHeight = 36 // Table header <th>
 
     const noteExtra = config.hasNotes ? Math.min(Math.ceil(config.notesLength / 60) * 16, 60) : 0
-    const footerHeight = 240 + noteExtra // Note + Condition + Divider + Signatures
+    const footerHeight = 252 + noteExtra // Note + Condition + Divider + Signatures
 
     const maxContentWithoutFooter = Math.max(
         200,
