@@ -149,7 +149,7 @@ export async function uploadFileToObjectStorage(
         const xhrResult = await new Promise<UploadResponse>((resolve, reject) => {
             const xhr = new XMLHttpRequest()
             xhr.open("POST", "/api/uploads")
-            xhr.timeout = 45000 // 45 seconds
+            xhr.timeout = 20000 // 20 seconds
 
             xhr.upload.onprogress = (event) => {
                 if (!event.lengthComputable) return

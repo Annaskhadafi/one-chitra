@@ -9,7 +9,7 @@ import { extractUploadFilename } from "@/lib/upload-url"
 const DEFAULT_PRODUCTION_UPLOAD_DIR = "/app/uploads"
 const DEFAULT_OBJECT_STORAGE_REGION = "us-east-1"
 const DEFAULT_OBJECT_STORAGE_PREFIX = "upload"
-const DEFAULT_OBJECT_STORAGE_TIMEOUT_MS = 30_000
+const DEFAULT_OBJECT_STORAGE_TIMEOUT_MS = 5_000
 const UPLOAD_URL_BASE = "/api/uploads"
 
 type UploadDriver = "local" | "s3"
@@ -304,9 +304,14 @@ function shouldAllowLocalUploadFallback() {
     return normalizeBoolean(process.env.OBJECT_STORAGE_ALLOW_LOCAL_FALLBACK?.trim(), true)
 }
 
-async function sendObjectStorageCommand<T>(client: S3Client, command: unknown): Promise<T> {
+async function sendObjectStorageCommand<T>(
+    client: S3Client,
+    command: unknown,
+    timeoutMs?: number
+): Promise<T> {
+    const finalTimeout = timeoutMs ?? getObjectStorageTimeoutMs()
     return client.send(command as never, {
-        abortSignal: AbortSignal.timeout(getObjectStorageTimeoutMs()),
+        abortSignal: AbortSignal.timeout(finalTimeout),
     }) as Promise<T>
 }
 
@@ -426,26 +431,18 @@ export async function saveManagedUpload(params: {
 
     let lastError: unknown = null
 
-    for (let attempt = 1; attempt <= 2; attempt++) {
-        try {
-            await sendObjectStorageCommand(client, uploadCommand)
+    try {
+        await sendObjectStorageCommand(client, uploadCommand, 5_000)
 
-            return {
-                filename,
-                url: getManagedUploadUrl(filename),
-                source: "object-storage" as const,
-                key,
-            }
-        } catch (error) {
-            lastError = error
-            const isTransient = isTransientObjectStorageUploadError(error)
-            const canRetry = isTransient && attempt < 2
-
-            if (canRetry) {
-                console.warn(`[UploadStorage] Object storage upload attempt ${attempt} failed, retrying...`, error)
-                continue
-            }
+        return {
+            filename,
+            url: getManagedUploadUrl(filename),
+            source: "object-storage" as const,
+            key,
         }
+    } catch (error) {
+        lastError = error
+        console.warn(`[UploadStorage] S3 upload timed out or failed (${error instanceof Error ? error.message : error}), falling back immediately to persistent local storage...`)
     }
 
     const shouldFallbackToLocal = shouldAllowLocalUploadFallback()
@@ -527,6 +524,7 @@ export async function readManagedUpload(value: string | null | undefined): Promi
             const key = config.prefix ? `${config.prefix}/${filename}` : filename
 
             try {
+                // Timeout cepat 3 detik untuk membaca dari S3 agar browser tidak menunggu lama
                 const response = await sendObjectStorageCommand<{
                     Body?: unknown
                     ContentType?: string
@@ -535,7 +533,8 @@ export async function readManagedUpload(value: string | null | undefined): Promi
                     new GetObjectCommand({
                         Bucket: config.bucket,
                         Key: key,
-                    })
+                    }),
+                    3_000
                 )
 
                 return {
@@ -545,8 +544,10 @@ export async function readManagedUpload(value: string | null | undefined): Promi
                     source: "object-storage",
                 }
             } catch (error) {
+                // Jangan pernah lempar error ke route handler!
+                // Jika S3 timeout, offline, atau 404, lanjutkan untuk membaca dari disk lokal
                 if (!isObjectStorageNotFoundError(error)) {
-                    throw error
+                    console.warn(`[UploadStorage] S3 read error or timeout for ${filename} (${error instanceof Error ? error.message : error}), falling back to local disk...`)
                 }
             }
         }

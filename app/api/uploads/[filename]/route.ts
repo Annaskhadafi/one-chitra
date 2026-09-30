@@ -1,6 +1,7 @@
+import { readFile } from "fs/promises";
 import { NextResponse } from "next/server";
 import { extractUploadFilename } from "@/lib/upload-url";
-import { getUploadReadDirs, readManagedUpload } from "@/lib/upload-storage";
+import { findExistingUploadFilePath, getUploadContentType, getUploadReadDirs, readManagedUpload } from "@/lib/upload-storage";
 
 const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "::1"]);
 
@@ -128,6 +129,24 @@ export async function GET(
         });
     } catch (error) {
         console.error("[ServeFile] Error reading file:", error);
+
+        // Emergency fallback directly from local disk before returning 500
+        const localFile = findExistingUploadFilePath(filename);
+        if (localFile) {
+            try {
+                const buffer = await readFile(localFile.filePath);
+                return new NextResponse(new Uint8Array(buffer), {
+                    headers: {
+                        "Content-Type": getUploadContentType(filename),
+                        "Cache-Control": "public, max-age=31536000, immutable",
+                        "X-Upload-Source": "emergency-local",
+                    },
+                });
+            } catch (fsError) {
+                console.error("[ServeFile] Emergency local read also failed:", fsError);
+            }
+        }
+
         return new NextResponse("Error reading file", { status: 500 });
     }
 }
