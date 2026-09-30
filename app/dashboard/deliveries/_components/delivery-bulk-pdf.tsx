@@ -263,8 +263,9 @@ function DeliverySinglePageView({
                     }
                     .pdf-page * { box-sizing: border-box; }
                     .pdf-page .container { 
-                        padding: 10mm 20mm; 
+                        padding: 0 20mm; 
                         padding-top: ${withBackground ? "42mm" : "35mm"}; 
+                        padding-bottom: 24mm;
                         width: 100%; 
                         max-width: none; 
                         background-color: transparent; 
@@ -298,7 +299,7 @@ function DeliverySinglePageView({
                     .pdf-page .serial-grid { width: 100%; border-collapse: collapse; margin-top: 4px; margin-bottom: 8px; border: 1px solid #000; }
                     .pdf-page .serial-grid th { background-color: #f3f4f6; border: 1px solid #000; padding: 2px 4px; font-size: 7.5pt; text-align: center; }
                     .pdf-page .serial-grid td { text-align: center; font-size: 7.5pt; padding: 2px 4px; border: 1px solid #000; }
-                    .pdf-page .footer-section { margin-top: auto; padding-top: 8px; }
+                    .pdf-page .footer-section { margin-top: 18px; padding-top: 4px; }
                     .pdf-page .note-section { margin-top: 8px; font-size: 8.5pt; }
                     .pdf-page .note-label { font-weight: bold; margin-bottom: 2px; }
                     .pdf-page .received-condition { font-size: 8pt; line-height: 1.35; margin-bottom: 8px; }
@@ -313,7 +314,7 @@ function DeliverySinglePageView({
                     .pdf-page .page-corner-indicator {
                         position: absolute;
                         left: 20mm;
-                        bottom: 8mm;
+                        bottom: 12mm;
                         font-size: 9pt;
                         font-weight: bold;
                         color: #000;

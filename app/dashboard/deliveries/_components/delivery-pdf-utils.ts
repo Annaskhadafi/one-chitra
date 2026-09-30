@@ -105,7 +105,7 @@ export function paginateDeliveryOrder(
     // Continuous Form (Rangkap standard 11"): 215mm x 279.4mm -> 813 x 1056px
     const pageTotalHeight = config.paperSize === "continuous" ? 1056 : 1123
     const topPadding = config.withBackground ? 159 : 132 // 42mm vs 35mm
-    const bottomPadding = 38 // 10mm
+    const bottomPadding = 90 // ~24mm (margin bawah yang lega agar tidak menimpa logo di footer kertas)
     const pageIndicatorHeight = 26
     const headerHeight = 175 // Ship to + DO Box
     const tableHeaderHeight = 36 // Table header <th>

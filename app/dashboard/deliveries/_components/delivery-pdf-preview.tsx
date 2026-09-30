@@ -217,8 +217,9 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                         break-after: auto;
                     }
                     .container { 
-                        padding: 10mm 20mm; 
+                        padding: 0 20mm; 
                         padding-top: ${withBackground ? "42mm" : "35mm"}; 
+                        padding-bottom: 24mm;
                         width: 100%; 
                         display: flex; 
                         flex-direction: column; 
@@ -246,7 +247,7 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                     .serial-grid { width: 100%; border-collapse: collapse; margin-top: 4px; margin-bottom: 8px; border: 1px solid #000; }
                     .serial-grid th { background-color: #f3f4f6; border: 1px solid #000; padding: 2px 4px; font-size: 7.5pt; text-align: center; }
                     .serial-grid td { text-align: center; font-size: 7.5pt; padding: 2px 4px; border: 1px solid #000; }
-                    .footer-section { margin-top: auto; padding-top: 8px; }
+                    .footer-section { margin-top: 18px; padding-top: 4px; }
                     .note-section { margin-top: 8px; font-size: 8.5pt; }
                     .note-label { font-weight: bold; margin-bottom: 2px; }
                     .received-condition { font-size: 8pt; line-height: 1.35; margin-bottom: 8px; }
@@ -260,7 +261,7 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                     .page-corner-indicator {
                         position: absolute;
                         left: 20mm;
-                        bottom: 8mm;
+                        bottom: 12mm;
                         font-size: 9pt;
                         font-weight: bold;
                         color: #000;
@@ -416,8 +417,9 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                                             }
                                             .pdf-wrapper * { box-sizing: border-box; }
                                             .pdf-wrapper .container { 
-                                                padding: 10mm 20mm; 
+                                                padding: 0 20mm; 
                                                 padding-top: ${withBackground ? "42mm" : "35mm"}; 
+                                                padding-bottom: 24mm;
                                                 width: 100%; 
                                                 max-width: none; 
                                                 background-color: transparent; 
@@ -453,7 +455,7 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                                             .pdf-wrapper .serial-grid th { background-color: #f3f4f6; border: 1px solid #000; padding: 2px 4px; font-size: 7.5pt; text-align: center; }
                                             .pdf-wrapper .serial-grid td { text-align: center; font-size: 7.5pt; padding: 2px 4px; border: 1px solid #000; }
                                             
-                                            .pdf-wrapper .footer-section { margin-top: auto; padding-top: 8px; }
+                                            .pdf-wrapper .footer-section { margin-top: 18px; padding-top: 4px; }
                                             .pdf-wrapper .note-section { margin-top: 8px; font-size: 8.5pt; }
                                             .pdf-wrapper .note-label { font-weight: bold; margin-bottom: 2px; }
                                             .pdf-wrapper .received-condition { font-size: 8pt; line-height: 1.35; margin-bottom: 8px; }
@@ -469,7 +471,7 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                                             .pdf-wrapper .page-corner-indicator {
                                                 position: absolute;
                                                 left: 20mm;
-                                                bottom: 8mm;
+                                                bottom: 12mm;
                                                 font-size: 9pt;
                                                 font-weight: bold;
                                                 color: #000;
