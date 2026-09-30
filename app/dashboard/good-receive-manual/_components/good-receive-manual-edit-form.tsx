@@ -93,8 +93,8 @@ export function GoodReceiveManualEditForm({ record }: GoodReceiveManualEditFormP
                     ? "Dokumen DO Vendor uploaded dengan optimasi ukuran"
                     : "Dokumen DO Vendor uploaded",
             )
-        } catch {
-            toast.error("An error occurred while uploading Dokumen DO Vendor")
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Terjadi kesalahan saat mengunggah Dokumen DO Vendor")
         } finally {
             setTimeout(() => {
                 setIsUploadingVendorDo(false)
@@ -247,7 +247,9 @@ export function GoodReceiveManualEditForm({ record }: GoodReceiveManualEditFormP
                                             {isUploadingVendorDo && (
                                                 <div className="space-y-2 rounded-md border bg-muted/20 p-3">
                                                     <div className="flex items-center justify-between text-xs">
-                                                        <span className="font-medium text-foreground">Uploading ke object storage...</span>
+                                                        <span className="font-medium text-foreground">
+                                                            {vendorDoUploadProgress >= 90 ? "Menyimpan berkas ke server..." : "Mengunggah dokumen..."}
+                                                        </span>
                                                         <span className="font-semibold tabular-nums">{vendorDoUploadProgress}%</span>
                                                     </div>
                                                     <Progress value={vendorDoUploadProgress} className="h-2" />

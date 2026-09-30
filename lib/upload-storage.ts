@@ -1,6 +1,6 @@
 import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3"
 import { existsSync } from "fs"
-import { mkdir, readFile, unlink, writeFile } from "fs/promises"
+import { mkdir, readFile, readdir, unlink, writeFile } from "fs/promises"
 import { join } from "path"
 import { v7 as uuidv7 } from "uuid"
 
@@ -301,7 +301,7 @@ function getObjectStorageTimeoutMs() {
 }
 
 function shouldAllowLocalUploadFallback() {
-    return normalizeBoolean(process.env.OBJECT_STORAGE_ALLOW_LOCAL_FALLBACK?.trim(), false)
+    return normalizeBoolean(process.env.OBJECT_STORAGE_ALLOW_LOCAL_FALLBACK?.trim(), true)
 }
 
 async function sendObjectStorageCommand<T>(client: S3Client, command: unknown): Promise<T> {
@@ -460,10 +460,57 @@ export async function saveManagedUpload(params: {
     }
 
     console.warn("[UploadStorage] Object storage upload failed, falling back to local disk because OBJECT_STORAGE_ALLOW_LOCAL_FALLBACK is enabled:", lastError)
-    return await saveUploadToLocalDisk({
+    const localResult = await saveUploadToLocalDisk({
         filename,
         buffer: params.buffer,
     })
+
+    // Jadwalkan sinkronisasi otomatis ke S3 di background begitu koneksi tersedia
+    scheduleBackgroundUploadSync({
+        filename,
+        filePath: localResult.filePath,
+        delayMs: 15_000,
+    })
+
+    return localResult
+}
+
+const pendingSyncFilenames = new Set<string>()
+
+export function scheduleBackgroundUploadSync(params: {
+    filename: string
+    filePath: string
+    delayMs?: number
+}) {
+    if (!isObjectStorageEnabled()) return
+    const { filename, filePath, delayMs = 15_000 } = params
+
+    if (pendingSyncFilenames.has(filename)) return
+    pendingSyncFilenames.add(filename)
+
+    const timer = setTimeout(async () => {
+        try {
+            if (!existsSync(filePath)) {
+                pendingSyncFilenames.delete(filename)
+                return
+            }
+
+            console.log(`[UploadStorage] Background sync starting for ${filename}...`)
+            const result = await uploadLocalFileToObjectStorage(filePath, {
+                filename,
+                deleteLocalAfterSync: true,
+            })
+            console.log(`[UploadStorage] Background sync completed for ${filename}:`, result)
+        } catch (error) {
+            console.warn(`[UploadStorage] Background sync postponed for ${filename} (will retry on next access/cron):`, error)
+        } finally {
+            pendingSyncFilenames.delete(filename)
+        }
+    }, delayMs)
+
+    if (typeof timer.unref === "function") {
+        timer.unref()
+    }
 }
 
 export async function readManagedUpload(value: string | null | undefined): Promise<ManagedUploadReadResult | null> {
@@ -508,6 +555,16 @@ export async function readManagedUpload(value: string | null | undefined): Promi
     const resolvedFile = findExistingUploadFilePath(filename)
     if (!resolvedFile) {
         return null
+    }
+
+    // Jika file dibaca dari local disk padahal S3 object storage diaktifkan,
+    // jadwalkan sinkronisasi otomatis ke S3 dan hapus file lokal setelah tersimpan di S3
+    if (isObjectStorageEnabled()) {
+        scheduleBackgroundUploadSync({
+            filename,
+            filePath: resolvedFile.filePath,
+            delayMs: 5_000,
+        })
     }
 
     return {
@@ -565,6 +622,7 @@ export async function uploadLocalFileToObjectStorage(
     options?: {
         filename?: string
         overwrite?: boolean
+        deleteLocalAfterSync?: boolean
     }
 ) {
     const config = requireObjectStorageConfig()
@@ -576,6 +634,20 @@ export async function uploadLocalFileToObjectStorage(
     }
 
     const key = config.prefix ? `${config.prefix}/${filename}` : filename
+    let localDeleted = false
+
+    const deleteLocalFileIfRequested = async () => {
+        if (!options?.deleteLocalAfterSync) return
+        try {
+            if (existsSync(filePath)) {
+                await unlink(filePath)
+                localDeleted = true
+                console.log(`[UploadStorage] Purged local file after S3 sync: ${filePath}`)
+            }
+        } catch (unlinkError) {
+            console.warn(`[UploadStorage] Could not delete local file ${filePath}:`, unlinkError)
+        }
+    }
 
     if (!options?.overwrite) {
         try {
@@ -587,10 +659,14 @@ export async function uploadLocalFileToObjectStorage(
                 })
             )
 
+            // File sudah ada di S3, hapus file lokal jika diminta untuk menghemat disk VPS
+            await deleteLocalFileIfRequested()
+
             return {
                 skipped: true as const,
                 key,
                 filename,
+                localDeleted,
             }
         } catch (error) {
             if (!isObjectStorageNotFoundError(error)) {
@@ -610,10 +686,86 @@ export async function uploadLocalFileToObjectStorage(
         })
     )
 
+    // Upload sukses ke S3, hapus file lokal jika diminta untuk menghemat disk VPS
+    await deleteLocalFileIfRequested()
+
     return {
         skipped: false as const,
         key,
         filename,
+        localDeleted,
+    }
+}
+
+export async function syncLocalUploadsToObjectStorage(options?: {
+    deleteLocalAfterSync?: boolean
+    maxFiles?: number
+}) {
+    if (!isObjectStorageEnabled()) {
+        return {
+            success: false,
+            message: "Object storage is not enabled",
+            synced: 0,
+            skipped: 0,
+            failed: 0,
+            deletedLocal: 0,
+        }
+    }
+
+    const deleteLocal = options?.deleteLocalAfterSync ?? true
+    const maxFiles = options?.maxFiles ?? 200
+    const sourceDirs = getUploadReadDirs().filter((dir) => existsSync(dir))
+
+    let synced = 0
+    let skipped = 0
+    let failed = 0
+    let deletedLocal = 0
+
+    const processedFiles = new Set<string>()
+
+    for (const directory of sourceDirs) {
+        try {
+            const entries = await readdir(directory, { withFileTypes: true })
+            for (const entry of entries) {
+                if (synced + skipped >= maxFiles) break
+                if (!entry.isFile()) continue
+
+                const filename = entry.name
+                if (processedFiles.has(filename)) continue
+                processedFiles.add(filename)
+
+                const filePath = join(directory, filename)
+                try {
+                    const result = await uploadLocalFileToObjectStorage(filePath, {
+                        filename,
+                        deleteLocalAfterSync: deleteLocal,
+                    })
+
+                    if (result.skipped) {
+                        skipped++
+                    } else {
+                        synced++
+                    }
+
+                    if (result.localDeleted) {
+                        deletedLocal++
+                    }
+                } catch (error) {
+                    failed++
+                    console.error(`[UploadStorage] Batch sync error for ${filename}:`, error)
+                }
+            }
+        } catch (error) {
+            console.error(`[UploadStorage] Failed to read directory ${directory}:`, error)
+        }
+    }
+
+    return {
+        success: true,
+        synced,
+        skipped,
+        failed,
+        deletedLocal,
     }
 }
 

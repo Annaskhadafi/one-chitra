@@ -9,12 +9,14 @@ import { getObjectStorageConfig, getUploadReadDirs, uploadLocalFileToObjectStora
 type CliOptions = {
     dryRun: boolean
     overwrite: boolean
+    deleteLocal: boolean
 }
 
 function parseOptions(argv: string[]): CliOptions {
     return {
         dryRun: argv.includes("--dry-run"),
         overwrite: argv.includes("--overwrite"),
+        deleteLocal: argv.includes("--delete-local") || argv.includes("--purge-local"),
     }
 }
 
@@ -90,22 +92,28 @@ async function main() {
     let uploadedCount = 0
     let skippedCount = 0
     let failedCount = 0
+    let purgedCount = 0
 
     for (const [filename, filePath] of filesByName) {
         try {
             const result = await uploadLocalFileToObjectStorage(filePath, {
                 filename,
                 overwrite: options.overwrite,
+                deleteLocalAfterSync: options.deleteLocal,
             })
+
+            if (result.localDeleted) {
+                purgedCount++
+            }
 
             if (result.skipped) {
                 skippedCount++
-                console.log(`[SKIP] ${filename} already exists as ${result.key}`)
+                console.log(`[SKIP] ${filename} already exists as ${result.key}${result.localDeleted ? " (local purged)" : ""}`)
                 continue
             }
 
             uploadedCount++
-            console.log(`[UPLOADED] ${filename} -> ${result.key}`)
+            console.log(`[UPLOADED] ${filename} -> ${result.key}${result.localDeleted ? " (local purged)" : ""}`)
         } catch (error) {
             failedCount++
             console.error(`[FAILED] ${filename}:`, error)
@@ -113,7 +121,7 @@ async function main() {
     }
 
     console.log(
-        `[Migrate Uploads] Done. Uploaded: ${uploadedCount}, Skipped: ${skippedCount}, Failed: ${failedCount}`
+        `[Migrate Uploads] Done. Uploaded: ${uploadedCount}, Skipped: ${skippedCount}, Failed: ${failedCount}, Local purged: ${purgedCount}`
     )
 
     if (failedCount > 0) {

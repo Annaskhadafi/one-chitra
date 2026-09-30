@@ -266,8 +266,8 @@ export function GoodReceiveForm({
                     ? "Dokumen DO Vendor uploaded dengan optimasi ukuran"
                     : "Dokumen DO Vendor uploaded",
             )
-        } catch {
-            toast.error("An error occurred while uploading Dokumen DO Vendor")
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Terjadi kesalahan saat mengunggah Dokumen DO Vendor")
         } finally {
             setTimeout(() => {
                 setIsUploadingVendorDo(false)
@@ -511,12 +511,16 @@ export function GoodReceiveForm({
                                                 {isUploadingVendorDo && (
                                                     <div className="space-y-2 rounded-md border bg-muted/20 p-3">
                                                         <div className="flex items-center justify-between text-xs">
-                                                            <span className="font-medium text-foreground">Uploading ke object storage...</span>
+                                                            <span className="font-medium text-foreground">
+                                                                {vendorDoUploadProgress >= 90 ? "Menyimpan berkas ke server..." : "Mengunggah dokumen..."}
+                                                            </span>
                                                             <span className="font-semibold tabular-nums">{vendorDoUploadProgress}%</span>
                                                         </div>
                                                         <Progress value={vendorDoUploadProgress} className="h-2" />
                                                         <p className="text-[11px] text-muted-foreground">
-                                                            Gambar akan dioptimasi dulu di browser agar upload lebih cepat. PDF tetap dikirim apa adanya.
+                                                            {vendorDoUploadProgress >= 90
+                                                                ? "Berkas sedang diverifikasi dan disimpan ke storage..."
+                                                                : "Gambar dioptimasi otomatis agar ukuran lebih hemat dan cepat terunggah."}
                                                         </p>
                                                     </div>
                                                 )}
