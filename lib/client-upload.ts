@@ -149,7 +149,9 @@ export async function uploadFileToObjectStorage(
         const xhrResult = await new Promise<UploadResponse>((resolve, reject) => {
             const xhr = new XMLHttpRequest()
             xhr.open("POST", "/api/uploads")
-            xhr.timeout = 20000 // 20 seconds
+            // Slow laptops and large PDFs can take longer to transmit. Avoid aborting at 20s
+            // (which previously triggered a second, duplicate upload via Server Action).
+            xhr.timeout = Math.min(180_000, Math.max(45_000, Math.ceil(file.size / 80_000) * 1000))
 
             xhr.upload.onprogress = (event) => {
                 if (!event.lengthComputable) return
@@ -168,7 +170,9 @@ export async function uploadFileToObjectStorage(
             }
 
             xhr.ontimeout = () => {
-                reject(new Error("Upload request timed out"))
+                const timeoutError = new Error("Upload request timed out. Please keep this page open and try again.")
+                timeoutError.name = "UploadTimeoutError"
+                reject(timeoutError)
             }
 
             xhr.onload = () => {
@@ -198,6 +202,11 @@ export async function uploadFileToObjectStorage(
 
         return xhrResult
     } catch (xhrError) {
+        // A timeout means the server may still be writing the file. Retrying through
+        // Server Actions would upload the same document twice and makes the UI look stuck.
+        if (xhrError instanceof Error && xhrError.name === "UploadTimeoutError") {
+            return { success: false, error: xhrError.message }
+        }
         console.warn("[ClientUpload] /api/uploads failed, falling back to Server Action uploadFile:", xhrError)
         onProgress?.(95)
     }
