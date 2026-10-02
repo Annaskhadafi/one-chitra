@@ -12,6 +12,26 @@ function safeDecodeURIComponent(value: string) {
     }
 }
 
+function sanitizeUploadFilename(value: string): string | null {
+    const decoded = safeDecodeURIComponent(value).trim()
+
+    // Managed uploads are flat object names. Reject traversal, path separators,
+    // absolute paths, control characters and dot-directory references.
+    if (
+        !decoded ||
+        decoded === "." ||
+        decoded === ".." ||
+        decoded.includes("/") ||
+        decoded.includes("\\") ||
+        decoded.includes("\0") ||
+        /[\u0000-\u001f\u007f]/.test(decoded)
+    ) {
+        return null
+    }
+
+    return decoded
+}
+
 export function extractUploadFilename(value: string | null | undefined): string | null {
     const raw = (value ?? "").trim()
     if (!raw) return null
@@ -30,15 +50,15 @@ export function extractUploadFilename(value: string | null | undefined): string 
 
     const uploadPathMatch = normalized.match(/(?:^|\/)(?:api\/)?uploads\/([^/?#]+)$/i)
     if (uploadPathMatch?.[1]) {
-        return safeDecodeURIComponent(uploadPathMatch[1])
+        return sanitizeUploadFilename(uploadPathMatch[1])
     }
 
     if (!normalized.includes("/")) {
-        return safeDecodeURIComponent(normalized)
+        return sanitizeUploadFilename(normalized)
     }
 
     const lastSegment = normalized.split("/").filter(Boolean).pop()
-    return lastSegment ? safeDecodeURIComponent(lastSegment) : null
+    return lastSegment ? sanitizeUploadFilename(lastSegment) : null
 }
 
 export function resolveUploadDocumentUrl(value: string | null | undefined): string | null {
