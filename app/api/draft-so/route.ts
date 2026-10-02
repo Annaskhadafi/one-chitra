@@ -1,3 +1,4 @@
+import { requireApiSession } from "@/lib/api-auth"
 import { NextRequest } from "next/server"
 import { db } from "@/db"
 import { salesOrders, salesOrderItems } from "@/db/schema/sales-orders"
@@ -40,6 +41,8 @@ type DraftSoPutInput = {
 }
 
 export async function POST(req: NextRequest) {
+    const session = await requireApiSession(req.headers)
+    if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 })
     const body = await req.json().catch(() => null)
     if (!body) {
         return Response.json({ error: "Invalid JSON" }, { status: 400 })
@@ -91,6 +94,8 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
+    const session = await requireApiSession(req.headers)
+    if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 })
     const body = await req.json().catch(() => null)
     if (!body) {
         return Response.json({ error: "Invalid JSON" }, { status: 400 })
@@ -121,7 +126,7 @@ export async function PUT(req: NextRequest) {
     }
     try {
         await db.insert(auditLogs).values({
-            userId: "system",
+            userId: session.user.id,
             action: "UPDATE_SO_DRAFT",
             description: `Sales Order ${id} draft diperbarui`,
         })
