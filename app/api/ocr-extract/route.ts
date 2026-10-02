@@ -1,3 +1,4 @@
+import { requireApiSession } from "@/lib/api-auth"
 import { NextRequest } from "next/server"
 import { readManagedUpload } from "@/lib/upload-storage"
 import { extractStructuredFromDocument } from "@/lib/mistral-ocr"
@@ -9,6 +10,8 @@ import { sql } from "drizzle-orm"
 export const runtime = "nodejs"
 
 export async function POST(req: NextRequest) {
+    const session = await requireApiSession(req.headers)
+    if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 })
     try {
         const body = await req.json().catch(() => null)
         if (!body) {
@@ -51,7 +54,7 @@ export async function POST(req: NextRequest) {
             fileName: read.filename.slice(0, 255),
             fileType: (read.contentType || "").slice(0, 50) || null,
             extractedData,
-            uploadedById: null,
+            uploadedById: session.user.id,
         })
         return Response.json({
             structured: ocr.structured,
