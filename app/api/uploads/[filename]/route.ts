@@ -1,5 +1,6 @@
 import { readFile } from "fs/promises";
 import { NextResponse } from "next/server";
+import { requireApiSession } from "@/lib/api-auth";
 import { extractUploadFilename } from "@/lib/upload-url";
 import { findExistingUploadFilePath, getUploadContentType, getUploadReadDirs, readManagedUpload } from "@/lib/upload-storage";
 
@@ -90,6 +91,11 @@ export async function GET(
     request: Request,
     { params }: { params: Promise<{ filename: string }> }
 ) {
+    const session = await requireApiSession(request.headers);
+    if (!session) {
+        return new NextResponse("Unauthorized", { status: 401 });
+    }
+
     const { filename: rawFilename } = await params;
     const filename = extractUploadFilename(rawFilename);
 
@@ -104,7 +110,7 @@ export async function GET(
             return new NextResponse(new Uint8Array(managedFile.buffer), {
                 headers: {
                     "Content-Type": managedFile.contentType,
-                    "Cache-Control": "public, max-age=31536000, immutable",
+                    "Cache-Control": "private, no-store",
                     "X-Upload-Source": managedFile.source,
                 },
             });
@@ -123,7 +129,7 @@ export async function GET(
         return new NextResponse(new Uint8Array(remoteFile.buffer), {
             headers: {
                 "Content-Type": remoteFile.contentType,
-                "Cache-Control": "public, max-age=31536000, immutable",
+                "Cache-Control": "private, no-store",
                 "X-Upload-Source": "remote-fallback",
             },
         });
@@ -138,7 +144,7 @@ export async function GET(
                 return new NextResponse(new Uint8Array(buffer), {
                     headers: {
                         "Content-Type": getUploadContentType(filename),
-                        "Cache-Control": "public, max-age=31536000, immutable",
+                        "Cache-Control": "private, no-store",
                         "X-Upload-Source": "emergency-local",
                     },
                 });
