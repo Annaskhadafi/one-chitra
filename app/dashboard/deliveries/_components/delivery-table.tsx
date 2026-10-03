@@ -4,7 +4,7 @@ import * as React from "react"
 import { useState, useMemo, useCallback } from "react"
 import { useMounted } from "@/hooks/use-mounted"
 import { SuccessAlertDialog } from "@/components/success-alert-dialog"
-import { deleteDelivery, bulkDeleteDeliveries, bulkUpdateDeliveryStatus, bulkUpdateDeliveryShipmentDetails, getDeliveries, updateDeliveryDate } from "@/app/actions/delivery"
+import { deleteDelivery, bulkDeleteDeliveries, bulkUpdateDeliveryStatus, bulkUpdateDeliveryShipmentDetails, getDeliveries, getDeliveryItemsFlat, updateDeliveryDate } from "@/app/actions/delivery"
 import { getDrivers, getVehicles } from "@/app/actions/fleet"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
@@ -107,7 +107,7 @@ import {
 } from "@tanstack/react-table"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import type { getDeliveryItemsFlat } from "@/app/actions/delivery"
-import type { getFleetTrips } from "@/app/actions/fleet-trips"
+import { getFleetTrips } from "@/app/actions/fleet-trips"
 import * as XLSX from "xlsx"
 
 interface DeliveryWithRelations {
@@ -632,7 +632,7 @@ function BulkShipmentDetailsDialog({
     )
 }
 
-function DeliveryTableContent({ data: initialData, itemsData = [], fleetTripsData = [] }: DeliveryTableProps) {
+function DeliveryTableContent({ data: initialData }: DeliveryTableProps) {
     const searchParams = useSearchParams()
     const { data: session } = useSession()
     const currentUserId = session?.user?.id || "anonymous"
@@ -689,6 +689,19 @@ function DeliveryTableContent({ data: initialData, itemsData = [], fleetTripsDat
         refetchInterval: 15_000,
         refetchIntervalInBackground: true,
     })
+    const { data: itemsData = [], isLoading: isItemsLoading } = useQuery({
+        queryKey: ["delivery-items"],
+        queryFn: () => getDeliveryItemsFlat(),
+        enabled: viewMode === "items",
+        staleTime: 60_000,
+    })
+    const { data: fleetTripsData = [], isLoading: isFleetTripsLoading } = useQuery({
+        queryKey: ["fleet-trips"],
+        queryFn: () => getFleetTrips(),
+        enabled: viewMode === "trip",
+        staleTime: 60_000,
+    })
+
     const { data: drivers = [] } = useQuery({
         queryKey: ["fleet-drivers"],
         queryFn: () => getDrivers(),
@@ -2267,19 +2280,19 @@ function DeliveryTableContent({ data: initialData, itemsData = [], fleetTripsDat
             {/* Delivery Items View */}
             {viewMode === "items" && (
                 <div className="pt-4">
-                    <DeliveryItemsTable data={itemsData} />
+                    {isItemsLoading ? <div className="py-12 text-center text-sm text-muted-foreground">Memuat delivery items…</div> : <DeliveryItemsTable data={itemsData} />}
                 </div>
             )}
 
             {viewMode === "trip" && (
                 <div className="pt-4">
-                    <DeliveryTripView
+                    {isFleetTripsLoading ? <div className="py-12 text-center text-sm text-muted-foreground">Memuat delivery trip…</div> : <DeliveryTripView
                         rows={deliveryTripRows}
                         onPreview={(d) => {
                             setPreviewDelivery(d)
                             setIsPreviewOpen(true)
                         }}
-                    />
+                    />}
                 </div>
             )}
 

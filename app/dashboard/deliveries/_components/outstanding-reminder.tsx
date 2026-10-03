@@ -1,9 +1,12 @@
+"use client"
+
 import { AlertCircle, PackageCheck, ChevronRight } from "lucide-react"
+import { useEffect, useState } from "react"
+import { getReadyOutstandingSalesOrders, type ReadyOutstandingSalesOrder } from "@/app/actions/delivery"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
-import { ReadyOutstandingSalesOrder } from "@/app/actions/delivery"
 import {
     Carousel,
     CarouselContent,
@@ -12,8 +15,22 @@ import {
     CarouselPrevious,
 } from "@/components/ui/carousel"
 
-export function OutstandingReminder({ orders }: { orders: ReadyOutstandingSalesOrder[] }) {
-    if (!orders || orders.length === 0) return null
+export function OutstandingReminder() {
+    const [orders, setOrders] = useState<ReadyOutstandingSalesOrder[]>([])
+
+    useEffect(() => {
+        let cancelled = false
+        const timer = window.setTimeout(() => {
+            void getReadyOutstandingSalesOrders().then((nextOrders) => {
+                if (!cancelled) setOrders(nextOrders)
+            }).catch(() => {
+                // The reminder is secondary; keep the primary delivery list available if it fails.
+            })
+        }, 250)
+        return () => { cancelled = true; window.clearTimeout(timer) }
+    }, [])
+
+    if (orders.length === 0) return null
 
     const getWarehouseBadgeLabel = (order: ReadyOutstandingSalesOrder) => {
         if (order.warehouseId) {
