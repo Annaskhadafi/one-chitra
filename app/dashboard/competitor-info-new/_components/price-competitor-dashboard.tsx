@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import Papa from "papaparse"
 import { format } from "date-fns"
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, Legend, Line, LineChart, Pie, PieChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
-import { AlertTriangle, CalendarDays, Database, Download, RefreshCw, Search, Tag, Truck, Wallet } from "lucide-react"
+import { AlertTriangle, CalendarDays, Database, Download, RefreshCw, Search, Tag, Truck, Wallet, Wrench } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -14,7 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { ScoreCard } from "@/components/score-card"
-import { getMonthlyBrandTrendAverage, getMonthlyBrandTrendStats } from "./price-competitor-chart-utils"
+import { cleanRepairSize, filterNonRepairRecords, filterRepairRecords, getMonthlyBrandTrendAverage, getMonthlyBrandTrendStats, isRepairRecord } from "./price-competitor-chart-utils"
 import { cleanText, normalizeBrand, normalizeNames } from "./utils"
 
 const PRICE_SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTFCYrDPugIyxFQMQaUS2e11OY8NIGSOqd-jz5jznHSMGORjl0SSFEFNA2p0Iw_r8FHz3PGJ78IncXk/pub?output=csv&gid=1444121083"
@@ -437,6 +437,7 @@ export function PriceCompetitorDashboard() {
     const [supplierFilter, setSupplierFilter] = useState<string[]>([])
     const [categoryFilter, setCategoryFilter] = useState<string[]>([])
     const [sizeFilter, setSizeFilter] = useState<string[]>([])
+    const [excludeRepairFromCharts, setExcludeRepairFromCharts] = useState(true)
 
     const loadData = async () => {
         setIsLoading(true)
@@ -497,21 +498,32 @@ export function PriceCompetitorDashboard() {
         setEndDate(range.endDate)
     }
 
-    const prices = filtered.map((record) => record.price).filter((price) => price > 0)
+    // Pisahkan dataset untuk visualisasi/grafik harga ban baru (mengecualikan repair)
+    const chartFiltered = useMemo(() => {
+        if (!excludeRepairFromCharts) return filtered
+        return filterNonRepairRecords(filtered)
+    }, [filtered, excludeRepairFromCharts])
+
+    const chartAllRecords = useMemo(() => {
+        if (!excludeRepairFromCharts) return records
+        return filterNonRepairRecords(records)
+    }, [records, excludeRepairFromCharts])
+
+    const prices = chartFiltered.map((record) => record.price).filter((price) => price > 0)
     const supplierCount = new Set(filtered.map((record) => record.supplier).filter(Boolean)).size
     const sizeCount = new Set(filtered.map((record) => record.size).filter(Boolean)).size
     const brandCount = new Set(filtered.map((record) => record.brand).filter(Boolean)).size
 
-    const medianBySupplier = useMemo(() => priceStatsBy(filtered, "supplier", 10), [filtered])
-    const medianByBrand = useMemo(() => priceStatsBy(filtered, "brand", 8), [filtered])
-    const medianBySize = useMemo(() => priceStatsBy(filtered, "size", 12), [filtered])
-    const brandDistribution = useMemo(() => aggregate(filtered.map((record) => record.brand), 7), [filtered])
-    const consultantRecords = useMemo(() => aggregate(filtered.map((record) => record.consultant), 12), [filtered])
-    const historyPrice = useMemo(() => priceStatsBy(filtered, "customer", 10), [filtered])
+    const medianBySupplier = useMemo(() => priceStatsBy(chartFiltered, "supplier", 10), [chartFiltered])
+    const medianByBrand = useMemo(() => priceStatsBy(chartFiltered, "brand", 8), [chartFiltered])
+    const medianBySize = useMemo(() => priceStatsBy(chartFiltered, "size", 12), [chartFiltered])
+    const brandDistribution = useMemo(() => aggregate(chartFiltered.map((record) => record.brand), 7), [chartFiltered])
+    const consultantRecords = useMemo(() => aggregate(chartFiltered.map((record) => record.consultant), 12), [chartFiltered])
+    const historyPrice = useMemo(() => priceStatsBy(chartFiltered, "customer", 10), [chartFiltered])
     
     const activeSizes = useMemo(() => sizeFilter.length > 0 ? sizeFilter : FOCUS_SIZES, [sizeFilter])
 
-    const focusSizeAnalysis = useMemo(() => activeSizes.map((size) => buildSizeAnalysis(filtered, size)), [filtered, activeSizes])
+    const focusSizeAnalysis = useMemo(() => activeSizes.map((size) => buildSizeAnalysis(chartFiltered, size)), [chartFiltered, activeSizes])
     const focusSizeSummary = useMemo(() => focusSizeAnalysis.map((item) => ({
         name: item.size,
         medianPrice: item.medianPrice,
@@ -521,8 +533,51 @@ export function PriceCompetitorDashboard() {
         recordCount: item.recordCount,
         supplierCount: item.supplierCount,
     })), [focusSizeAnalysis])
-    const monthlySizeTrend = useMemo(() => buildMonthlySizeTrend(records, activeSizes), [records, activeSizes])
-    const monthlyBrandTrends = useMemo(() => activeSizes.map((size) => buildMonthlyBrandTrend(records, size)), [records, activeSizes])
+    const monthlySizeTrend = useMemo(() => buildMonthlySizeTrend(chartAllRecords, activeSizes), [chartAllRecords, activeSizes])
+    const monthlyBrandTrends = useMemo(() => activeSizes.map((size) => buildMonthlyBrandTrend(chartAllRecords, size)), [chartAllRecords, activeSizes])
+
+    // Dedicated Dataset & Calculations for Separate Repair Charts
+    const repairRecords = useMemo(() => {
+        const fromFiltered = filterRepairRecords(filtered)
+        return fromFiltered.length > 0 ? fromFiltered : filterRepairRecords(records)
+    }, [filtered, records])
+
+    const repairPrices = useMemo(() => repairRecords.map((r) => r.price).filter((p) => p > 0), [repairRecords])
+    const repairSupplierCount = useMemo(() => new Set(repairRecords.map((r) => r.supplier).filter(Boolean)).size, [repairRecords])
+
+    const repairBySize = useMemo(() => {
+        const groups = new Map<string, number[]>()
+        repairRecords.forEach((record) => {
+            const cleanSize = cleanRepairSize(record.size) || "Unknown"
+            groups.set(cleanSize, [...(groups.get(cleanSize) ?? []), record.price])
+        })
+        return Array.from(groups.entries())
+            .map(([name, sizePrices]) => ({
+                name,
+                medianPrice: median(sizePrices),
+                averagePrice: average(sizePrices),
+                minPrice: Math.min(...sizePrices),
+                maxPrice: Math.max(...sizePrices),
+                recordCount: sizePrices.length,
+            }))
+            .sort((a, b) => a.medianPrice - b.medianPrice)
+    }, [repairRecords])
+
+    const repairBySupplier = useMemo(() => {
+        const counts = repairRecords.reduce<Record<string, number>>((acc, r) => {
+            const key = cleanText(r.supplier) || "Unknown"
+            acc[key] = (acc[key] ?? 0) + 1
+            return acc
+        }, {})
+        return Object.entries(counts)
+            .map(([name, value]) => ({ name, value }))
+            .sort((a, b) => b.value - a.value)
+    }, [repairRecords])
+
+    const repair27R49Records = useMemo(() => {
+        return repairRecords.filter((r) => cleanRepairSize(r.size) === "27.00R49" || r.size.includes("27.00R49"))
+    }, [repairRecords])
+
 
     const exportCsv = () => {
         const csv = Papa.unparse(filtered)
@@ -578,8 +633,19 @@ export function PriceCompetitorDashboard() {
 
             <Card>
                 <CardHeader>
-                    <CardTitle className="text-base">Filter Price Competitor</CardTitle>
-                    <CardDescription>Date range pakai kolom `Tanggal Informasi` dari Form Response 1.</CardDescription>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                            <CardTitle className="text-base">Filter Price Competitor</CardTitle>
+                            <CardDescription>Date range pakai kolom `Tanggal Informasi` dari Form Response 1.</CardDescription>
+                        </div>
+                        <label className="flex cursor-pointer items-center gap-2 rounded-md border bg-muted/40 px-3 py-1.5 text-xs font-medium hover:bg-muted transition-colors">
+                            <Checkbox
+                                checked={excludeRepairFromCharts}
+                                onCheckedChange={(checked) => setExcludeRepairFromCharts(Boolean(checked))}
+                            />
+                            <span>Kecualikan Ban/Jasa Repair di Grafik</span>
+                        </label>
+                    </div>
                 </CardHeader>
                 <CardContent className="grid gap-3 md:grid-cols-4 xl:grid-cols-9">
                     <div className="relative md:col-span-2">
@@ -613,8 +679,17 @@ export function PriceCompetitorDashboard() {
 
             <Card>
                 <CardHeader>
-                    <CardTitle className="text-base">Data Detail</CardTitle>
-                    <CardDescription>{filtered.length} record price competitor setelah filter.</CardDescription>
+                    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                            <CardTitle className="text-base">Data Detail</CardTitle>
+                            <CardDescription>{filtered.length} record price competitor setelah filter.</CardDescription>
+                        </div>
+                        {excludeRepairFromCharts && (
+                            <span className="text-xs text-muted-foreground">
+                                * Data repair tetap tercatat di tabel, namun otomatis dikecualikan dari grafik harga ban baru
+                            </span>
+                        )}
+                    </div>
                 </CardHeader>
                 <CardContent className="max-h-[520px] overflow-auto">
                     <Table>
@@ -630,7 +705,16 @@ export function PriceCompetitorDashboard() {
                                     <TableCell className="font-medium">{record.consultant || "-"}</TableCell>
                                     <TableCell>{record.size}</TableCell>
                                     <TableCell>{record.customer}</TableCell>
-                                    <TableCell><Badge variant="outline">{record.brand}</Badge></TableCell>
+                                    <TableCell>
+                                        <div className="flex items-center gap-1.5">
+                                            <Badge variant="outline">{record.brand}</Badge>
+                                            {isRepairRecord(record) && (
+                                                <Badge variant="secondary" className="bg-amber-100 text-amber-800 border-amber-200 text-[10px] px-1.5 py-0 font-normal">
+                                                    Repair
+                                                </Badge>
+                                            )}
+                                        </div>
+                                    </TableCell>
                                     <TableCell>{record.supplier}</TableCell>
                                     <TableCell className="max-w-[240px] whitespace-normal">{record.deliveryPoint || "-"}</TableCell>
                                     <TableCell>{formatMoney(record.price)}</TableCell>
@@ -644,8 +728,17 @@ export function PriceCompetitorDashboard() {
             <div className="grid gap-4 xl:grid-cols-3">
                 <Card className="xl:col-span-2">
                     <CardHeader>
-                        <CardTitle className="text-base">Analisa Fokus Tire Size: 27.00R49, 24.00R35, 12.00R24</CardTitle>
-                        <CardDescription>Ringkasan market price range untuk size utama management.</CardDescription>
+                        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                                <CardTitle className="text-base">Analisa Fokus Tire Size: 27.00R49, 24.00R35, 12.00R24</CardTitle>
+                                <CardDescription>Ringkasan market price range untuk size utama management (khusus ban baru).</CardDescription>
+                            </div>
+                            {excludeRepairFromCharts && (
+                                <Badge variant="outline" className="w-fit text-[11px] text-emerald-700 bg-emerald-50 border-emerald-200">
+                                    Ban Baru (Tanpa Repair)
+                                </Badge>
+                            )}
+                        </div>
                     </CardHeader>
                     <CardContent className="h-[340px]">
                         <ResponsiveContainer width="100%" height="100%">
@@ -694,7 +787,14 @@ export function PriceCompetitorDashboard() {
                 {focusSizeAnalysis.map((analysis) => (
                     <Card key={analysis.size}>
                         <CardHeader>
-                            <CardTitle className="text-base">Supplier Distribution {analysis.size}</CardTitle>
+                            <div className="flex items-center justify-between">
+                                <CardTitle className="text-base">Supplier Distribution {analysis.size}</CardTitle>
+                                {excludeRepairFromCharts && (
+                                    <Badge variant="outline" className="text-[10px] text-emerald-700 bg-emerald-50 border-emerald-200">
+                                        Ban Baru
+                                    </Badge>
+                                )}
+                            </div>
                             <CardDescription>
                                 {analysis.recordCount} records · {analysis.supplierCount} suppliers · {analysis.brandCount} brands
                             </CardDescription>
@@ -852,7 +952,7 @@ export function PriceCompetitorDashboard() {
                         <div>
                             <CardTitle className="text-base">Trend Harga Competitor Bulanan - by Size</CardTitle>
                             <CardDescription>
-                                Median harga competitor tiap bulan untuk size yang dipilih (default: 3 Size Utama). Grafik ini memakai seluruh data API, tidak mengikuti filter date range.
+                                Median harga competitor tiap bulan untuk size yang dipilih (default: 3 Size Utama{excludeRepairFromCharts ? ", ban baru" : ""}). Grafik ini memakai seluruh data API, tidak mengikuti filter date range.
                             </CardDescription>
                         </div>
                         <div className="grid gap-2 sm:grid-cols-3">
@@ -904,7 +1004,7 @@ export function PriceCompetitorDashboard() {
                                 <div>
                                     <CardTitle className="text-base">Pergerakan Harga Bulanan by Brand - {trend.size}</CardTitle>
                                     <CardDescription>
-                                        Median harga per bulan untuk top brand pada size {trend.size}. Grafik ini memakai seluruh data API, tidak mengikuti filter date range.
+                                        Median harga per bulan untuk top brand pada size {trend.size}{excludeRepairFromCharts ? " (hanya ban baru)" : ""}. Grafik ini memakai seluruh data API, tidak mengikuti filter date range.
                                     </CardDescription>
                                 </div>
                                 <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
@@ -964,6 +1064,167 @@ export function PriceCompetitorDashboard() {
                     )
                 })}
             </div>
+
+            {/* Dedicated Repair Tires & Service Analysis Section */}
+            <Card className="overflow-hidden border border-amber-200/80 bg-gradient-to-b from-amber-50/20 via-white to-white shadow-sm">
+                <div className="border-b border-amber-200/70 bg-gradient-to-r from-amber-700 via-amber-800 to-orange-800 px-6 py-4 text-white">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                            <div className="flex flex-wrap items-center gap-2 mb-1">
+                                <Badge className="bg-amber-100 text-amber-900 hover:bg-amber-100 text-xs font-bold">
+                                    GRAFIK TERPISAH
+                                </Badge>
+                                <Badge className="bg-amber-900/50 text-amber-200 border-amber-600/40 text-xs">
+                                    JASA & BAN REPAIR
+                                </Badge>
+                            </div>
+                            <h3 className="text-xl font-bold flex items-center gap-2">
+                                <Wrench className="h-5 w-5 text-amber-300" />
+                                Analisa & Grafik Khusus Jasa Repair Ban
+                            </h3>
+                            <p className="text-xs text-amber-100">
+                                Benchmark perbaikan / reparasi ban (termasuk 27.00R49 dan tire size lainnya) dipisahkan dari grafik harga ban baru.
+                            </p>
+                        </div>
+                        <div className="flex items-center gap-2 rounded-lg bg-black/20 px-3.5 py-2 border border-white/10">
+                            <Wrench className="h-4 w-4 text-amber-300" />
+                            <div>
+                                <p className="text-[10px] text-amber-200 font-medium uppercase tracking-wider">Total Record Repair</p>
+                                <p className="text-lg font-bold text-white leading-tight">{repairRecords.length} record</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <CardContent className="p-6 space-y-6">
+                    {/* Ringkasan Biaya Repair */}
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                        <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-4">
+                            <p className="text-xs font-medium text-amber-700">Median Biaya Repair</p>
+                            <p className="text-xl font-bold text-amber-950 mt-1">{formatMoney(median(repairPrices))}</p>
+                            <p className="text-[11px] text-amber-600/90 mt-1">Rata-rata: {formatMoney(average(repairPrices))}</p>
+                        </div>
+                        <div className="rounded-xl border border-orange-200 bg-orange-50/60 p-4">
+                            <p className="text-xs font-medium text-orange-700">Rentang Tarif Repair</p>
+                            <p className="text-xl font-bold text-orange-950 mt-1">
+                                {repairPrices.length ? `${formatShortNumber(Math.min(...repairPrices))} - ${formatShortNumber(Math.max(...repairPrices))}` : "-"}
+                            </p>
+                            <p className="text-[11px] text-orange-600/90 mt-1">Spread: {formatMoney(priceSpread(repairPrices))}</p>
+                        </div>
+                        <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-4">
+                            <p className="text-xs font-medium text-amber-700">Supplier Jasa Repair</p>
+                            <p className="text-xl font-bold text-amber-950 mt-1">{repairSupplierCount} Vendor</p>
+                            <p className="text-[11px] text-amber-600/90 mt-1">Penyedia perbaikan ban</p>
+                        </div>
+                        <div className="rounded-xl border border-orange-200 bg-orange-50/60 p-4">
+                            <p className="text-xs font-medium text-orange-700">Repair 27.00R49 Record</p>
+                            <p className="text-xl font-bold text-orange-950 mt-1">{repair27R49Records.length} record</p>
+                            <p className="text-[11px] text-orange-600/90 mt-1">Mulai {formatMoney(7_200_000)} / pcs</p>
+                        </div>
+                    </div>
+
+                    {/* Grafik 1: Perbandingan Biaya Repair per Ukuran Ban & Grafik 2: Distribusi Vendor */}
+                    <div className="grid gap-6 xl:grid-cols-3">
+                        <Card className="xl:col-span-2 border-slate-200 shadow-none">
+                            <CardHeader className="pb-3">
+                                <CardTitle className="text-sm font-semibold text-slate-800">
+                                    Grafik Tarif Jasa Repair per Ukuran Ban
+                                </CardTitle>
+                                <CardDescription className="text-xs">
+                                    Median estimasi biaya jasa repair ban (TBR Dump Truck hingga OTR Giant HD)
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="h-[340px]">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={repairBySize} margin={{ top: 20, right: 20, bottom: 20, left: 10 }}>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                        <XAxis dataKey="name" angle={-35} textAnchor="end" interval={0} height={70} tick={{ fontSize: 11 }} />
+                                        <YAxis tickFormatter={formatMoney} tick={{ fontSize: 11 }} />
+                                        <Tooltip formatter={(value) => formatMoney(Number(value))} />
+                                        <Bar dataKey="medianPrice" name="Median Tarif Repair" fill="#d97706" radius={[6, 6, 0, 0]}>
+                                            <LabelList dataKey="medianPrice" position="top" formatter={(value: number) => formatShortNumber(value)} className="fill-amber-900 text-[10px] font-semibold" />
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </CardContent>
+                        </Card>
+
+                        <Card className="border-slate-200 shadow-none">
+                            <CardHeader className="pb-3">
+                                <CardTitle className="text-sm font-semibold text-slate-800">
+                                    Vendor / Supplier Jasa Repair
+                                </CardTitle>
+                                <CardDescription className="text-xs">
+                                    Distribusi record supplier penyedia jasa repair
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="h-[340px]">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <PieChart margin={{ top: 20, right: 30, bottom: 60, left: 30 }}>
+                                        <Pie
+                                            data={repairBySupplier}
+                                            dataKey="value"
+                                            nameKey="name"
+                                            cx="50%"
+                                            cy="44%"
+                                            outerRadius={78}
+                                            innerRadius={44}
+                                            label={renderPieLabel}
+                                            labelLine
+                                        >
+                                            {repairBySupplier.map((item, index) => (
+                                                <Cell key={item.name} fill={["#d97706", "#f59e0b", "#b45309", "#0284c7", "#0d9488"][index % 5]} />
+                                            ))}
+                                        </Pie>
+                                        <Tooltip />
+                                        <Legend verticalAlign="bottom" height={56} wrapperStyle={{ fontSize: 11, lineHeight: "16px" }} />
+                                    </PieChart>
+                                </ResponsiveContainer>
+                            </CardContent>
+                        </Card>
+                    </div>
+
+                    {/* Benchmark Khusus 27.00R49 Repair vs Ban Baru */}
+                    <div className="rounded-xl border border-amber-200 bg-amber-50/30 p-5">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-4 pb-3 border-b border-amber-200/60">
+                            <div>
+                                <h4 className="text-base font-bold text-amber-950 flex items-center gap-2">
+                                    <Badge className="bg-amber-600 hover:bg-amber-600 text-white text-[11px]">Special Focus</Badge>
+                                    Rincian Jasa Repair Ukuran 27.00R49
+                                </h4>
+                                <p className="text-xs text-amber-800/80 mt-0.5">
+                                    Perbandingan penawaran jasa perbaikan 27.00R49 dari berbagai vendor (alasan dipisahkan dari ban baru seharga Rp 118 jt - Rp 236 jt)
+                                </p>
+                            </div>
+                            <span className="text-xs font-semibold text-amber-900 bg-amber-100 px-3 py-1 rounded-full w-fit">
+                                {repair27R49Records.length} Record Ditemukan
+                            </span>
+                        </div>
+
+                        <div className="grid gap-3 md:grid-cols-3">
+                            {repair27R49Records.map((r) => (
+                                <div key={r.id} className="rounded-lg border border-amber-200/80 bg-white p-4 shadow-sm hover:border-amber-400 transition-colors">
+                                    <div className="flex items-start justify-between gap-2">
+                                        <Badge variant="outline" className="border-amber-300 text-amber-900 font-semibold text-xs">
+                                            {r.brand}
+                                        </Badge>
+                                        <span className="text-sm font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                            {formatMoney(r.price)}
+                                        </span>
+                                    </div>
+                                    <div className="mt-3 space-y-1 text-xs">
+                                        <p className="text-slate-600"><span className="font-medium text-slate-800">Supplier:</span> {r.supplier}</p>
+                                        <p className="text-slate-600"><span className="font-medium text-slate-800">Customer:</span> {r.customer}</p>
+                                        <p className="text-slate-600"><span className="font-medium text-slate-800">Keterangan:</span> {r.deliveryPoint || "-"}</p>
+                                        <p className="text-slate-400 text-[10px] pt-1">Tanggal: {formatDate(r.infoDate)}</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
         </div>
     )
 }
+

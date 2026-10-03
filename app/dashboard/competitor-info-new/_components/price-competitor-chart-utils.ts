@@ -27,3 +27,46 @@ export function getMonthlyBrandTrendAverage(data: MonthlyTrendRow[], brands: str
 
     return prices.reduce((sum, value) => sum + value, 0) / prices.length
 }
+
+export function isRepairRecord(record: {
+    brand?: string | null
+    category?: string | null
+    size?: string | null
+    deliveryPoint?: string | null
+}): boolean {
+    const brand = (record.brand ?? "").toLowerCase()
+    const category = (record.category ?? "").toLowerCase()
+    const size = (record.size ?? "").toLowerCase()
+    const remark = (record.deliveryPoint ?? "").toLowerCase()
+
+    return (
+        brand.includes("repair") ||
+        category.includes("repair") ||
+        size.includes("repair") ||
+        remark.includes("repair")
+    )
+}
+
+export function filterNonRepairRecords<T extends {
+    brand?: string | null
+    category?: string | null
+    size?: string | null
+    deliveryPoint?: string | null
+}>(records: T[]): T[] {
+    return records.filter((record) => !isRepairRecord(record))
+}
+
+export function filterRepairRecords<T extends {
+    brand?: string | null
+    category?: string | null
+    size?: string | null
+    deliveryPoint?: string | null
+}>(records: T[]): T[] {
+    return records.filter((record) => isRepairRecord(record))
+}
+
+export function cleanRepairSize(size?: string | null): string {
+    return (size ?? "").replace(/^repair\s*/i, "").replace(/\s+/g, "").trim()
+}
+
+
