@@ -373,7 +373,7 @@ async function notifyCreatedDelivery(deliveryId: number) {
     }
 }
 
-export async function getDeliveries() {
+async function readDeliveries(limit?: number) {
     noStore()
     const rows = await db.query.deliveries.findMany({
         with: {
@@ -393,9 +393,19 @@ export async function getDeliveries() {
             },
         },
         orderBy: [desc(deliveries.createdAt)],
+        limit,
     })
 
     return normalizeDeliveryOutput(mergeDeliveryRows(rows))
+}
+
+// Keep the first response bounded; the client fetches the full history afterwards.
+export async function getInitialDeliveries() {
+    return readDeliveries(25)
+}
+
+export async function getDeliveries() {
+    return readDeliveries()
 }
 
 export async function getDoMonitoringDeliveries() {

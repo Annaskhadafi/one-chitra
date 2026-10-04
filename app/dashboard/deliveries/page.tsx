@@ -1,6 +1,7 @@
-import { getDeliveries } from "@/app/actions/delivery"
+import { Suspense } from "react"
+import { DeliveriesLoading } from "./_components/deliveries-loading"
+import { getInitialDeliveries } from "@/app/actions/delivery"
 import { DeliveryTable } from "./_components/delivery-table"
-import { OutstandingReminder } from "./_components/outstanding-reminder"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Plus, Truck } from "lucide-react"
@@ -11,8 +12,12 @@ import { RestrictedActionButton } from "@/components/restricted-action-button"
 
 export const dynamic = "force-dynamic"
 
-export default async function DeliveriesPage() {
-    const deliveriesData = await getDeliveries()
+async function InitialDeliveryTable() {
+    const deliveriesData = await getInitialDeliveries()
+    return <DeliveryTable data={deliveriesData} />
+}
+
+export default function DeliveriesPage() {
 
     return (
         <div className="flex flex-1 flex-col gap-6 p-4 md:p-8 lg:p-10">
@@ -52,10 +57,10 @@ export default async function DeliveriesPage() {
                 </PermissionGuard>
             </div>
 
-            <OutstandingReminder />
-
             <div className="flex-1">
-                <DeliveryTable data={deliveriesData} />
+                <Suspense fallback={<DeliveriesLoading />}>
+                    <InitialDeliveryTable />
+                </Suspense>
             </div>
         </div>
     )

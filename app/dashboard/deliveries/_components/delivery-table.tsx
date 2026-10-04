@@ -10,10 +10,10 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar"
 import { cn } from "@/lib/utils"
 import { BULK_DELIVERY_COST_FIELDS, BULK_DELIVERY_STATUS_OPTIONS, buildBulkDeliveryShipmentDetailsUpdate, normalizeBulkDeliveryStatus, type BulkDeliveryShipmentDetailsInput } from "@/lib/delivery-bulk-shipment"
-import { DeliveryPreview } from "./delivery-preview"
-import { DeliveryPdfPreview } from "./delivery-pdf-preview"
-import { DeliveryBulkPdf } from "./delivery-bulk-pdf"
-import { DeliveryItemsTable } from "./delivery-items-table"
+const DeliveryPreview = dynamic(() => import("./delivery-preview").then((mod) => mod.DeliveryPreview))
+const DeliveryPdfPreview = dynamic(() => import("./delivery-pdf-preview").then((mod) => mod.DeliveryPdfPreview))
+const DeliveryBulkPdf = dynamic(() => import("./delivery-bulk-pdf").then((mod) => mod.DeliveryBulkPdf))
+const DeliveryItemsTable = dynamic(() => import("./delivery-items-table").then((mod) => mod.DeliveryItemsTable))
 import {
     DropdownMenu,
     DropdownMenuCheckboxItem,
@@ -106,9 +106,9 @@ import {
     VisibilityState,
 } from "@tanstack/react-table"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import type { getDeliveryItemsFlat } from "@/app/actions/delivery"
 import { getFleetTrips } from "@/app/actions/fleet-trips"
-import * as XLSX from "xlsx"
+import dynamic from "next/dynamic"
+import { OutstandingReminder } from "./outstanding-reminder"
 
 interface DeliveryWithRelations {
     id: number
@@ -166,8 +166,6 @@ interface DeliveryWithRelations {
 
 interface DeliveryTableProps {
     data: DeliveryWithRelations[]
-    itemsData?: Awaited<ReturnType<typeof getDeliveryItemsFlat>>
-    fleetTripsData?: Awaited<ReturnType<typeof getFleetTrips>>
 }
 
 const DELIVERY_TRANSITIONS = {
@@ -678,17 +676,24 @@ function DeliveryTableContent({ data: initialData }: DeliveryTableProps) {
     const [blockedDialog, setBlockedDialog] = useState<ActionBlockedDetails | null>(null)
 
     const queryClient = useQueryClient()
-    const { data = initialData, isLoading, refetch } = useQuery({
+    const [loadFullHistory, setLoadFullHistory] = useState(false)
+    React.useEffect(() => {
+        const timer = window.setTimeout(() => setLoadFullHistory(true), 250)
+        return () => window.clearTimeout(timer)
+    }, [])
+    const { data = initialData, isLoading, isError, dataUpdatedAt, refetch } = useQuery({
         queryKey: ["deliveries"],
         queryFn: () => getDeliveries(),
         initialData: initialData,
-        initialDataUpdatedAt: 0,    // Tandai initialData sebagai stale → langsung refetch
-        staleTime: 0,               // Selalu anggap data stale setelah fetched
-        refetchOnMount: true,       // Selalu refetch saat komponen mount
-        refetchOnWindowFocus: true, // Refetch saat window kembali aktif
-        refetchInterval: 15_000,
-        refetchIntervalInBackground: true,
+        initialDataUpdatedAt: 0,
+        enabled: loadFullHistory,
+        staleTime: 60_000,
+        refetchOnMount: true,
+        refetchOnWindowFocus: true,
+        refetchInterval: 60_000,
+        refetchIntervalInBackground: false,
     })
+    const hasFullHistory = dataUpdatedAt > 0
     const { data: itemsData = [], isLoading: isItemsLoading } = useQuery({
         queryKey: ["delivery-items"],
         queryFn: () => getDeliveryItemsFlat(),
@@ -705,24 +710,15 @@ function DeliveryTableContent({ data: initialData }: DeliveryTableProps) {
     const { data: drivers = [] } = useQuery({
         queryKey: ["fleet-drivers"],
         queryFn: () => getDrivers(),
+        enabled: isBulkShipmentOpen,
         staleTime: 60_000,
     })
     const { data: vehicles = [] } = useQuery({
         queryKey: ["fleet-vehicles"],
         queryFn: () => getVehicles(),
+        enabled: isBulkShipmentOpen,
         staleTime: 60_000,
     })
-
-    React.useEffect(() => {
-        const queryState = queryClient.getQueryState<DeliveryWithRelations[]>(["deliveries"])
-
-        // Hindari menimpa hasil refetch client dengan payload server yang lebih lama.
-        if ((queryState?.dataUpdatedAt ?? 0) > 0) {
-            return
-        }
-
-        queryClient.setQueryData<DeliveryWithRelations[]>(["deliveries"], initialData)
-    }, [initialData, queryClient])
 
     const refreshToken = searchParams.get("refresh")
     const focusId = useMemo(() => {
@@ -2018,6 +2014,15 @@ function DeliveryTableContent({ data: initialData }: DeliveryTableProps) {
 
     return (
         <div className="space-y-6">
+            {!hasFullHistory && (
+                <div role="status" aria-live="polite" className="rounded-lg border bg-muted/40 p-3 text-sm">
+                    {isError
+                        ? "Riwayat lengkap gagal dimuat. Data terbaru tetap tersedia."
+                        : "Menampilkan 25 delivery terbaru. Riwayat lengkap sedang dimuat; angka ringkasan, pencarian, dan filter masih sementara."}
+                    {isError && <Button variant="outline" size="sm" className="ml-2" onClick={() => refetch()}>Coba lagi</Button>}
+                </div>
+            )}
+            {hasFullHistory && <OutstandingReminder />}
             <ActionBlockedDialog
                 open={blockedDialog !== null}
                 onOpenChange={(open) => {
@@ -3204,13 +3209,13 @@ function DeliveryTableContent({ data: initialData }: DeliveryTableProps) {
             </>)}
 
             {/* Shared Dialogs - tersedia untuk semua view mode */}
-            <DeliveryPreview
-                delivery={previewDelivery as Parameters<typeof DeliveryPreview>[0]["delivery"]}
+            {isPreviewOpen && <DeliveryPreview
+                delivery={previewDelivery as any}
                 open={isPreviewOpen}
                 onOpenChange={setIsPreviewOpen}
-            />
+            />}
 
-            {pdfDelivery && (
+            {isPdfOpen && pdfDelivery && (
                 <DeliveryPdfPreview
                     delivery={pdfDelivery}
                     open={isPdfOpen}
@@ -3231,11 +3236,11 @@ function DeliveryTableContent({ data: initialData }: DeliveryTableProps) {
                 title="Status Diperbarui"
                 description={successMessage}
             />
-            <DeliveryBulkPdf
+            {isBulkPdfOpen && <DeliveryBulkPdf
                 deliveries={selectedDeliveries}
                 open={isBulkPdfOpen}
                 onClose={() => setIsBulkPdfOpen(false)}
-            />
+            />}
             <BulkShipmentDetailsDialog
                 open={isBulkShipmentOpen}
                 onOpenChange={setIsBulkShipmentOpen}
@@ -3457,7 +3462,8 @@ function DeliveryTripView({ rows, onPreview }: { rows: DeliveryTripRow[]; onPrev
         }
     }, [filteredRows])
 
-    const handleExportExcel = () => {
+    const handleExportExcel = async () => {
+        const XLSX = await import("xlsx")
         const detailRows = filteredRows.map((row) => ({
             "Tanggal Delivery": row.deliveryDate
                 ? new Date(row.deliveryDate).toLocaleDateString("id-ID")
