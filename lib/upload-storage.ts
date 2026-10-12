@@ -7,10 +7,15 @@ import { v7 as uuidv7 } from "uuid"
 import { extractUploadFilename } from "@/lib/upload-url"
 
 const DEFAULT_PRODUCTION_UPLOAD_DIR = "/app/uploads"
+const DEFAULT_OBJECT_STORAGE_ENDPOINT = "https://is3.cloudhost.id"
+const DEFAULT_OBJECT_STORAGE_BUCKET = "onechitra"
 const DEFAULT_OBJECT_STORAGE_REGION = "us-east-1"
 const DEFAULT_OBJECT_STORAGE_PREFIX = "upload"
-const DEFAULT_OBJECT_STORAGE_TIMEOUT_MS = 5_000
+const DEFAULT_OBJECT_STORAGE_ACCESS_KEY_ID = "I2BBBINVCAQXY7G6M5OD"
+const DEFAULT_OBJECT_STORAGE_SECRET_ACCESS_KEY = "c4YupRIPTlaetB3XIwIXOO8EBcZWZfTrEqghDN1A"
+const DEFAULT_OBJECT_STORAGE_TIMEOUT_MS = 15_000
 const UPLOAD_URL_BASE = "/api/uploads"
+
 
 type UploadDriver = "local" | "s3"
 
@@ -226,7 +231,12 @@ export function getUploadDriver(): UploadDriver {
         return "s3"
     }
 
-    return "local"
+    if (rawDriver === "local") {
+        return "local"
+    }
+
+    // Default ke s3 jika tidak ditentukan secara eksplisit
+    return "s3"
 }
 
 export function isObjectStorageEnabled() {
@@ -234,10 +244,10 @@ export function isObjectStorageEnabled() {
 }
 
 export function getObjectStorageConfig() {
-    const endpoint = getEnvValue("OBJECT_STORAGE_ENDPOINT", "S3_ENDPOINT", "AWS_ENDPOINT_URL_S3")
-    const bucket = getEnvValue("OBJECT_STORAGE_BUCKET", "S3_BUCKET")
-    const accessKeyId = getEnvValue("OBJECT_STORAGE_ACCESS_KEY_ID", "S3_ACCESS_KEY_ID", "AWS_ACCESS_KEY_ID")
-    const secretAccessKey = getEnvValue("OBJECT_STORAGE_SECRET_ACCESS_KEY", "S3_SECRET_ACCESS_KEY", "AWS_SECRET_ACCESS_KEY")
+    const endpoint = getEnvValue("OBJECT_STORAGE_ENDPOINT", "S3_ENDPOINT", "AWS_ENDPOINT_URL_S3") || DEFAULT_OBJECT_STORAGE_ENDPOINT
+    const bucket = getEnvValue("OBJECT_STORAGE_BUCKET", "S3_BUCKET") || DEFAULT_OBJECT_STORAGE_BUCKET
+    const accessKeyId = getEnvValue("OBJECT_STORAGE_ACCESS_KEY_ID", "S3_ACCESS_KEY_ID", "AWS_ACCESS_KEY_ID") || DEFAULT_OBJECT_STORAGE_ACCESS_KEY_ID
+    const secretAccessKey = getEnvValue("OBJECT_STORAGE_SECRET_ACCESS_KEY", "S3_SECRET_ACCESS_KEY", "AWS_SECRET_ACCESS_KEY") || DEFAULT_OBJECT_STORAGE_SECRET_ACCESS_KEY
 
     if (!endpoint || !bucket || !accessKeyId || !secretAccessKey) {
         return null
@@ -253,6 +263,7 @@ export function getObjectStorageConfig() {
         forcePathStyle: normalizeBoolean(getEnvValue("OBJECT_STORAGE_FORCE_PATH_STYLE", "S3_FORCE_PATH_STYLE"), true),
     } satisfies ObjectStorageConfig
 }
+
 
 function requireObjectStorageConfig() {
     const config = getObjectStorageConfig()
