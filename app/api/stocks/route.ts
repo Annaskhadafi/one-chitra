@@ -1,16 +1,23 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/db"
-import { stockLevels, stockCustomerBookings, products, warehouses } from "@/db/schema"
-import { and, eq, ilike, or, sql, desc, asc, SQLWrapper } from "drizzle-orm"
-import { requireStocksApiKey } from "@/lib/api/stocks-auth"
+import { stockLevels, stockCustomerBookings, products, warehouses, customers } from "@/db/schema"
+import { and, eq, ilike, or, sql, asc, inArray, gt, SQLWrapper } from "drizzle-orm"
+import { requireStocksApiKey, corsHeaders } from "@/lib/api/stocks-auth"
 
 export const dynamic = "force-dynamic"
 
-const MAX_LIMIT = 1000
+const MAX_LIMIT = 10000
 const DEFAULT_LIMIT = 100
 
+export async function OPTIONS() {
+    return new NextResponse(null, {
+        status: 204,
+        headers: corsHeaders,
+    })
+}
+
 export async function GET(req: NextRequest) {
-    const unauthorized = requireStocksApiKey(req)
+    const unauthorized = await requireStocksApiKey(req)
     if (unauthorized) return unauthorized
 
     try {
@@ -20,8 +27,12 @@ export async function GET(req: NextRequest) {
         const warehouseType = searchParams.get("warehouseType")?.trim() || null
         const sloc = searchParams.get("sloc")?.trim() || null
         const search = searchParams.get("search")?.trim() || null
+        const getAll = searchParams.get("all") === "true"
+        const format = searchParams.get("format")?.trim().toLowerCase() || "json"
+
         const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10) || 1)
-        const limit = Math.min(MAX_LIMIT, Math.max(1, parseInt(searchParams.get("limit") || String(DEFAULT_LIMIT), 10) || DEFAULT_LIMIT))
+        const limitParam = parseInt(searchParams.get("limit") || searchParams.get("pageSize") || String(DEFAULT_LIMIT), 10)
+        const limit = Math.min(MAX_LIMIT, Math.max(1, isNaN(limitParam) ? DEFAULT_LIMIT : limitParam))
         const offset = (page - 1) * limit
 
         const conditions: SQLWrapper[] = []
@@ -58,7 +69,7 @@ export async function GET(req: NextRequest) {
 
         const total = countResult[0]?.count ?? 0
 
-        const rows = await db
+        let query = db
             .select({
                 id: stockLevels.id,
                 totalStock: stockLevels.totalStock,
@@ -96,12 +107,14 @@ export async function GET(req: NextRequest) {
                 asc(products.materialNumber),
                 asc(warehouses.sloc)
             )
-            .limit(limit)
-            .offset(offset)
+
+        const rows = getAll
+            ? await query
+            : await query.limit(limit).offset(offset)
 
         const stockIds = rows.map((r) => r.id)
 
-        let bookingsMap = new Map<number, Array<{
+        const bookingsMap = new Map<number, Array<{
             id: number
             customerId: number
             customerName: string
@@ -116,6 +129,8 @@ export async function GET(req: NextRequest) {
                     stockLevelId: stockCustomerBookings.stockLevelId,
                     id: stockCustomerBookings.id,
                     customerId: stockCustomerBookings.customerId,
+                    customerName: customers.name,
+                    customerCode: customers.customerCode,
                     quantity: stockCustomerBookings.quantity,
                     remark: stockCustomerBookings.remark,
                 })
@@ -124,10 +139,14 @@ export async function GET(req: NextRequest) {
                     stockLevels,
                     eq(stockCustomerBookings.stockLevelId, stockLevels.id)
                 )
+                .leftJoin(
+                    customers,
+                    eq(stockCustomerBookings.customerId, customers.id)
+                )
                 .where(
                     and(
-                        sql`${stockCustomerBookings.stockLevelId} = ANY(${stockIds})`,
-                        sql`${stockCustomerBookings.quantity} > 0`
+                        inArray(stockCustomerBookings.stockLevelId, stockIds),
+                        gt(stockCustomerBookings.quantity, 0)
                     )
                 )
 
@@ -136,8 +155,8 @@ export async function GET(req: NextRequest) {
                 existing.push({
                     id: b.id,
                     customerId: b.customerId,
-                    customerName: "",
-                    customerCode: "",
+                    customerName: b.customerName || "",
+                    customerCode: b.customerCode || "",
                     quantity: Number(b.quantity),
                     remark: b.remark,
                 })
@@ -145,46 +164,64 @@ export async function GET(req: NextRequest) {
             }
         }
 
-        const data = rows.map((row) => ({
-            id: row.id,
-            plant: row.product?.plant || "",
-            category: row.product?.category || "",
-            brand: row.product?.brand || "",
-            materialNumber: row.product?.materialNumber || "",
-            materialNumberCk: row.product?.materialNumberCk || null,
-            oldMaterialNo: row.product?.oldMaterialNo || null,
-            materialDescription: row.product?.materialDescription || "",
-            costSap: row.product?.costSap || null,
-            sloc: row.product?.sloc || "",
-            warehouseId: row.warehouse?.id,
-            warehouseSloc: row.warehouse?.sloc || "",
-            warehouseDescription: row.warehouse?.description || "",
-            warehouseType: row.warehouse?.type || "",
-            totalStock: Number(row.totalStock),
-            minStock: Number(row.minStock),
-            bookedStock: Number(row.bookedStock),
-            draftBookedStock: Number(row.draftBookedStock),
-            valuationValue: Number(row.valuationValue),
-            bookings: bookingsMap.get(row.id) || [],
-            createdAt: row.createdAt,
-            updatedAt: row.updatedAt,
-        }))
+        const data = rows.map((row) => {
+            const totalStock = Number(row.totalStock) || 0
+            const minStock = Number(row.minStock) || 0
+            const bookedStock = Number(row.bookedStock) || 0
+            const draftBookedStock = Number(row.draftBookedStock) || 0
+            const availableStock = Math.max(0, totalStock - bookedStock - draftBookedStock)
 
-        return NextResponse.json({
-            status: "OK",
-            data,
-            meta: {
-                total,
-                page,
-                limit,
-                totalPages: Math.ceil(total / limit),
-            },
+            return {
+                id: row.id,
+                plant: row.product?.plant || "",
+                category: row.product?.category || "",
+                brand: row.product?.brand || "",
+                materialNumber: row.product?.materialNumber || "",
+                materialNumberCk: row.product?.materialNumberCk || null,
+                oldMaterialNo: row.product?.oldMaterialNo || null,
+                materialDescription: row.product?.materialDescription || "",
+                costSap: row.product?.costSap || null,
+                sloc: row.product?.sloc || "",
+                warehouseId: row.warehouse?.id,
+                warehouseSloc: row.warehouse?.sloc || "",
+                warehouseDescription: row.warehouse?.description || "",
+                warehouseType: row.warehouse?.type || "",
+                totalStock,
+                minStock,
+                bookedStock,
+                draftBookedStock,
+                availableStock,
+                valuationValue: Number(row.valuationValue) || 0,
+                bookings: bookingsMap.get(row.id) || [],
+                createdAt: row.createdAt,
+                updatedAt: row.updatedAt,
+            }
         })
+
+        if (format === "array" || format === "raw") {
+            return NextResponse.json(data, { headers: corsHeaders })
+        }
+
+        return NextResponse.json(
+            {
+                status: "OK",
+                data,
+                meta: {
+                    total,
+                    page: getAll ? 1 : page,
+                    limit: getAll ? total : limit,
+                    totalPages: getAll ? 1 : Math.ceil(total / limit),
+                },
+                count: data.length,
+            },
+            { headers: corsHeaders }
+        )
     } catch (error) {
         console.error("Failed to fetch stocks:", error)
         return NextResponse.json(
             { status: "ERROR", message: "Failed to fetch stocks" },
-            { status: 500 }
+            { status: 500, headers: corsHeaders }
         )
     }
 }
+

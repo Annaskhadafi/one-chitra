@@ -65,6 +65,8 @@ export async function verifyApiKey(
     if (process.env.RFID_API_KEY) envKeys[process.env.RFID_API_KEY.trim()] = ["all", "rfid", "openapi"]
     // Default SAP Revenue API Key
     envKeys["och_sap_6fd98d6a2b26388f261aa6825f06bbd12cf8dcea16fe5ee1153d29f2d957bfef"] = ["all", "sales-revenue", "openapi"]
+    // Default Stocks API Key
+    envKeys["a3f8b2c1d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1"] = ["all", "stocks", "openapi"]
 
     if (envKeys[providedKey]) {
         const scopes = envKeys[providedKey]

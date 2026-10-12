@@ -39,6 +39,22 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
+        source: "/api/stocks/:path*",
+        headers: [
+          { key: "Access-Control-Allow-Origin", value: "*" },
+          { key: "Access-Control-Allow-Methods", value: "GET, OPTIONS" },
+          { key: "Access-Control-Allow-Headers", value: "Content-Type, Authorization, x-api-key, X-API-KEY, apiKey, api_key" },
+        ],
+      },
+      {
+        source: "/api/stocks",
+        headers: [
+          { key: "Access-Control-Allow-Origin", value: "*" },
+          { key: "Access-Control-Allow-Methods", value: "GET, OPTIONS" },
+          { key: "Access-Control-Allow-Headers", value: "Content-Type, Authorization, x-api-key, X-API-KEY, apiKey, api_key" },
+        ],
+      },
+      {
         // Apply security headers to all routes
         source: "/:path*",
         headers: [
