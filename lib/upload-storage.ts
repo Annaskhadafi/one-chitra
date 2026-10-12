@@ -244,14 +244,23 @@ export function isObjectStorageEnabled() {
 }
 
 export function getObjectStorageConfig() {
-    const endpoint = getEnvValue("OBJECT_STORAGE_ENDPOINT", "S3_ENDPOINT", "AWS_ENDPOINT_URL_S3") || DEFAULT_OBJECT_STORAGE_ENDPOINT
-    const bucket = getEnvValue("OBJECT_STORAGE_BUCKET", "S3_BUCKET") || DEFAULT_OBJECT_STORAGE_BUCKET
-    const accessKeyId = getEnvValue("OBJECT_STORAGE_ACCESS_KEY_ID", "S3_ACCESS_KEY_ID", "AWS_ACCESS_KEY_ID") || DEFAULT_OBJECT_STORAGE_ACCESS_KEY_ID
-    const secretAccessKey = getEnvValue("OBJECT_STORAGE_SECRET_ACCESS_KEY", "S3_SECRET_ACCESS_KEY", "AWS_SECRET_ACCESS_KEY") || DEFAULT_OBJECT_STORAGE_SECRET_ACCESS_KEY
+    const endpoint =
+        getEnvValue("OBJECT_STORAGE_ENDPOINT", "S3_ENDPOINT", "AWS_ENDPOINT_URL_S3", "AWS_ENDPOINT", "S3_URL") ||
+        DEFAULT_OBJECT_STORAGE_ENDPOINT
+    const bucket =
+        getEnvValue("OBJECT_STORAGE_BUCKET", "S3_BUCKET", "AWS_BUCKET", "AWS_S3_BUCKET", "S3_BUCKET_NAME") ||
+        DEFAULT_OBJECT_STORAGE_BUCKET
+    const accessKeyId =
+        getEnvValue("OBJECT_STORAGE_ACCESS_KEY_ID", "S3_ACCESS_KEY_ID", "AWS_ACCESS_KEY_ID", "S3_KEY", "S3_ACCESS_KEY", "AWS_ACCESS_KEY") ||
+        DEFAULT_OBJECT_STORAGE_ACCESS_KEY_ID
+    const secretAccessKey =
+        getEnvValue("OBJECT_STORAGE_SECRET_ACCESS_KEY", "S3_SECRET_ACCESS_KEY", "AWS_SECRET_ACCESS_KEY", "S3_SECRET", "S3_SECRET_KEY", "AWS_SECRET_KEY") ||
+        DEFAULT_OBJECT_STORAGE_SECRET_ACCESS_KEY
 
     if (!endpoint || !bucket || !accessKeyId || !secretAccessKey) {
         return null
     }
+
 
     return {
         endpoint: normalizeObjectStorageEndpoint(endpoint),
