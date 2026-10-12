@@ -1,6 +1,6 @@
 "use client"
 
-import type { ReactNode } from "react"
+import { useState, useEffect, type ReactNode } from "react"
 import {
     Dialog,
     DialogContent,
@@ -9,7 +9,7 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { AlertTriangle, ExternalLink, X } from "lucide-react"
+import { AlertTriangle, Download, ExternalLink, Loader2, X } from "lucide-react"
 import { isUploadImageFile, resolveUploadDocumentUrl } from "@/lib/upload-url"
 
 interface ScanDoPreviewProps {
@@ -28,6 +28,14 @@ export function ScanDoPreview({
     headerActions,
 }: ScanDoPreviewProps) {
     const fileUrl = resolveUploadDocumentUrl(url)
+    const [isLoading, setIsLoading] = useState(true)
+
+    // Reset loading state whenever the dialog opens or file changes
+    useEffect(() => {
+        if (open) {
+            setIsLoading(true)
+        }
+    }, [open, fileUrl])
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -42,14 +50,26 @@ export function ScanDoPreview({
                     <div className="flex items-center gap-2 mr-8">
                         {headerActions}
                         {fileUrl && (
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => window.open(fileUrl, '_blank')}
-                            >
-                                <ExternalLink className="h-4 w-4 mr-1" />
-                                Open in New Tab
-                            </Button>
+                            <>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => window.open(fileUrl, '_blank')}
+                                >
+                                    <ExternalLink className="h-4 w-4 mr-1" />
+                                    Open in New Tab
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    asChild
+                                >
+                                    <a href={fileUrl} download={`${deliveryNumber || "scan-do"}.pdf`} target="_blank" rel="noopener noreferrer">
+                                        <Download className="h-4 w-4 mr-1" />
+                                        Unduh
+                                    </a>
+                                </Button>
+                            </>
                         )}
                         <Button
                             variant="ghost"
@@ -63,21 +83,32 @@ export function ScanDoPreview({
                 </DialogHeader>
                 <div className="flex-1 w-full min-h-0 bg-muted/10 relative overflow-auto">
                     {fileUrl ? (
-                        isUploadImageFile(fileUrl) || !fileUrl.toLowerCase().endsWith('.pdf') ? (
-                            <div className="flex items-center justify-center min-h-full p-4">
-                                <img
+                        <>
+                            {isLoading && (
+                                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-background/80 backdrop-blur-xs">
+                                    <Loader2 className="h-8 w-8 animate-spin text-primary mb-2" />
+                                    <p className="text-xs text-muted-foreground">Memuat dokumen Scan DO...</p>
+                                </div>
+                            )}
+                            {isUploadImageFile(fileUrl) || !fileUrl.toLowerCase().endsWith('.pdf') ? (
+                                <div className="flex items-center justify-center min-h-full p-4">
+                                    <img
+                                        src={fileUrl}
+                                        alt="Scan DO"
+                                        className="max-w-full h-auto shadow-sm rounded-sm"
+                                        onLoad={() => setIsLoading(false)}
+                                        onError={() => setIsLoading(false)}
+                                    />
+                                </div>
+                            ) : (
+                                <iframe
                                     src={fileUrl}
-                                    alt="Scan DO"
-                                    className="max-w-full h-auto shadow-sm rounded-sm"
+                                    className="absolute inset-0 w-full h-full border-none"
+                                    title="Scan DO Document"
+                                    onLoad={() => setIsLoading(false)}
                                 />
-                            </div>
-                        ) : (
-                            <iframe
-                                src={fileUrl}
-                                className="absolute inset-0 w-full h-full border-none"
-                                title="Scan DO Document"
-                            />
-                        )
+                            )}
+                        </>
                     ) : (
                         <div className="flex flex-col items-center justify-center h-full text-center py-12 text-muted-foreground">
                             <AlertTriangle className="h-12 w-12 mb-4 opacity-20" />
@@ -90,3 +121,4 @@ export function ScanDoPreview({
         </Dialog>
     )
 }
+

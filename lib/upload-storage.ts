@@ -514,17 +514,38 @@ export async function readManagedUpload(value: string | null | undefined): Promi
     const filename = extractUploadFilename(value)
     if (!filename) return null
 
-    if (isObjectStorageEnabled()) {
-        const config = getObjectStorageConfig()
+    // 1. Cek disk lokal terlebih dahulu (sangat cepat ~0.5ms)
+    const localFile = findExistingUploadFilePath(filename)
+    if (localFile) {
+        try {
+            const buffer = await readFile(localFile.filePath)
+            return {
+                filename,
+                buffer,
+                contentType: getUploadContentType(filename),
+                source: "local",
+            }
+        } catch (error) {
+            console.warn(`[UploadStorage] Failed to read cached local file ${localFile.filePath}:`, error)
+        }
+    }
 
-        if (!config) {
-            console.error("[UploadStorage] Upload driver is S3 but object storage config is incomplete")
-        } else {
-            const client = getObjectStorageClient(config)
-            const key = config.prefix ? `${config.prefix}/${filename}` : filename
+    // 2. Jika tidak ada di disk lokal, cek Object Storage (S3) jika konfigurasinya tersedia
+    const config = getObjectStorageConfig()
+    if (config) {
+        const client = getObjectStorageClient(config)
+        const readTimeoutMs = Math.max(getObjectStorageTimeoutMs(), 15_000)
 
+        // Coba semua kandidat key yang mungkin (dengan prefix yang dikonfigurasi, prefix bawaan, dan tanpa prefix)
+        const candidateKeys = uniquePaths([
+            config.prefix ? `${config.prefix}/${filename}` : filename,
+            `upload/${filename}`,
+            `uploads/${filename}`,
+            filename,
+        ])
+
+        for (const key of candidateKeys) {
             try {
-                // Timeout cepat 3 detik untuk membaca dari S3 agar browser tidak menunggu lama
                 const response = await sendObjectStorageCommand<{
                     Body?: unknown
                     ContentType?: string
@@ -534,47 +555,36 @@ export async function readManagedUpload(value: string | null | undefined): Promi
                         Bucket: config.bucket,
                         Key: key,
                     }),
-                    3_000
+                    readTimeoutMs
                 )
+
+                const buffer = await toBuffer(response.Body)
+                const contentType = getUploadContentType(filename, response.ContentType)
+
+                // Simpan cache ke disk lokal secara asinkron agar akses berikutnya instan
+                saveUploadToLocalDisk({ filename, buffer }).catch((cacheErr) => {
+                    console.warn(`[UploadStorage] Background caching to local disk failed for ${filename}:`, cacheErr)
+                })
 
                 return {
                     filename,
-                    buffer: await toBuffer(response.Body),
-                    contentType: getUploadContentType(filename, response.ContentType),
+                    buffer,
+                    contentType,
                     source: "object-storage",
                 }
             } catch (error) {
-                // Jangan pernah lempar error ke route handler!
-                // Jika S3 timeout, offline, atau 404, lanjutkan untuk membaca dari disk lokal
-                if (!isObjectStorageNotFoundError(error)) {
-                    console.warn(`[UploadStorage] S3 read error or timeout for ${filename} (${error instanceof Error ? error.message : error}), falling back to local disk...`)
+                if (isObjectStorageNotFoundError(error)) {
+                    // Coba kandidat key berikutnya
+                    continue
                 }
+                console.warn(`[UploadStorage] S3 read error for key "${key}" (${error instanceof Error ? error.message : error})`)
             }
         }
     }
 
-    const resolvedFile = findExistingUploadFilePath(filename)
-    if (!resolvedFile) {
-        return null
-    }
-
-    // Jika file dibaca dari local disk padahal S3 object storage diaktifkan,
-    // jadwalkan sinkronisasi otomatis ke S3 dan hapus file lokal setelah tersimpan di S3
-    if (isObjectStorageEnabled()) {
-        scheduleBackgroundUploadSync({
-            filename,
-            filePath: resolvedFile.filePath,
-            delayMs: 5_000,
-        })
-    }
-
-    return {
-        filename,
-        buffer: await readFile(resolvedFile.filePath),
-        contentType: getUploadContentType(filename),
-        source: "local",
-    }
+    return null
 }
+
 
 export async function deleteManagedUpload(value: string | null | undefined) {
     const filename = extractUploadFilename(value)

@@ -110,7 +110,10 @@ export async function GET(
             return new NextResponse(new Uint8Array(managedFile.buffer), {
                 headers: {
                     "Content-Type": managedFile.contentType,
-                    "Cache-Control": "private, no-store",
+                    "Content-Disposition": `inline; filename="${encodeURIComponent(filename)}"`,
+                    "Content-Length": String(managedFile.buffer.length),
+                    "Accept-Ranges": "bytes",
+                    "Cache-Control": "private, max-age=3600",
                     "X-Upload-Source": managedFile.source,
                 },
             });
@@ -129,7 +132,10 @@ export async function GET(
         return new NextResponse(new Uint8Array(remoteFile.buffer), {
             headers: {
                 "Content-Type": remoteFile.contentType,
-                "Cache-Control": "private, no-store",
+                "Content-Disposition": `inline; filename="${encodeURIComponent(filename)}"`,
+                "Content-Length": String(remoteFile.buffer.byteLength),
+                "Accept-Ranges": "bytes",
+                "Cache-Control": "private, max-age=3600",
                 "X-Upload-Source": "remote-fallback",
             },
         });
@@ -144,7 +150,10 @@ export async function GET(
                 return new NextResponse(new Uint8Array(buffer), {
                     headers: {
                         "Content-Type": getUploadContentType(filename),
-                        "Cache-Control": "private, no-store",
+                        "Content-Disposition": `inline; filename="${encodeURIComponent(filename)}"`,
+                        "Content-Length": String(buffer.length),
+                        "Accept-Ranges": "bytes",
+                        "Cache-Control": "private, max-age=3600",
                         "X-Upload-Source": "emergency-local",
                     },
                 });
