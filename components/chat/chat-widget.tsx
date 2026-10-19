@@ -773,6 +773,7 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
         let active = true
         const interval = window.setInterval(async () => {
             try {
+                if (document.hidden) return
                 const latest = messages[messages.length - 1]?.createdAt
                 const response = await fetch(`/api/chat/messages?roomId=${room.id}${latest ? `&after=${encodeURIComponent(latest)}` : ""}`, { cache: "no-store" })
                 if (!response.ok) return
@@ -796,7 +797,7 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
                     const snapshot = await getRoomMessages(room.id, { limit: Math.max(messages.length + data.messages.length, 30) }); applySnapshot(snapshot, false); onRoomUpdated().catch(() => undefined)
                 }
             } catch { return }
-        }, 1500)
+        }, 3000)
         return () => {
             active = false
             window.clearInterval(interval)
@@ -1413,7 +1414,27 @@ export function ChatWidget({ currentUserId }: { currentUserId: string }) {
             active = false
         }
     }, [chatUsers.length, chatUsersLoading, isOpen, loadChatUsers, loadRooms])
-    useEffect(() => { loadRooms().catch(() => undefined); const interval = window.setInterval(() => { loadRooms().catch(() => undefined) }, 6000); return () => window.clearInterval(interval) }, [loadRooms])
+    useEffect(() => {
+        loadRooms().catch(() => undefined)
+        // Adaptive polling: 15s if chat is open, 45s if chat is minimized
+        const pollInterval = isOpen ? 15_000 : 45_000
+        const interval = window.setInterval(() => {
+            if (document.hidden) return
+            loadRooms().catch(() => undefined)
+        }, pollInterval)
+
+        const handleVisibilityChange = () => {
+            if (!document.hidden) {
+                loadRooms().catch(() => undefined)
+            }
+        }
+        document.addEventListener("visibilitychange", handleVisibilityChange)
+
+        return () => {
+            window.clearInterval(interval)
+            document.removeEventListener("visibilitychange", handleVisibilityChange)
+        }
+    }, [isOpen, loadRooms])
     const togglePreference = useCallback(async (roomId: number, updates: Partial<Pick<ChatRoomWithMeta, "isMuted" | "isArchived" | "isPinned">>) => { try { await updateRoomPreferences(roomId, updates); await loadRooms() } catch { toast.error("Pengaturan room gagal diubah") } }, [loadRooms])
     const handleRoomCreated = useCallback(async (roomId: number) => { const refreshed = await getUserRooms({ includeArchived: true }); previousRoomsRef.current = refreshed; setRooms(refreshed); setActiveRoom(refreshed.find((room) => room.id === roomId) ?? null); setShowNewChat(false); setFilter("active") }, [])
     const handleOpenHelpDesk = useCallback(async () => {

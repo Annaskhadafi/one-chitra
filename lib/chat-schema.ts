@@ -98,18 +98,21 @@ async function syncChatSchema() {
     `)
 }
 
-let isChatSchemaSynced = false
+const globalChatSchema = globalThis as unknown as {
+    isChatSchemaSynced?: boolean
+    ensureChatSchemaPromise?: Promise<void> | null
+}
 
 export async function ensureChatSchema() {
-    if (isChatSchemaSynced) return
-    if (!ensureChatSchemaPromise) {
-        ensureChatSchemaPromise = syncChatSchema().then(() => {
-            isChatSchemaSynced = true
+    if (globalChatSchema.isChatSchemaSynced) return
+    if (!globalChatSchema.ensureChatSchemaPromise) {
+        globalChatSchema.ensureChatSchemaPromise = syncChatSchema().then(() => {
+            globalChatSchema.isChatSchemaSynced = true
         }).catch((error) => {
-            ensureChatSchemaPromise = null
+            globalChatSchema.ensureChatSchemaPromise = null
             throw error
         })
     }
 
-    await ensureChatSchemaPromise
+    await globalChatSchema.ensureChatSchemaPromise
 }

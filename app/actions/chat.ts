@@ -1055,79 +1055,112 @@ export async function getUserRooms(options?: { includeArchived?: boolean }): Pro
         .from(chatRoomMembers)
         .where(eq(chatRoomMembers.userId, currentUserId))
 
-    const rooms: ChatRoomWithMeta[] = []
-
-    for (const membership of myMemberships) {
-        if (!options?.includeArchived && membership.isArchived) {
-            continue
-        }
-
-        const room = await db.query.chatRooms.findFirst({
-            where: eq(chatRooms.id, membership.roomId),
-        })
-        if (!room) {
-            continue
-        }
-
-        const memberRows = await getMemberRows(membership.roomId)
-
-        const [lastMsg] = await db
-            .select({
-                content: chatMessages.content,
-                senderName: userTable.name,
-                createdAt: chatMessages.createdAt,
-            })
-            .from(chatMessages)
-            .innerJoin(userTable, eq(chatMessages.senderId, userTable.id))
-            .where(eq(chatMessages.roomId, membership.roomId))
-            .orderBy(desc(chatMessages.createdAt))
-            .limit(1)
-
-        const unreadCondition = membership.lastReadAt
-            ? and(
-                eq(chatMessages.roomId, membership.roomId),
-                ne(chatMessages.senderId, currentUserId),
-                gt(chatMessages.createdAt, membership.lastReadAt)
-            )
-            : and(eq(chatMessages.roomId, membership.roomId), ne(chatMessages.senderId, currentUserId))
-
-        const [unreadRow] = await db
-            .select({ count: sql<number>`count(*)` })
-            .from(chatMessages)
-            .where(unreadCondition)
-
-        let displayName = room.name
-        if (room.type === "dm") {
-            displayName = memberRows.find((member) => member.userId !== currentUserId)?.name ?? "Unknown"
-        }
-
-        rooms.push({
-            id: room.id,
-            name: displayName,
-            type: room.type,
-            members: memberRows.map((member) => ({
-                userId: member.userId,
-                name: member.name,
-                email: member.email,
-                image: member.image ?? null,
-                lastReadAt: member.lastReadAt ? member.lastReadAt.toISOString() : null,
-                lastSeenAt: member.lastSeenAt ? member.lastSeenAt.toISOString() : null,
-                isTyping: !!member.typingAt && Date.now() - member.typingAt.getTime() <= 10_000,
-            })),
-            lastMessage: lastMsg
-                ? {
-                    content: lastMsg.content,
-                    senderName: lastMsg.senderName,
-                    createdAt: lastMsg.createdAt.toISOString(),
-                }
-                : null,
-            unreadCount: Number(unreadRow?.count ?? 0),
-            isMuted: membership.isMuted,
-            isArchived: membership.isArchived,
-            isPinned: membership.isPinned,
-            updatedAt: room.updatedAt.toISOString(),
-        })
+    const filteredMemberships = myMemberships.filter((m) => options?.includeArchived || !m.isArchived)
+    if (filteredMemberships.length === 0) {
+        return []
     }
+
+    const roomIds = filteredMemberships.map((m) => m.roomId)
+
+    // Batch fetch rooms & members in parallel
+    const [roomRows, allMemberRows] = await Promise.all([
+        db.select().from(chatRooms).where(inArray(chatRooms.id, roomIds)),
+        db.select({
+            roomId: chatRoomMembers.roomId,
+            userId: chatRoomMembers.userId,
+            name: userTable.name,
+            email: userTable.email,
+            image: userTable.image,
+            lastReadAt: chatRoomMembers.lastReadAt,
+            lastSeenAt: chatRoomMembers.lastSeenAt,
+            isMuted: chatRoomMembers.isMuted,
+            isArchived: chatRoomMembers.isArchived,
+            isPinned: chatRoomMembers.isPinned,
+            typingAt: chatRoomMembers.typingAt,
+        })
+        .from(chatRoomMembers)
+        .innerJoin(userTable, eq(chatRoomMembers.userId, userTable.id))
+        .where(inArray(chatRoomMembers.roomId, roomIds)),
+    ])
+
+    const roomMap = new Map(roomRows.map((r) => [r.id, r]))
+    const membersByRoom = new Map<number, typeof allMemberRows>()
+    for (const m of allMemberRows) {
+        const list = membersByRoom.get(m.roomId) ?? []
+        list.push(m)
+        membersByRoom.set(m.roomId, list)
+    }
+
+    // Fetch last messages & unread counts concurrently
+    const roomMetrics = await Promise.all(
+        filteredMemberships.map(async (membership) => {
+            const room = roomMap.get(membership.roomId)
+            if (!room) return null
+
+            const memberRows = membersByRoom.get(membership.roomId) ?? []
+
+            const unreadCondition = membership.lastReadAt
+                ? and(
+                    eq(chatMessages.roomId, membership.roomId),
+                    ne(chatMessages.senderId, currentUserId),
+                    gt(chatMessages.createdAt, membership.lastReadAt)
+                )
+                : and(eq(chatMessages.roomId, membership.roomId), ne(chatMessages.senderId, currentUserId))
+
+            const [[lastMsg], [unreadRow]] = await Promise.all([
+                db
+                    .select({
+                        content: chatMessages.content,
+                        senderName: userTable.name,
+                        createdAt: chatMessages.createdAt,
+                    })
+                    .from(chatMessages)
+                    .innerJoin(userTable, eq(chatMessages.senderId, userTable.id))
+                    .where(eq(chatMessages.roomId, membership.roomId))
+                    .orderBy(desc(chatMessages.createdAt))
+                    .limit(1),
+                db
+                    .select({ count: sql<number>`count(*)` })
+                    .from(chatMessages)
+                    .where(unreadCondition),
+            ])
+
+            let displayName = room.name
+            if (room.type === "dm") {
+                displayName = memberRows.find((member) => member.userId !== currentUserId)?.name ?? "Unknown"
+            }
+
+            const item: ChatRoomWithMeta = {
+                id: room.id,
+                name: displayName,
+                type: room.type,
+                members: memberRows.map((member) => ({
+                    userId: member.userId,
+                    name: member.name,
+                    email: member.email,
+                    image: member.image ?? null,
+                    lastReadAt: member.lastReadAt ? member.lastReadAt.toISOString() : null,
+                    lastSeenAt: member.lastSeenAt ? member.lastSeenAt.toISOString() : null,
+                    isTyping: !!member.typingAt && Date.now() - member.typingAt.getTime() <= 10_000,
+                })),
+                lastMessage: lastMsg
+                    ? {
+                        content: lastMsg.content,
+                        senderName: lastMsg.senderName,
+                        createdAt: lastMsg.createdAt.toISOString(),
+                    }
+                    : null,
+                unreadCount: Number(unreadRow?.count ?? 0),
+                isMuted: membership.isMuted,
+                isArchived: membership.isArchived,
+                isPinned: membership.isPinned,
+                updatedAt: room.updatedAt.toISOString(),
+            }
+            return item
+        })
+    )
+
+    const rooms = roomMetrics.filter((r): r is ChatRoomWithMeta => r !== null)
 
     return rooms.sort((left, right) => {
         if (left.isPinned !== right.isPinned) {

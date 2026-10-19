@@ -201,13 +201,23 @@ export function NotificationBell() {
         void loadPushStatus()
 
         const interval = window.setInterval(() => {
+            if (document.hidden) return
             const intervalController = new AbortController()
             void loadNotifications(intervalController.signal)
-        }, 30_000)
+        }, 45_000)
+
+        const handleVisibilityChange = () => {
+            if (!document.hidden) {
+                const c = new AbortController()
+                void loadNotifications(c.signal)
+            }
+        }
+        document.addEventListener("visibilitychange", handleVisibilityChange)
 
         return () => {
             controller.abort()
             window.clearInterval(interval)
+            document.removeEventListener("visibilitychange", handleVisibilityChange)
         }
     }, [loadNotifications, loadPushStatus])
 

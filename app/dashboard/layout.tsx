@@ -277,7 +277,7 @@ export default async function DashboardLayout({
   const cookieStore = await cookies()
   const defaultOpen = cookieStore.get("sidebar_state")?.value === "true"
 
-  // Fetch session server-side
+  // Fetch session server-side with resilient retry for transient DB glitches
   const requestHeaders = await headers()
   let session = null
   try {
@@ -285,7 +285,15 @@ export default async function DashboardLayout({
       headers: requestHeaders
     })
   } catch (err) {
-    console.error("[Dashboard Layout] Error getting session:", err)
+    console.warn("[Dashboard Layout] Transient error getting session, retrying once:", err)
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 300))
+      session = await auth.api.getSession({
+        headers: requestHeaders
+      })
+    } catch (retryErr) {
+      console.error("[Dashboard Layout] Second attempt getting session failed:", retryErr)
+    }
   }
 
   // Redirect unauthenticated users (defense-in-depth — middleware also handles this)
@@ -340,6 +348,9 @@ export default async function DashboardLayout({
       return true
     }
     if (url === "/dashboard/approvals") {
+      return true
+    }
+    if (resource === "system-blueprint" || url === "/dashboard/blueprint") {
       return true
     }
     if (!resource) {
