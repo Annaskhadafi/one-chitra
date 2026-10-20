@@ -25,5 +25,9 @@ export const rfidScans = pgTable("rfid_scans", {
     userId: varchar("user_id").references(() => user.id),
     tireCondition: varchar("tire_condition", { length: 50 }),
     remarks: text("remarks"),
+    ekspedisi: varchar("ekspedisi", { length: 100 }),
+    platTruk: varchar("plat_truk", { length: 50 }),
+    tujuan: varchar("tujuan", { length: 255 }),
+    namaDriver: varchar("nama_driver", { length: 100 }),
     scannedAt: timestamp("scanned_at").defaultNow().notNull(),
 });

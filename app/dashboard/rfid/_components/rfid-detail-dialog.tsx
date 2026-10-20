@@ -1,7 +1,7 @@
 "use client"
 
 import { format } from "date-fns"
-import { Calendar, Edit, Info, Layers, MapPin, Package, RadioTower, User } from "lucide-react"
+import { Calendar, Edit, Info, Layers, MapPin, Package, RadioTower, Truck, User } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -40,6 +40,12 @@ export type RfidRow = {
     tire_condition?: string | null
     remarks?: string | null
     keterangan?: string | null
+    ekspedisi?: string | null
+    platTruk?: string | null
+    plat_truk?: string | null
+    tujuan?: string | null
+    namaDriver?: string | null
+    nama_driver?: string | null
     scannedAt: Date | string
 }
 
@@ -239,6 +245,41 @@ export function RfidDetailDialog({
                                 <p className="text-xs font-medium text-muted-foreground">Keterangan / Remarks</p>
                                 <p className="text-sm font-medium mt-1 text-foreground/90">
                                     {data.remarks || data.keterangan || "-"}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <Separator />
+
+                    {/* Shipping & Delivery Section */}
+                    <div>
+                        <h3 className="text-sm font-semibold flex items-center gap-2 text-foreground/80 mb-3">
+                            <Truck className="size-4 text-blue-500" /> Informasi Pengiriman / Logistik
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 rounded-lg bg-muted/40 border">
+                            <div>
+                                <p className="text-xs font-medium text-muted-foreground">Ekspedisi</p>
+                                <p className="text-sm font-semibold mt-1 text-foreground/90">
+                                    {data.ekspedisi || "-"}
+                                </p>
+                            </div>
+                            <div>
+                                <p className="text-xs font-medium text-muted-foreground">Plat Truk / No. Polisi</p>
+                                <p className="text-sm font-semibold tabular-nums mt-1 text-foreground/90 font-mono">
+                                    {data.platTruk || data.plat_truk || "-"}
+                                </p>
+                            </div>
+                            <div>
+                                <p className="text-xs font-medium text-muted-foreground">Tujuan</p>
+                                <p className="text-sm font-medium mt-1 text-foreground/90">
+                                    {data.tujuan || "-"}
+                                </p>
+                            </div>
+                            <div>
+                                <p className="text-xs font-medium text-muted-foreground">Nama Driver</p>
+                                <p className="text-sm font-medium mt-1 text-foreground/90">
+                                    {data.namaDriver || data.nama_driver || "-"}
                                 </p>
                             </div>
                         </div>

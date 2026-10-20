@@ -55,6 +55,10 @@ export function RfidFormDialog({
     const [status, setStatus] = useState<"Masuk" | "Keluar">("Masuk")
     const [tireCondition, setTireCondition] = useState("")
     const [remarks, setRemarks] = useState("")
+    const [ekspedisi, setEkspedisi] = useState("")
+    const [platTruk, setPlatTruk] = useState("")
+    const [tujuan, setTujuan] = useState("")
+    const [namaDriver, setNamaDriver] = useState("")
 
     useEffect(() => {
         if (open) {
@@ -75,6 +79,10 @@ export function RfidFormDialog({
                 setCreatedBy(initialData.createdBy || "")
                 setTireCondition(initialData.tireCondition || initialData.tire_condition || "")
                 setRemarks(initialData.remarks || initialData.keterangan || "")
+                setEkspedisi(initialData.ekspedisi || "")
+                setPlatTruk(initialData.platTruk || initialData.plat_truk || "")
+                setTujuan(initialData.tujuan || "")
+                setNamaDriver(initialData.namaDriver || initialData.nama_driver || "")
             } else {
                 // Reset for create
                 setTagId("")
@@ -93,6 +101,10 @@ export function RfidFormDialog({
                 setCreatedBy("")
                 setTireCondition("GOOD")
                 setRemarks("")
+                setEkspedisi("")
+                setPlatTruk("")
+                setTujuan("")
+                setNamaDriver("")
             }
         }
     }, [open, mode, initialData])
@@ -124,6 +136,10 @@ export function RfidFormDialog({
             createdBy: createdBy.trim() || undefined,
             tireCondition: tireCondition.trim() || undefined,
             remarks: remarks.trim() || undefined,
+            ekspedisi: ekspedisi.trim() || undefined,
+            platTruk: platTruk.trim() || undefined,
+            tujuan: tujuan.trim() || undefined,
+            namaDriver: namaDriver.trim() || undefined,
         }
 
         try {
@@ -351,6 +367,51 @@ export function RfidFormDialog({
                                 value={remarks}
                                 onChange={(e) => setRemarks(e.target.value)}
                             />
+                        </div>
+
+                        {/* Shipping & Delivery Information */}
+                        <div className="border-t pt-3 space-y-3">
+                            <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                                Informasi Pengiriman / Logistik
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-1.5">
+                                    <Label htmlFor="ekspedisi">Ekspedisi</Label>
+                                    <Input
+                                        id="ekspedisi"
+                                        placeholder="Contoh: JNE / Internal / Tunas"
+                                        value={ekspedisi}
+                                        onChange={(e) => setEkspedisi(e.target.value)}
+                                    />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label htmlFor="platTruk">Plat Truk / No. Polisi</Label>
+                                    <Input
+                                        id="platTruk"
+                                        placeholder="Contoh: KT 1234 AB"
+                                        value={platTruk}
+                                        onChange={(e) => setPlatTruk(e.target.value)}
+                                    />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label htmlFor="tujuan">Tujuan</Label>
+                                    <Input
+                                        id="tujuan"
+                                        placeholder="Contoh: Site A / Gudang Sangatta"
+                                        value={tujuan}
+                                        onChange={(e) => setTujuan(e.target.value)}
+                                    />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label htmlFor="namaDriver">Nama Driver</Label>
+                                    <Input
+                                        id="namaDriver"
+                                        placeholder="Contoh: Budi Santoso"
+                                        value={namaDriver}
+                                        onChange={(e) => setNamaDriver(e.target.value)}
+                                    />
+                                </div>
+                            </div>
                         </div>
                     </div>
 

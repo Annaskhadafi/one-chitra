@@ -11,7 +11,10 @@ const flexibleString = z.preprocess((val) => {
     return String(val).trim()
 }, z.string())
 
-const requiredText = flexibleString
+const requiredText = z.preprocess((val) => {
+    if (val === null || val === undefined) return ""
+    return String(val).trim()
+}, z.string().min(1))
 
 const flexibleStringOrNull = z.preprocess((val) => {
     if (val === null || val === undefined) return null
@@ -53,14 +56,14 @@ export const rfidScanPayloadSchema = z.object({
         sloc: flexibleString,
         slocDescription: flexibleStringOrNull,
         actStock: z.preprocess((val) => {
-            if (val === null || val === undefined || val === "") return 0
+            if (val === null || val === undefined || val === "") return null
             const num = Number(val)
-            return Number.isNaN(num) ? 0 : Math.round(num)
-        }, z.number().int()),
+            return Number.isNaN(num) ? null : Math.round(num)
+        }, z.number().int().nullable()),
     }),
     items: z.array(z.object({
         sn: flexibleStringOrNull,
-        epc: flexibleString,
+        epc: requiredText,
         rssi: flexibleRssi,
         linked: linkedSchema,
         scanType: flexibleStringOrNull,
@@ -72,6 +75,12 @@ export const rfidScanPayloadSchema = z.object({
         remarks: flexibleStringOrNull,
         keterangan: flexibleStringOrNull,
         catatan: flexibleStringOrNull,
+        ekspedisi: flexibleStringOrNull,
+        plat_truk: flexibleStringOrNull,
+        platTruk: flexibleStringOrNull,
+        tujuan: flexibleStringOrNull,
+        nama_driver: flexibleStringOrNull,
+        namaDriver: flexibleStringOrNull,
     })).min(1),
     createdBy: z.preprocess((val) => {
         if (!val) return "System"
@@ -234,6 +243,10 @@ export async function saveRfidScanPayload(payload: unknown, overrideStatus?: str
 
             const itemTireCondition = item.tire_condition || item.tireCondition || item.condition || item.kondisi || null
             const itemRemarks = item.remarks || item.keterangan || item.catatan || null
+            const itemEkspedisi = item.ekspedisi || null
+            const itemPlatTruk = item.plat_truk || item.platTruk || null
+            const itemTujuan = item.tujuan || null
+            const itemNamaDriver = item.nama_driver || item.namaDriver || null
 
             // Find existing scan record by matching EPC, Tag ID, or Serial Number
             const existing = allExistingScans.find((row) => {
@@ -267,6 +280,10 @@ export async function saveRfidScanPayload(payload: unknown, overrideStatus?: str
                         warehouseId: warehouse?.id ?? existing.warehouseId,
                         tireCondition: itemTireCondition ?? existing.tireCondition,
                         remarks: itemRemarks ?? existing.remarks,
+                        ekspedisi: itemEkspedisi ?? existing.ekspedisi,
+                        platTruk: itemPlatTruk ?? existing.platTruk,
+                        tujuan: itemTujuan ?? existing.tujuan,
+                        namaDriver: itemNamaDriver ?? existing.namaDriver,
                     })
                     .where(eq(rfidScans.id, existing.id))
                     .returning()
@@ -296,6 +313,10 @@ export async function saveRfidScanPayload(payload: unknown, overrideStatus?: str
                         scannedAt: parsed.createdAt,
                         tireCondition: itemTireCondition,
                         remarks: itemRemarks,
+                        ekspedisi: itemEkspedisi,
+                        platTruk: itemPlatTruk,
+                        tujuan: itemTujuan,
+                        namaDriver: itemNamaDriver,
                     })
                     .returning()
 
@@ -313,7 +334,7 @@ export const deleteRfidScanPayloadSchema = z.object({
         material: flexibleString,
         sloc: flexibleString,
     }).optional(),
-    epcs: z.array(flexibleString).min(1),
+    epcs: z.array(requiredText).min(1),
 })
 
 export type DeleteRfidScanPayload = z.input<typeof deleteRfidScanPayloadSchema>

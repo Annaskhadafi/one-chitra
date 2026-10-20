@@ -35,6 +35,12 @@ export async function GET() {
                 tire_condition: rfidScans.tireCondition,
                 remarks: rfidScans.remarks,
                 keterangan: rfidScans.remarks,
+                ekspedisi: rfidScans.ekspedisi,
+                platTruk: rfidScans.platTruk,
+                plat_truk: rfidScans.platTruk,
+                tujuan: rfidScans.tujuan,
+                namaDriver: rfidScans.namaDriver,
+                nama_driver: rfidScans.namaDriver,
             })
             .from(rfidScans)
             .orderBy(desc(rfidScans.scannedAt), desc(rfidScans.id))

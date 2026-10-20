@@ -24,6 +24,10 @@ const rfidScanFormSchema = z.object({
     scanType: z.string().trim().optional(),
     tireCondition: z.string().trim().optional().nullable(),
     remarks: z.string().trim().optional().nullable(),
+    ekspedisi: z.string().trim().optional().nullable(),
+    platTruk: z.string().trim().optional().nullable(),
+    tujuan: z.string().trim().optional().nullable(),
+    namaDriver: z.string().trim().optional().nullable(),
 })
 
 export type RfidScanFormInput = z.infer<typeof rfidScanFormSchema>
@@ -52,6 +56,10 @@ export async function createRfidScanAction(data: RfidScanFormInput) {
             scanType: parsed.scanType || "INBOUND",
             tireCondition: parsed.tireCondition || null,
             remarks: parsed.remarks || null,
+            ekspedisi: parsed.ekspedisi || null,
+            platTruk: parsed.platTruk || null,
+            tujuan: parsed.tujuan || null,
+            namaDriver: parsed.namaDriver || null,
             userId: session.user.id,
             scannedAt: new Date(),
         }).returning()
@@ -99,6 +107,10 @@ export async function updateRfidScanAction(id: number, data: Partial<RfidScanFor
                 scanType: parsed.scanType !== undefined ? (parsed.scanType || "INBOUND") : existing.scanType,
                 tireCondition: parsed.tireCondition !== undefined ? (parsed.tireCondition || null) : existing.tireCondition,
                 remarks: parsed.remarks !== undefined ? (parsed.remarks || null) : existing.remarks,
+                ekspedisi: parsed.ekspedisi !== undefined ? (parsed.ekspedisi || null) : existing.ekspedisi,
+                platTruk: parsed.platTruk !== undefined ? (parsed.platTruk || null) : existing.platTruk,
+                tujuan: parsed.tujuan !== undefined ? (parsed.tujuan || null) : existing.tujuan,
+                namaDriver: parsed.namaDriver !== undefined ? (parsed.namaDriver || null) : existing.namaDriver,
             })
             .where(eq(rfidScans.id, id))
             .returning()

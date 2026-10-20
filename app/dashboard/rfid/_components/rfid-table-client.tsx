@@ -121,7 +121,13 @@ export function RfidTableClient({ initialRows }: RfidTableClientProps) {
                 row.sloc?.toLowerCase().includes(q) ||
                 row.slocDescription?.toLowerCase().includes(q) ||
                 row.createdBy?.toLowerCase().includes(q) ||
-                row.category?.toLowerCase().includes(q)
+                row.category?.toLowerCase().includes(q) ||
+                row.ekspedisi?.toLowerCase().includes(q) ||
+                row.platTruk?.toLowerCase().includes(q) ||
+                row.plat_truk?.toLowerCase().includes(q) ||
+                row.tujuan?.toLowerCase().includes(q) ||
+                row.namaDriver?.toLowerCase().includes(q) ||
+                row.nama_driver?.toLowerCase().includes(q)
             )
         })
     }, [rows, searchQuery, statusFilter])
@@ -212,6 +218,12 @@ export function RfidTableClient({ initialRows }: RfidTableClientProps) {
             "Serial Number",
             "RSSI",
             "Status (Masuk/Keluar)",
+            "Kondisi Ban",
+            "Remarks",
+            "Ekspedisi",
+            "Plat Truk",
+            "Tujuan",
+            "Nama Driver",
             "DO Link",
             "Keterhubungan",
             "Material Number",
@@ -234,6 +246,12 @@ export function RfidTableClient({ initialRows }: RfidTableClientProps) {
                     `"${r.serialNumber || ""}"`,
                     `"${r.rssi || ""}"`,
                     `"${r.status || (r.scanType?.toLowerCase().includes("keluar") ? "Keluar" : "Masuk")}"`,
+                    `"${r.tireCondition || r.tire_condition || ""}"`,
+                    `"${(r.remarks || r.keterangan || "").replace(/"/g, '""')}"`,
+                    `"${(r.ekspedisi || "").replace(/"/g, '""')}"`,
+                    `"${(r.platTruk || r.plat_truk || "").replace(/"/g, '""')}"`,
+                    `"${(r.tujuan || "").replace(/"/g, '""')}"`,
+                    `"${(r.namaDriver || r.nama_driver || "").replace(/"/g, '""')}"`,
                     `"${r.doNumber || ""}"`,
                     `"${r.linked ? "Linked" : "Unlinked"}"`,
                     `"${r.materialNumber || ""}"`,
@@ -360,6 +378,10 @@ export function RfidTableClient({ initialRows }: RfidTableClientProps) {
                                 <TableHead>Status</TableHead>
                                 <TableHead>Kondisi Ban</TableHead>
                                 <TableHead>Keterangan</TableHead>
+                                <TableHead>Ekspedisi</TableHead>
+                                <TableHead>Plat Truk</TableHead>
+                                <TableHead>Tujuan</TableHead>
+                                <TableHead>Nama Driver</TableHead>
                                 <TableHead>DO Link</TableHead>
                                 <TableHead>Keterhubungan</TableHead>
                                 <TableHead className="text-right">Act Stock</TableHead>
@@ -370,7 +392,7 @@ export function RfidTableClient({ initialRows }: RfidTableClientProps) {
                         <TableBody>
                             {filteredRows.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={15} className="h-32 text-center text-muted-foreground">
+                                    <TableCell colSpan={19} className="h-32 text-center text-muted-foreground">
                                         Tidak ada data RFID yang sesuai filter.
                                     </TableCell>
                                 </TableRow>
@@ -483,6 +505,18 @@ export function RfidTableClient({ initialRows }: RfidTableClientProps) {
                                         </TableCell>
                                         <TableCell className="max-w-[180px] truncate text-xs" title={itemRemarks ?? undefined}>
                                             {itemRemarks ?? "-"}
+                                        </TableCell>
+                                        <TableCell className="text-xs">
+                                            {row.ekspedisi || "-"}
+                                        </TableCell>
+                                        <TableCell className="font-mono text-xs whitespace-nowrap">
+                                            {row.platTruk || row.plat_truk || "-"}
+                                        </TableCell>
+                                        <TableCell className="text-xs max-w-[150px] truncate" title={row.tujuan ?? undefined}>
+                                            {row.tujuan || "-"}
+                                        </TableCell>
+                                        <TableCell className="text-xs">
+                                            {row.namaDriver || row.nama_driver || "-"}
                                         </TableCell>
                                         <TableCell>
                                             {row.doNumber ? (
