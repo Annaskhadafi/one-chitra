@@ -4,9 +4,6 @@ services:
     pull_policy: always
     container_name: one-chitra-app
     restart: unless-stopped
-    depends_on:
-      ollama:
-        condition: service_started
     ports:
       - "${APP_PORT:-3000}:3000"
     environment:
@@ -28,10 +25,6 @@ services:
       S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-${OBJECT_STORAGE_SECRET_ACCESS_KEY:-${AWS_SECRET_ACCESS_KEY}}}
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-https://one.chitraparatama.com}
       NEXT_PUBLIC_BETTER_AUTH_URL: ${NEXT_PUBLIC_BETTER_AUTH_URL:-https://one.chitraparatama.com}
-      OLLAMA_URL: http://ollama:11434
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5vl:7b}
-      OLLAMA_MODEL_VISION: ${OLLAMA_MODEL_VISION:-qwen2.5vl:7b}
-      OLLAMA_API_KEY: ${OLLAMA_API_KEY:-}
       DATABASE_URL: ${DATABASE_URL}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL}
@@ -43,37 +36,6 @@ services:
       - /mnt/data/one-chitra/uploads:/app/uploads
     networks:
       - one-chitra-net
-
-  ollama:
-    image: ollama/ollama:latest
-    container_name: one-chitra-ollama
-    restart: unless-stopped
-    ports:
-      - "${OLLAMA_PORT:-11434}:11434"
-    environment:
-      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-10m}
-    volumes:
-      - /mnt/data/one-chitra/ollama:/root/.ollama
-    networks:
-      - one-chitra-net
-
-  ollama-init:
-    image: ollama/ollama:latest
-    container_name: one-chitra-ollama-init
-    depends_on:
-      ollama:
-        condition: service_started
-    entrypoint:
-      - /bin/sh
-      - -c
-      - |
-        sleep 10
-        ollama pull ${OLLAMA_MODEL:-qwen2.5vl:7b}
-    environment:
-      OLLAMA_HOST: http://ollama:11434
-    networks:
-      - one-chitra-net
-    restart: "no"
 
 networks:
   one-chitra-net:
