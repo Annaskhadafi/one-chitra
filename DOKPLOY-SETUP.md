@@ -94,6 +94,29 @@ docker inspect <container-id> | grep -A 10 Mounts
 docker exec -it <container-id> ls -la /app/uploads/
 ```
 
+## Optimasi PostgreSQL & Anti-Downtime di Dokploy
+
+Untuk mencegah PostgreSQL hang/mati karena penumpukan koneksi (misal dari Power BI / eksternal) dan memastikan restart Dokploy hanya memakan waktu 2–5 detik (bukan 10 menit):
+
+### 1. Terapkan Safeguards Database
+Jalankan perintah ini di container atau local:
+```bash
+npm run db:safeguards
+```
+Perintah ini otomatis mengaktifkan:
+- `idle_session_timeout = 60s` (otomatis memutus sesi idle yang menganggur > 1 menit)
+- `idle_in_transaction_session_timeout = 15s` (otomatis membunuh transaksi gantung)
+- `max_connections = 200`
+- `checkpoint_completion_target = 0.9` (mencegah VPS disk I/O spike)
+
+### 2. Konfigurasi Fast Shutdown pada PostgreSQL Container
+Pada Dokploy atau Docker Compose service PostgreSQL:
+```yaml
+stop_signal: SIGINT
+stop_grace_period: 30s
+```
+*Catatan: Sinyal `SIGINT` (Fast Shutdown) menghentikan database secara bersih tanpa menunggu klien luar memutus koneksi, sehingga PostgreSQL boot kembali tanpa perlu Crash Recovery selama 10 menit.*
+
 ## Migration Database
 
 Setelah deploy pertama kali atau ada perubahan schema:

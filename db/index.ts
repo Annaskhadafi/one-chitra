@@ -19,10 +19,12 @@ const pool = globalForDb.pool ?? new Pool({
     keepAliveInitialDelayMillis: 10000,
 });
 
-// Guardrails against hung transactions on Postgres level
+// Guardrails against hung transactions and zombie connections on Postgres level
 pool.on('connect', (client) => {
     // Automatically terminate transactions that remain idle for > 10 seconds
     client.query('SET idle_in_transaction_session_timeout = 10000;').catch(() => undefined);
+    // Automatically terminate idle client sessions that remain inactive for > 60 seconds (prevents zombie leaks from external tools)
+    client.query('SET idle_session_timeout = 60000;').catch(() => undefined);
 });
 
 pool.on('error', (err) => {
@@ -37,4 +39,4 @@ if (!globalForDb.pool) {
 export const db = globalForDb.db ?? drizzle(pool, { schema });
 if (!globalForDb.db) {
     globalForDb.db = db;
-}
+}
