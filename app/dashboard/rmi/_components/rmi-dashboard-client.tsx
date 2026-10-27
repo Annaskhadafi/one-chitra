@@ -565,6 +565,11 @@ export function RmiDashboardClient({
             const wFrVal = wCfg?.freightWeight ?? 0.05
             const wFxVal = wCfg?.fxWeight ?? 0.05
 
+            // Ambil kurs tengah kuartal evaluasi dari database/fxIndex untuk tabel material (bukan simulatedRate agar tidak double-count FX)
+            const evalQuarterRate = parseFloat(evalRmiObj.fxIndex) > 0
+                ? (parseFloat(evalRmiObj.fxIndex) / 100) * bpFx
+                : simulatorResult.baseRate
+
             const wsData: any[][] = [
                 ["SIMULASI PRICE ADJUSTMENT DETAIL REPORT"],
                 [`Dibuat pada: ${new Date().toLocaleString("id-ID")}`],
@@ -583,7 +588,7 @@ export function RmiDashboardClient({
                 ["Carbon Black (USD/kg)", parseFloat(baseRmiObj.carbonBlack), parseFloat(evalRmiObj.carbonBlack), bpCb, wCbVal, "", ""],  // Baris 15
                 ["Steel Cord (USD/kg)", parseFloat(baseRmiObj.steelCord), parseFloat(evalRmiObj.steelCord), bpSc, wScVal, "", ""],   // Baris 16
                 ["Freight (USD/40ft)", parseFloat(baseRmiObj.freight || "0"), parseFloat(evalRmiObj.freight || "0"), bpFr, wFrVal, "", ""], // Baris 17
-                ["USD/IDR FX Rate (Kurs Tengah BI)", simulatorResult.baseRate, simulatedRate, bpFx, wFxVal, "", ""], // Baris 18
+                ["USD/IDR FX Rate (Kurs Tengah BI)", simulatorResult.baseRate, evalQuarterRate, bpFx, wFxVal, "", ""], // Baris 18
                 [],
                 ["HASIL KALKULASI UTAMA", "SEBELUM", "SESUDAH", "PERSENTASE PERUBAHAN (%)", "BOBOT FORMULA (%)", "KONTRIBUSI PENYESUAIAN HARGA (%)"], // Baris 20
                 ["Raw Material Index (RMI)", "", "", "", "", ""], // Baris 21
@@ -597,45 +602,50 @@ export function RmiDashboardClient({
 
             const worksheet = XLSX.utils.aoa_to_sheet(wsData)
 
-            // Terapkan Rumus Excel (Formula)
+            // Terapkan Rumus Excel (Formula) dengan nilai precalculated (v) agar tampilan selalu sinkron
             // Baris 13-18 Kolom F (Index Base Val %): =(B/D)*100
             // Baris 13-18 Kolom G (Index Eval Val %): =(C/D)*100
             for (let i = 13; i <= 18; i++) {
-                worksheet[`F${i}`] = { t: 'n', f: `(B${i}/D${i})*100` }
-                worksheet[`G${i}`] = { t: 'n', f: `(C${i}/D${i})*100` }
+                const bVal = Number(wsData[i - 1][1]) || 0
+                const cVal = Number(wsData[i - 1][2]) || 0
+                const dVal = Number(wsData[i - 1][3]) || 1
+                const fVal = dVal > 0 ? (bVal / dVal) * 100 : 0
+                const gVal = dVal > 0 ? (cVal / dVal) * 100 : 0
+                worksheet[`F${i}`] = { t: 'n', f: `(B${i}/D${i})*100`, v: fVal }
+                worksheet[`G${i}`] = { t: 'n', f: `(C${i}/D${i})*100`, v: gVal }
             }
 
-            // RMI Sebelum (B21) = RMI = sum(Bobot * Index Base Val)
-            // Formula RMI Sebelum: =(F13*E13)+(F14*E14)+(F15*E15)+(F16*E16)+(F17*E17)+(F18*E18)
-            worksheet['B21'] = { t: 'n', f: 'SUMPRODUCT(F13:F18,E13:E18)' }
-            // RMI Sesudah (C21) = RMI = sum(Bobot * Index Eval Val)
-            worksheet['C21'] = { t: 'n', f: 'SUMPRODUCT(G13:G18,E13:E18)' }
+            // RMI Sebelum (B21) = sum(Bobot * Index Base Val)
+            worksheet['B21'] = { t: 'n', f: 'SUMPRODUCT(F13:F18,E13:E18)', v: simulatorResult.baseRmi }
+            // RMI Sesudah (C21) = sum(Bobot * Index Eval Val)
+            worksheet['C21'] = { t: 'n', f: 'SUMPRODUCT(G13:G18,E13:E18)', v: simulatorResult.evalRmi }
             // Persentase Perubahan RMI (D21): =((C21/B21)-1)*100
-            worksheet['D21'] = { t: 'n', f: '((C21/B21)-1)*100' }
+            worksheet['D21'] = { t: 'n', f: '((C21/B21)-1)*100', v: simulatorResult.deltaRmiPct }
             // Bobot Formula RMI (E21): =B9
-            worksheet['E21'] = { t: 'n', f: 'B9' }
+            worksheet['E21'] = { t: 'n', f: 'B9', v: weightRmi / 100 }
             // Kontribusi Penyesuaian Harga RMI (F21): =D21*E21
-            worksheet['F21'] = { t: 'n', f: 'D21*E21' }
+            worksheet['F21'] = { t: 'n', f: 'D21*E21', v: (weightRmi / 100) * simulatorResult.deltaRmiPct }
 
             // FX Sebelum (B22) = Kurs Base (B18)
-            worksheet['B22'] = { t: 'n', f: 'B18' }
-            // FX Sesudah (C22) = Kurs Tengah Eval (C18)
-            worksheet['C22'] = { t: 'n', f: 'C18' }
+            worksheet['B22'] = { t: 'n', f: 'B18', v: simulatorResult.baseRate }
+            // FX Sesudah (C22) = Kurs Tengah Saat Ini dari input simulasi (B8)
+            worksheet['C22'] = { t: 'n', f: 'B8', v: simulatedRate }
             // Persentase Perubahan FX (D22): =((C22/B22)-1)*100
-            worksheet['D22'] = { t: 'n', f: '((C22/B22)-1)*100' }
+            worksheet['D22'] = { t: 'n', f: '((C22/B22)-1)*100', v: simulatorResult.deltaFxPct }
             // Bobot Formula FX (E22): =B10
-            worksheet['E22'] = { t: 'n', f: 'B10' }
+            worksheet['E22'] = { t: 'n', f: 'B10', v: weightFx / 100 }
             // Kontribusi Penyesuaian Harga FX (F22): =D22*E22
-            worksheet['F22'] = { t: 'n', f: 'D22*E22' }
+            worksheet['F22'] = { t: 'n', f: 'D22*E22', v: (weightFx / 100) * simulatorResult.deltaFxPct }
 
             // Total Price Adjustment % (B25): =F21+F22
-            worksheet['B25'] = { t: 'n', f: 'F21+F22' }
+            worksheet['B25'] = { t: 'n', f: 'F21+F22', v: simulatorResult.totalAdjustmentPct }
 
-            // Estimasi Harga Baru (B26): =B7*(1+(B25/100))
-            worksheet['B26'] = { t: 'n', f: 'B7*(1+(B25/100))' }
+            // Estimasi Harga Baru (B26): =ROUND(B7*(1+(B25/100)),0)
+            const roundedAdjustedPrice = Math.round(simulatorResult.adjustedPrice)
+            worksheet['B26'] = { t: 'n', f: 'ROUND(B7*(1+(B25/100)),0)', v: roundedAdjustedPrice }
 
             // Selisih Nominal (B27): =B26-B7
-            worksheet['B27'] = { t: 'n', f: 'B26-B7' }
+            worksheet['B27'] = { t: 'n', f: 'B26-B7', v: roundedAdjustedPrice - basePrice }
 
             // Set Format Tampilan Excel (Persentase dan Rupiah)
             worksheet['B9'].z = '0.0%'
