@@ -15,7 +15,7 @@ COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 # Increase memory limit for large projects; use webpack (no --turbopack) for stable Docker builds
-ENV NODE_OPTIONS="--max-old-space-size=4096"
+ENV NODE_OPTIONS="--max-old-space-size=8192"
 
 # Build using webpack (without --turbopack) for stable, memory-efficient Docker builds
 RUN npx next build --webpack
