@@ -7,6 +7,10 @@ import { v7 as uuidv7 } from "uuid"
 import { extractUploadFilename } from "@/lib/upload-url"
 
 const DEFAULT_PRODUCTION_UPLOAD_DIR = "/app/uploads"
+const DEFAULT_OBJECT_STORAGE_ENDPOINT = "https://is3.cloudhost.id"
+const DEFAULT_OBJECT_STORAGE_BUCKET = "onechitra"
+const DEFAULT_OBJECT_STORAGE_ACCESS_KEY_ID = "I2BBBINVCAQXY7G6M5OD"
+const DEFAULT_OBJECT_STORAGE_SECRET_ACCESS_KEY = "c4YupRIPTlaetB3XIwIXOO8EBcZWZfTrEqghDN1A"
 const DEFAULT_OBJECT_STORAGE_REGION = "us-east-1"
 const DEFAULT_OBJECT_STORAGE_PREFIX = "upload"
 const DEFAULT_OBJECT_STORAGE_TIMEOUT_MS = 15_000
@@ -240,10 +244,10 @@ export function isObjectStorageEnabled() {
 }
 
 export function getObjectStorageConfig() {
-    const endpoint = getEnvValue("OBJECT_STORAGE_ENDPOINT", "S3_ENDPOINT", "AWS_ENDPOINT_URL_S3", "AWS_ENDPOINT", "S3_URL")
-    const bucket = getEnvValue("OBJECT_STORAGE_BUCKET", "S3_BUCKET", "AWS_BUCKET", "AWS_S3_BUCKET", "S3_BUCKET_NAME")
-    const accessKeyId = getEnvValue("OBJECT_STORAGE_ACCESS_KEY_ID", "S3_ACCESS_KEY_ID", "AWS_ACCESS_KEY_ID", "S3_KEY", "S3_ACCESS_KEY", "AWS_ACCESS_KEY")
-    const secretAccessKey = getEnvValue("OBJECT_STORAGE_SECRET_ACCESS_KEY", "S3_SECRET_ACCESS_KEY", "AWS_SECRET_ACCESS_KEY", "S3_SECRET", "S3_SECRET_KEY", "AWS_SECRET_KEY")
+    const endpoint = getEnvValue("OBJECT_STORAGE_ENDPOINT", "S3_ENDPOINT", "AWS_ENDPOINT_URL_S3", "AWS_ENDPOINT", "S3_URL") || DEFAULT_OBJECT_STORAGE_ENDPOINT
+    const bucket = getEnvValue("OBJECT_STORAGE_BUCKET", "S3_BUCKET", "AWS_BUCKET", "AWS_S3_BUCKET", "S3_BUCKET_NAME") || DEFAULT_OBJECT_STORAGE_BUCKET
+    const accessKeyId = getEnvValue("OBJECT_STORAGE_ACCESS_KEY_ID", "S3_ACCESS_KEY_ID", "AWS_ACCESS_KEY_ID", "S3_KEY", "S3_ACCESS_KEY", "AWS_ACCESS_KEY") || DEFAULT_OBJECT_STORAGE_ACCESS_KEY_ID
+    const secretAccessKey = getEnvValue("OBJECT_STORAGE_SECRET_ACCESS_KEY", "S3_SECRET_ACCESS_KEY", "AWS_SECRET_ACCESS_KEY", "S3_SECRET", "S3_SECRET_KEY", "AWS_SECRET_KEY") || DEFAULT_OBJECT_STORAGE_SECRET_ACCESS_KEY
 
     if (!endpoint || !bucket || !accessKeyId || !secretAccessKey) {
         return null
@@ -581,11 +585,9 @@ export async function readManagedUpload(value: string | null | undefined): Promi
                     source: "object-storage",
                 }
             } catch (error) {
-                if (isObjectStorageNotFoundError(error)) {
-                    // Coba kandidat key berikutnya
-                    continue
-                }
                 console.warn(`[UploadStorage] S3 read error for key "${key}" (${error instanceof Error ? error.message : error})`)
+                // Tetap coba kandidat key berikutnya agar tidak terhenti jika salah satu key melempar error
+                continue
             }
         }
     }
