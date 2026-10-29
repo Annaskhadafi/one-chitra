@@ -17,6 +17,8 @@ import type { InferSelectModel } from "drizzle-orm"
 import { normalizeQuotationText } from "@/lib/quotation-text"
 import { buildQuotationPdfPayload } from "./quotation-pdf-generator"
 import { resolveUploadDocumentUrl } from "@/lib/upload-url"
+import { Switch } from "@/components/ui/switch"
+import { generateRosterFromQuotation } from "./quotation-roster-helper"
 
 type User = InferSelectModel<typeof user>
 
@@ -123,6 +125,24 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
     const [mobileScale, setMobileScale] = useState(1)
     const [mobileScaledHeight, setMobileScaledHeight] = useState<number | null>(null)
     const [isDownloadingPdf, setIsDownloadingPdf] = useState(false)
+    const [includeRoster, setIncludeRoster] = useState(true)
+    const [rosterOverrides, setRosterOverrides] = useState<Record<string, Record<number, "11" | "FB">>>({})
+
+    const handleToggleCell = (personId: string, day: number) => {
+        setRosterOverrides((prev) => {
+            const currentPerson = prev[personId] || {}
+            const currentVal = currentPerson[day] || "11"
+            const nextVal = currentVal === "11" ? "FB" : "11"
+            return {
+                ...prev,
+                [personId]: {
+                    ...currentPerson,
+                    [day]: nextVal,
+                },
+            }
+        })
+    }
+
     const A4_PAGE_WIDTH = 794
     const A4_PAGE_HEIGHT = 1123
 
@@ -231,15 +251,18 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
             <head>
                 <title>Quotation ${quotation.quotationNumber}</title>
                 <style>
-                    @page { size: A4; margin: 0; }
+                    @page { size: A4 portrait; margin: 0; }
+                    @page roster-landscape { size: A4 landscape; margin: 0; }
                     * { box-sizing: border-box; }
                     html, body { margin: 0; padding: 0; background: #ffffff; }
                     body { font-family: Arial, Helvetica, sans-serif; color: #163153; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
                     .print-pages-container { width: 100%; display: flex; flex-direction: column; align-items: center; }
                     .print-page { width: 210mm; height: 297mm; position: relative; overflow: hidden; page-break-after: always; background: white; }
+                    .print-page-landscape { width: 297mm !important; height: 210mm !important; min-width: 297mm !important; min-height: 210mm !important; page: roster-landscape !important; page-break-before: always !important; }
                     @media print {
                         .print-page { page-break-after: always; }
                         .print-page:last-child { page-break-after: auto; }
+                        .print-page-landscape { page: roster-landscape !important; page-break-before: always !important; page-break-after: auto !important; }
                     }
                     .bg-letterhead { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; pointer-events: none; }
                     .page-content { position: relative; z-index: 10; padding: 14mm 15mm 22mm 15mm; height: 100%; display: flex; flex-direction: column; }
@@ -286,7 +309,11 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
 
         try {
             const { generateQuotationPdf } = await import("./quotation-pdf-generator")
-            await generateQuotationPdf(buildQuotationPdfPayload(quotation), { mergeAttachments: visibleAttachments.length > 0 })
+            await generateQuotationPdf(buildQuotationPdfPayload(quotation), {
+                mergeAttachments: visibleAttachments.length > 0,
+                includeRoster,
+                rosterOverrides,
+            })
         } catch (error) {
             console.error("Failed to download quotation preview PDF:", error)
             toast.error(error instanceof Error ? error.message : "Download PDF A4 gagal")
@@ -305,6 +332,21 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                         <DialogTitle className="pr-10 text-base sm:text-lg">Quotation Preview</DialogTitle>
                         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                            {/* Switch Roster */}
+                            <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 shadow-2xs">
+                                <Switch
+                                    id="toggle-roster-switch"
+                                    checked={includeRoster}
+                                    onCheckedChange={setIncludeRoster}
+                                />
+                                <label
+                                    htmlFor="toggle-roster-switch"
+                                    className="cursor-pointer text-xs font-semibold text-slate-700 select-none"
+                                >
+                                    Roster (Landscape)
+                                </label>
+                            </div>
+
                             <Button size="sm" onClick={handlePrint} className="w-full gap-2 bg-blue-600 text-white hover:bg-blue-700 sm:w-auto">
                                 <Printer className="h-3.5 w-3.5" />
                                 Browser Print
@@ -714,6 +756,179 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                                     </div>
                                 </div>
                             ))
+                        })()}
+
+                        {/* Rendering Halaman Roster (Landscape A4: 297mm x 210mm) */}
+                        {includeRoster && (() => {
+                            const roster = generateRosterFromQuotation(quotation.quotationDate, quotation.items, rosterOverrides)
+
+                            return (
+                                <div
+                                    key="roster-page"
+                                    className="print-page print-page-landscape relative bg-white shadow-2xl ring-1 ring-slate-200"
+                                    style={{
+                                        width: "297mm",
+                                        height: "210mm",
+                                        minWidth: "297mm",
+                                        minHeight: "210mm",
+                                        position: "relative",
+                                        overflow: "hidden",
+                                        background: "#ffffff",
+                                        color: "#163153",
+                                        fontFamily: "Arial, Helvetica, sans-serif",
+                                        lineHeight: "1.3",
+                                        pageBreakBefore: "always",
+                                        flexShrink: 0,
+                                    }}
+                                >
+                                    <div className="page-content relative z-10 px-[12mm] py-[10mm] flex flex-col h-full">
+                                        {/* Header Roster */}
+                                        <div className="flex items-start justify-between border-b-2 border-blue-600 pb-2 mb-2.5">
+                                            <div>
+                                                <div className="text-sm font-bold text-blue-800 tracking-wide uppercase">
+                                                    JADWAL ROSTER KERJA (OPERATION ROSTER PLAN)
+                                                </div>
+                                                <div className="text-xs text-slate-500 font-medium">
+                                                    PT Chitra Paratama - Mining & Heavy Equipment Tire Service
+                                                </div>
+                                            </div>
+                                            <div className="text-right text-xs">
+                                                <div className="font-bold text-slate-900">
+                                                    Quotation: {quotation.quotationNumber || "DRAFT"}
+                                                </div>
+                                                <div className="text-slate-600">
+                                                    Customer: {quotation.customer.name}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Sub-Header Metadata & Legend */}
+                                        <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5 rounded-md bg-slate-50 p-2 border border-slate-200 text-xs">
+                                            <div className="flex items-center gap-4">
+                                                <div>
+                                                    <span className="text-slate-500 font-semibold">Periode: </span>
+                                                    <span className="font-bold text-slate-800">{roster.monthName} {roster.year}</span>
+                                                </div>
+                                                <div>
+                                                    <span className="text-slate-500 font-semibold">Total Personil: </span>
+                                                    <span className="font-bold text-slate-800">{roster.persons.length} Orang</span>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                                <span className="text-slate-500 font-semibold">Keterangan:</span>
+                                                <span className="inline-flex items-center gap-1 rounded bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-700 border border-emerald-200">
+                                                    11 = Shift Kerja (11 Jam)
+                                                </span>
+                                                <span className="inline-flex items-center gap-1 rounded bg-rose-50 px-2 py-0.5 text-xs font-bold text-rose-700 border border-rose-200">
+                                                    FB = Field Break / Off
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        {/* Table Grid Roster */}
+                                        <div className="flex-1 overflow-hidden">
+                                            <table className="w-full border-collapse text-[8pt]">
+                                                <thead>
+                                                    <tr className="bg-blue-800 text-white font-bold">
+                                                        <th className="border border-blue-900 px-1 py-1 text-center w-[22px]">#</th>
+                                                        <th className="border border-blue-900 px-2 py-1 text-left min-w-[120px] max-w-[170px]">
+                                                            Nama / Posisi
+                                                        </th>
+                                                        {roster.daysArray.map((day) => (
+                                                            <th key={day} className="border border-blue-900 px-0.5 py-1 text-center w-[21px]">
+                                                                {day}
+                                                            </th>
+                                                        ))}
+                                                        <th className="border border-blue-900 px-1 py-1 text-center w-[30px] bg-emerald-900">
+                                                            11
+                                                        </th>
+                                                        <th className="border border-blue-900 px-1 py-1 text-center w-[30px] bg-rose-900">
+                                                            FB
+                                                        </th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {roster.persons.map((person, pIdx) => (
+                                                        <tr key={person.id} className={pIdx % 2 === 1 ? "bg-slate-50" : "bg-white"}>
+                                                            <td className="border border-slate-300 px-1 py-0.5 text-center text-slate-600 font-mono">
+                                                                {pIdx + 1}
+                                                            </td>
+                                                            <td className="border border-slate-300 px-2 py-0.5 font-semibold text-slate-800 truncate" title={person.name}>
+                                                                {person.name}
+                                                            </td>
+                                                            {roster.daysArray.map((day) => {
+                                                                const shift = person.shifts[day] || "11"
+                                                                const isFb = shift === "FB"
+                                                                return (
+                                                                    <td
+                                                                        key={day}
+                                                                        onClick={() => handleToggleCell(person.id, day)}
+                                                                        title="Klik untuk switch 11 / FB"
+                                                                        className={`border border-slate-300 px-0.5 py-0.5 text-center font-bold text-[7pt] cursor-pointer select-none transition-colors ${
+                                                                            isFb
+                                                                                ? "bg-rose-50 text-rose-700 hover:bg-rose-100"
+                                                                                : "bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                                                                        }`}
+                                                                    >
+                                                                        {shift}
+                                                                    </td>
+                                                                )
+                                                            })}
+                                                            <td className="border border-slate-300 px-1 py-0.5 text-center font-bold text-emerald-800 bg-emerald-50/60">
+                                                                {person.total11}
+                                                            </td>
+                                                            <td className="border border-slate-300 px-1 py-0.5 text-center font-bold text-rose-700 bg-rose-50/60">
+                                                                {person.totalFb}
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                    {/* Summary Row */}
+                                                    <tr className="bg-slate-100 font-bold text-slate-800 border-t-2 border-slate-400">
+                                                        <td colSpan={2} className="border border-slate-300 px-2 py-1 text-right text-[7.5pt]">
+                                                            TOTAL SHIFT / HARI
+                                                        </td>
+                                                        {roster.daysArray.map((day) => {
+                                                            const count11 = roster.persons.filter((p) => p.shifts[day] === "11").length
+                                                            return (
+                                                                <td key={day} className="border border-slate-300 px-0.5 py-1 text-center text-[7pt] text-emerald-800">
+                                                                    {count11}
+                                                                </td>
+                                                            )
+                                                        })}
+                                                        <td className="border border-slate-300 px-1 py-1 text-center text-emerald-800 bg-emerald-100">
+                                                            {roster.totalAll11}
+                                                        </td>
+                                                        <td className="border border-slate-300 px-1 py-1 text-center text-rose-800 bg-rose-100">
+                                                            {roster.totalAllFb}
+                                                        </td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+
+                                        {/* Footer Signatures */}
+                                        <div className="mt-2.5 pt-2 border-t border-slate-200 flex justify-between items-end text-xs text-slate-600">
+                                            <div>
+                                                <p className="text-[9px] text-slate-400 italic">
+                                                    * Klik angka pada sel untuk switch antara shift "11" dan "FB" sebelum print/download PDF.
+                                                </p>
+                                            </div>
+                                            <div className="flex gap-10 text-center text-[9.5px]">
+                                                <div>
+                                                    <p className="font-semibold text-slate-700">Dibuat Oleh,</p>
+                                                    <div className="h-7" />
+                                                    <p className="border-t border-slate-400 pt-0.5 font-bold text-slate-900">{quotation.salesPerson?.name || "Site Coordinator"}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="font-semibold text-slate-700">Disetujui Oleh,</p>
+                                                    <div className="h-7" />
+                                                    <p className="border-t border-slate-400 pt-0.5 font-bold text-slate-900">{quotation.attn || quotation.customer.name}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )
                         })()}
                     </div>
                 </div>

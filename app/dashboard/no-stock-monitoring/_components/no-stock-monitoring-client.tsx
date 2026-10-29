@@ -28,6 +28,9 @@ import {
     getMonitoringDashboardMetrics,
     getPoAgingUrgency,
     groupMonitoringByItem,
+    matchesPrPoFilter,
+    PR_PO_FILTER_OPTIONS,
+    type PrPoFilterValue,
 } from "@/lib/no-stock-monitoring"
 import type { ItemGroupSummary } from "@/lib/no-stock-monitoring"
 import { Badge } from "@/components/ui/badge"
@@ -514,6 +517,7 @@ export function NoStockMonitoringClient({
     const [customerFilter, setCustomerFilter] = useState("all")
     const [salesFilter, setSalesFilter] = useState("all")
     const [materialFilter, setMaterialFilter] = useState("all")
+    const [prPoFilter, setPrPoFilter] = useState<PrPoFilterValue>("all")
     const [selectedItemIds, setSelectedItemIds] = useState<Set<number>>(new Set())
     const [managingItem, setManagingItem] = useState<MonitoringItem | null>(null)
     const [allocationDialogOpen, setAllocationDialogOpen] = useState(false)
@@ -564,7 +568,8 @@ export function NoStockMonitoringClient({
                 (!query || searchable.includes(query)) &&
                 (customerFilter === "all" || row.customerName === customerFilter) &&
                 (salesFilter === "all" || row.salesPersonName === salesFilter) &&
-                (materialFilter === "all" || row.materialNumber === materialFilter)
+                (materialFilter === "all" || row.materialNumber === materialFilter) &&
+                matchesPrPoFilter(row, prPoFilter)
             )
         })
 
@@ -577,7 +582,7 @@ export function NoStockMonitoringClient({
         }
 
         return rows
-    }, [agingSortOrder, customerFilter, materialFilter, salesFilter, search, visibleRows])
+    }, [agingSortOrder, customerFilter, materialFilter, prPoFilter, salesFilter, search, visibleRows])
 
     // Grouping calculations
     const groupedItems = useMemo(() => {
@@ -683,6 +688,7 @@ export function NoStockMonitoringClient({
         setCustomerFilter("all")
         setSalesFilter("all")
         setMaterialFilter("all")
+        setPrPoFilter("all")
     }
 
     const toggleItem = (itemId: number) => {
@@ -849,7 +855,17 @@ export function NoStockMonitoringClient({
                         <FilterSelect label="Customer" value={customerFilter} options={customers} onChange={setCustomerFilter} />
                         <FilterSelect label="Sales" value={salesFilter} options={salesPeople} onChange={setSalesFilter} />
                         <FilterSelect label="Barang" value={materialFilter} options={materials} onChange={setMaterialFilter} />
-                        {(search || customerFilter !== "all" || salesFilter !== "all" || materialFilter !== "all") && (
+                        <select
+                            aria-label="Filter Status PR/PO"
+                            value={prPoFilter}
+                            onChange={(event) => setPrPoFilter(event.target.value as PrPoFilterValue)}
+                            className="h-9 rounded-md border border-slate-200 bg-background px-3 text-xs shadow-xs focus:border-indigo-500 focus:outline-none"
+                        >
+                            {PR_PO_FILTER_OPTIONS.map((option) => (
+                                <option key={option.value} value={option.value}>{option.label}</option>
+                            ))}
+                        </select>
+                        {(search || customerFilter !== "all" || salesFilter !== "all" || materialFilter !== "all" || prPoFilter !== "all") && (
                             <Button type="button" variant="ghost" size="sm" onClick={clearFilters} className="h-9 text-xs">
                                 <X className="mr-1 h-3.5 w-3.5" />
                                 Reset

@@ -1,7 +1,8 @@
-﻿import { toast } from "sonner"
+import { toast } from "sonner"
 import type { Customer, Product } from "@/lib/types"
 import { normalizeQuotationText } from "@/lib/quotation-text"
 import { resolveUploadDocumentUrl } from "@/lib/upload-url"
+import { generateRosterFromQuotation } from "./quotation-roster-helper"
 
 interface QuotationPdfData {
     quotationNumber: string | null
@@ -217,6 +218,8 @@ export async function generateQuotationPdf(
     quotation: QuotationPdfData,
     options?: {
         mergeAttachments?: boolean
+        includeRoster?: boolean
+        rosterOverrides?: Record<string, Record<number, "11" | "FB">>
     },
 ) {
     try {
@@ -607,6 +610,115 @@ export async function generateQuotationPdf(
             includedAttachments.forEach((attachment, index) => {
                 doc.text(`${index + 1}. ${attachment.title} (${attachment.fileName})`, 20, lineY)
                 lineY += 6
+            })
+        }
+
+        // Roster Manpower Page (Landscape A4: 297mm x 210mm)
+        if (options?.includeRoster) {
+            doc.addPage("a4", "landscape")
+
+            // Title & Info
+            doc.setFont("helvetica", "bold")
+            doc.setFontSize(14)
+            doc.setTextColor(30, 64, 175) // blue-800
+            doc.text("JADWAL ROSTER KERJA (OPERATION ROSTER PLAN)", 14, 16)
+
+            doc.setFontSize(8.5)
+            doc.setFont("helvetica", "normal")
+            doc.setTextColor(darkText[0], darkText[1], darkText[2])
+
+            const roster = generateRosterFromQuotation(quotation.quotationDate, quotation.items, options?.rosterOverrides)
+
+            // Sub-info box
+            doc.text(`Quotation No : ${quotation.quotationNumber || "DRAFT"}`, 14, 23)
+            doc.text(`Customer     : ${quotation.customer.name}`, 14, 28)
+            doc.text(`Periode      : ${roster.monthName} ${roster.year}`, 150, 23)
+            doc.text(`Total Personil: ${roster.persons.length} Orang`, 150, 28)
+
+            // Legend badge
+            doc.setFont("helvetica", "bold")
+            doc.setTextColor(22, 101, 52) // green-800
+            doc.text("Keterangan: 11 = Shift Kerja (11 Jam)   |   FB = Field Break / Off", 14, 34)
+
+            // Table columns: #, NAMA / POSISI, 1..daysInMonth, Total 11, Total FB
+            const headCols = ["#", "NAMA / POSISI", ...roster.daysArray.map((d) => d.toString()), "11", "FB"]
+
+            const rosterBody = roster.persons.map((person, idx) => {
+                const dayCols = roster.daysArray.map((d) => person.shifts[d] || "11")
+                return [
+                    (idx + 1).toString(),
+                    person.name,
+                    ...dayCols,
+                    person.total11.toString(),
+                    person.totalFb.toString(),
+                ]
+            })
+
+            // Summary row at bottom
+            const summaryRow = [
+                "",
+                "TOTAL SHIFT / HARI",
+                ...roster.daysArray.map((d) => {
+                    const count11 = roster.persons.filter((p) => p.shifts[d] === "11").length
+                    return count11.toString()
+                }),
+                roster.totalAll11.toString(),
+                roster.totalAllFb.toString(),
+            ]
+
+            const dayColWidth = Math.max(4.5, (270 - 48) / (roster.daysInMonth + 3))
+
+            const columnStylesConfig: Record<number, { cellWidth?: number; halign?: "center" | "left" | "right" }> = {
+                0: { cellWidth: 8, halign: "center" },
+                1: { cellWidth: 42, halign: "left" },
+            }
+
+            roster.daysArray.forEach((_, dIdx) => {
+                columnStylesConfig[dIdx + 2] = { cellWidth: dayColWidth, halign: "center" }
+            })
+
+            columnStylesConfig[roster.daysInMonth + 2] = { cellWidth: 12, halign: "center" }
+            columnStylesConfig[roster.daysInMonth + 3] = { cellWidth: 12, halign: "center" }
+
+            autoTable(doc, {
+                startY: 37,
+                margin: { left: 14, right: 14 },
+                head: [headCols],
+                body: [...rosterBody, summaryRow],
+                theme: "grid",
+                headStyles: {
+                    fillColor: [30, 64, 175],
+                    textColor: [255, 255, 255],
+                    fontSize: 7.5,
+                    fontStyle: "bold",
+                    halign: "center",
+                    cellPadding: 1.5,
+                },
+                bodyStyles: {
+                    fontSize: 7,
+                    cellPadding: 1.5,
+                    textColor: [30, 41, 59],
+                },
+                columnStyles: columnStylesConfig,
+                didParseCell: (data) => {
+                    if (data.section === "body") {
+                        const isLastRow = data.row.index === rosterBody.length
+                        if (isLastRow) {
+                            data.cell.styles.fontStyle = "bold"
+                            data.cell.styles.fillColor = [241, 245, 249]
+                        } else if (data.column.index >= 2 && data.column.index < roster.daysInMonth + 2) {
+                            const val = data.cell.raw
+                            if (val === "FB") {
+                                data.cell.styles.textColor = [185, 28, 28]
+                                data.cell.styles.fontStyle = "bold"
+                                data.cell.styles.fillColor = [254, 242, 242]
+                            } else if (val === "11") {
+                                data.cell.styles.textColor = [22, 101, 52]
+                                data.cell.styles.fontStyle = "bold"
+                            }
+                        }
+                    }
+                },
             })
         }
 

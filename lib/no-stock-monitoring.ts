@@ -39,6 +39,42 @@ export function exceedsOutstandingAllocation(existingQuantities: number[], candi
     return existingQuantities.reduce((sum, quantity) => sum + quantity, 0) + candidateQty > outstandingQty
 }
 
+export type PrPoFilterValue = "all" | "has-pr" | "no-pr" | "has-po" | "no-po"
+
+export const PR_PO_FILTER_OPTIONS: Array<{ value: PrPoFilterValue; label: string }> = [
+    { value: "all", label: "Semua Status PR/PO" },
+    { value: "has-pr", label: "Sudah Ada PR" },
+    { value: "no-pr", label: "Belum Ada PR" },
+    { value: "has-po", label: "Sudah Ada PO Vendor" },
+    { value: "no-po", label: "Belum Ada PO Vendor" },
+]
+
+export function itemHasPr(item: BaseMonitoringItem) {
+    return item.allocations.some((allocation) => normalizePoValue(allocation.eprPrNumber) !== "")
+}
+
+export function itemHasVendorPo(item: BaseMonitoringItem) {
+    return item.allocations.some(
+        (allocation) =>
+            normalizePoValue(allocation.vendorPoNumber) !== "" || normalizePoValue(allocation.eprVendorPoNumber) !== ""
+    )
+}
+
+export function matchesPrPoFilter<T extends BaseMonitoringItem>(item: T, filter: PrPoFilterValue): boolean {
+    switch (filter) {
+        case "all":
+            return true
+        case "has-pr":
+            return itemHasPr(item)
+        case "no-pr":
+            return !itemHasPr(item)
+        case "has-po":
+            return itemHasVendorPo(item)
+        case "no-po":
+            return !itemHasVendorPo(item)
+    }
+}
+
 export interface BaseMonitoringItem {
     orderId: number
     invoiceNumber: string | null

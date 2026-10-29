@@ -8,6 +8,7 @@ import {
     getMonitoringDashboardMetrics,
     getPoAgingUrgency,
     groupMonitoringByItem,
+    matchesPrPoFilter,
 } from "@/lib/no-stock-monitoring"
 
 describe("No Stock Monitoring statuses", () => {
@@ -130,5 +131,30 @@ describe("No Stock Monitoring statuses", () => {
 
         // Invalid date -> 0 days
         expect(calculatePoAgingDays(null, null, referenceDate)).toBe(0)
+    })
+
+    it("filters items by PR/PO procurement status", () => {
+        const noAllocation = {
+            orderId: 1, invoiceNumber: "SO-001", customerPo: null, customerName: "PT Maju", salesPersonName: "Budi",
+            itemId: 101, materialNumber: "MAT-A", materialDescription: "A", outstandingQty: 10, availableStock: 0,
+            allocations: [], status: "Belum Diisi" as const,
+        }
+        const prOnly = {
+            ...noAllocation, itemId: 102,
+            allocations: [{ eprPrNumber: "PR-100", vendorPoNumber: "", allocatedQty: 5, status: "PR Terhubung" as const }],
+            status: "PR Terhubung" as const,
+        }
+        const prAndPo = {
+            ...noAllocation, itemId: 103,
+            allocations: [{ eprPrNumber: "PR-101", vendorPoNumber: "PO-V-1", allocatedQty: 5, status: "PO Terbit" as const }],
+            status: "PO Terbit" as const,
+        }
+        const items = [noAllocation, prOnly, prAndPo]
+
+        expect(items.filter((item) => matchesPrPoFilter(item, "all"))).toHaveLength(3)
+        expect(items.filter((item) => matchesPrPoFilter(item, "has-pr")).map((i) => i.itemId)).toEqual([102, 103])
+        expect(items.filter((item) => matchesPrPoFilter(item, "no-pr")).map((i) => i.itemId)).toEqual([101])
+        expect(items.filter((item) => matchesPrPoFilter(item, "has-po")).map((i) => i.itemId)).toEqual([103])
+        expect(items.filter((item) => matchesPrPoFilter(item, "no-po")).map((i) => i.itemId)).toEqual([101, 102])
     })
 })
