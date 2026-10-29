@@ -18,7 +18,7 @@ ENV NODE_ENV=production
 ENV NODE_OPTIONS="--max-old-space-size=4096"
 
 # Build using webpack (without --turbopack) for stable, memory-efficient Docker builds
-RUN npx next build
+RUN npx next build --webpack
 
 # Stage 3: Runner
 FROM node:22-bookworm-slim AS runner

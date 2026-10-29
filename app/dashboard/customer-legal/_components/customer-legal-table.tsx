@@ -39,8 +39,8 @@ import {
 import { usePermissions } from "@/hooks/use-permissions";
 import {
     deleteCustomerLegalDocument,
-    getDocumentCompleteness,
 } from "@/app/actions/customer-legal";
+import { getDocumentCompleteness } from "@/lib/customer-legal";
 import { toast } from "sonner";
 import {
     Search,
