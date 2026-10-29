@@ -11,6 +11,8 @@ import {
     ClipboardList,
     Lock,
     Wrench,
+    BookOpen,
+    Scale,
     type LucideIcon
 } from "lucide-react"
 
@@ -46,6 +48,17 @@ export const navigationConfig: NavSection[] = [
                 url: "/dashboard/portal",
                 icon: LayoutGrid,
                 resource: "portal-items",
+            },
+        ],
+    },
+    {
+        title: "Legal & Compliance",
+        items: [
+            {
+                title: "Data Legal Customer",
+                url: "/dashboard/customer-legal",
+                icon: Scale,
+                resource: "customer-legal",
             },
         ],
     },
@@ -143,6 +156,11 @@ export const navigationConfig: NavSection[] = [
                         title: "Fleet Management",
                         url: "/dashboard/fleet-management",
                         resource: "fleet-management",
+                    },
+                    {
+                        title: "Fleet Tracking",
+                        url: "/dashboard/fleet-tracking",
+                        resource: "fleet-tracking",
                     },
                     {
                         title: "Stock Transfer",
@@ -562,6 +580,12 @@ export const navigationConfig: NavSection[] = [
                         resource: "reports",
                     },
                 ],
+            },
+            {
+                title: "Documentation & Blueprint",
+                url: "/dashboard/blueprint",
+                icon: BookOpen,
+                resource: "system-blueprint",
             },
             {
                 title: "Admin",

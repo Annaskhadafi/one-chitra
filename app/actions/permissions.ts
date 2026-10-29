@@ -73,7 +73,8 @@ export async function syncPermissions() {
         resources.add("customer-segmentation")
         resources.add("customers")
         resources.add("forecasts")
-        resources.add("forms-surveys")
+        resources.add("forms-surveys");
+        resources.add("customer-legal")
 
         // Also add standard resources that might not be in nav or are special
         // resources.add('users') // Already in nav

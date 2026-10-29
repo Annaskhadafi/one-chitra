@@ -67,6 +67,16 @@ export { salesOrders, salesOrderItems, salesOrdersRelations, salesOrderItemsRela
 export { goodReceiveManual, goodReceiveManualItems, goodReceiveManualRelations, goodReceiveManualItemsRelations } from "./good-receive-manual";
 export { fleetDrivers, fleetVehicles } from "./fleet";
 export { fleetTrips, fleetTripsRelations } from "./fleet-trips";
+export {
+    geofences,
+    vehicleTelemetryStates,
+    vehicleTelemetryLogs,
+    vehicleGeofenceEvents,
+    geofencesRelations,
+    vehicleTelemetryStatesRelations,
+    vehicleTelemetryLogsRelations,
+    vehicleGeofenceEventsRelations,
+} from "./fleet-telematics";
 // Old historyOrders removed, aliased from sap.ts below
 export { historyOrders as oldHistoryOrdersTable } from "./history-orders";
 export { salesDocuments } from "./sales-documents";
@@ -217,6 +227,11 @@ export {
     ragFeedbacksRelations,
 } from "./rag-growth";
 export { businessCards } from "./business-cards";
+export {
+    customerLegalDocuments,
+    type CustomerLegalDocument,
+    type NewCustomerLegalDocument,
+} from "./customer-legal";
 
 // Core Auth Table Relations
 import { salesDocuments } from "./sales-documents";
