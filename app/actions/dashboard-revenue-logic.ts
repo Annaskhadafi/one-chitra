@@ -1,11 +1,12 @@
 import { db } from "@/db"
 import { salesRevenueSap, zmc9StockSap } from "@/db/schema/sap"
 import { forecasts } from "@/db/schema/forecasts"
-import { eq, sql, and, isNotNull, or, isNull, notIlike, ilike, not } from "drizzle-orm"
+import { eq, sql, and, isNotNull, or, isNull, notIlike, ilike, not, inArray } from "drizzle-orm"
 import { settings } from "@/db/schema/settings"
 import { normalizeRevenueReportConfig, type RevenueReportConfig } from "@/lib/revenue-report-config"
 import { mergeRevenueTypeTotals } from "@/lib/revenue-type"
 import { salesRevenueCountableQty } from "@/lib/sales-revenue-sql"
+import { getOtherBrandRankingPeriod, MVC_COMPANIES } from "@/lib/revenue-forecast-chart"
 
 export interface DashboardRevenueFilters {
     period: string; // MM.YYYY or YYYY
@@ -38,12 +39,6 @@ export async function fetchDashboardRevenueForecast(filters: DashboardRevenueFil
     const periodStr = filters.period;
     const isYearlyView = !periodStr.includes('.');
     const [, year] = isYearlyView ? ["", periodStr] : periodStr.split('.');
-    const requestedPeriodKey = isYearlyView
-        ? Number(year) * 12 + 11
-        : Number(year) * 12 + Number(periodStr.split('.')[0]) - 1;
-    const now = new Date();
-    const currentPeriodKey = now.getFullYear() * 12 + now.getMonth();
-    const combineMaFq = requestedPeriodKey >= currentPeriodKey;
     const { startDate, endDate } = getPeriodBounds(periodStr);
     const rangeDateFilter = and(
         sql`${salesRevenueSap.billingDate} >= ${startDate}`,
@@ -105,7 +100,7 @@ export async function fetchDashboardRevenueForecast(filters: DashboardRevenueFil
     const revenueService = Number(serviceData[0]?.total || 0);
 
     // ─── C. Revenue PA (Product Accessories) ───────────────────────────────
-    const paMtGrpFilter = not(primeProdMatGrpFilter);
+    const paMtGrpFilter = not(primeProdMatGrpFilter!);
 
     const paData = await db.select({
         total: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInLocCurr}, 0))`
@@ -253,11 +248,59 @@ export async function fetchDashboardRevenueForecast(filters: DashboardRevenueFil
     const forecastYtdData = await db.select().from(forecasts).where(
         and(
             ilike(forecasts.period, `%${year}`),
-            eq(forecasts.targetName, 'Consolidate')
+            inArray(forecasts.targetName, ['Consolidate', 'Tire Other Brand', 'MVC'])
         )
     );
     const forecastMap = new Map<string, number>();
-    forecastYtdData.forEach(f => forecastMap.set(f.period || "", f.amount));
+    forecastYtdData.forEach(f => forecastMap.set(`${f.targetName}:${f.period}`, f.amount));
+
+    const tireOtherBrandFilter = and(
+        ilike(salesRevenueSap.revType, 'Trading'),
+        sql`UPPER(BTRIM(${salesRevenueSap.matGrp1Desc})) = 'CP TIRE'`,
+        sql`NULLIF(BTRIM(${salesRevenueSap.matGrp2Desc}), '') IS NOT NULL`,
+        // SAP stores the brand as "MICHELIN", not "BRAND MICHELIN".
+        notIlike(salesRevenueSap.matGrp2Desc, '%MICHELIN%'),
+    );
+    const mvcFilter = inArray(sql<string>`UPPER(BTRIM(${salesRevenueSap.customerName}))`, [...MVC_COMPANIES]);
+    const segmentRevenue = await db.select({
+        month: sql<string>`to_char(${salesRevenueSap.billingDate}, 'MM.YYYY')`,
+        tireOtherBrand: sql<number>`SUM(CASE WHEN ${tireOtherBrandFilter} THEN COALESCE(${salesRevenueSap.revenueInLocCurr}, 0) ELSE 0 END)`,
+        mvc: sql<number>`SUM(CASE WHEN ${mvcFilter} THEN COALESCE(${salesRevenueSap.revenueInLocCurr}, 0) ELSE 0 END)`,
+    }).from(salesRevenueSap)
+        .where(baseFilterYTD)
+        .groupBy(sql`to_char(${salesRevenueSap.billingDate}, 'MM.YYYY')`);
+    const segmentRevenueMap = new Map(segmentRevenue.map(row => [row.month, row]));
+    const segmentChart = (targetName: 'Tire Other Brand' | 'MVC', revenueKey: 'tireOtherBrand' | 'mvc') =>
+        Array.from({ length: 12 }, (_, index) => {
+            const month = `${String(index + 1).padStart(2, '0')}.${year}`;
+            return {
+                name: month,
+                revenue: Number(segmentRevenueMap.get(month)?.[revenueKey] || 0),
+                forecast: forecastMap.get(`${targetName}:${month}`) || 0,
+            };
+        });
+    const tireOtherBrandChart = segmentChart('Tire Other Brand', 'tireOtherBrand');
+    const mvcChart = segmentChart('MVC', 'mvc');
+    const rankingPeriod = getOtherBrandRankingPeriod(periodStr, tireOtherBrandChart);
+    const rankingFilter = and(
+        baseFilterYTD,
+        tireOtherBrandFilter,
+        sql`to_char(${salesRevenueSap.billingDate}, 'MM.YYYY') = ${rankingPeriod}`,
+    );
+    const rankingRevenue = sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInLocCurr}, 0))`;
+    const [topOtherBrands, topOtherBrandCustomers] = await Promise.all([
+        db.select({ name: salesRevenueSap.matGrp2Desc, revenue: rankingRevenue })
+            .from(salesRevenueSap).where(and(rankingFilter, notIlike(salesRevenueSap.matGrp2Desc, 'OTHERS')))
+            .groupBy(salesRevenueSap.matGrp2Desc)
+            .orderBy(sql`SUM(COALESCE(${salesRevenueSap.revenueInLocCurr}, 0)) DESC`).limit(5),
+        db.select({ name: salesRevenueSap.customerName, revenue: rankingRevenue })
+            .from(salesRevenueSap).where(and(rankingFilter, isNotNull(salesRevenueSap.customerName)))
+            .groupBy(salesRevenueSap.customerName)
+            .orderBy(sql`SUM(COALESCE(${salesRevenueSap.revenueInLocCurr}, 0)) DESC`).limit(5),
+    ]);
+    const selectedRevenue = (chart: typeof tireOtherBrandChart) => isYearlyView
+        ? chart.reduce((total, month) => total + month.revenue, 0)
+        : chart.find(month => month.name === periodStr)?.revenue || 0;
 
     // ─── L. Top 5 Customer by Revenue in Local Currency ───────────────────
     const topCustomersLocCurr = await db.select({
@@ -278,7 +321,7 @@ export async function fetchDashboardRevenueForecast(filters: DashboardRevenueFil
         : ytdData.map(y => ({
             name: y.month,
             revenue: Number(y.rev),
-            forecast: forecastMap.get(y.month || "") || 0,
+            forecast: forecastMap.get(`Consolidate:${y.month}`) || 0,
         }))
 
     return {
@@ -286,7 +329,6 @@ export async function fetchDashboardRevenueForecast(filters: DashboardRevenueFil
         data: {
             period: periodStr,
             isYearlyView,
-            combineMaFq,
             targets: {
                 consolidate: { revenue: revenueConsolidate, forecast: forecastConsolidate },
                 primeProduct: { revenue: revenuePrimeProduct, forecast: forecastPrime },
@@ -300,13 +342,14 @@ export async function fetchDashboardRevenueForecast(filters: DashboardRevenueFil
                 sis: { revenue: revenueSIS, forecast: targetMap.get("SIS") || 0 },
                 ma_oc: { revenue: salesmanRevenue.ma_oc, forecast: targetMap.get("MA OC") || 0 },
                 ma_ws: { revenue: salesmanRevenue.ma_ws, forecast: targetMap.get("MA WIS") || targetMap.get("MA WS") || 0 },
-                ma_fq: { revenue: salesmanRevenue.ma_fq, forecast: targetMap.get("MA FQ") || 0 },
                 ma_br: { revenue: salesmanRevenue.ma_br, forecast: targetMap.get("MA BUR") || targetMap.get("MA BR") || 0 },
                 ma_ag: {
-                    revenue: salesmanRevenue.ma_ag + (combineMaFq ? salesmanRevenue.ma_fq : 0),
-                    forecast: (targetMap.get("MA AG") || 0) + (combineMaFq ? (targetMap.get("MA FQ") || 0) : 0)
+                    revenue: salesmanRevenue.ma_ag + salesmanRevenue.ma_fq,
+                    forecast: (targetMap.get("MA AG") || 0) + (targetMap.get("MA FQ") || 0)
                 },
                 ma_mc: { revenue: salesmanRevenue.ma_mc, forecast: targetMap.get("MA MIC") || targetMap.get("MA MC") || 0 },
+                tireOtherBrand: { revenue: selectedRevenue(tireOtherBrandChart), forecast: targetMap.get('Tire Other Brand') || 0 },
+                mvc: { revenue: selectedRevenue(mvcChart), forecast: targetMap.get('MVC') || 0 },
             },
             materials: materialsData.map(m => ({
                 desc: m.materialDesc || "Unknown",
@@ -319,7 +362,16 @@ export async function fetchDashboardRevenueForecast(filters: DashboardRevenueFil
             })),
             revTypes: finalRevTypeTable,
             matGroups: matGrp1Data.map(m => ({ desc: m.desc || "Unknown", revenue: Number(m.total) })),
-            ytdChart: yearlyChartData
+            ytdChart: yearlyChartData,
+            tireOtherBrandChart,
+            mvcChart,
+            tireOtherBrandAnnualForecast: forecastMap.get(`Tire Other Brand:${year}`),
+            mvcAnnualForecast: forecastMap.get(`MVC:${year}`),
+            tireOtherBrandRanking: {
+                period: rankingPeriod,
+                brands: topOtherBrands.map(item => ({ name: item.name || "Unknown", revenue: Number(item.revenue) })),
+                customers: topOtherBrandCustomers.map(item => ({ name: item.name || "Unknown", revenue: Number(item.revenue) })),
+            },
         }
     };
 }

@@ -38,7 +38,6 @@ export default async function RevenueSnapshotPage({
     const defaultData: SnapshotRevenueData = {
         period,
         isYearlyView: false,
-        combineMaFq: false,
         targets: {
             consolidate: { revenue: 0, forecast: 0 },
             primeProduct: { revenue: 0, forecast: 0 },
@@ -49,15 +48,18 @@ export default async function RevenueSnapshotPage({
             sis: { revenue: 0, forecast: 0 },
             ma_oc: { revenue: 0, forecast: 0 },
             ma_ws: { revenue: 0, forecast: 0 },
-            ma_fq: { revenue: 0, forecast: 0 },
             ma_br: { revenue: 0, forecast: 0 },
             ma_ag: { revenue: 0, forecast: 0 },
-            ma_mc: { revenue: 0, forecast: 0 }
+            ma_mc: { revenue: 0, forecast: 0 },
+            tireOtherBrand: { revenue: 0, forecast: 0 },
+            mvc: { revenue: 0, forecast: 0 }
         },
         materials: [],
         revTypes: [],
         matGroups: [],
-        ytdChart: [] as Array<{ name: string; revenue: number; forecast: number }>
+        ytdChart: [] as Array<{ name: string; revenue: number; forecast: number }>,
+        tireOtherBrandChart: [],
+        mvcChart: []
     }
 
     const data = response.success && response.data ? response.data : defaultData

@@ -5,15 +5,16 @@ import { useMemo, useRef, useState } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { Download } from "lucide-react"
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell, Legend, LabelList } from "recharts"
+import { ResponsiveContainer, BarChart, ComposedChart, Line, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell, Legend, LabelList } from "recharts"
+import { buildSegmentTrendData, MVC_COMPANIES } from "@/lib/revenue-forecast-chart"
 
 interface TargetData { revenue: number; forecast: number }
+interface RankedRevenue { name: string; revenue: number }
 
 interface RevenueClientProps {
     initialData: {
         period: string
         isYearlyView: boolean
-        combineMaFq: boolean
         targets: {
             consolidate: TargetData
             primeProduct: TargetData
@@ -24,15 +25,21 @@ interface RevenueClientProps {
             sis: TargetData
             ma_oc: TargetData
             ma_ws: TargetData
-            ma_fq: TargetData
             ma_br: TargetData
             ma_ag: TargetData
             ma_mc: TargetData
+            tireOtherBrand: TargetData
+            mvc: TargetData
         }
         materials: Array<{ desc: string; revenue: number; qty: number }>
         revTypes: Array<{ type: string; total: number }>
         matGroups: Array<{ desc: string; revenue: number }>
         ytdChart: Array<{ name: string; revenue: number; forecast: number }>
+        tireOtherBrandChart: Array<{ name: string; revenue: number; forecast: number }>
+        mvcChart: Array<{ name: string; revenue: number; forecast: number }>
+        tireOtherBrandAnnualForecast?: number
+        mvcAnnualForecast?: number
+        tireOtherBrandRanking?: { period: string; brands: RankedRevenue[]; customers: RankedRevenue[] }
     }
     selectedPeriod: string
     inventoryData?: { jasum: number; kalEi: number; singapore: number; total: number } | null
@@ -369,11 +376,127 @@ function InventoryPieChart({ data }: { data: { jasum: number; kalEi: number; sin
 
 import { toast } from "sonner"
 
+function SegmentTrendChart({ title, summary, period, data, annualForecast, companies, ranking, isExporting }: {
+    title: string
+    summary: TargetData
+    period: string
+    data: Array<{ name: string; revenue: number; forecast: number }>
+    annualForecast?: number
+    companies?: readonly string[]
+    ranking?: { period: string; brands: RankedRevenue[]; customers: RankedRevenue[] }
+    isExporting: boolean
+}) {
+    const chartData = buildSegmentTrendData(data, annualForecast)
+    const achievement = pct(summary.revenue, summary.forecast)
+    const gaugeFill = Math.min(achievement, 100)
+    const gaugeColor = achievement >= 100 ? "#10b981" : achievement >= 80 ? "#3b82f6" : achievement >= 50 ? "#f59e0b" : "#ef4444"
+    const compact = (value: number) => new Intl.NumberFormat("id-ID", { maximumFractionDigits: 0 }).format(value / 1000)
+    const renderRevenueLabel = ({ x, y, width, height, value }: {
+        x?: number | string; y?: number | string; width?: number | string; height?: number | string; value?: number | string
+    }) => {
+        const barX = Number(x), barY = Number(y), barWidth = Number(width), barHeight = Number(height)
+        const amount = Number(value)
+        if (!amount || !Number.isFinite(barX + barY + barWidth + barHeight)) return null
+        const centerX = barX + barWidth / 2
+        const label = compact(amount * 1000)
+        return barHeight < 35
+            ? <text x={centerX} y={barY - 4} textAnchor="middle" fill="#075985" fontSize={9} fontWeight={800}>{label}</text>
+            : <text x={centerX} y={barY + barHeight / 2} transform={`rotate(-90 ${centerX} ${barY + barHeight / 2})`} textAnchor="middle" dominantBaseline="central" fill="#fff" stroke="#075985" strokeWidth={1.5} paintOrder="stroke" fontSize={10} fontWeight={800}>{label}</text>
+    }
+    return (
+        <div className="bg-card border rounded-xl overflow-hidden shadow-sm flex flex-col">
+            <div className="px-4 py-3 bg-blue-600 flex items-center justify-between gap-3">
+                <h3 className="text-xs font-bold uppercase tracking-widest text-white">{title} Revenue vs Forecast</h3>
+                <span className="text-[10px] font-semibold text-white/80">{period}</span>
+            </div>
+            <div className="flex flex-col sm:flex-row flex-1">
+            <div className="sm:w-[170px] shrink-0 flex flex-col border-b sm:border-b-0 sm:border-r p-3">
+                <div className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Revenue {period.includes(".") ? "MTD" : "YTD"}</div>
+                <div className="flex-1 relative flex flex-col justify-center items-center py-3" role="img" aria-label={`${title} ${period}: revenue ${fmt(summary.revenue)}, forecast ${fmt(summary.forecast)}, pencapaian ${achievement.toFixed(0)} persen`}>
+                    <svg viewBox="0 0 200 115" className="w-[145px] max-w-full" aria-hidden="true">
+                        <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="#e5e7eb" strokeWidth="14" strokeLinecap="round" pathLength="100" />
+                        <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke={gaugeColor} strokeWidth="14" strokeLinecap="round" pathLength="100" strokeDasharray={`${gaugeFill} 100`} />
+                        <text x="100" y="104" textAnchor="middle" fill={gaugeColor} className="text-[24px] font-black">{achievement.toFixed(0)}%</text>
+                    </svg>
+                    <div className="-mt-1 text-center text-lg font-black text-foreground" title={`Revenue: USD ${fmt(summary.revenue)}`}>
+                        USD {compact(summary.revenue)} K
+                    </div>
+                    <span className="mt-1 text-center text-[10px] text-muted-foreground">Forecast {period.includes(".") ? "MTD" : "Tahunan"} USD {fmt(summary.forecast)}</span>
+                </div>
+            </div>
+            <div className="flex-1 min-w-0 p-3 overflow-x-auto">
+                <div className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground px-1">
+                    Revenue YTD &amp; Forecast YTD{annualForecast !== undefined ? " (target tahunan ÷ 12)" : " (akumulasi target bulanan)"} · USD Thousand
+                </div>
+                <div className="h-[220px] min-w-[360px]" role="img" aria-label={`${title}: batang revenue akumulasi, garis forecast akumulasi, dan pencapaian bulanan Januari sampai Desember`}>
+                    <ResponsiveContainer width="100%" height="100%">
+                        <ComposedChart data={chartData} margin={{ top: 24, right: 5, left: 5, bottom: 2 }} barCategoryGap="23%">
+                            <XAxis dataKey="month" axisLine={false} tickLine={false} height={37} tick={({ x, y, payload }) => {
+                                const month = chartData.find(item => item.month === payload.value)
+                                return <g transform={`translate(${x},${y})`}>
+                                    <text y={10} textAnchor="middle" fill="#475569" fontSize={9}>{payload.value}</text>
+                                    <text y={23} textAnchor="middle" fill="#64748b" fontSize={8}>{month?.forecast ? `${month.achievement.toFixed(0)}%` : "–"}</text>
+                                </g>
+                            }} />
+                            <YAxis hide />
+                            <Tooltip formatter={(value: number, name: string) => [`USD ${fmt(value * 1000)}`, name]} labelFormatter={(value) => value} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+                            <Bar dataKey="revenueYtdK" name="Revenue YTD" fill="#0891b2" radius={[6, 6, 0, 0]} maxBarSize={24} isAnimationActive={!isExporting}>
+                                <LabelList dataKey="revenueYtdK" content={renderRevenueLabel} />
+                            </Bar>
+                            <Line dataKey="forecastYtdK" name="Forecast YTD" stroke="#dc2626" strokeWidth={2.5} dot={{ r: 2 }} isAnimationActive={!isExporting}>
+                                <LabelList dataKey="forecastYtdK" position="top" formatter={(value: number) => value ? compact(value * 1000) : ""} style={{ fontSize: 10, fill: "#7f1d1d", fontWeight: 800, stroke: "#fff", strokeWidth: 3, strokeLinejoin: "round", paintOrder: "stroke" }} />
+                            </Line>
+                        </ComposedChart>
+                    </ResponsiveContainer>
+                </div>
+                <div className="flex justify-center gap-3 pb-2 text-[9px] font-semibold text-muted-foreground">
+                    <span><i className="inline-block h-2 w-2 bg-cyan-600 mr-1" />Revenue YTD</span>
+                    <span><i className="inline-block h-0.5 w-3 bg-red-600 mr-1 align-middle" />Forecast YTD</span>
+                    <span>Pencapaian bulanan di bawah bulan</span>
+                </div>
+                {ranking && (
+                    <div className="border-t pt-2 text-[10px] text-muted-foreground">
+                        <div className="font-bold text-foreground mb-1">Top 5 Other Brand &amp; Customer · {ranking.period}</div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {[
+                                { label: "Brand", items: ranking.brands },
+                                { label: "Customer", items: ranking.customers },
+                            ].map(group => (
+                                <div key={group.label} className="min-w-0">
+                                    <div className="font-bold text-primary mb-1">{group.label}</div>
+                                    <ol className="space-y-0.5">
+                                        {group.items.length === 0 && <li>Belum ada transaksi</li>}
+                                        {group.items.map((item, index) => (
+                                            <li key={item.name} className="flex items-center justify-between gap-2" title={`${item.name} · USD ${fmt(item.revenue)}`}>
+                                                <span className="min-w-0 truncate">{index + 1}. {item.name}</span>
+                                                <span className="shrink-0 font-semibold tabular-nums">{compact(item.revenue)}K</span>
+                                            </li>
+                                        ))}
+                                    </ol>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+                {companies && (
+                    <div className="border-t px-2 py-2 text-[10px] text-muted-foreground">
+                        <div className="font-bold text-foreground mb-1">Perusahaan MVC:</div>
+                        <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-0.5 list-disc pl-4">
+                            {companies.map(company => <li key={company}>{company}</li>)}
+                        </ul>
+                    </div>
+                )}
+            </div>
+            </div>
+        </div>
+    )
+}
+
 export function RevenueClient({ initialData, selectedPeriod, inventoryData, isExporting = false }: RevenueClientProps) {
     const router = useRouter()
     const dashboardRef = useRef<HTMLDivElement>(null)
     const [isExportingJpg, setIsExportingJpg] = useState(false)
-    const { targets, materials, revTypes, matGroups, ytdChart } = initialData
+    const { targets, materials, revTypes, matGroups, ytdChart, tireOtherBrandChart, mvcChart } = initialData
     const periodOptions = useMemo(() => {
         const now = new Date()
         const currentYear = now.getFullYear()
@@ -536,7 +659,6 @@ export function RevenueClient({ initialData, selectedPeriod, inventoryData, isEx
                     <SalesmanCard label="MA WS" data={targets.ma_ws} isExporting={isExporting || isExportingJpg} />
                     <SalesmanCard label="MA AG" data={targets.ma_ag} isExporting={isExporting || isExportingJpg} />
                     <SalesmanCard label="MA BR" data={targets.ma_br} isExporting={isExporting || isExportingJpg} />
-                    {!initialData.combineMaFq && <SalesmanCard label="MA FQ" data={targets.ma_fq} isExporting={isExporting || isExportingJpg} />}
                     <SalesmanCard label="MA MC" data={targets.ma_mc} isExporting={isExporting || isExportingJpg} />
                 </div>
 
@@ -712,6 +834,11 @@ export function RevenueClient({ initialData, selectedPeriod, inventoryData, isEx
                         </table>
                     </div>
                 </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <SegmentTrendChart title="Tire Other Brand" summary={targets.tireOtherBrand} period={selectedPeriod} data={tireOtherBrandChart} annualForecast={initialData.tireOtherBrandAnnualForecast} ranking={initialData.tireOtherBrandRanking} isExporting={isExporting || isExportingJpg} />
+                <SegmentTrendChart title="MVC" summary={targets.mvc} period={selectedPeriod} data={mvcChart} annualForecast={initialData.mvcAnnualForecast} companies={MVC_COMPANIES} isExporting={isExporting || isExportingJpg} />
             </div>
 
             {/* ─── ROW 5: Revenue YTD Bar Chart ─────────────────────────────────── */}

@@ -37,7 +37,17 @@ const CATEGORIES = [
     {
         type: "SALESMAN",
         title: "Salesman (MA)",
-        items: ["MA OC", "MA WIS", "MA FQ", "MA BUR", "MA AG", "MA MIC"]
+        items: ["MA OC", "MA WIS", "MA BUR", "MA AG", "MA MIC"]
+    },
+    {
+        type: "PRODUCT",
+        title: "Tire Other Brand",
+        items: ["Tire Other Brand"]
+    },
+    {
+        type: "CUSTOMER",
+        title: "MVC",
+        items: ["MVC"]
     }
 ]
 
@@ -54,6 +64,8 @@ export default function ForecastDialog({ open, onOpenChange, initialData, onSucc
                 initialData.items.forEach(item => {
                     newFormData[item.targetName] = item.amount
                 })
+                // ponytail: fold legacy MA FQ forecasts into MA AG when an old period is edited.
+                newFormData["MA AG"] = Number(newFormData["MA AG"] || 0) + Number(newFormData["MA FQ"] || 0)
                 setFormData(newFormData)
             } else {
                 setPeriod("")
@@ -64,7 +76,7 @@ export default function ForecastDialog({ open, onOpenChange, initialData, onSucc
 
 
 
-    const onSubmit = async () => {
+    const onSubmit = async (divideNewTargets = false) => {
         if (!period.trim()) {
             toast.error("Period is required (e.g. 01.2026)")
             return
@@ -95,10 +107,10 @@ export default function ForecastDialog({ open, onOpenChange, initialData, onSucc
                 })
             })
 
-            const res = await saveForecastPeriod(period, itemsToSave)
+            const res = await saveForecastPeriod(period, itemsToSave, divideNewTargets)
 
             if (res.success) {
-                toast.success("Forecast saved successfully")
+                toast.success(divideNewTargets ? "Forecast tahunan disimpan dan target baru dibagi 12" : "Forecast saved successfully")
                 onSuccess()
                 onOpenChange(false)
             } else {
@@ -118,6 +130,7 @@ export default function ForecastDialog({ open, onOpenChange, initialData, onSucc
                     <DialogTitle className="text-2xl">{initialData ? "Edit" : "New"} Forecast Period</DialogTitle>
                     <DialogDescription>
                         Set sales target and forecast amounts for a specific period.
+                        {!!formData.isYearly && " Bagi 12 hanya mengisi Tire Other Brand dan MVC pada bulan yang belum terisi atau bernilai nol."}
                     </DialogDescription>
                 </DialogHeader>
 
@@ -152,7 +165,7 @@ export default function ForecastDialog({ open, onOpenChange, initialData, onSucc
                     <ScrollArea className="flex-1 min-h-0 -mx-2">
                         <div className="space-y-6 pb-32 px-2">
                             {CATEGORIES.map(category => (
-                                <div key={category.type} className="space-y-4 p-5 rounded-xl border bg-card shadow-sm">
+                                <div key={category.title} className="space-y-4 p-5 rounded-xl border bg-card shadow-sm">
                                     <div className="flex items-center gap-2 border-b border-muted pb-3">
                                         <div className="w-1.5 h-6 bg-blue-600 rounded-full shadow-sm" />
                                         <h4 className="font-bold text-base uppercase tracking-tight text-foreground">{category.title}</h4>
@@ -189,9 +202,14 @@ export default function ForecastDialog({ open, onOpenChange, initialData, onSucc
                     </ScrollArea>
                 </div>
 
-                <DialogFooter className="p-6 pt-3 border-t bg-muted/30 shrink-0">
+                <DialogFooter className="p-6 pt-3 border-t bg-muted/30 shrink-0 flex-wrap">
                     <Button variant="outline" onClick={() => onOpenChange(false)} className="font-semibold h-11 px-8">Cancel</Button>
-                    <Button onClick={onSubmit} disabled={isLoading} className="font-bold h-11 px-8 bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-200">
+                    {!!formData.isYearly && (
+                        <Button type="button" variant="secondary" onClick={() => onSubmit(true)} disabled={isLoading} className="font-bold h-11 px-5">
+                            Simpan &amp; Bagi 12
+                        </Button>
+                    )}
+                    <Button type="button" onClick={() => onSubmit(false)} disabled={isLoading} className="font-bold h-11 px-8 bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-200">
                         {isLoading ? "Saving..." : "Save Forecast"}
                     </Button>
                 </DialogFooter>

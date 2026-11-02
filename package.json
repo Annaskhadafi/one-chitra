@@ -6,7 +6,7 @@
     "node": "22"
   },
   "scripts": {
-    "dev": "next dev --turbopack",
+    "dev": "next dev --webpack",
     "build": "next build --webpack",
     "build:turbo": "next build --turbopack",
     "start": "next start",
