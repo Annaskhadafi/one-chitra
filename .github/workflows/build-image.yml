@@ -40,3 +40,14 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Deploy to Dokploy
+        env:
+          DOKPLOY_WEBHOOK_URL: ${{ secrets.DOKPLOY_WEBHOOK_URL }}
+        run: |
+          if [ -z "$DOKPLOY_WEBHOOK_URL" ]; then
+            echo "::error::Set DOKPLOY_WEBHOOK_URL in GitHub Actions secrets."
+            exit 1
+          fi
+          curl --fail-with-body --silent --show-error --max-time 30 --retry 3 \
+            --request POST "$DOKPLOY_WEBHOOK_URL"

@@ -1,5 +1,16 @@
 # Quick Setup Guide - Dokploy
 
+## Auto deploy dari GitHub Actions
+
+Workflow `.github/workflows/build-image.yml` membangun image `ghcr.io/annaskhadafi/one-chitra:latest` saat ada push ke `main`, lalu memanggil Dokploy setelah image berhasil dipush.
+
+1. Di Dokploy, buka service One Chitra → **Deployments**, aktifkan **Auto Deploy**, lalu salin **Webhook URL**.
+2. Di GitHub repo `Annaskhadafi/one-chitra`, buka **Settings → Secrets and variables → Actions**. Pastikan secret `DOKPLOY_WEBHOOK_URL` berisi URL tersebut.
+3. Pastikan service Dokploy memakai image GHCR `ghcr.io/annaskhadafi/one-chitra:latest` dan dapat menarik image dari registry. Jika Dokploy juga terhubung langsung ke GitHub untuk auto deploy, nonaktifkan pemicu langsungnya agar deploy hanya berjalan setelah image baru selesai dipush.
+4. Cek run **Build image for Dokploy** di tab GitHub Actions. Langkah **Deploy to Dokploy** harus berjalan setelah build dan push berhasil.
+
+`DOKPLOY_API_KEY` tidak dipakai pada alur webhook ini. Metode API memerlukan ID Application atau Compose di samping API key.
+
 ## Deploy Aplikasi di Dokploy
 
 File yang bisa langsung dipakai:
