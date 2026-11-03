@@ -44,7 +44,8 @@ export {
 } from "./transfers";
 export { sapSyncLogs } from "./sap-sync";
 export * from "./sap";
-export { rfidScans } from "./rfid-scans";
+export { rfidScans, rfidScansRelations } from "./rfid-scans";
+export { rfidDamagePhotos, rfidDamagePhotosRelations } from "./rfid-damage-photos";
 export { tireScans } from "./tire-scans";
 export {
     quotations,

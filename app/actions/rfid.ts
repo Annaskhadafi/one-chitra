@@ -1,7 +1,7 @@
 "use server"
 
 import { db } from "@/db"
-import { rfidScans } from "@/db/schema"
+import { rfidDamagePhotos, rfidScans } from "@/db/schema"
 import { getAuthenticatedSession } from "@/lib/rbac"
 import { eq, inArray } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
@@ -24,6 +24,7 @@ const rfidScanFormSchema = z.object({
     scanType: z.string().trim().optional(),
     tireCondition: z.string().trim().optional().nullable(),
     remarks: z.string().trim().optional().nullable(),
+    damagePhotos: z.array(z.string()).optional(),
     ekspedisi: z.string().trim().optional().nullable(),
     platTruk: z.string().trim().optional().nullable(),
     tujuan: z.string().trim().optional().nullable(),
@@ -56,6 +57,7 @@ export async function createRfidScanAction(data: RfidScanFormInput) {
             scanType: parsed.scanType || "INBOUND",
             tireCondition: parsed.tireCondition || null,
             remarks: parsed.remarks || null,
+            damagePhotos: parsed.damagePhotos || [],
             ekspedisi: parsed.ekspedisi || null,
             platTruk: parsed.platTruk || null,
             tujuan: parsed.tujuan || null,
@@ -63,6 +65,12 @@ export async function createRfidScanAction(data: RfidScanFormInput) {
             userId: session.user.id,
             scannedAt: new Date(),
         }).returning()
+
+        if (parsed.damagePhotos && parsed.damagePhotos.length > 0) {
+            await db.update(rfidDamagePhotos)
+                .set({ rfidScanId: created.id })
+                .where(inArray(rfidDamagePhotos.photoId, parsed.damagePhotos))
+        }
 
         revalidatePath("/dashboard/rfid")
         return { success: true, data: created }
@@ -107,6 +115,7 @@ export async function updateRfidScanAction(id: number, data: Partial<RfidScanFor
                 scanType: parsed.scanType !== undefined ? (parsed.scanType || "INBOUND") : existing.scanType,
                 tireCondition: parsed.tireCondition !== undefined ? (parsed.tireCondition || null) : existing.tireCondition,
                 remarks: parsed.remarks !== undefined ? (parsed.remarks || null) : existing.remarks,
+                damagePhotos: parsed.damagePhotos !== undefined ? parsed.damagePhotos : existing.damagePhotos,
                 ekspedisi: parsed.ekspedisi !== undefined ? (parsed.ekspedisi || null) : existing.ekspedisi,
                 platTruk: parsed.platTruk !== undefined ? (parsed.platTruk || null) : existing.platTruk,
                 tujuan: parsed.tujuan !== undefined ? (parsed.tujuan || null) : existing.tujuan,
@@ -114,6 +123,12 @@ export async function updateRfidScanAction(id: number, data: Partial<RfidScanFor
             })
             .where(eq(rfidScans.id, id))
             .returning()
+
+        if (parsed.damagePhotos && parsed.damagePhotos.length > 0) {
+            await db.update(rfidDamagePhotos)
+                .set({ rfidScanId: id })
+                .where(inArray(rfidDamagePhotos.photoId, parsed.damagePhotos))
+        }
 
         revalidatePath("/dashboard/rfid")
         return { success: true, data: updated }
@@ -143,7 +158,7 @@ export async function updateRfidScanTypeAction(id: number, status: "Masuk" | "Ke
         console.error("Gagal mengubah status scan RFID:", error)
         return {
             success: false,
-            error: error instanceof Error ? error.message : "Gagal mengubah status scan RFID",
+            error: error instanceof Error ? error.message : "Gagal mengubah status RFID",
         }
     }
 }
@@ -163,7 +178,7 @@ export async function toggleRfidStatusAction(id: number, linked: boolean) {
         console.error("Gagal mengubah status RFID scan:", error)
         return {
             success: false,
-            error: error instanceof Error ? error.message : "Gagal mengubah status RFID",
+            error: error instanceof Error ? error.message : "Gagal mengubah status RFID scan",
         }
     }
 }
@@ -181,7 +196,7 @@ export async function deleteRfidScanAction(id: number) {
         }
 
         revalidatePath("/dashboard/rfid")
-        return { success: true, id: deleted.id }
+        return { success: true, id: deleted.id, data: deleted }
     } catch (error) {
         console.error("Gagal menghapus RFID scan:", error)
         return {
@@ -214,6 +229,10 @@ export async function bulkDeleteRfidScansAction(ids: number[]) {
     }
 }
 
+export async function deleteMultipleRfidScansAction(ids: number[]) {
+    return bulkDeleteRfidScansAction(ids)
+}
+
 export async function getAvailableKeluarRfidScansAction(query?: { materialNumber?: string; materialDescription?: string } | string) {
     try {
         const { getAvailableKeluarRfidScans } = await import("@/lib/rfid")
@@ -243,4 +262,3 @@ export async function linkRfidScansToDeliveryAction(doNumber: string, serialNumb
         }
     }
 }
-

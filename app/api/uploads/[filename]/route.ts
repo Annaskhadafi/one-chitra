@@ -91,16 +91,25 @@ export async function GET(
     request: Request,
     { params }: { params: Promise<{ filename: string }> }
 ) {
-    const session = await requireApiSession(request.headers);
-    if (!session) {
-        return new NextResponse("Unauthorized", { status: 401 });
-    }
-
     const { filename: rawFilename } = await params;
     const filename = extractUploadFilename(rawFilename);
 
     if (!filename) {
         return new NextResponse("File not found", { status: 404 });
+    }
+
+    const lower = filename.toLowerCase();
+    const isPublic =
+        lower.includes("damage_") ||
+        lower.startsWith("damage-") ||
+        lower.startsWith("rfid-") ||
+        lower.includes("_damage_");
+
+    if (!isPublic) {
+        const session = await requireApiSession(request.headers);
+        if (!session) {
+            return new NextResponse("Unauthorized", { status: 401 });
+        }
     }
 
     try {

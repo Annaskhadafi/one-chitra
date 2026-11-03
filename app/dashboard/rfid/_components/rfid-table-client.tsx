@@ -4,6 +4,7 @@ import { useMemo, useState } from "react"
 import { format } from "date-fns"
 import Link from "next/link"
 import {
+    Camera,
     Check,
     Download,
     ExternalLink,
@@ -378,6 +379,7 @@ export function RfidTableClient({ initialRows }: RfidTableClientProps) {
                                 <TableHead>Status</TableHead>
                                 <TableHead>Kondisi Ban</TableHead>
                                 <TableHead>Keterangan</TableHead>
+                                <TableHead>Foto Kerusakan</TableHead>
                                 <TableHead>Ekspedisi</TableHead>
                                 <TableHead>Plat Truk</TableHead>
                                 <TableHead>Tujuan</TableHead>
@@ -392,7 +394,7 @@ export function RfidTableClient({ initialRows }: RfidTableClientProps) {
                         <TableBody>
                             {filteredRows.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={19} className="h-32 text-center text-muted-foreground">
+                                    <TableCell colSpan={20} className="h-32 text-center text-muted-foreground">
                                         Tidak ada data RFID yang sesuai filter.
                                     </TableCell>
                                 </TableRow>
@@ -505,6 +507,32 @@ export function RfidTableClient({ initialRows }: RfidTableClientProps) {
                                         </TableCell>
                                         <TableCell className="max-w-[180px] truncate text-xs" title={itemRemarks ?? undefined}>
                                             {itemRemarks ?? "-"}
+                                        </TableCell>
+                                        <TableCell>
+                                            {(() => {
+                                                const photos =
+                                                    row.damagePhotoDetails ||
+                                                    row.damage_photo_details ||
+                                                    (Array.isArray(row.damagePhotos) ? row.damagePhotos : [])
+                                                const photoCount = photos.length
+                                                if (photoCount > 0) {
+                                                    return (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setDetailRow(row)
+                                                                setIsDetailOpen(true)
+                                                            }}
+                                                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800 hover:bg-rose-100 dark:hover:bg-rose-900/50 transition-colors cursor-pointer"
+                                                            title="Klik untuk melihat foto kerusakan"
+                                                        >
+                                                            <Camera className="size-3" />
+                                                            <span>{photoCount} Foto</span>
+                                                        </button>
+                                                    )
+                                                }
+                                                return <span className="text-muted-foreground text-xs">-</span>
+                                            })()}
                                         </TableCell>
                                         <TableCell className="text-xs">
                                             {row.ekspedisi || "-"}

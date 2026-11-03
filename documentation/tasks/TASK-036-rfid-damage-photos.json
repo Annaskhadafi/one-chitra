@@ -1,0 +1,11 @@
+{
+  "id": "TASK-036",
+  "status": "completed",
+  "priority": "P0",
+  "title": "Add Damage Photos to RFID Schema, S3 Upload API, UI & Response",
+  "description": "Menambahkan support Damage Photo multiple ke S3 & public: endpoint POST /api/rfid/upload untuk upload foto dari aplikasi RFID, endpoint GET /api/rfid/upload?sn=... untuk cek foto, integrasi damage_photos di GET/POST /api/rfid, migrasi database schema, serta tampilan kolom & galeri preview di halaman RFID.",
+  "createdAt": "2026-11-03T11:43:00.000Z",
+  "startedAt": "2026-11-03T11:43:00.000Z",
+  "completedAt": "2026-11-03T12:02:00.000Z",
+  "completionDetails": "Berhasil menambahkan endpoint POST /api/rfid/upload (validasi ukuran 10MB, return format json persis sesuai spek), endpoint GET /api/rfid/upload?sn=..., tabel rfid_damage_photos dan kolom damage_photos di rfid_scans, integrasi damage_photos & damage_photo_details pada GET/POST /api/rfid, bypass auth foto publik di proxy /api/uploads, serta penambahan kolom Foto Kerusakan di tabel RFID dashboard dan galeri foto di Detail Dialog dengan lightbox zoom & unduh file."
+}

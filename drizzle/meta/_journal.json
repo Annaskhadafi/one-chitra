@@ -281,6 +281,13 @@
       "when": 1786965846362,
       "tag": "0039_productive_gamora",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1793677432052,
+      "tag": "0040_heavy_firedrake",
+      "breakpoints": true
     }
   ]
 }

@@ -3,10 +3,12 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import * as schema from './schema';
 
+import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
+
 // Global pool to prevent creating new connection pools across hot reloads & worker bundles
 const globalForDb = globalThis as unknown as {
     pool?: Pool;
-    db?: ReturnType<typeof drizzle>;
+    db?: NodePgDatabase<typeof schema>;
 };
 
 const pool = globalForDb.pool ?? new Pool({

@@ -1,7 +1,9 @@
-import { boolean, integer, pgTable, serial, text, timestamp, varchar } from "drizzle-orm/pg-core";
+import { boolean, integer, jsonb, pgTable, serial, text, timestamp, varchar } from "drizzle-orm/pg-core";
+import { relations } from "drizzle-orm";
 import { products } from "./products";
 import { warehouses } from "./warehouses";
 import { user } from "./auth";
+import { rfidDamagePhotos } from "./rfid-damage-photos";
 
 export const rfidScans = pgTable("rfid_scans", {
     id: serial("id").primaryKey(),
@@ -25,9 +27,14 @@ export const rfidScans = pgTable("rfid_scans", {
     userId: varchar("user_id").references(() => user.id),
     tireCondition: varchar("tire_condition", { length: 50 }),
     remarks: text("remarks"),
+    damagePhotos: jsonb("damage_photos").$type<string[]>().default([]),
     ekspedisi: varchar("ekspedisi", { length: 100 }),
     platTruk: varchar("plat_truk", { length: 50 }),
     tujuan: varchar("tujuan", { length: 255 }),
     namaDriver: varchar("nama_driver", { length: 100 }),
     scannedAt: timestamp("scanned_at").defaultNow().notNull(),
 });
+
+export const rfidScansRelations = relations(rfidScans, ({ many }) => ({
+    damagePhotoRecords: many(rfidDamagePhotos),
+}));

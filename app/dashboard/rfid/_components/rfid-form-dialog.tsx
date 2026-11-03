@@ -59,6 +59,7 @@ export function RfidFormDialog({
     const [platTruk, setPlatTruk] = useState("")
     const [tujuan, setTujuan] = useState("")
     const [namaDriver, setNamaDriver] = useState("")
+    const [damagePhotos, setDamagePhotos] = useState<string[]>([])
 
     useEffect(() => {
         if (open) {
@@ -83,6 +84,8 @@ export function RfidFormDialog({
                 setPlatTruk(initialData.platTruk || initialData.plat_truk || "")
                 setTujuan(initialData.tujuan || "")
                 setNamaDriver(initialData.namaDriver || initialData.nama_driver || "")
+                const rawPhotos = initialData.damagePhotos || initialData.damage_photos || []
+                setDamagePhotos(Array.isArray(rawPhotos) ? rawPhotos : [])
             } else {
                 // Reset for create
                 setTagId("")
@@ -101,6 +104,7 @@ export function RfidFormDialog({
                 setCreatedBy("")
                 setTireCondition("GOOD")
                 setRemarks("")
+                setDamagePhotos([])
                 setEkspedisi("")
                 setPlatTruk("")
                 setTujuan("")
@@ -136,6 +140,7 @@ export function RfidFormDialog({
             createdBy: createdBy.trim() || undefined,
             tireCondition: tireCondition.trim() || undefined,
             remarks: remarks.trim() || undefined,
+            damagePhotos: damagePhotos.length > 0 ? damagePhotos : undefined,
             ekspedisi: ekspedisi.trim() || undefined,
             platTruk: platTruk.trim() || undefined,
             tujuan: tujuan.trim() || undefined,

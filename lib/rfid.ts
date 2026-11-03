@@ -1,10 +1,10 @@
 import "server-only"
 
-import { and, desc, eq, inArray } from "drizzle-orm"
+import { and, desc, eq, inArray, isNull, or } from "drizzle-orm"
 import { z } from "zod"
 
 import { db } from "@/db"
-import { products, rfidScans, warehouses } from "@/db/schema"
+import { products, rfidDamagePhotos, rfidScans, warehouses } from "@/db/schema"
 
 const flexibleString = z.preprocess((val) => {
     if (val === null || val === undefined) return ""
@@ -27,6 +27,23 @@ const flexibleRssi = z.preprocess((val) => {
     const str = String(val).trim()
     return str === "" ? "0" : str
 }, z.string())
+
+const flexibleStringArray = z.preprocess((val) => {
+    if (!val) return []
+    if (Array.isArray(val)) {
+        return val.map((v) => String(v).trim()).filter(Boolean)
+    }
+    if (typeof val === "string") {
+        try {
+            const parsed = JSON.parse(val)
+            if (Array.isArray(parsed)) {
+                return parsed.map((v) => String(v).trim()).filter(Boolean)
+            }
+        } catch {}
+        return [val.trim()].filter(Boolean)
+    }
+    return []
+}, z.array(z.string()))
 
 const parseFlutterDate = (value: unknown) => {
     if (!value) return new Date()
@@ -75,6 +92,8 @@ export const rfidScanPayloadSchema = z.object({
         remarks: flexibleStringOrNull,
         keterangan: flexibleStringOrNull,
         catatan: flexibleStringOrNull,
+        damage_photos: flexibleStringArray.optional(),
+        damagePhotos: flexibleStringArray.optional(),
         ekspedisi: flexibleStringOrNull,
         plat_truk: flexibleStringOrNull,
         platTruk: flexibleStringOrNull,
@@ -106,16 +125,78 @@ export function formatRfidStatus(scanType?: string | null): "Masuk" | "Keluar" {
     return "Masuk"
 }
 
-export async function getRfidScanRows(limit = 500, statusFilter?: string) {
+export type RfidScanRowWithDamagePhotos = typeof rfidScans.$inferSelect & {
+    status: "Masuk" | "Keluar"
+    damagePhotoRecords?: Array<typeof rfidDamagePhotos.$inferSelect>
+    damagePhotos: string[]
+    damagePhotoDetails: Array<{
+        id: string
+        filename: string
+        url: string
+    }>
+}
+
+export async function getRfidScanRows(limit = 500, statusFilter?: string): Promise<RfidScanRowWithDamagePhotos[]> {
     const rawRows = await db.query.rfidScans.findMany({
         orderBy: [desc(rfidScans.scannedAt), desc(rfidScans.id)],
         limit,
+        with: {
+            damagePhotoRecords: true,
+        },
     })
 
-    const formattedRows = rawRows.map((row) => ({
-        ...row,
-        status: formatRfidStatus(row.scanType),
-    }))
+    // Also collect all damage photos to map by SN if damagePhotoRecords is empty or unlinked
+    const allDamagePhotos = await db.query.rfidDamagePhotos.findMany({
+        orderBy: [desc(rfidDamagePhotos.id)],
+    })
+
+    const photosBySn = new Map<string, Array<typeof rfidDamagePhotos.$inferSelect>>()
+    const photosById = new Map<string, typeof rfidDamagePhotos.$inferSelect>()
+
+    for (const photo of allDamagePhotos) {
+        photosById.set(photo.photoId, photo)
+        const snKey = photo.sn.trim().toUpperCase()
+        if (!photosBySn.has(snKey)) {
+            photosBySn.set(snKey, [])
+        }
+        photosBySn.get(snKey)!.push(photo)
+    }
+
+    const formattedRows: RfidScanRowWithDamagePhotos[] = rawRows.map((row) => {
+        const snKey = (row.serialNumber || "").trim().toUpperCase()
+        const epcKey = (row.epc || "").trim().toUpperCase()
+
+        const photosFromRelation = row.damagePhotoRecords || []
+        const photosBySnMatch = photosBySn.get(snKey) || photosBySn.get(epcKey) || []
+
+        // Combine photos from relation, by SN, and by explicit damagePhotos IDs in JSON
+        const rawPhotoIds: string[] = Array.isArray(row.damagePhotos) ? (row.damagePhotos as string[]) : []
+        const photosFromIds = rawPhotoIds
+            .map((id) => photosById.get(id))
+            .filter((p): p is typeof rfidDamagePhotos.$inferSelect => Boolean(p))
+
+        const combinedPhotosMap = new Map<string, { id: string; filename: string; url: string }>()
+
+        for (const p of [...photosFromRelation, ...photosFromIds, ...photosBySnMatch]) {
+            if (!combinedPhotosMap.has(p.photoId)) {
+                combinedPhotosMap.set(p.photoId, {
+                    id: p.photoId,
+                    filename: p.filename,
+                    url: p.url,
+                })
+            }
+        }
+
+        const details = Array.from(combinedPhotosMap.values())
+        const ids = details.map((d) => d.id)
+
+        return {
+            ...row,
+            status: formatRfidStatus(row.scanType),
+            damagePhotos: ids.length > 0 ? ids : rawPhotoIds,
+            damagePhotoDetails: details,
+        }
+    })
 
     if (!statusFilter || statusFilter.toLowerCase() === "all") {
         return formattedRows
@@ -247,6 +328,7 @@ export async function saveRfidScanPayload(payload: unknown, overrideStatus?: str
             const itemPlatTruk = item.plat_truk || item.platTruk || null
             const itemTujuan = item.tujuan || null
             const itemNamaDriver = item.nama_driver || item.namaDriver || null
+            const itemDamagePhotos = item.damage_photos?.length ? item.damage_photos : (item.damagePhotos ?? [])
 
             // Find existing scan record by matching EPC, Tag ID, or Serial Number
             const existing = allExistingScans.find((row) => {
@@ -258,6 +340,11 @@ export async function saveRfidScanPayload(payload: unknown, overrideStatus?: str
                 const snMatch = itemSnUpper && (rowSn === itemSnUpper || rowEpc === itemSnUpper)
                 return Boolean(epcMatch || snMatch)
             })
+
+            const existingDamagePhotos = Array.isArray(existing?.damagePhotos) ? (existing?.damagePhotos as string[]) : []
+            const mergedDamagePhotos = Array.from(new Set([...existingDamagePhotos, ...itemDamagePhotos]))
+
+            let savedRecord: typeof rfidScans.$inferSelect
 
             if (existing) {
                 // Update existing scan record so status immediately changes (e.g. Masuk -> Keluar)
@@ -280,6 +367,7 @@ export async function saveRfidScanPayload(payload: unknown, overrideStatus?: str
                         warehouseId: warehouse?.id ?? existing.warehouseId,
                         tireCondition: itemTireCondition ?? existing.tireCondition,
                         remarks: itemRemarks ?? existing.remarks,
+                        damagePhotos: mergedDamagePhotos,
                         ekspedisi: itemEkspedisi ?? existing.ekspedisi,
                         platTruk: itemPlatTruk ?? existing.platTruk,
                         tujuan: itemTujuan ?? existing.tujuan,
@@ -288,6 +376,7 @@ export async function saveRfidScanPayload(payload: unknown, overrideStatus?: str
                     .where(eq(rfidScans.id, existing.id))
                     .returning()
 
+                savedRecord = updated
                 results.push(updated)
             } else {
                 // Insert new scan record
@@ -313,6 +402,7 @@ export async function saveRfidScanPayload(payload: unknown, overrideStatus?: str
                         scannedAt: parsed.createdAt,
                         tireCondition: itemTireCondition,
                         remarks: itemRemarks,
+                        damagePhotos: mergedDamagePhotos,
                         ekspedisi: itemEkspedisi,
                         platTruk: itemPlatTruk,
                         tujuan: itemTujuan,
@@ -320,7 +410,28 @@ export async function saveRfidScanPayload(payload: unknown, overrideStatus?: str
                     })
                     .returning()
 
+                savedRecord = inserted
                 results.push(inserted)
+            }
+
+            // Link uploaded damage photos to this rfid_scan record
+            if (mergedDamagePhotos.length > 0) {
+                await tx
+                    .update(rfidDamagePhotos)
+                    .set({ rfidScanId: savedRecord.id })
+                    .where(inArray(rfidDamagePhotos.photoId, mergedDamagePhotos))
+            }
+
+            if (itemSnUpper) {
+                await tx
+                    .update(rfidDamagePhotos)
+                    .set({ rfidScanId: savedRecord.id })
+                    .where(
+                        and(
+                            eq(rfidDamagePhotos.sn, itemSnUpper),
+                            isNull(rfidDamagePhotos.rfidScanId),
+                        ),
+                    )
             }
         }
 

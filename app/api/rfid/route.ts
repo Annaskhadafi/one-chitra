@@ -59,6 +59,9 @@ export async function GET(req: NextRequest) {
                 tireCondition: r.tireCondition,
                 remarks: r.remarks,
                 keterangan: r.remarks,
+                damage_photos: r.damagePhotos || [],
+                damagePhotos: r.damagePhotos || [],
+                damage_photo_details: r.damagePhotoDetails || [],
                 ekspedisi: r.ekspedisi,
                 plat_truk: r.platTruk,
                 platTruk: r.platTruk,
@@ -93,6 +96,12 @@ export async function GET(req: NextRequest) {
                 linked: boolean
                 tire_condition: string
                 remarks: string
+                damage_photos: string[]
+                damage_photo_details: Array<{
+                    id: string
+                    filename: string
+                    url: string
+                }>
                 ekspedisi: string
                 plat_truk: string
                 tujuan: string
@@ -130,6 +139,8 @@ export async function GET(req: NextRequest) {
                 linked: Boolean(r.linked),
                 tire_condition: r.tireCondition || "GOOD",
                 remarks: r.remarks || "",
+                damage_photos: r.damagePhotos || [],
+                damage_photo_details: r.damagePhotoDetails || [],
                 ekspedisi: r.ekspedisi || "",
                 plat_truk: r.platTruk || "",
                 tujuan: r.tujuan || "",
