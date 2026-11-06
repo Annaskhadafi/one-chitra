@@ -544,7 +544,7 @@ export function VendorInvoicesManagerClient({
                                     </CardDescription>
                                 </div>
                                 <Badge variant="outline" className="text-xs">
-                                    Aturan Cut-off: Tgl $\le 15$ bulan ini, $> 15$ tgl 1 bulan depan
+                                    Aturan Cut-off: Tgl &le; 15 bulan ini, &gt; 15 tgl 1 bulan depan
                                 </Badge>
                             </div>
                         </CardHeader>
@@ -1376,9 +1376,9 @@ export function VendorInvoicesManagerClient({
                                     <div>
                                         Status Cut-Off:{" "}
                                         {new Date().getDate() <= 15 ? (
-                                            <span className="font-bold text-emerald-700">Tanggal $\le 15$ &rarr; Tercatat Diterima Bulan Ini</span>
+                                            <span className="font-bold text-emerald-700">Tanggal &le; 15 &rarr; Tercatat Diterima Bulan Ini</span>
                                         ) : (
-                                            <span className="font-bold text-amber-700">Tanggal $> 15$ &rarr; Tercatat Diterima Tanggal 1 Bulan Depan</span>
+                                            <span className="font-bold text-amber-700">Tanggal &gt; 15 &rarr; Tercatat Diterima Tanggal 1 Bulan Depan</span>
                                         )}
                                     </div>
                                     <div>Aturan Pembayaran: <strong>Hari kerja terakhir (Senin-Jumat) di minggu terakhir bulan jatuh tempo TOP.</strong></div>

@@ -1055,6 +1055,11 @@ export async function createPaymentBatchCheckoutAction(data: {
         }
     }
 
+    revalidatePath("/dashboard/vendor-invoices")
+    revalidatePath("/vendor/dashboard")
+    return { success: true, batch }
+}
+
 /**
  * 13. Mengambil Semua Master Vendor Tenant (Admin View)
  */
