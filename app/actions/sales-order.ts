@@ -32,6 +32,14 @@ const baseSalesOrderColumns = {
     categoryProduct: true,
     poDocument: true,
     status: true,
+    shippingApprovalStatus: true,
+    shippingApprovalBatchId: true,
+    shippingApprovalUserComment: true,
+    shippingApprovalNotes: true,
+    shippingApprovalRequestedAt: true,
+    shippingApprovalRequestedBy: true,
+    shippingApprovedAt: true,
+    shippingApprovedBy: true,
     termsConditions: true,
     notes: true,
     discount: true,
@@ -199,6 +207,8 @@ export async function getSalesOrders() {
                 customer: true,
                 createdByUser: true,
                 salesPerson: true,
+                shippingApprovalRequestedByUser: true,
+                shippingApprovedByUser: true,
             },
             orderBy: [desc(salesOrders.createdAt)],
         })
@@ -207,6 +217,8 @@ export async function getSalesOrders() {
             with: {
                 customer: true,
                 createdByUser: true,
+                shippingApprovalRequestedByUser: true,
+                shippingApprovedByUser: true,
             },
             orderBy: [desc(salesOrders.createdAt)],
         })
@@ -434,6 +446,8 @@ export async function getSalesOrder(id: number) {
                 customer: true,
                 createdByUser: true,
                 salesPerson: true,
+                shippingApprovalRequestedByUser: true,
+                shippingApprovedByUser: true,
             },
         })
         : await db.query.salesOrders.findFirst({
@@ -442,6 +456,8 @@ export async function getSalesOrder(id: number) {
             with: {
                 customer: true,
                 createdByUser: true,
+                shippingApprovalRequestedByUser: true,
+                shippingApprovedByUser: true,
             },
         })
 

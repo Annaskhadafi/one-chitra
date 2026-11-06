@@ -64,7 +64,7 @@ export { customers } from "./customers";
 export { customerAddresses, customerAddressesRelations } from "./customer-addresses";
 export { coverLetters, coverLetterItems } from "./cover-letters";
 export { deliveryCostRequests, deliveryCostRequestItems, deliveryCostCredits } from "./delivery-cost-requests";
-export { salesOrders, salesOrderItems, salesOrdersRelations, salesOrderItemsRelations } from "./sales-orders";
+export { salesOrders, salesOrderItems, salesOrdersRelations, salesOrderItemsRelations, shippingApprovalRequests, shippingApprovalRequestsRelations } from "./sales-orders";
 export { goodReceiveManual, goodReceiveManualItems, goodReceiveManualRelations, goodReceiveManualItemsRelations } from "./good-receive-manual";
 export { fleetDrivers, fleetVehicles } from "./fleet";
 export { fleetTrips, fleetTripsRelations } from "./fleet-trips";

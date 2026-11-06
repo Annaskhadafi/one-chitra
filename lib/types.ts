@@ -41,6 +41,8 @@ export type SalesOrderWithRelations = SalesOrder & {
     customer: Customer | null
     createdByUser: User | null
     salesPerson: User | null
+    shippingApprovalRequestedByUser?: User | null
+    shippingApprovedByUser?: User | null
     items: (SalesOrderItem & {
         product: Product | null
     })[]

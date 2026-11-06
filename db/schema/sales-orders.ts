@@ -36,6 +36,14 @@ export const salesOrders = pgTable("sales_orders", {
     quotationAdminNote: text("quotation_admin_note"),
     quotationClientNote: text("quotation_client_note"),
     customerAttn: varchar("customer_attn", { length: 200 }),
+    shippingApprovalStatus: varchar("shipping_approval_status", { length: 30 }).default("-").notNull(),
+    shippingApprovalBatchId: varchar("shipping_approval_batch_id", { length: 100 }),
+    shippingApprovalUserComment: text("shipping_approval_user_comment"),
+    shippingApprovalNotes: text("shipping_approval_notes"),
+    shippingApprovalRequestedAt: timestamp("shipping_approval_requested_at"),
+    shippingApprovalRequestedBy: text("shipping_approval_requested_by").references(() => user.id),
+    shippingApprovedAt: timestamp("shipping_approved_at"),
+    shippingApprovedBy: text("shipping_approved_by").references(() => user.id),
     createdBy: varchar("created_by").references(() => user.id),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -44,6 +52,7 @@ export const salesOrders = pgTable("sales_orders", {
     salesPersonIdIdx: index("sales_orders_sales_person_id_idx").on(table.salesPersonId),
     warehouseIdIdx: index("sales_orders_warehouse_id_idx").on(table.warehouseId),
     statusIdx: index("sales_orders_status_idx").on(table.status),
+    shippingApprovalStatusIdx: index("sales_orders_shipping_approval_status_idx").on(table.shippingApprovalStatus),
     salesDateIdx: index("sales_orders_sales_date_idx").on(table.salesDate),
     quotationIdIdx: index("sales_orders_quotation_id_idx").on(table.quotationId),
 }));
@@ -64,6 +73,23 @@ export const salesOrderItems = pgTable("sales_order_items", {
     productIdIdx: index("sales_order_items_product_id_idx").on(table.productId),
 }));
 
+export const shippingApprovalRequests = pgTable("shipping_approval_requests", {
+    id: varchar("id", { length: 100 }).primaryKey(),
+    batchNumber: varchar("batch_number", { length: 100 }).notNull(),
+    requesterId: text("requester_id").references(() => user.id).notNull(),
+    approverId: text("approver_id").references(() => user.id),
+    status: varchar("status", { length: 30 }).default("Waiting Approve").notNull(),
+    userComment: text("user_comment"),
+    approverNotes: text("approver_notes"),
+    totalOrders: integer("total_orders").default(0).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+    approvedAt: timestamp("approved_at"),
+}, (table) => ({
+    statusIdx: index("shipping_approval_requests_status_idx").on(table.status),
+    requesterIdx: index("shipping_approval_requests_requester_idx").on(table.requesterId),
+}));
+
 export const salesOrdersRelations = relations(salesOrders, ({ one, many }) => ({
     customer: one(customers, {
         fields: [salesOrders.customerId],
@@ -81,6 +107,14 @@ export const salesOrdersRelations = relations(salesOrders, ({ one, many }) => ({
         fields: [salesOrders.createdBy],
         references: [user.id],
     }),
+    shippingApprovalRequestedByUser: one(user, {
+        fields: [salesOrders.shippingApprovalRequestedBy],
+        references: [user.id],
+    }),
+    shippingApprovedByUser: one(user, {
+        fields: [salesOrders.shippingApprovedBy],
+        references: [user.id],
+    }),
     items: many(salesOrderItems),
 }));
 
@@ -92,5 +126,16 @@ export const salesOrderItemsRelations = relations(salesOrderItems, ({ one }) => 
     product: one(products, {
         fields: [salesOrderItems.productId],
         references: [products.id],
+    }),
+}));
+
+export const shippingApprovalRequestsRelations = relations(shippingApprovalRequests, ({ one }) => ({
+    requester: one(user, {
+        fields: [shippingApprovalRequests.requesterId],
+        references: [user.id],
+    }),
+    approver: one(user, {
+        fields: [shippingApprovalRequests.approverId],
+        references: [user.id],
     }),
 }));

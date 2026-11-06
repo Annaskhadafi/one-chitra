@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/table"
 import { format } from "date-fns"
 import Link from "next/link"
-import { Pencil, MapPin, Mail, FileText } from "lucide-react"
+import { Pencil, MapPin, Mail, FileText, MessageSquare } from "lucide-react"
 import type { SalesOrderWithRelations } from "@/lib/types"
 
 

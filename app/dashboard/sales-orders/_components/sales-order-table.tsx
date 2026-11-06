@@ -49,14 +49,15 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Search, Pencil, Trash2, Eye, ShoppingCart, CheckCircle, Clock, User, Download, FileText, ChevronUp, ChevronDown, BarChart3, RefreshCcw, MoreHorizontal, Printer, Truck } from "lucide-react"
+import { Search, Pencil, Trash2, Eye, ShoppingCart, CheckCircle, Clock, User, Download, FileText, ChevronUp, ChevronDown, BarChart3, RefreshCcw, MoreHorizontal, Printer, Truck, Send } from "lucide-react"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { toast } from "sonner"
 import Link from "next/link"
-import { useSearchParams } from "next/navigation"
+import { useSearchParams, useRouter } from "next/navigation"
 import { useSession } from "@/lib/auth-client"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts"
 import { SalesOrderDetail } from "./sales-order-detail"
+import { RequestShippingApprovalDialog } from "./request-shipping-approval-dialog"
 import { ProformaInvoiceDialog } from "./proforma-invoice-dialog"
 import type { SalesOrderListItem, ProformaInvoiceOrder } from "./types"
 import { usePermissions } from "@/hooks/use-permissions"
@@ -262,6 +263,7 @@ function getOrderItemDeliverySummary(order: SalesOrderListItem, item: SalesOrder
 
 function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
     const queryClient = useQueryClient()
+    const router = useRouter()
     const searchParams = useSearchParams()
     const { data: session } = useSession()
     const currentUserId = session?.user?.id || "anonymous"
@@ -310,6 +312,8 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
 
     const [globalFilter, setGlobalFilter] = useState("")
     const [statusFilter, setStatusFilter] = useState<string[]>([])
+    const [shippingApprovalFilter, setShippingApprovalFilter] = useState<string[]>([])
+    const [isShippingApprovalOpen, setIsShippingApprovalOpen] = useState(false)
     const [customerFilter, setCustomerFilter] = useState<string[]>([])
     const [tripDestinationFilter, setTripDestinationFilter] = useState<string[]>([])
     const [categoryFilter, setCategoryFilter] = useState<string[]>([])
@@ -974,6 +978,33 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
             ),
         },
         {
+            accessorKey: "shippingApprovalStatus",
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                    Status Approval
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                </Button>
+            ),
+            cell: ({ row }) => {
+                const approvalStatus = row.original.shippingApprovalStatus || "-"
+                if (approvalStatus === "Approve") {
+                    return (
+                        <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 font-semibold text-xs">
+                            Approve
+                        </Badge>
+                    )
+                }
+                if (approvalStatus === "Waiting Approve") {
+                    return (
+                        <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800 font-semibold text-xs">
+                            Waiting Approve
+                        </Badge>
+                    )
+                }
+                return <span className="text-muted-foreground font-mono text-xs pl-2">-</span>
+            },
+        },
+        {
             accessorKey: "status",
             header: ({ column }) => (
                 <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
@@ -1077,6 +1108,7 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
             const matchesSearch = orderMatchesSearch(order, term)
 
             const matchesStatus = statusFilter.length === 0 || statusFilter.includes(order.status)
+            const matchesShippingApproval = shippingApprovalFilter.length === 0 || shippingApprovalFilter.includes(order.shippingApprovalStatus || "-")
             const matchesCustomer = customerFilter.length === 0 || customerFilter.includes(order.customer?.name || "")
             const matchesTripDestination = tripDestinationFilter.length === 0 || tripDestinationFilter.includes(order.tripDestination || "-")
             const matchesCategory = categoryFilter.length === 0 || categoryFilter.includes(order.categoryProduct || "")
@@ -1085,9 +1117,9 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
             const matchesMonth = monthFilter.length === 0 || monthFilter.includes(orderMonth)
             const matchesCreatedBy = createdByFilter.length === 0 || createdByFilter.includes(order.createdByUser?.name || "")
 
-            return matchesSearch && matchesStatus && matchesCustomer && matchesTripDestination && matchesCategory && matchesRemark && matchesYear && matchesMonth && matchesCreatedBy
+            return matchesSearch && matchesStatus && matchesShippingApproval && matchesCustomer && matchesTripDestination && matchesCategory && matchesRemark && matchesYear && matchesMonth && matchesCreatedBy
         })
-    }, [data, globalFilter, statusFilter, customerFilter, tripDestinationFilter, categoryFilter, remarkFilter, yearFilter, monthFilter, createdByFilter])
+    }, [data, globalFilter, statusFilter, shippingApprovalFilter, customerFilter, tripDestinationFilter, categoryFilter, remarkFilter, yearFilter, monthFilter, createdByFilter])
 
     const filteredOutstandingTotals = useMemo(() => {
         const term = globalFilter.trim().toLowerCase()
@@ -1385,7 +1417,7 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
     }, [])
     useEffect(() => {
         setPagination((prev) => ({ ...prev, pageIndex: 0 }))
-    }, [globalFilter, statusFilter, customerFilter, tripDestinationFilter, categoryFilter, remarkFilter, yearFilter, monthFilter, createdByFilter])
+    }, [globalFilter, statusFilter, shippingApprovalFilter, customerFilter, tripDestinationFilter, categoryFilter, remarkFilter, yearFilter, monthFilter, createdByFilter])
 
     return (
         <div className="space-y-6">
@@ -1654,6 +1686,12 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
                             selectedValues={statusFilter}
                             onFilterChange={setStatusFilter}
                         />
+                        <DataTableFacetedFilter
+                            title="Status Approval"
+                            options={["Approve", "Waiting Approve", "-"]}
+                            selectedValues={shippingApprovalFilter}
+                            onFilterChange={setShippingApprovalFilter}
+                        />
                         {uniqueCustomers.length > 0 && (
                             <DataTableFacetedFilter
                                 title="Customer"
@@ -1771,6 +1809,12 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
                             options={["draft", "confirmed", "completed", "cancelled"]}
                             selectedValues={statusFilter}
                             onFilterChange={setStatusFilter}
+                        />
+                        <DataTableFacetedFilter
+                            title="Status Approval"
+                            options={["Approve", "Waiting Approve", "-"]}
+                            selectedValues={shippingApprovalFilter}
+                            onFilterChange={setShippingApprovalFilter}
                         />
                         {uniqueCustomers.length > 0 && (
                             <DataTableFacetedFilter
@@ -1983,13 +2027,23 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
             </div>
 
             {
-                table.getSelectedRowModel().flatRows.length > 0 && (canEdit || canDelete) && (
+                table.getSelectedRowModel().flatRows.length > 0 && (
                     <BulkActions
                         selectedCount={table.getSelectedRowModel().flatRows.length}
                         onDelete={canDelete ? handleBulkDelete : () => { }}
                         onEdit={canEdit ? handleBulkUpdateStatus : () => { }}
                         entityName="sales order"
-                    />
+                    >
+                        <Button
+                            type="button"
+                            size="sm"
+                            className="bg-sky-600 hover:bg-sky-700 text-white font-medium shadow-sm"
+                            onClick={() => setIsShippingApprovalOpen(true)}
+                        >
+                            <Send className="h-4 w-4 mr-2" />
+                            Minta Approval Pengiriman
+                        </Button>
+                    </BulkActions>
                 )
             }
                 </>
@@ -1999,6 +2053,16 @@ function SalesOrderTableContent({ data: initialData }: SalesOrderTableProps) {
                 open={isViewOpen}
                 onOpenChange={setIsViewOpen}
                 order={viewOrder}
+            />
+
+            <RequestShippingApprovalDialog
+                open={isShippingApprovalOpen}
+                onOpenChange={setIsShippingApprovalOpen}
+                selectedOrders={table.getSelectedRowModel().flatRows.map((r) => r.original)}
+                onSuccess={() => {
+                    table.resetRowSelection()
+                    router.refresh()
+                }}
             />
 
             <PoPreviewDialog
