@@ -275,3 +275,20 @@ export const lostSalesRelations = relations(lostSales, ({ one }) => ({
         references: [user.id],
     }),
 }));
+
+
+// Vendor Invoices & Multi-Tenant Management
+export {
+    vendorTenantStatusEnum,
+    vendorInvoiceStatusEnum,
+    vendorTenants,
+    vendorTenantUsers,
+    vendorPaymentBatches,
+    vendorInvoices,
+    vendorInvoiceLogs,
+    vendorTenantsRelations,
+    vendorTenantUsersRelations,
+    vendorInvoicesRelations,
+    vendorPaymentBatchesRelations,
+    vendorInvoiceLogsRelations,
+} from "./vendor-invoices";

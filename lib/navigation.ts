@@ -119,6 +119,11 @@ export const navigationConfig: NavSection[] = [
                         url: "/dashboard/vendor-quotations",
                         resource: "vendor-quotations",
                     },
+                    {
+                        title: "Vendor Invoice & Checkout",
+                        url: "/dashboard/vendor-invoices",
+                        resource: "vendor-invoices",
+                    },
                 ],
             },
             {
@@ -623,3 +628,4 @@ export const navigationConfig: NavSection[] = [
         ],
     },
 ]
+
