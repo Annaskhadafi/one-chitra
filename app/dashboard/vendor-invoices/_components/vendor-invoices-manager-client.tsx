@@ -6,6 +6,10 @@ import {
     approveManagerInvoiceAction,
     createPaymentBatchCheckoutAction,
     inviteVendorAction,
+    lookupSapPoForVendorAction,
+    recheckAdminChecklistAction,
+    searchSapVendorMasterAction,
+    submitInvoiceByAdminAction,
     validateFinanceInvoiceAction,
     verifyAdminChecklistAction,
 } from "@/app/actions/vendor-invoices"
@@ -35,6 +39,7 @@ import {
     ExternalLink,
     Eye,
     FileCheck,
+    FilePlus2,
     FileSpreadsheet,
     FileText,
     History,
@@ -98,10 +103,12 @@ export function VendorInvoicesManagerClient({
     initialStats,
     initialInvoices,
     initialTenants,
+    initialSapVendors = [],
 }: {
     initialStats: any
     initialInvoices: any[]
     initialTenants: any[]
+    initialSapVendors?: any[]
 }) {
     const router = useRouter()
     const [activeTab, setActiveTab] = useState("monitoring")
@@ -115,6 +122,7 @@ export function VendorInvoicesManagerClient({
     const [isManagerModalOpen, setIsManagerModalOpen] = useState(false)
     const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false)
     const [isInviteVendorModalOpen, setIsInviteVendorModalOpen] = useState(false)
+    const [isProcurementEntryOpen, setIsProcurementEntryOpen] = useState(false)
 
     // Admin Validation Gate State
     const [adminChecklist, setAdminChecklist] = useState({
@@ -127,10 +135,34 @@ export function VendorInvoicesManagerClient({
     const [adminNotes, setAdminNotes] = useState("")
     const [isProcessingAdmin, setIsProcessingAdmin] = useState(false)
 
-    // Finance State
+    // Finance State (TOP Read-Only from Master Vendor & Re-Check Gate)
     const [financeNotes, setFinanceNotes] = useState("")
-    const [overrideTop, setOverrideTop] = useState<number>(30)
+    const [financeRecheckPassed, setFinanceRecheckPassed] = useState(false)
     const [isProcessingFinance, setIsProcessingFinance] = useState(false)
+
+    // Procurement Entry State
+    const [procurementVendorId, setProcurementVendorId] = useState("")
+    const [procurementInvoiceNumber, setProcurementInvoiceNumber] = useState("")
+    const [procurementPoNumber, setProcurementPoNumber] = useState("")
+    const [procurementInvoiceDate, setProcurementInvoiceDate] = useState(new Date().toISOString().slice(0, 10))
+    const [procurementSubtotal, setProcurementSubtotal] = useState<number>(0)
+    const [procurementPpnPercent, setProcurementPpnPercent] = useState<number>(11)
+    const [procurementPphPercent, setProcurementPphPercent] = useState<number>(0)
+    const [procurementInvoiceFile, setProcurementInvoiceFile] = useState<File | null>(null)
+    const [procurementGrSlipFile, setProcurementGrSlipFile] = useState<File | null>(null)
+    const [procurementTaxFile, setProcurementTaxFile] = useState<File | null>(null)
+    const [procurementPoFile, setProcurementPoFile] = useState<File | null>(null)
+    const [procurementDeliveryFile, setProcurementDeliveryFile] = useState<File | null>(null)
+    const [procurementNotes, setProcurementNotes] = useState("")
+    const [isCheckingProcurementPo, setIsCheckingProcurementPo] = useState(false)
+    const [procurementPoResult, setProcurementPoResult] = useState<any>(null)
+    const [isSubmittingProcurement, setIsSubmittingProcurement] = useState(false)
+    const [procurementError, setProcurementError] = useState<string | null>(null)
+
+    // SAP Master Vendor Search State
+    const [sapSearchQuery, setSapSearchQuery] = useState("")
+    const [sapSearchResults, setSapSearchResults] = useState<any[]>(initialSapVendors)
+    const [isSearchingSap, setIsSearchingSap] = useState(false)
 
     // Manager State
     const [managerNotes, setManagerNotes] = useState("")
@@ -144,7 +176,7 @@ export function VendorInvoicesManagerClient({
     const [proofFile, setProofFile] = useState<File | null>(null)
     const [isProcessingCheckout, setIsProcessingCheckout] = useState(false)
 
-    // Invite Vendor State
+    // Invite Vendor State (with SAP link)
     const [inviteData, setInviteData] = useState({
         name: "",
         email: "",
@@ -156,6 +188,9 @@ export function VendorInvoicesManagerClient({
         bankName: "BCA",
         bankAccountNo: "",
         bankAccountHolder: "",
+        sapVendorCode: "",
+        sapTopCode: "",
+        sapCurrency: "IDR",
     })
     const [isProcessingInvite, setIsProcessingInvite] = useState(false)
     const [inviteSuccessMsg, setInviteSuccessMsg] = useState<string | null>(null)
@@ -218,14 +253,20 @@ export function VendorInvoicesManagerClient({
     // Open Finance Modal
     const handleOpenFinanceModal = (invoice: any) => {
         setSelectedInvoice(invoice)
-        setOverrideTop(invoice.topDays || 30)
-        setFinanceNotes("")
+        setFinanceRecheckPassed(invoice.financeRecheckPassed || false)
+        setFinanceNotes(invoice.financeNotes || "")
         setIsFinanceModalOpen(true)
     }
 
-    // Submit Finance Action
+    // Submit Finance Action (TOP is READ-ONLY, re-check mandatory)
     const handleFinanceAction = async (action: "validate" | "reject") => {
         if (!selectedInvoice) return
+
+        if (action === "validate" && !financeRecheckPassed) {
+            alert("Mandatory: Finance wajib mencentang konfirmasi re-check checklist admin sebelum menyetujui.")
+            return
+        }
+
         setIsProcessingFinance(true)
 
         try {
@@ -233,7 +274,6 @@ export function VendorInvoicesManagerClient({
                 invoiceId: selectedInvoice.id,
                 action,
                 notes: financeNotes,
-                overrideTopDays: overrideTop,
             })
 
             if (!res.success) {
@@ -248,6 +288,176 @@ export function VendorInvoicesManagerClient({
             alert(err.message || "Terjadi kesalahan.")
         } finally {
             setIsProcessingFinance(false)
+        }
+    }
+
+    // SAP Vendor Search handler
+    const handleSearchSap = async (query: string) => {
+        setSapSearchQuery(query)
+        if (!query || query.trim().length < 2) {
+            setSapSearchResults(initialSapVendors)
+            return
+        }
+        setIsSearchingSap(true)
+        try {
+            const results = await searchSapVendorMasterAction(query)
+            setSapSearchResults(results)
+        } catch (err) {
+            console.error("Gagal mencari vendor SAP:", err)
+        } finally {
+            setIsSearchingSap(false)
+        }
+    }
+
+    // Pilih vendor SAP untuk otomatis isi form invite
+    const handleSelectSapForInvite = (v: any) => {
+        setInviteData({
+            name: v.vendorName,
+            email: "",
+            phone: v.telephone || "",
+            address: `${v.street || ""}, ${v.city || ""}, ${v.country || ""}`.replace(/^,\s*|,\s*$/g, ""),
+            defaultTopDays: v.topDays || 30,
+            isPkp: true,
+            npwp: "",
+            bankName: "BCA",
+            bankAccountNo: "",
+            bankAccountHolder: v.vendorName,
+            sapVendorCode: v.supplierCode,
+            sapTopCode: v.termsOfPayment || "",
+            sapCurrency: v.orderCurrency || "IDR",
+        })
+        setIsInviteVendorModalOpen(true)
+    }
+
+    // Cek PO internal untuk Procurement Entry
+    const handleCheckProcurementPo = async () => {
+        if (!procurementPoNumber.trim()) return
+        setIsCheckingProcurementPo(true)
+        setProcurementPoResult(null)
+        try {
+            const res = await lookupSapPoForVendorAction(procurementPoNumber)
+            setProcurementPoResult(res)
+            if (res.found && res.netValue && procurementSubtotal === 0) {
+                setProcurementSubtotal(res.netValue)
+            }
+        } catch {
+            setProcurementPoResult({ found: false, message: "Gagal memeriksa database SAP." })
+        } finally {
+            setIsCheckingProcurementPo(false)
+        }
+    }
+
+    // Submit Procurement Entry on behalf of Vendor
+    const handleProcurementSubmit = async (e: React.FormEvent) => {
+        e.preventDefault()
+        setProcurementError(null)
+
+        if (!procurementVendorId) {
+            setProcurementError("Pilih Vendor penerima tagihan.")
+            return
+        }
+        if (!procurementInvoiceNumber.trim()) {
+            setProcurementError("Nomor Invoice wajib diisi.")
+            return
+        }
+        if (!procurementPoNumber.trim()) {
+            setProcurementError("Nomor PO wajib diisi.")
+            return
+        }
+        if (procurementSubtotal <= 0) {
+            setProcurementError("Subtotal nominal tagihan harus lebih dari 0.")
+            return
+        }
+        if (!procurementInvoiceFile) {
+            setProcurementError("Berkas Invoice fisik wajib diunggah.")
+            return
+        }
+        if (!procurementGrSlipFile) {
+            setProcurementError("Lampiran GR Slip (Goods Receipt) asli wajib diunggah.")
+            return
+        }
+
+        setIsSubmittingProcurement(true)
+
+        try {
+            // Upload Invoice File
+            const invForm = new FormData()
+            invForm.append("file", procurementInvoiceFile)
+            const upInv = await uploadFile(invForm)
+            if (!upInv.success || !upInv.url) {
+                throw new Error("Gagal mengunggah berkas invoice: " + upInv.error)
+            }
+
+            // Upload GR Slip (Mandatory)
+            const grForm = new FormData()
+            grForm.append("file", procurementGrSlipFile)
+            const upGr = await uploadFile(grForm)
+            if (!upGr.success || !upGr.url) {
+                throw new Error("Gagal mengunggah berkas GR Slip: " + upGr.error)
+            }
+
+            // Upload Tax File if exists
+            let taxUrl: string | undefined = undefined
+            if (procurementTaxFile) {
+                const taxForm = new FormData()
+                taxForm.append("file", procurementTaxFile)
+                const upTax = await uploadFile(taxForm)
+                if (upTax.success && upTax.url) taxUrl = upTax.url
+            }
+
+            // Upload PO copy if exists
+            let poUrl: string | undefined = undefined
+            if (procurementPoFile) {
+                const poForm = new FormData()
+                poForm.append("file", procurementPoFile)
+                const upPo = await uploadFile(poForm)
+                if (upPo.success && upPo.url) poUrl = upPo.url
+            }
+
+            // Upload Surat Jalan if exists
+            let delivUrl: string | undefined = undefined
+            if (procurementDeliveryFile) {
+                const delivForm = new FormData()
+                delivForm.append("file", procurementDeliveryFile)
+                const upDeliv = await uploadFile(delivForm)
+                if (upDeliv.success && upDeliv.url) delivUrl = upDeliv.url
+            }
+
+            const res = await submitInvoiceByAdminAction({
+                tenantId: procurementVendorId,
+                invoiceNumber: procurementInvoiceNumber,
+                poNumber: procurementPoNumber,
+                invoiceDate: procurementInvoiceDate,
+                subtotal: procurementSubtotal,
+                ppnPercent: procurementPpnPercent,
+                pphPercent: procurementPphPercent,
+                invoiceFileUrl: upInv.url,
+                grSlipFileUrl: upGr.url,
+                taxInvoiceFileUrl: taxUrl,
+                poFileUrl: poUrl,
+                deliveryReceiptFileUrl: delivUrl,
+                notes: procurementNotes,
+            })
+
+            if (!res.success) {
+                throw new Error(res.error || "Gagal menyimpan entry invoice.")
+            }
+
+            // Reset form
+            setIsProcurementEntryOpen(false)
+            setProcurementInvoiceNumber("")
+            setProcurementPoNumber("")
+            setProcurementSubtotal(0)
+            setProcurementInvoiceFile(null)
+            setProcurementGrSlipFile(null)
+            setProcurementTaxFile(null)
+            setProcurementPoFile(null)
+            setProcurementDeliveryFile(null)
+            router.refresh()
+        } catch (err: any) {
+            setProcurementError(err.message || "Terjadi kesalahan saat submit entry invoice.")
+        } finally {
+            setIsSubmittingProcurement(false)
         }
     }
 
@@ -475,14 +685,24 @@ export function VendorInvoicesManagerClient({
                         </TabsTrigger>
                     </TabsList>
 
-                    <Button
-                        size="sm"
-                        onClick={() => setIsInviteVendorModalOpen(true)}
-                        className="bg-primary hover:bg-primary/90 text-white text-xs flex items-center gap-1.5 shadow-sm"
-                    >
-                        <UserPlus className="w-4 h-4" />
-                        Undang Vendor Baru
-                    </Button>
+                    <div className="flex items-center gap-2">
+                        <Button
+                            size="sm"
+                            onClick={() => setIsProcurementEntryOpen(true)}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs flex items-center gap-1.5 shadow-sm"
+                        >
+                            <FilePlus2 className="w-4 h-4" />
+                            Entry Invoice (Procurement)
+                        </Button>
+                        <Button
+                            size="sm"
+                            onClick={() => setIsInviteVendorModalOpen(true)}
+                            className="bg-primary hover:bg-primary/90 text-white text-xs flex items-center gap-1.5 shadow-sm"
+                        >
+                            <UserPlus className="w-4 h-4" />
+                            Undang Vendor Baru
+                        </Button>
+                    </div>
                 </div>
 
                 {/* TAB 1: MONITORING & PROYEKSI 3 BULAN */}
@@ -1159,6 +1379,91 @@ export function VendorInvoicesManagerClient({
                             </div>
                         </CardContent>
                     </Card>
+
+                    {/* Master Data Vendor SAP Explorer */}
+                    <Card className="shadow-xs border-slate-200 dark:border-slate-800">
+                        <CardHeader className="p-4 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/60 dark:bg-slate-900/40">
+                            <div>
+                                <CardTitle className="text-sm font-bold flex items-center gap-2">
+                                    <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                                    Master Data Vendor SAP MKVZ 2026 (1.122 Rekan Vendor)
+                                </CardTitle>
+                                <CardDescription className="text-xs text-slate-500">
+                                    Tersinkronisasi dari master SAP MKVZ. TOP dan mata uang terikat langsung secara read-only.
+                                </CardDescription>
+                            </div>
+                            <div className="w-full sm:w-72 relative">
+                                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+                                <Input
+                                    placeholder="Cari kode SAP / Nama / Kota..."
+                                    value={sapSearchQuery}
+                                    onChange={(e) => handleSearchSap(e.target.value)}
+                                    className="pl-8 text-xs h-8 bg-white dark:bg-slate-800"
+                                />
+                                {isSearchingSap && (
+                                    <Loader2 className="w-3 h-3 animate-spin absolute right-2.5 top-2.5 text-slate-400" />
+                                )}
+                            </div>
+                        </CardHeader>
+                        <CardContent className="p-0">
+                            <div className="overflow-x-auto max-h-[380px]">
+                                <table className="w-full text-left text-xs">
+                                    <thead className="bg-slate-100 dark:bg-slate-800 text-slate-600 uppercase font-semibold border-b sticky top-0">
+                                        <tr>
+                                            <th className="px-4 py-2.5">Kode SAP</th>
+                                            <th className="px-4 py-2.5">Nama Vendor</th>
+                                            <th className="px-4 py-2.5">Kota & Negara</th>
+                                            <th className="px-4 py-2.5">TOP SAP (Hari)</th>
+                                            <th className="px-4 py-2.5">Mata Uang</th>
+                                            <th className="px-4 py-2.5 text-right">Aksi</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                                        {sapSearchResults.length === 0 ? (
+                                            <tr>
+                                                <td colSpan={6} className="px-4 py-6 text-center text-slate-400">
+                                                    Tidak ditemukan vendor SAP dengan kata kunci &quot;{sapSearchQuery}&quot;
+                                                </td>
+                                            </tr>
+                                        ) : (
+                                            sapSearchResults.map((sv) => (
+                                                <tr key={sv.id || sv.supplierCode} className="hover:bg-slate-50/60 transition-colors">
+                                                    <td className="px-4 py-2.5 font-mono font-semibold text-primary">
+                                                        {sv.supplierCode}
+                                                    </td>
+                                                    <td className="px-4 py-2.5 font-medium text-slate-900 dark:text-slate-100">
+                                                        {sv.vendorName}
+                                                    </td>
+                                                    <td className="px-4 py-2.5 text-slate-500">
+                                                        {sv.city ? `${sv.city}, ${sv.country || ""}` : sv.country || "-"}
+                                                    </td>
+                                                    <td className="px-4 py-2.5">
+                                                        <Badge variant="outline" className="font-semibold text-slate-700 bg-slate-50">
+                                                            {sv.topDays} Hari {sv.termsOfPayment ? `(${sv.termsOfPayment})` : ""}
+                                                        </Badge>
+                                                    </td>
+                                                    <td className="px-4 py-2.5 font-mono text-[11px]">
+                                                        {sv.orderCurrency || "IDR"}
+                                                    </td>
+                                                    <td className="px-4 py-2.5 text-right">
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            className="h-7 text-xs bg-white hover:bg-primary hover:text-white"
+                                                            onClick={() => handleSelectSapForInvite(sv)}
+                                                        >
+                                                            <UserPlus className="w-3 h-3 mr-1" />
+                                                            Undang Mitra
+                                                        </Button>
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </CardContent>
+                    </Card>
                 </TabsContent>
             </Tabs>
 
@@ -1209,6 +1514,17 @@ export function VendorInvoicesManagerClient({
                                     <ExternalLink className="w-3 h-3" />
                                     Invoice PDF
                                 </a>
+                                {selectedInvoice.grSlipFileUrl && (
+                                    <a
+                                        href={resolveUploadDocumentUrl(selectedInvoice.grSlipFileUrl) || selectedInvoice.grSlipFileUrl}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="px-2 py-1 bg-blue-600 text-white rounded font-medium hover:bg-blue-700 flex items-center gap-1 shadow-xs"
+                                    >
+                                        <ExternalLink className="w-3 h-3" />
+                                        GR Slip (Wajib)
+                                    </a>
+                                )}
                                 {selectedInvoice.taxInvoiceFileUrl && (
                                     <a
                                         href={resolveUploadDocumentUrl(selectedInvoice.taxInvoiceFileUrl) || selectedInvoice.taxInvoiceFileUrl}
@@ -1246,8 +1562,8 @@ export function VendorInvoicesManagerClient({
                                             onCheckedChange={(c) => setAdminChecklist({ ...adminChecklist, docValid: Boolean(c) })}
                                         />
                                         <div>
-                                            <span className="font-semibold text-slate-800 dark:text-slate-200">1. Validitas Dokumen Fisik</span>
-                                            <p className="text-[11px] text-slate-500">Berkas PDF/Scan tidak korup, terbaca jelas, dan asli.</p>
+                                            <span className="font-semibold text-slate-800 dark:text-slate-200">1. Validitas Dokumen Fisik &amp; Lampiran GR Slip</span>
+                                            <p className="text-[11px] text-slate-500">Berkas PDF/Scan Invoice dan GR Slip asli tidak korup, terbaca jelas, dan lengkap.</p>
                                         </div>
                                     </label>
 
@@ -1385,15 +1701,79 @@ export function VendorInvoicesManagerClient({
                                 </div>
                             </div>
 
+                            {/* Re-Check Hasil Validasi Admin (Mandatory Gate) */}
+                            <div className="p-3 bg-slate-50 dark:bg-slate-900 border rounded-xl space-y-2.5">
+                                <h4 className="font-bold text-slate-800 dark:text-slate-200 text-xs flex items-center justify-between">
+                                    <span className="flex items-center gap-1.5">
+                                        <ShieldCheck className="w-4 h-4 text-blue-600" />
+                                        Re-Check Hasil Validasi Admin (Mandatory)
+                                    </span>
+                                    <Badge variant="outline" className="text-[10px] bg-blue-50 text-blue-700">
+                                        Admin Verified
+                                    </Badge>
+                                </h4>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-slate-600 dark:text-slate-400">
+                                    <div className="flex items-center gap-1.5">
+                                        <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                        <span>Dokumen Fisik &amp; GR Slip: <strong>{selectedInvoice.checklistDocValid ? "Lengkap" : "Perlu Cek"}</strong></span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                        <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                        <span>Kesesuaian PO One Chitra: <strong>{selectedInvoice.checklistPoValid ? "Cocok" : "Perlu Cek"}</strong></span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                        <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                        <span>Akurasi Kalkulasi DPP &amp; Pajak: <strong>{selectedInvoice.checklistCalcValid ? "Akurat" : "Perlu Cek"}</strong></span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                        <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                        <span>Rekening Bank Vendor: <strong>{selectedInvoice.checklistBankValid ? "Valid" : "Perlu Cek"}</strong></span>
+                                    </div>
+                                </div>
+
+                                {selectedInvoice.adminChecklistNotes && (
+                                    <p className="text-[11px] italic text-slate-500 bg-white dark:bg-slate-800 p-2 rounded border">
+                                        Catatan Admin: {selectedInvoice.adminChecklistNotes}
+                                    </p>
+                                )}
+
+                                <div className="pt-1 border-t">
+                                    <label className="flex items-start gap-2 cursor-pointer p-2 bg-indigo-50/60 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-900 rounded-lg">
+                                        <Checkbox
+                                            checked={financeRecheckPassed}
+                                            onCheckedChange={(c) => setFinanceRecheckPassed(Boolean(c))}
+                                        />
+                                        <div className="text-[11px]">
+                                            <span className="font-semibold text-indigo-900 dark:text-indigo-200">
+                                                Konfirmasi Re-Check Finance *
+                                            </span>
+                                            <p className="text-slate-500">
+                                                Saya telah melakukan re-check independen terhadap kelengkapan berkas fisik invoice, GR Slip, PO SAP, kalkulasi perpajakan (PPN/PPh), dan rekening tujuan transfer.
+                                            </p>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1.5">
-                                    <Label htmlFor="topDaysInput">Term of Payment (TOP Hari)</Label>
-                                    <Input
-                                        id="topDaysInput"
-                                        type="number"
-                                        value={overrideTop}
-                                        onChange={(e) => setOverrideTop(Number(e.target.value) || 30)}
-                                    />
+                                    <Label htmlFor="topDaysInput">Term of Payment (TOP) - Master Vendor</Label>
+                                    <div className="flex items-center gap-2">
+                                        <Input
+                                            id="topDaysInput"
+                                            type="text"
+                                            readOnly
+                                            disabled
+                                            value={`${selectedInvoice.topDays || selectedInvoice.tenant.defaultTopDays || 30} Hari`}
+                                            className="bg-slate-100 dark:bg-slate-800 font-semibold cursor-not-allowed text-slate-700 dark:text-slate-300"
+                                        />
+                                        <span className="text-[10px] font-bold text-slate-500 whitespace-nowrap bg-slate-100 dark:bg-slate-800 px-2 py-2 rounded-md border">
+                                            Read-Only
+                                        </span>
+                                    </div>
+                                    <p className="text-[10px] text-slate-400">
+                                        Mengikuti data Master Vendor SAP. TOP terhitung otomatis setelah invoice valid by Finance.
+                                    </p>
                                 </div>
 
                                 <div className="space-y-1.5">
@@ -1430,12 +1810,12 @@ export function VendorInvoicesManagerClient({
                         <Button
                             variant="default"
                             size="sm"
-                            disabled={isProcessingFinance}
+                            disabled={isProcessingFinance || !financeRecheckPassed}
                             onClick={() => handleFinanceAction("validate")}
-                            className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs"
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs disabled:opacity-50"
                         >
                             {isProcessingFinance ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Calendar className="w-4 h-4 mr-1" />}
-                            Validasi Pajak & Jadwalkan Bayar
+                            Validasi Pajak &amp; Jadwalkan Bayar
                         </Button>
                     </DialogFooter>
                 </DialogContent>
@@ -1669,6 +2049,17 @@ export function VendorInvoicesManagerClient({
                                         <ExternalLink className="w-3.5 h-3.5" />
                                         Invoice Fisik
                                     </a>
+                                    {selectedInvoice.grSlipFileUrl && (
+                                        <a
+                                            href={resolveUploadDocumentUrl(selectedInvoice.grSlipFileUrl) || selectedInvoice.grSlipFileUrl}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="px-3 py-1.5 bg-blue-600 text-white rounded-md flex items-center gap-1 font-medium shadow-xs"
+                                        >
+                                            <ExternalLink className="w-3.5 h-3.5" />
+                                            GR Slip (Wajib)
+                                        </a>
+                                    )}
                                     {selectedInvoice.taxInvoiceFileUrl && (
                                         <a
                                             href={resolveUploadDocumentUrl(selectedInvoice.taxInvoiceFileUrl) || selectedInvoice.taxInvoiceFileUrl}
@@ -1834,6 +2225,267 @@ export function VendorInvoicesManagerClient({
                             </Button>
                         </form>
                     )}
+                </DialogContent>
+            </Dialog>
+
+            {/* MODAL 7: ENTRY INVOICE OLEH ADMIN PROCUREMENT */}
+            <Dialog open={isProcurementEntryOpen} onOpenChange={setIsProcurementEntryOpen}>
+                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2 text-base">
+                            <FilePlus2 className="w-5 h-5 text-emerald-600" />
+                            Entry Invoice Vendor oleh Admin Procurement
+                        </DialogTitle>
+                        <DialogDescription className="text-xs">
+                            Admin Procurement memasukkan dokumen invoice atas nama rekan vendor dengan lampiran fisik dan GR Slip wajib.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    {procurementError && (
+                        <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs flex items-center gap-2">
+                            <AlertCircle className="w-4 h-4 shrink-0" />
+                            <span>{procurementError}</span>
+                        </div>
+                    )}
+
+                    <form onSubmit={handleProcurementSubmit} className="space-y-4 text-xs">
+                        {/* 1. Pilih Vendor */}
+                        <div className="space-y-1.5">
+                            <Label htmlFor="procVendorSelect">Pilih Mitra Vendor *</Label>
+                            <select
+                                id="procVendorSelect"
+                                className="w-full px-3 py-2 text-xs border rounded-lg bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 font-medium"
+                                value={procurementVendorId}
+                                onChange={(e) => {
+                                    const vId = e.target.value
+                                    setProcurementVendorId(vId)
+                                    const matched = initialTenants.find((t) => t.id === vId)
+                                    if (matched) {
+                                        setProcurementPpnPercent(matched.isPkp ? 11 : 0)
+                                    }
+                                }}
+                                required
+                            >
+                                <option value="">-- Pilih Vendor Terdaftar --</option>
+                                {initialTenants.map((t) => (
+                                    <option key={t.id} value={t.id}>
+                                        {t.name} ({t.code}) &bull; TOP: {t.defaultTopDays} Hari &bull; {t.isPkp ? "PKP" : "Non-PKP"}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {/* 2. Informasi Faktur & PO */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div className="space-y-1.5">
+                                <Label htmlFor="procInvoiceNum">Nomor Invoice Tagihan *</Label>
+                                <Input
+                                    id="procInvoiceNum"
+                                    placeholder="Contoh: INV/2026/03/991"
+                                    value={procurementInvoiceNumber}
+                                    onChange={(e) => setProcurementInvoiceNumber(e.target.value)}
+                                    required
+                                />
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <Label htmlFor="procInvoiceDate">Tanggal Invoice *</Label>
+                                <Input
+                                    id="procInvoiceDate"
+                                    type="date"
+                                    value={procurementInvoiceDate}
+                                    onChange={(e) => setProcurementInvoiceDate(e.target.value)}
+                                    required
+                                />
+                            </div>
+                        </div>
+
+                        {/* PO One Chitra with live checker */}
+                        <div className="space-y-1.5">
+                            <Label htmlFor="procPoNum">Nomor Purchase Order (PO) One Chitra *</Label>
+                            <div className="flex gap-2">
+                                <Input
+                                    id="procPoNum"
+                                    placeholder="Contoh: 4500012345"
+                                    value={procurementPoNumber}
+                                    onChange={(e) => setProcurementPoNumber(e.target.value)}
+                                    required
+                                />
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={handleCheckProcurementPo}
+                                    disabled={isCheckingProcurementPo || !procurementPoNumber.trim()}
+                                    className="shrink-0 text-xs flex items-center gap-1"
+                                >
+                                    {isCheckingProcurementPo ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+                                    Cek SAP PO
+                                </Button>
+                            </div>
+                            {procurementPoResult && (
+                                <div className={`p-2.5 rounded-lg text-[11px] border ${procurementPoResult.found ? "bg-emerald-50 border-emerald-200 text-emerald-800" : "bg-amber-50 border-amber-200 text-amber-800"}`}>
+                                    {procurementPoResult.found ? (
+                                        <p>PO Ditemukan di SAP &bull; Vendor: <strong>{procurementPoResult.vendorName}</strong> &bull; Total Net: <strong>{formatCurrency(procurementPoResult.netValue)}</strong></p>
+                                    ) : (
+                                        <p>{procurementPoResult.message}</p>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* 3. Nominal & TOP Read-Only */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div className="space-y-1.5">
+                                <Label htmlFor="procSubtotal">Sub-Total (DPP) *</Label>
+                                <Input
+                                    id="procSubtotal"
+                                    type="number"
+                                    min={0}
+                                    placeholder="0"
+                                    value={procurementSubtotal || ""}
+                                    onChange={(e) => setProcurementSubtotal(Number(e.target.value) || 0)}
+                                    required
+                                />
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <Label htmlFor="procPpn">PPN (%)</Label>
+                                <Input
+                                    id="procPpn"
+                                    type="number"
+                                    min={0}
+                                    max={100}
+                                    value={procurementPpnPercent}
+                                    onChange={(e) => setProcurementPpnPercent(Number(e.target.value) || 0)}
+                                />
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <Label htmlFor="procPph">PPh (%)</Label>
+                                <Input
+                                    id="procPph"
+                                    type="number"
+                                    min={0}
+                                    max={100}
+                                    value={procurementPphPercent}
+                                    onChange={(e) => setProcurementPphPercent(Number(e.target.value) || 0)}
+                                />
+                            </div>
+                        </div>
+
+                        {/* Ringkasan & TOP info */}
+                        <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                            <div>
+                                <span className="text-slate-400 block text-[10px]">Term of Payment (TOP):</span>
+                                <span className="font-bold text-slate-800 dark:text-slate-200">
+                                    {initialTenants.find((t) => t.id === procurementVendorId)?.defaultTopDays || 30} Hari (Read-Only dari Master Vendor)
+                                </span>
+                            </div>
+                            <div className="text-right">
+                                <span className="text-slate-400 block text-[10px]">Grand Total Estimasi:</span>
+                                <span className="font-extrabold text-base text-primary">
+                                    {formatCurrency(
+                                        procurementSubtotal +
+                                        (procurementSubtotal * procurementPpnPercent) / 100 -
+                                        (procurementSubtotal * procurementPphPercent) / 100
+                                    )}
+                                </span>
+                            </div>
+                        </div>
+
+                        {/* 4. Berkas Lampiran Dokumen */}
+                        <div className="space-y-3 pt-1">
+                            <h4 className="font-semibold text-slate-900 dark:text-slate-100 text-xs">
+                                Unggah Berkas Fisik &amp; GR Slip
+                            </h4>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div className="p-3 border border-dashed rounded-xl bg-slate-50 dark:bg-slate-900">
+                                    <div className="flex justify-between items-center mb-1.5">
+                                        <Label className="text-xs font-semibold">Berkas Invoice Fisik *</Label>
+                                        <span className="text-[10px] text-red-500 font-bold">Wajib</span>
+                                    </div>
+                                    <input
+                                        type="file"
+                                        accept=".pdf,image/*"
+                                        onChange={(e) => setProcurementInvoiceFile(e.target.files?.[0] || null)}
+                                        className="block w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-2.5 file:rounded file:border-0 file:text-xs file:bg-primary file:text-white cursor-pointer"
+                                        required
+                                    />
+                                </div>
+
+                                <div className="p-3 border border-dashed border-blue-300 dark:border-blue-900 rounded-xl bg-blue-50/40 dark:bg-blue-950/20">
+                                    <div className="flex justify-between items-center mb-1.5">
+                                        <Label className="text-xs font-semibold">Lampiran GR Slip (Goods Receipt) *</Label>
+                                        <span className="text-[10px] text-blue-600 font-bold">Wajib Lampiran GR</span>
+                                    </div>
+                                    <input
+                                        type="file"
+                                        accept=".pdf,image/*"
+                                        onChange={(e) => setProcurementGrSlipFile(e.target.files?.[0] || null)}
+                                        className="block w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-2.5 file:rounded file:border-0 file:text-xs file:bg-blue-600 file:text-white cursor-pointer"
+                                        required
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                <div className="p-2 border rounded-lg bg-slate-50 dark:bg-slate-900">
+                                    <Label className="text-[11px] block mb-1">e-Faktur Pajak (Opsional)</Label>
+                                    <input
+                                        type="file"
+                                        accept=".pdf,image/*"
+                                        onChange={(e) => setProcurementTaxFile(e.target.files?.[0] || null)}
+                                        className="text-[11px] block w-full text-slate-500 file:mr-1 file:py-0.5 file:px-2 file:rounded file:border-0 file:text-[10px] file:bg-slate-200 file:text-slate-700"
+                                    />
+                                </div>
+                                <div className="p-2 border rounded-lg bg-slate-50 dark:bg-slate-900">
+                                    <Label className="text-[11px] block mb-1">Salinan PO (Opsional)</Label>
+                                    <input
+                                        type="file"
+                                        accept=".pdf,image/*"
+                                        onChange={(e) => setProcurementPoFile(e.target.files?.[0] || null)}
+                                        className="text-[11px] block w-full text-slate-500 file:mr-1 file:py-0.5 file:px-2 file:rounded file:border-0 file:text-[10px] file:bg-slate-200 file:text-slate-700"
+                                    />
+                                </div>
+                                <div className="p-2 border rounded-lg bg-slate-50 dark:bg-slate-900">
+                                    <Label className="text-[11px] block mb-1">Surat Jalan / BAP (Opsional)</Label>
+                                    <input
+                                        type="file"
+                                        accept=".pdf,image/*"
+                                        onChange={(e) => setProcurementDeliveryFile(e.target.files?.[0] || null)}
+                                        className="text-[11px] block w-full text-slate-500 file:mr-1 file:py-0.5 file:px-2 file:rounded file:border-0 file:text-[10px] file:bg-slate-200 file:text-slate-700"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="space-y-1.5">
+                            <Label htmlFor="procNotes">Catatan Tambahan Procurement (Opsional)</Label>
+                            <Textarea
+                                id="procNotes"
+                                rows={2}
+                                placeholder="Keterangan penyerahan invoice fisik oleh vendor..."
+                                value={procurementNotes}
+                                onChange={(e) => setProcurementNotes(e.target.value)}
+                            />
+                        </div>
+
+                        <Button
+                            type="submit"
+                            disabled={isSubmittingProcurement}
+                            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 text-xs shadow-md mt-2"
+                        >
+                            {isSubmittingProcurement ? (
+                                <>
+                                    <Loader2 className="w-4 h-4 animate-spin mr-1.5" />
+                                    Menyimpan &amp; Mengunggah Dokumen Invoice...
+                                </>
+                            ) : (
+                                "Simpan Entry Invoice (Kirim ke Antrean Validation Gate Admin)"
+                            )}
+                        </Button>
+                    </form>
                 </DialogContent>
             </Dialog>
         </div>

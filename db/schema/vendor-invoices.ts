@@ -49,6 +49,15 @@ export const vendorTenants = pgTable(
         bankAccountNo: text("bank_account_no"),
         bankAccountHolder: text("bank_account_holder"),
         defaultTopDays: integer("default_top_days").default(30).notNull(),
+        // SAP Master Linkage
+        sapVendorCode: varchar("sap_vendor_code", { length: 20 }),
+        sapTopCode: varchar("sap_top_code", { length: 10 }),
+        sapCurrency: varchar("sap_currency", { length: 10 }),
+        sapSalesperson: text("sap_salesperson"),
+        sapTelephone: text("sap_telephone"),
+        city: text("city"),
+        country: varchar("country", { length: 10 }),
+        postalCode: varchar("postal_code", { length: 20 }),
         status: vendorTenantStatusEnum("status").default("pending_invitation").notNull(),
         // Invitation system
         invitationToken: varchar("invitation_token", { length: 100 }).unique(),
@@ -142,7 +151,12 @@ export const vendorInvoices = pgTable(
         taxInvoiceFileUrl: text("tax_invoice_file_url"),
         poFileUrl: text("po_file_url"),
         deliveryReceiptFileUrl: text("delivery_receipt_file_url"),
+        grSlipFileUrl: text("gr_slip_file_url"),
         additionalFileUrl: text("additional_file_url"),
+
+        // Entry Mode (Vendor Self-service vs Procurement Internal Entry)
+        entryMode: varchar("entry_mode", { length: 30 }).default("vendor").notNull(),
+        enteredBy: text("entered_by").references(() => user.id),
 
         // Validation Gate (Admin Checklist)
         checklistDocValid: boolean("checklist_doc_valid").default(false).notNull(),
@@ -153,6 +167,12 @@ export const vendorInvoices = pgTable(
         adminChecklistNotes: text("admin_checklist_notes"),
         adminVerifiedAt: timestamp("admin_verified_at"),
         adminVerifiedBy: text("admin_verified_by").references(() => user.id),
+
+        // Finance Re-Check of Admin Checklist
+        financeRecheckAt: timestamp("finance_recheck_at"),
+        financeRecheckBy: text("finance_recheck_by").references(() => user.id),
+        financeRecheckNotes: text("finance_recheck_notes"),
+        financeRecheckPassed: boolean("finance_recheck_passed").default(false).notNull(),
 
         // Finance Validation & Cut-Off Engine
         financeValidatedAt: timestamp("finance_validated_at"),
@@ -216,6 +236,35 @@ export const vendorInvoiceLogs = pgTable(
         invoiceIdx: index("vendor_invoice_logs_invoice_idx").on(table.invoiceId),
         actionIdx: index("vendor_invoice_logs_action_idx").on(table.action),
         createdAtIdx: index("vendor_invoice_logs_created_at_idx").on(table.createdAt),
+    })
+)
+
+// 6. SAP Master Vendor (Mirrored from SAP MKVZ)
+export const sapVendorMaster = pgTable(
+    "sap_vendor_master",
+    {
+        id: serial("id").primaryKey(),
+        supplierCode: varchar("supplier_code", { length: 20 }).notNull().unique(),
+        vendorName: text("vendor_name").notNull(),
+        street: text("street"),
+        city: text("city"),
+        country: varchar("country", { length: 10 }),
+        postalCode: varchar("postal_code", { length: 20 }),
+        accountGroup: varchar("account_group", { length: 20 }),
+        termsOfPayment: varchar("terms_of_payment", { length: 10 }),
+        topDays: integer("top_days").default(0).notNull(),
+        incoterms: varchar("incoterms", { length: 20 }),
+        orderCurrency: varchar("order_currency", { length: 10 }),
+        salesperson: text("salesperson"),
+        telephone: text("telephone"),
+        isActive: boolean("is_active").default(true).notNull(),
+        importedAt: timestamp("imported_at").defaultNow().notNull(),
+        updatedAt: timestamp("updated_at").defaultNow().notNull(),
+    },
+    (table) => ({
+        supplierCodeIdx: index("sap_vendor_master_code_idx").on(table.supplierCode),
+        vendorNameIdx: index("sap_vendor_master_name_idx").on(table.vendorName),
+        topCodeIdx: index("sap_vendor_master_top_idx").on(table.termsOfPayment),
     })
 )
 

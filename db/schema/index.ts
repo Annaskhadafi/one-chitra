@@ -286,6 +286,7 @@ export {
     vendorPaymentBatches,
     vendorInvoices,
     vendorInvoiceLogs,
+    sapVendorMaster,
     vendorTenantsRelations,
     vendorTenantUsersRelations,
     vendorInvoicesRelations,

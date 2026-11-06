@@ -50,6 +50,7 @@ export function VendorInvoiceCreateForm({ tenant }: { tenant: any }) {
 
     // File attachments
     const [invoiceFile, setInvoiceFile] = useState<File | null>(null)
+    const [grSlipFile, setGrSlipFile] = useState<File | null>(null)
     const [taxInvoiceFile, setTaxInvoiceFile] = useState<File | null>(null)
     const [poFile, setPoFile] = useState<File | null>(null)
     const [deliveryReceiptFile, setDeliveryReceiptFile] = useState<File | null>(null)
@@ -105,6 +106,11 @@ export function VendorInvoiceCreateForm({ tenant }: { tenant: any }) {
             return
         }
 
+        if (!grSlipFile) {
+            setErrorMessage("Berkas Lampiran GR Slip (Goods Receipt) asli wajib diunggah.")
+            return
+        }
+
         if (tenant.isPkp && !taxInvoiceFile) {
             setErrorMessage("Vendor PKP wajib melampirkan berkas e-Faktur Pajak.")
             return
@@ -120,6 +126,15 @@ export function VendorInvoiceCreateForm({ tenant }: { tenant: any }) {
 
             if (!uploadInvoiceRes.success || !uploadInvoiceRes.url) {
                 throw new Error("Gagal mengunggah berkas invoice: " + uploadInvoiceRes.error)
+            }
+
+            // 1.b Upload GR Slip File (Mandatory)
+            const grFormData = new FormData()
+            grFormData.append("file", grSlipFile)
+            const uploadGrRes = await uploadFile(grFormData)
+
+            if (!uploadGrRes.success || !uploadGrRes.url) {
+                throw new Error("Gagal mengunggah berkas GR Slip: " + uploadGrRes.error)
             }
 
             // 2. Upload e-Faktur Pajak if exists
@@ -164,9 +179,9 @@ export function VendorInvoiceCreateForm({ tenant }: { tenant: any }) {
                 subtotal,
                 ppnPercent,
                 pphPercent,
-                topDays,
-                currency: poCheckResult?.currency || "IDR",
+                currency: poCheckResult?.currency || tenant.sapCurrency || "IDR",
                 invoiceFileUrl: uploadInvoiceRes.url,
+                grSlipFileUrl: uploadGrRes.url,
                 taxInvoiceFileUrl: taxInvoiceUrl,
                 poFileUrl: poUrl,
                 deliveryReceiptFileUrl: deliveryUrl,
@@ -337,17 +352,22 @@ export function VendorInvoiceCreateForm({ tenant }: { tenant: any }) {
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="space-y-1.5">
-                            <Label htmlFor="topDays">Term of Payment (TOP Hari)</Label>
-                            <Input
-                                id="topDays"
-                                type="number"
-                                min={1}
-                                max={180}
-                                value={topDays}
-                                onChange={(e) => setTopDays(Number(e.target.value) || 30)}
-                            />
+                            <Label htmlFor="topDays">Term of Payment (TOP) - Master Vendor</Label>
+                            <div className="flex items-center gap-2">
+                                <Input
+                                    id="topDays"
+                                    type="text"
+                                    readOnly
+                                    disabled
+                                    value={`${tenant.defaultTopDays || 30} Hari ${tenant.sapTopCode ? `(SAP: ${tenant.sapTopCode})` : ""}`}
+                                    className="bg-slate-100 dark:bg-slate-800 font-semibold cursor-not-allowed text-slate-700 dark:text-slate-300"
+                                />
+                                <span className="text-[11px] font-medium text-slate-500 whitespace-nowrap bg-slate-100 dark:bg-slate-800 px-2 py-2 rounded-md border">
+                                    Read-Only
+                                </span>
+                            </div>
                             <p className="text-[11px] text-slate-400">
-                                TOP akan terhitung setelah invoice dinyatakan valid oleh Finance.
+                                Sesuai data Master Vendor SAP. TOP terhitung otomatis setelah invoice valid by Finance.
                             </p>
                         </div>
 
@@ -412,6 +432,38 @@ export function VendorInvoiceCreateForm({ tenant }: { tenant: any }) {
                                 accept=".pdf,image/*"
                                 onChange={(e) => setInvoiceFile(e.target.files?.[0] || null)}
                                 className="block w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-primary file:text-white hover:file:bg-primary/90 cursor-pointer"
+                                required
+                            />
+                        )}
+                    </div>
+
+                    {/* Lampiran GR Slip (Wajib) */}
+                    <div className="p-4 border rounded-xl border-dashed border-blue-300 dark:border-blue-900 bg-blue-50/40 dark:bg-blue-950/20">
+                        <div className="flex items-center justify-between mb-2">
+                            <Label className="font-semibold text-slate-900 dark:text-slate-100 text-sm">
+                                Lampiran GR Slip / Goods Receipt (PDF / Gambar) *
+                            </Label>
+                            <span className="text-[11px] text-blue-600 dark:text-blue-400 font-bold">Wajib Lampiran GR Slip</span>
+                        </div>
+                        {grSlipFile ? (
+                            <div className="flex items-center justify-between p-2.5 bg-white dark:bg-slate-800 border rounded-lg text-xs">
+                                <span className="truncate max-w-xs font-medium">{grSlipFile.name}</span>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setGrSlipFile(null)}
+                                    className="h-6 w-6 p-0 text-slate-400 hover:text-red-500"
+                                >
+                                    <X className="w-4 h-4" />
+                                </Button>
+                            </div>
+                        ) : (
+                            <input
+                                type="file"
+                                accept=".pdf,image/*"
+                                onChange={(e) => setGrSlipFile(e.target.files?.[0] || null)}
+                                className="block w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700 cursor-pointer"
                                 required
                             />
                         )}

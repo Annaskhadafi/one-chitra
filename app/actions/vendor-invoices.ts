@@ -8,6 +8,7 @@ import {
     vendorTenants,
     vendorTenantUsers,
     vendorInvoiceLogs,
+    sapVendorMaster,
     zvendorPoReportSap,
     me2lPurchDocsSap,
 } from "@/db/schema"
@@ -365,6 +366,29 @@ export async function getVendorInvoiceByIdAction(id: string) {
 }
 
 /**
+ * 4.b. Pencarian Master Vendor SAP (Autocomplete & Sync)
+ */
+export async function searchSapVendorMasterAction(query: string) {
+    if (!query || query.trim().length < 2) {
+        return []
+    }
+    const clean = `%${query.trim()}%`
+    const results = await db
+        .select()
+        .from(sapVendorMaster)
+        .where(
+            or(
+                ilike(sapVendorMaster.supplierCode, clean),
+                ilike(sapVendorMaster.vendorName, clean),
+                ilike(sapVendorMaster.city, clean)
+            )
+        )
+        .limit(20)
+
+    return results
+}
+
+/**
  * 5. Admin Mengundang Vendor Baru (Invite-Only Vendor Registration)
  */
 export async function inviteVendorAction(data: {
@@ -378,6 +402,14 @@ export async function inviteVendorAction(data: {
     bankName?: string
     bankAccountNo?: string
     bankAccountHolder?: string
+    sapVendorCode?: string
+    sapTopCode?: string
+    sapCurrency?: string
+    sapSalesperson?: string
+    sapTelephone?: string
+    city?: string
+    country?: string
+    postalCode?: string
 }) {
     const currentUser = await getActiveUser()
     const cleanEmail = data.email.trim().toLowerCase()
@@ -397,9 +429,14 @@ export async function inviteVendorAction(data: {
     const expiresAt = new Date()
     expiresAt.setDate(expiresAt.getDate() + 7) // Berlaku 7 hari
 
-    // Generate kode vendor VND-XXXX
-    const countTenants = await db.select({ count: sql<number>`count(*)` }).from(vendorTenants)
-    const code = `VND-${String(Number(countTenants[0]?.count || 0) + 1).padStart(4, "0")}`
+    // Kode vendor: jika ada SAP vendor code, gunakan SAP code, jika tidak VND-XXXX
+    let code: string
+    if (data.sapVendorCode?.trim()) {
+        code = `SAP-${data.sapVendorCode.trim()}`
+    } else {
+        const countTenants = await db.select({ count: sql<number>`count(*)` }).from(vendorTenants)
+        code = `VND-${String(Number(countTenants[0]?.count || 0) + 1).padStart(4, "0")}`
+    }
 
     const [newTenant] = await db
         .insert(vendorTenants)
@@ -407,7 +444,7 @@ export async function inviteVendorAction(data: {
             code,
             name: data.name.trim(),
             email: cleanEmail,
-            phone: data.phone?.trim(),
+            phone: data.phone?.trim() || data.sapTelephone?.trim(),
             address: data.address?.trim(),
             defaultTopDays: Number(data.defaultTopDays) || 30,
             isPkp: Boolean(data.isPkp),
@@ -415,6 +452,14 @@ export async function inviteVendorAction(data: {
             bankName: data.bankName?.trim(),
             bankAccountNo: data.bankAccountNo?.trim(),
             bankAccountHolder: data.bankAccountHolder?.trim(),
+            sapVendorCode: data.sapVendorCode?.trim() || null,
+            sapTopCode: data.sapTopCode?.trim() || null,
+            sapCurrency: data.sapCurrency?.trim() || "IDR",
+            sapSalesperson: data.sapSalesperson?.trim() || null,
+            sapTelephone: data.sapTelephone?.trim() || null,
+            city: data.city?.trim() || null,
+            country: data.country?.trim() || null,
+            postalCode: data.postalCode?.trim() || null,
             status: "pending_invitation",
             invitationToken,
             invitationExpiresAt: expiresAt,
@@ -565,8 +610,8 @@ export async function submitVendorInvoiceAction(data: {
     ppnPercent?: number
     pphPercent?: number
     currency?: string
-    topDays?: number
     invoiceFileUrl: string
+    grSlipFileUrl: string // Mandatory Goods Receipt Slip
     taxInvoiceFileUrl?: string
     poFileUrl?: string
     deliveryReceiptFileUrl?: string
@@ -577,7 +622,12 @@ export async function submitVendorInvoiceAction(data: {
         return { success: false, error: "Sesi telah berakhir. Silakan login kembali." }
     }
 
-    // Ambil tenant untuk validasi
+    // Validasi lampiran wajib GR Slip
+    if (!data.grSlipFileUrl?.trim()) {
+        return { success: false, error: "Lampiran GR Slip (Goods Receipt) wajib diunggah." }
+    }
+
+    // Ambil tenant untuk validasi & TOP read-only
     const tenant = await db
         .select()
         .from(vendorTenants)
@@ -594,7 +644,8 @@ export async function submitVendorInvoiceAction(data: {
         pphPercent: data.pphPercent ?? 0,
     })
 
-    const topDays = Number(data.topDays) || tenant[0].defaultTopDays || 30
+    // TOP vendor READ-ONLY mengikuti Master Vendor masing-masing
+    const topDays = tenant[0].defaultTopDays || 30
 
     // Simpan invoice
     const [newInvoice] = await db
@@ -610,10 +661,12 @@ export async function submitVendorInvoiceAction(data: {
             pphPercent: String(data.pphPercent ?? 0),
             pphAmount: String(pphAmount),
             grandTotal: String(grandTotal),
-            currency: data.currency || "IDR",
+            currency: data.currency || tenant[0].sapCurrency || "IDR",
             topDays,
+            entryMode: "vendor",
             status: "submitted",
             invoiceFileUrl: data.invoiceFileUrl,
+            grSlipFileUrl: data.grSlipFileUrl,
             taxInvoiceFileUrl: data.taxInvoiceFileUrl,
             poFileUrl: data.poFileUrl,
             deliveryReceiptFileUrl: data.deliveryReceiptFileUrl,
@@ -629,7 +682,7 @@ export async function submitVendorInvoiceAction(data: {
         actorId: currentUser.id,
         actorName: currentUser.name || "Vendor",
         actorRole: "vendor",
-        notes: `Pengajuan invoice baru nomor ${newInvoice.invoiceNumber}`,
+        notes: `Pengajuan invoice baru nomor ${newInvoice.invoiceNumber} (TOP ${topDays} hari)`,
     })
 
     // Kirim notifikasi email ke Admin
@@ -641,6 +694,95 @@ export async function submitVendorInvoiceAction(data: {
     })
 
     revalidatePath("/vendor/dashboard")
+    revalidatePath("/dashboard/vendor-invoices")
+    return { success: true, invoice: newInvoice }
+}
+
+/**
+ * 8.b. Opsi Entry Invoice oleh Admin Procurement (Internal Submission on behalf of Vendor)
+ */
+export async function submitInvoiceByAdminAction(data: {
+    tenantId: string
+    invoiceNumber: string
+    poNumber: string
+    invoiceDate: string
+    subtotal: number
+    ppnPercent?: number
+    pphPercent?: number
+    currency?: string
+    invoiceFileUrl: string
+    grSlipFileUrl: string // Mandatory Goods Receipt Slip
+    taxInvoiceFileUrl?: string
+    poFileUrl?: string
+    deliveryReceiptFileUrl?: string
+    additionalFileUrl?: string
+    notes?: string
+}) {
+    const currentUser = await getActiveUser()
+    if (!currentUser) {
+        return { success: false, error: "Unauthorized. Anda harus login sebagai Admin." }
+    }
+
+    if (!data.grSlipFileUrl?.trim()) {
+        return { success: false, error: "Lampiran GR Slip (Goods Receipt) wajib diunggah." }
+    }
+
+    const tenant = await db
+        .select()
+        .from(vendorTenants)
+        .where(eq(vendorTenants.id, data.tenantId))
+        .limit(1)
+
+    if (tenant.length === 0) {
+        return { success: false, error: "Vendor tidak ditemukan." }
+    }
+
+    const { ppnAmount, pphAmount, grandTotal } = calculateTaxAndTotals({
+        subtotal: data.subtotal,
+        ppnPercent: data.ppnPercent ?? (tenant[0].isPkp ? 11 : 0),
+        pphPercent: data.pphPercent ?? 0,
+    })
+
+    // TOP read-only dari master vendor
+    const topDays = tenant[0].defaultTopDays || 30
+
+    const [newInvoice] = await db
+        .insert(vendorInvoices)
+        .values({
+            tenantId: data.tenantId,
+            invoiceNumber: data.invoiceNumber.trim(),
+            poNumber: data.poNumber.trim(),
+            invoiceDate: new Date(data.invoiceDate),
+            subtotal: String(data.subtotal),
+            ppnPercent: String(data.ppnPercent ?? 11),
+            ppnAmount: String(ppnAmount),
+            pphPercent: String(data.pphPercent ?? 0),
+            pphAmount: String(pphAmount),
+            grandTotal: String(grandTotal),
+            currency: data.currency || tenant[0].sapCurrency || "IDR",
+            topDays,
+            entryMode: "admin_procurement",
+            enteredBy: currentUser.id,
+            status: "submitted",
+            invoiceFileUrl: data.invoiceFileUrl,
+            grSlipFileUrl: data.grSlipFileUrl,
+            taxInvoiceFileUrl: data.taxInvoiceFileUrl,
+            poFileUrl: data.poFileUrl,
+            deliveryReceiptFileUrl: data.deliveryReceiptFileUrl,
+            additionalFileUrl: data.additionalFileUrl,
+            createdBy: currentUser.id,
+        })
+        .returning()
+
+    await db.insert(vendorInvoiceLogs).values({
+        invoiceId: newInvoice.id,
+        action: "submitted",
+        actorId: currentUser.id,
+        actorName: currentUser.name || "Admin Procurement",
+        actorRole: "admin_procurement",
+        notes: `Entry invoice oleh Procurement on-behalf vendor ${tenant[0].name}. ${data.notes || ""}`,
+    })
+
     revalidatePath("/dashboard/vendor-invoices")
     return { success: true, invoice: newInvoice }
 }
@@ -757,13 +899,53 @@ export async function verifyAdminChecklistAction(data: {
 }
 
 /**
+ * 9.b. Finance Re-Check Hasil Validasi Checklist Admin
+ */
+export async function recheckAdminChecklistAction(data: {
+    invoiceId: string
+    passed: boolean
+    notes?: string
+}) {
+    const currentUser = await getActiveUser()
+    if (!currentUser) return { success: false, error: "Unauthorized" }
+
+    const invoice = await getVendorInvoiceByIdAction(data.invoiceId)
+    if (!invoice) return { success: false, error: "Invoice tidak ditemukan." }
+
+    const now = new Date()
+
+    await db
+        .update(vendorInvoices)
+        .set({
+            financeRecheckAt: now,
+            financeRecheckBy: currentUser.id,
+            financeRecheckNotes: data.notes?.trim() || null,
+            financeRecheckPassed: data.passed,
+            updatedAt: now,
+        })
+        .where(eq(vendorInvoices.id, data.invoiceId))
+
+    await db.insert(vendorInvoiceLogs).values({
+        invoiceId: data.invoiceId,
+        action: data.passed ? "finance_recheck_passed" : "finance_recheck_failed",
+        actorId: currentUser.id,
+        actorName: currentUser.name || "Finance",
+        actorRole: "finance",
+        notes: `Finance re-check hasil validasi admin: ${data.passed ? "SESUAI" : "DISCREPANCY/TIDAK SESUAI"}. ${data.notes || ""}`,
+    })
+
+    revalidatePath("/dashboard/vendor-invoices")
+    return { success: true }
+}
+
+/**
  * 10. Finance Validation & Cut-Off Engine Execution
+ * Catatan: TOP vendor adalah READ-ONLY mengikuti Master Vendor masing-masing.
  */
 export async function validateFinanceInvoiceAction(data: {
     invoiceId: string
     action: "validate" | "reject"
     notes?: string
-    overrideTopDays?: number
 }) {
     const currentUser = await getActiveUser()
     if (!currentUser) return { success: false, error: "Unauthorized" }
@@ -773,7 +955,9 @@ export async function validateFinanceInvoiceAction(data: {
 
     if (data.action === "validate") {
         const now = new Date()
-        const effectiveTopDays = data.overrideTopDays ?? invoice.topDays ?? 30
+
+        // TOP vendor READ-ONLY dari Master Vendor
+        const effectiveTopDays = invoice.topDays || invoice.tenant.defaultTopDays || 30
 
         // Jalankan kalkulator cut-off, TOP, dan jadwal bayar
         const schedule = calculateCutOffAndSchedule({
@@ -786,6 +970,9 @@ export async function validateFinanceInvoiceAction(data: {
             .set({
                 status: "validated_finance",
                 topDays: effectiveTopDays,
+                financeRecheckPassed: true,
+                financeRecheckAt: invoice.financeRecheckAt || now,
+                financeRecheckBy: invoice.financeRecheckBy || currentUser.id,
                 financeValidatedAt: now,
                 financeValidatedBy: currentUser.id,
                 financeNotes: data.notes?.trim() || null,
@@ -804,11 +991,12 @@ export async function validateFinanceInvoiceAction(data: {
             actorId: currentUser.id,
             actorName: currentUser.name || "Finance",
             actorRole: "finance",
-            notes: `Validasi Finance berhasil. Buku: ${schedule.bookReceivedDate.toISOString().slice(0, 10)}, Jadwal Bayar: ${schedule.scheduledPaymentDate.toISOString().slice(0, 10)}.`,
+            notes: `Validasi Finance berhasil. TOP: ${effectiveTopDays} hari (Read-Only Master Vendor). Buku: ${schedule.bookReceivedDate.toISOString().slice(0, 10)}, Jadwal Bayar: ${schedule.scheduledPaymentDate.toISOString().slice(0, 10)}.`,
             metadata: {
                 bookReceivedDate: schedule.bookReceivedDate,
                 paymentDueDate: schedule.paymentDueDate,
                 scheduledPaymentDate: schedule.scheduledPaymentDate,
+                topDays: effectiveTopDays,
             },
         })
     } else {
@@ -1086,5 +1274,43 @@ export async function getAllVendorTenantsAction() {
         .orderBy(desc(vendorTenants.createdAt))
 
     return tenants
+}
+
+/**
+ * 14. Mengambil Daftar Master Vendor SAP MKVZ (Paginasi/Pencarian)
+ */
+export async function getSapVendorMasterListAction(params?: {
+    search?: string
+    limit?: number
+    offset?: number
+}) {
+    const limit = params?.limit || 50
+    const offset = params?.offset || 0
+
+    let query = db.select().from(sapVendorMaster)
+
+    if (params?.search?.trim()) {
+        const clean = `%${params.search.trim()}%`
+        return await db
+            .select()
+            .from(sapVendorMaster)
+            .where(
+                or(
+                    ilike(sapVendorMaster.supplierCode, clean),
+                    ilike(sapVendorMaster.vendorName, clean),
+                    ilike(sapVendorMaster.city, clean)
+                )
+            )
+            .orderBy(sapVendorMaster.supplierCode)
+            .limit(limit)
+            .offset(offset)
+    }
+
+    return await db
+        .select()
+        .from(sapVendorMaster)
+        .orderBy(sapVendorMaster.supplierCode)
+        .limit(limit)
+        .offset(offset)
 }
 
