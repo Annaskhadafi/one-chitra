@@ -106,12 +106,12 @@ export function VendorInvoiceCreateForm({ tenant }: { tenant: any }) {
             return
         }
 
-        if (!grSlipFile) {
-            setErrorMessage("Berkas Lampiran GR Slip (Goods Receipt) asli wajib diunggah.")
+        if (!grSlipFile && !deliveryReceiptFile) {
+            setErrorMessage("Wajib melampirkan minimal salah satu bukti penerimaan: Berkas GR Slip atau Surat Jalan / BAST / Rekap Absen.")
             return
         }
 
-        if (tenant.isPkp && !taxInvoiceFile) {
+        if ((tenant.isPkp || ppnPercent > 0) && !taxInvoiceFile) {
             setErrorMessage("Vendor PKP wajib melampirkan berkas e-Faktur Pajak.")
             return
         }
@@ -128,16 +128,33 @@ export function VendorInvoiceCreateForm({ tenant }: { tenant: any }) {
                 throw new Error("Gagal mengunggah berkas invoice: " + uploadInvoiceRes.error)
             }
 
-            // 1.b Upload GR Slip File (Mandatory)
-            const grFormData = new FormData()
-            grFormData.append("file", grSlipFile)
-            const uploadGrRes = await uploadFile(grFormData)
+            // 1.b Upload GR Slip File if provided
+            let uploadGrUrl: string | undefined = undefined
+            if (grSlipFile) {
+                const grFormData = new FormData()
+                grFormData.append("file", grSlipFile)
+                const uploadGrRes = await uploadFile(grFormData)
 
-            if (!uploadGrRes.success || !uploadGrRes.url) {
-                throw new Error("Gagal mengunggah berkas GR Slip: " + uploadGrRes.error)
+                if (!uploadGrRes.success || !uploadGrRes.url) {
+                    throw new Error("Gagal mengunggah berkas GR Slip: " + uploadGrRes.error)
+                }
+                uploadGrUrl = uploadGrRes.url
             }
 
-            // 2. Upload e-Faktur Pajak if exists
+            // 1.c Upload Surat Jalan / BAST / Absen if provided
+            let uploadDelivUrl: string | undefined = undefined
+            if (deliveryReceiptFile) {
+                const delivFormData = new FormData()
+                delivFormData.append("file", deliveryReceiptFile)
+                const uploadDelivRes = await uploadFile(delivFormData)
+
+                if (!uploadDelivRes.success || !uploadDelivRes.url) {
+                    throw new Error("Gagal mengunggah berkas Surat Jalan / BAST / Absen: " + uploadDelivRes.error)
+                }
+                uploadDelivUrl = uploadDelivRes.url
+            }
+
+            // 2. Upload e-Faktur Pajak (Mandatory jika PKP)
             let taxInvoiceUrl: string | undefined = undefined
             if (taxInvoiceFile) {
                 const taxFormData = new FormData()
@@ -159,18 +176,7 @@ export function VendorInvoiceCreateForm({ tenant }: { tenant: any }) {
                 }
             }
 
-            // 4. Upload Surat Jalan/BAP if exists
-            let deliveryUrl: string | undefined = undefined
-            if (deliveryReceiptFile) {
-                const delivFormData = new FormData()
-                delivFormData.append("file", deliveryReceiptFile)
-                const uploadDelivRes = await uploadFile(delivFormData)
-                if (uploadDelivRes.success && uploadDelivRes.url) {
-                    deliveryUrl = uploadDelivRes.url
-                }
-            }
-
-            // 5. Submit to database action
+            // 4. Submit to database action
             const res = await submitVendorInvoiceAction({
                 tenantId: tenant.id,
                 invoiceNumber,
@@ -181,10 +187,10 @@ export function VendorInvoiceCreateForm({ tenant }: { tenant: any }) {
                 pphPercent,
                 currency: poCheckResult?.currency || tenant.sapCurrency || "IDR",
                 invoiceFileUrl: uploadInvoiceRes.url,
-                grSlipFileUrl: uploadGrRes.url,
+                grSlipFileUrl: uploadGrUrl,
+                deliveryReceiptFileUrl: uploadDelivUrl,
                 taxInvoiceFileUrl: taxInvoiceUrl,
                 poFileUrl: poUrl,
-                deliveryReceiptFileUrl: deliveryUrl,
             })
 
             if (!res.success) {
@@ -437,13 +443,15 @@ export function VendorInvoiceCreateForm({ tenant }: { tenant: any }) {
                         )}
                     </div>
 
-                    {/* Lampiran GR Slip (Wajib) */}
+                    {/* Lampiran GR Slip / Surat Jalan (Wajib Salah Satu) */}
                     <div className="p-4 border rounded-xl border-dashed border-blue-300 dark:border-blue-900 bg-blue-50/40 dark:bg-blue-950/20">
                         <div className="flex items-center justify-between mb-2">
                             <Label className="font-semibold text-slate-900 dark:text-slate-100 text-sm">
-                                Lampiran GR Slip / Goods Receipt (PDF / Gambar) *
+                                Lampiran GR Slip / Goods Receipt (PDF / Gambar)
                             </Label>
-                            <span className="text-[11px] text-blue-600 dark:text-blue-400 font-bold">Wajib Lampiran GR Slip</span>
+                            <span className="text-[11px] text-blue-600 dark:text-blue-400 font-bold">
+                                {deliveryReceiptFile ? "Opsional (Surat Jalan terunggah)" : "Wajib Pilih Salah Satu"}
+                            </span>
                         </div>
                         {grSlipFile ? (
                             <div className="flex items-center justify-between p-2.5 bg-white dark:bg-slate-800 border rounded-lg text-xs">
@@ -464,7 +472,6 @@ export function VendorInvoiceCreateForm({ tenant }: { tenant: any }) {
                                 accept=".pdf,image/*"
                                 onChange={(e) => setGrSlipFile(e.target.files?.[0] || null)}
                                 className="block w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700 cursor-pointer"
-                                required
                             />
                         )}
                     </div>
@@ -504,19 +511,24 @@ export function VendorInvoiceCreateForm({ tenant }: { tenant: any }) {
 
                     {/* Surat Jalan / BAP / Proof of Delivery & PO copy */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="p-3 border rounded-xl border-slate-200 dark:border-slate-800">
-                            <Label className="text-xs font-medium block mb-1.5">
-                                Surat Jalan / BAP (Opsional)
-                            </Label>
+                        <div className="p-3 border rounded-xl border-amber-300 dark:border-amber-900 bg-amber-50/40 dark:bg-amber-950/20">
+                            <div className="flex justify-between items-center mb-1.5">
+                                <Label className="text-xs font-semibold block">
+                                    Surat Jalan / BAST / Rekap Absen
+                                </Label>
+                                <span className="text-[10px] text-amber-700 font-bold">
+                                    {grSlipFile ? "Opsional (GR Slip terunggah)" : "Wajib Pilih Salah Satu"}
+                                </span>
+                            </div>
                             {deliveryReceiptFile ? (
-                                <div className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-800 border rounded-lg text-xs">
-                                    <span className="truncate max-w-xs">{deliveryReceiptFile.name}</span>
+                                <div className="flex items-center justify-between p-2 bg-white dark:bg-slate-800 border rounded-lg text-xs">
+                                    <span className="truncate max-w-xs font-medium">{deliveryReceiptFile.name}</span>
                                     <Button
                                         type="button"
                                         variant="ghost"
                                         size="sm"
                                         onClick={() => setDeliveryReceiptFile(null)}
-                                        className="h-6 w-6 p-0"
+                                        className="h-6 w-6 p-0 text-slate-400 hover:text-red-500"
                                     >
                                         <X className="w-4 h-4" />
                                     </Button>
@@ -526,7 +538,7 @@ export function VendorInvoiceCreateForm({ tenant }: { tenant: any }) {
                                     type="file"
                                     accept=".pdf,image/*"
                                     onChange={(e) => setDeliveryReceiptFile(e.target.files?.[0] || null)}
-                                    className="block w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-2.5 file:rounded file:border-0 file:text-xs file:bg-slate-200 file:text-slate-700 cursor-pointer"
+                                    className="block w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-2.5 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-amber-600 file:text-white hover:file:bg-amber-700 cursor-pointer"
                                 />
                             )}
                         </div>

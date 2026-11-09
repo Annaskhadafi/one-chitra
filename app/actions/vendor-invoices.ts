@@ -26,7 +26,9 @@ import {
     sendInvoiceSubmittedNotification,
     sendVendorInvitationEmail,
 } from "@/lib/vendor-invoice-notifications"
-import { requireApiSession } from "@/lib/api-auth"
+import { auth } from "@/lib/auth"
+import { headers } from "next/headers"
+import { checkPermission } from "@/lib/rbac"
 import { and, desc, eq, ilike, inArray, or, sql } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import bcrypt from "bcryptjs"
@@ -37,9 +39,13 @@ import * as crypto from "crypto"
  */
 async function getActiveUser() {
     try {
-        const session = await requireApiSession()
+        const reqHeaders = await headers()
+        const session = await auth.api.getSession({
+            headers: reqHeaders,
+        })
         return session?.user ?? null
-    } catch {
+    } catch (e) {
+        console.error("[vendor-invoices] getActiveUser failed:", e)
         return null
     }
 }
@@ -599,6 +605,79 @@ export async function acceptVendorInvitationAction(data: {
 }
 
 /**
+ * 4.c. Dapatkan atau Buat Tenant dari Master SAP Vendor (On-The-Fly Linking)
+ */
+export async function getOrCreateVendorTenantFromSapAction(sapSupplierCode: string) {
+    if (!sapSupplierCode?.trim()) {
+        return { success: false, error: "Kode supplier SAP tidak valid." }
+    }
+    const cleanCode = sapSupplierCode.trim()
+
+    // 1. Cek apakah sudah ada tenant yang tertaut dengan sap_vendor_code ini
+    const existingTenant = await db
+        .select()
+        .from(vendorTenants)
+        .where(
+            or(
+                eq(vendorTenants.sapVendorCode, cleanCode),
+                eq(vendorTenants.code, `SAP-${cleanCode}`)
+            )
+        )
+        .limit(1)
+
+    if (existingTenant.length > 0) {
+        return { success: true, tenant: existingTenant[0] }
+    }
+
+    // 2. Ambil data master vendor SAP
+    const sapVendor = await db
+        .select()
+        .from(sapVendorMaster)
+        .where(eq(sapVendorMaster.supplierCode, cleanCode))
+        .limit(1)
+
+    if (sapVendor.length === 0) {
+        return { success: false, error: `Vendor SAP dengan kode ${cleanCode} tidak ditemukan di database master.` }
+    }
+
+    const sv = sapVendor[0]
+    const placeholderEmail = `${cleanCode.toLowerCase()}@vendor-sap.chitra.com`
+
+    // Cek apakah email placeholder sudah ada
+    const existingByEmail = await db
+        .select()
+        .from(vendorTenants)
+        .where(eq(vendorTenants.email, placeholderEmail))
+        .limit(1)
+
+    if (existingByEmail.length > 0) {
+        return { success: true, tenant: existingByEmail[0] }
+    }
+
+    const [newTenant] = await db
+        .insert(vendorTenants)
+        .values({
+            code: `SAP-${cleanCode}`,
+            name: sv.vendorName,
+            email: placeholderEmail,
+            phone: sv.telephone || undefined,
+            address: `${sv.street || ""}, ${sv.city || ""}, ${sv.country || ""}`.replace(/^,\s*|,\s*$/g, "") || undefined,
+            defaultTopDays: sv.topDays || 30,
+            isPkp: true, // Default PKP jika bertransaksi komersial SAP
+            sapVendorCode: sv.supplierCode,
+            sapTopCode: sv.termsOfPayment || undefined,
+            sapCurrency: sv.orderCurrency || "IDR",
+            city: sv.city || undefined,
+            country: sv.country || undefined,
+            postalCode: sv.postalCode || undefined,
+            status: "active",
+        })
+        .returning()
+
+    return { success: true, tenant: newTenant }
+}
+
+/**
  * 8. Vendor Mengajukan Invoice Baru (Draft/Submitted -> Notifikasi ke Admin)
  */
 export async function submitVendorInvoiceAction(data: {
@@ -611,10 +690,10 @@ export async function submitVendorInvoiceAction(data: {
     pphPercent?: number
     currency?: string
     invoiceFileUrl: string
-    grSlipFileUrl: string // Mandatory Goods Receipt Slip
+    grSlipFileUrl?: string // Goods Receipt Slip (wajib salah satu dengan deliveryReceiptFileUrl)
     taxInvoiceFileUrl?: string
     poFileUrl?: string
-    deliveryReceiptFileUrl?: string
+    deliveryReceiptFileUrl?: string // Surat Jalan / BAST / Absen (wajib salah satu dengan grSlipFileUrl)
     additionalFileUrl?: string
 }) {
     const currentUser = await getActiveUser()
@@ -622,9 +701,9 @@ export async function submitVendorInvoiceAction(data: {
         return { success: false, error: "Sesi telah berakhir. Silakan login kembali." }
     }
 
-    // Validasi lampiran wajib GR Slip
-    if (!data.grSlipFileUrl?.trim()) {
-        return { success: false, error: "Lampiran GR Slip (Goods Receipt) wajib diunggah." }
+    // Validasi bukti penerimaan: minimal salah satu antara GR Slip atau Surat Jalan/BAST/Absen
+    if (!data.grSlipFileUrl?.trim() && !data.deliveryReceiptFileUrl?.trim()) {
+        return { success: false, error: "Wajib melampirkan minimal salah satu bukti penerimaan: Lampiran GR Slip atau Surat Jalan / BAST / Daftar Absen." }
     }
 
     // Ambil tenant untuk validasi & TOP read-only
@@ -636,6 +715,12 @@ export async function submitVendorInvoiceAction(data: {
 
     if (tenant.length === 0) {
         return { success: false, error: "Organisasi vendor tidak ditemukan." }
+    }
+
+    // Validasi e-Faktur Pajak Wajib bagi Vendor PKP
+    const isVendorPkp = tenant[0].isPkp || (data.ppnPercent ?? 0) > 0
+    if (isVendorPkp && !data.taxInvoiceFileUrl?.trim()) {
+        return { success: false, error: "Vendor PKP wajib melampirkan berkas e-Faktur Pajak." }
     }
 
     const { ppnAmount, pphAmount, grandTotal } = calculateTaxAndTotals({
@@ -703,6 +788,7 @@ export async function submitVendorInvoiceAction(data: {
  */
 export async function submitInvoiceByAdminAction(data: {
     tenantId: string
+    sapSupplierCode?: string // Optional direct link to SAP Vendor Master
     invoiceNumber: string
     poNumber: string
     invoiceDate: string
@@ -711,30 +797,55 @@ export async function submitInvoiceByAdminAction(data: {
     pphPercent?: number
     currency?: string
     invoiceFileUrl: string
-    grSlipFileUrl: string // Mandatory Goods Receipt Slip
+    grSlipFileUrl?: string // Goods Receipt Slip (wajib salah satu dengan deliveryReceiptFileUrl)
     taxInvoiceFileUrl?: string
     poFileUrl?: string
-    deliveryReceiptFileUrl?: string
+    deliveryReceiptFileUrl?: string // Surat Jalan / BAST / Absen (wajib salah satu dengan grSlipFileUrl)
     additionalFileUrl?: string
     notes?: string
 }) {
     const currentUser = await getActiveUser()
     if (!currentUser) {
-        return { success: false, error: "Unauthorized. Anda harus login sebagai Admin." }
+        return { success: false, error: "Unauthorized. Silakan login terlebih dahulu." }
     }
 
-    if (!data.grSlipFileUrl?.trim()) {
-        return { success: false, error: "Lampiran GR Slip (Goods Receipt) wajib diunggah." }
+    try {
+        await checkPermission("vendor-invoices", "create")
+    } catch {
+        return { success: false, error: "Akses ditolak. Akun Anda belum memiliki izin entry invoice vendor." }
+    }
+
+    // Validasi bukti penerimaan: minimal salah satu antara GR Slip atau Surat Jalan/BAST/Absen
+    if (!data.grSlipFileUrl?.trim() && !data.deliveryReceiptFileUrl?.trim()) {
+        return { success: false, error: "Wajib melampirkan minimal salah satu bukti penerimaan: Lampiran GR Slip atau Surat Jalan / BAST / Daftar Absen." }
+    }
+
+    let targetTenantId = data.tenantId
+
+    // Jika tenantId berawalan "sap:" atau dikirim sapSupplierCode, lakukan on-the-fly linking
+    if (targetTenantId?.startsWith("sap:") || data.sapSupplierCode) {
+        const sapCode = data.sapSupplierCode || targetTenantId.replace("sap:", "")
+        const linkedRes = await getOrCreateVendorTenantFromSapAction(sapCode)
+        if (!linkedRes.success || !linkedRes.tenant) {
+            return { success: false, error: linkedRes.error || "Gagal mengaitkan data Master Vendor SAP." }
+        }
+        targetTenantId = linkedRes.tenant.id
     }
 
     const tenant = await db
         .select()
         .from(vendorTenants)
-        .where(eq(vendorTenants.id, data.tenantId))
+        .where(eq(vendorTenants.id, targetTenantId))
         .limit(1)
 
     if (tenant.length === 0) {
         return { success: false, error: "Vendor tidak ditemukan." }
+    }
+
+    // Validasi e-Faktur Pajak Wajib bagi Vendor PKP
+    const isVendorPkp = tenant[0].isPkp || (data.ppnPercent ?? 0) > 0
+    if (isVendorPkp && !data.taxInvoiceFileUrl?.trim()) {
+        return { success: false, error: "Vendor PKP wajib melampirkan berkas e-Faktur Pajak." }
     }
 
     const { ppnAmount, pphAmount, grandTotal } = calculateTaxAndTotals({
@@ -749,7 +860,7 @@ export async function submitInvoiceByAdminAction(data: {
     const [newInvoice] = await db
         .insert(vendorInvoices)
         .values({
-            tenantId: data.tenantId,
+            tenantId: targetTenantId,
             invoiceNumber: data.invoiceNumber.trim(),
             poNumber: data.poNumber.trim(),
             invoiceDate: new Date(data.invoiceDate),

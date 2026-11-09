@@ -85,6 +85,7 @@ export const dashboardRoutePermissionRules: DashboardRoutePermissionRule[] = [
     { prefix: "/dashboard/test-delivery-page", resource: "deliveries" },
     { prefix: "/dashboard/warehouse", resource: "warehouses" },
     { prefix: "/dashboard/wip-repair", resource: "wip-repair" },
+    { prefix: "/dashboard/vendor-invoices", resource: "vendor-invoices" },
     { prefix: "/dashboard", resource: "dashboard" },
 ]
 

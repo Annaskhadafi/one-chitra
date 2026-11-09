@@ -72,7 +72,7 @@ export async function checkPermission(
     }
 
     const roleLower = userRole.toLowerCase()
-    if (roleLower === 'admin' || roleLower === 'superuser' || roleLower === 'super admin' || roleLower === 'super-admin' || roleLower === 'super_admin') {
+    if (roleLower === 'admin' || roleLower === 'superuser' || roleLower === 'super admin' || roleLower === 'super-admin' || roleLower === 'super_admin' || roleLower === 'admin procurement' || roleLower === 'procurement admin') {
         return true
     }
 
