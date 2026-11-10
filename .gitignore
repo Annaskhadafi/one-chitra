@@ -46,6 +46,11 @@ next-env.d.ts
 # uploads
 /public/uploads/
 
+# PWA generated assets
+/public/sw.js.map
+/public/workbox-*.js*
+/public/worker-*.js*
+
 # db backups
 /backups/
 *.sql

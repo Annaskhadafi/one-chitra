@@ -128,6 +128,8 @@ export const vendorInvoices = pgTable(
             .references(() => vendorTenants.id, { onDelete: "cascade" }),
         invoiceNumber: varchar("invoice_number", { length: 150 }).notNull(),
         poNumber: varchar("po_number", { length: 100 }).notNull(),
+        referenceType: varchar("reference_type", { length: 20 }).default("PO").notNull(), // 'PO' | 'CONTRACT'
+        contractNumber: varchar("contract_number", { length: 100 }),
         invoiceDate: timestamp("invoice_date").notNull(),
 
         // Financial Amounts
@@ -142,6 +144,9 @@ export const vendorInvoices = pgTable(
 
         // Lifecycle & Status
         status: vendorInvoiceStatusEnum("status").default("submitted").notNull(),
+        poStatus: varchar("po_status", { length: 30 }).default("open"), // 'open' | 'partial' | 'completed' | 'closed' | 'cancelled'
+        invoicedItemsCount: integer("invoiced_items_count").default(0),
+        totalPoItemsCount: integer("total_po_items_count").default(0),
         rejectionReason: text("rejection_reason"),
         rejectionStage: varchar("rejection_stage", { length: 30 }),
         rejectionNotes: text("rejection_notes"),
@@ -150,6 +155,7 @@ export const vendorInvoices = pgTable(
         invoiceFileUrl: text("invoice_file_url").notNull(),
         taxInvoiceFileUrl: text("tax_invoice_file_url"),
         poFileUrl: text("po_file_url"),
+        contractFileUrl: text("contract_file_url"),
         deliveryReceiptFileUrl: text("delivery_receipt_file_url"),
         grSlipFileUrl: text("gr_slip_file_url"),
         additionalFileUrl: text("additional_file_url"),
@@ -239,7 +245,7 @@ export const vendorInvoiceLogs = pgTable(
     })
 )
 
-// 6. SAP Master Vendor (Mirrored from SAP MKVZ)
+// 6. SAP Master Vendor (Mirrored from SAP MKVZ & VPMS Accenture Standard)
 export const sapVendorMaster = pgTable(
     "sap_vendor_master",
     {
@@ -258,6 +264,30 @@ export const sapVendorMaster = pgTable(
         salesperson: text("salesperson"),
         telephone: text("telephone"),
         isActive: boolean("is_active").default(true).notNull(),
+
+        // Accenture VPMS Standard Master Data Fields
+        npwp: varchar("npwp", { length: 50 }),
+        typeOfBusiness: text("type_of_business"), // KBLI / Category
+        status: varchar("status", { length: 20 }).default("Active").notNull(), // Active, Blacklisted, Inactive
+        address: text("address"),
+
+        // Vendor Director Detail
+        directorName: text("director_name"),
+        directorPosition: text("director_position"),
+        directorEmail: text("director_email"),
+        directorPhone: text("director_phone"),
+
+        // Vendor Sales PIC Detail
+        salesPicName: text("sales_pic_name"),
+        salesPicPosition: text("sales_pic_position"),
+        salesPicEmail: text("sales_pic_email"),
+        salesPicPhone: text("sales_pic_phone"),
+
+        // Bank Account Details
+        bankName: text("bank_name"),
+        bankAccountNumber: text("bank_account_number"),
+        bankAccountHolder: text("bank_account_holder"),
+
         importedAt: timestamp("imported_at").defaultNow().notNull(),
         updatedAt: timestamp("updated_at").defaultNow().notNull(),
     },
@@ -265,6 +295,101 @@ export const sapVendorMaster = pgTable(
         supplierCodeIdx: index("sap_vendor_master_code_idx").on(table.supplierCode),
         vendorNameIdx: index("sap_vendor_master_name_idx").on(table.vendorName),
         topCodeIdx: index("sap_vendor_master_top_idx").on(table.termsOfPayment),
+        statusIdx: index("sap_vendor_master_status_idx").on(table.status),
+    })
+)
+
+// 7. Vendor Contracts (Sewa Menyewa, Pengadaan, Jasa, dll)
+export const vendorContracts = pgTable(
+    "vendor_contracts",
+    {
+        id: serial("id").primaryKey(),
+        contractNumber: varchar("contract_number", { length: 100 }).notNull().unique(),
+        vendorTenantId: varchar("vendor_tenant_id", { length: 36 }).references(() => vendorTenants.id, { onDelete: "set null" }),
+        vendorSapCode: varchar("vendor_sap_code", { length: 50 }),
+        vendorName: varchar("vendor_name", { length: 255 }).notNull(),
+        title: varchar("title", { length: 255 }).default("Perjanjian Kerjasama / Sewa").notNull(),
+        category: varchar("category", { length: 100 }).default("Sewa Kendaraan").notNull(),
+        itemName: text("item_name").notNull(), // e.g. "MITSUBISHI TRITON 2.5L DC HDX-L (4X4) MT - DA 8109 HH"
+        itemDetails: jsonb("item_details").$type<{
+            policeNumber?: string
+            chassisNumber?: string
+            engineNumber?: string
+            year?: number | string
+            color?: string
+            location?: string
+            specs?: string
+            qty?: number
+            uom?: string
+        }>().default({}),
+        contractValue: numeric("contract_value", { precision: 18, scale: 2 }).default("0").notNull(),
+        billingFrequency: varchar("billing_frequency", { length: 50 }).default("monthly").notNull(),
+        currency: varchar("currency", { length: 10 }).default("IDR").notNull(),
+        startDate: timestamp("start_date").notNull(),
+        endDate: timestamp("end_date").notNull(),
+        topDays: integer("top_days").default(45).notNull(),
+        isPkp: boolean("is_pkp").default(true).notNull(),
+        ppnPercent: numeric("ppn_percent", { precision: 5, scale: 2 }).default("11").notNull(),
+        pphPercent: numeric("pph_percent", { precision: 5, scale: 2 }).default("2").notNull(),
+        bankName: varchar("bank_name", { length: 100 }),
+        bankAccountNumber: varchar("bank_account_number", { length: 100 }),
+        bankAccountHolder: varchar("bank_account_holder", { length: 255 }),
+        npwpNumber: varchar("npwp_number", { length: 50 }),
+        vendorAddress: text("vendor_address"),
+        vendorPicName: varchar("vendor_pic_name", { length: 100 }),
+        contractFileUrl: text("contract_file_url"),
+        attachmentUrls: jsonb("attachment_urls").$type<{
+            stnkUrl?: string
+            photoUrl?: string
+            insuranceUrl?: string
+            npwpUrl?: string
+            otherUrl?: string
+        }>().default({}),
+        status: varchar("status", { length: 30 }).default("active").notNull(), // 'active' | 'expired' | 'terminated' | 'draft'
+        notes: text("notes"),
+        createdBy: text("created_by").references(() => user.id),
+        createdAt: timestamp("created_at").defaultNow().notNull(),
+        updatedAt: timestamp("updated_at").defaultNow().notNull(),
+    },
+    (table) => ({
+        contractNoIdx: index("vendor_contracts_number_idx").on(table.contractNumber),
+        vendorNameIdx: index("vendor_contracts_vendor_name_idx").on(table.vendorName),
+        statusIdx: index("vendor_contracts_status_idx").on(table.status),
+    })
+)
+
+// 8. PO Tracking (Open, Partial, Completed, Closed, Cancelled)
+export const vendorPoTracking = pgTable(
+    "vendor_po_tracking",
+    {
+        id: serial("id").primaryKey(),
+        poNumber: varchar("po_number", { length: 100 }).notNull().unique(),
+        vendorCode: varchar("vendor_code", { length: 50 }),
+        vendorName: varchar("vendor_name", { length: 255 }),
+        totalItems: integer("total_items").default(0).notNull(),
+        invoicedItems: integer("invoiced_items").default(0).notNull(),
+        totalQty: numeric("total_qty", { precision: 18, scale: 2 }).default("0").notNull(),
+        invoicedQty: numeric("invoiced_qty", { precision: 18, scale: 2 }).default("0").notNull(),
+        netValue: numeric("net_value", { precision: 18, scale: 2 }).default("0").notNull(),
+        invoicedValue: numeric("invoiced_value", { precision: 18, scale: 2 }).default("0").notNull(),
+        currency: varchar("currency", { length: 10 }).default("IDR").notNull(),
+        status: varchar("status", { length: 30 }).default("open").notNull(), // 'open' | 'partial' | 'completed' | 'closed' | 'cancelled'
+        lastInvoicedAt: timestamp("last_invoiced_at"),
+        itemsDetail: jsonb("items_detail").$type<Array<{
+            itemNo: number
+            material: string
+            description: string
+            poQty: number
+            invoicedQty: number
+            netValue: number
+            invoicedValue: number
+            status: "open" | "partial" | "completed"
+        }>>().default([]),
+        updatedAt: timestamp("updated_at").defaultNow().notNull(),
+    },
+    (table) => ({
+        poNoIdx: index("vendor_po_tracking_po_no_idx").on(table.poNumber),
+        statusIdx: index("vendor_po_tracking_status_idx").on(table.status),
     })
 )
 
@@ -331,6 +456,17 @@ export const vendorInvoiceLogsRelations = relations(vendorInvoiceLogs, ({ one })
     }),
     actor: one(user, {
         fields: [vendorInvoiceLogs.actorId],
+        references: [user.id],
+    }),
+}))
+
+export const vendorContractsRelations = relations(vendorContracts, ({ one }) => ({
+    tenant: one(vendorTenants, {
+        fields: [vendorContracts.vendorTenantId],
+        references: [vendorTenants.id],
+    }),
+    creator: one(user, {
+        fields: [vendorContracts.createdBy],
         references: [user.id],
     }),
 }))

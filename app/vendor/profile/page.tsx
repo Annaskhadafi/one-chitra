@@ -3,6 +3,9 @@ import { getVendorTenantForCurrentUser } from "@/app/actions/vendor-invoices"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Building2, CreditCard, Mail, MapPin, Phone, ShieldCheck, User } from "lucide-react"
+import { VendorChangePasswordCard } from "./_components/change-password-card"
+
+export const dynamic = "force-dynamic"
 
 export const metadata = {
     title: "Profil Perusahaan Vendor | One Chitra Partner Portal",
@@ -112,6 +115,9 @@ export default async function VendorProfilePage() {
                     </CardContent>
                 </Card>
             </div>
+
+            {/* Pengaturan Ganti Kata Sandi */}
+            <VendorChangePasswordCard />
         </div>
     )
 }

@@ -2,6 +2,8 @@ import { redirect } from "next/navigation"
 import { getVendorTenantForCurrentUser, getVendorInvoicesAction } from "@/app/actions/vendor-invoices"
 import { VendorDashboardClient } from "./_components/vendor-dashboard-client"
 
+export const dynamic = "force-dynamic"
+
 export const metadata = {
     title: "Dashboard Tagihan Vendor | One Chitra",
     description: "Monitoring status pengajuan faktur tagihan dan riwayat pembayaran.",

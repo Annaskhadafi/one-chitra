@@ -2,6 +2,7 @@ import { Suspense } from "react"
 import {
     getAllVendorTenantsAction,
     getSapVendorMasterListAction,
+    getVendorContractsAction,
     getVendorInvoiceDashboardStats,
     getVendorInvoicesAction,
 } from "@/app/actions/vendor-invoices"
@@ -15,11 +16,12 @@ export const metadata = {
 }
 
 export default async function VendorInvoicesDashboardPage() {
-    const [stats, invoices, tenants, sapVendors] = await Promise.all([
+    const [stats, invoices, tenants, sapVendors, contracts] = await Promise.all([
         getVendorInvoiceDashboardStats(),
         getVendorInvoicesAction({ limit: 300 }),
         getAllVendorTenantsAction(),
         getSapVendorMasterListAction({ limit: 50 }),
+        getVendorContractsAction(),
     ])
 
     return (
@@ -43,6 +45,7 @@ export default async function VendorInvoicesDashboardPage() {
                     initialInvoices={invoices}
                     initialTenants={tenants}
                     initialSapVendors={sapVendors}
+                    initialContracts={contracts}
                 />
             </Suspense>
         </div>

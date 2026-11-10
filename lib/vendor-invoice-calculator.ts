@@ -299,3 +299,42 @@ export function getDueDateUrgency(
         colorClass: "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-900 dark:text-slate-300",
     }
 }
+
+/**
+ * Memeriksa apakah suatu PO SAP merupakan milik dari vendor tenant yang bersangkutan
+ */
+export function isPoOwnedByVendor(
+    poVendorCode: string | null | undefined,
+    poVendorName: string | null | undefined,
+    tenant: { name: string; sapVendorCode?: string | null; code?: string | null }
+): boolean {
+    if (!tenant) return true
+
+    // 1. Cek kode SAP jika ada
+    if (tenant.sapVendorCode && poVendorCode) {
+        const cleanTenantSap = tenant.sapVendorCode.trim().toLowerCase().replace(/^0+/, "")
+        const cleanPoSap = poVendorCode.trim().toLowerCase().replace(/^0+/, "")
+        if (cleanTenantSap && cleanPoSap && cleanTenantSap === cleanPoSap) return true
+    }
+
+    // 2. Cek kesamaan nama perusahaan (normalize buang prefix PT/CV/dll dan karakter non-alfanumerik)
+    if (poVendorName && tenant.name) {
+        const norm = (str: string) =>
+            str
+                .toLowerCase()
+                .replace(/\b(pt|cv|ud|tbk|ltd|inc|corp)\b/gi, "")
+                .replace(/[^a-z0-9]/g, "")
+                .trim()
+
+        const nPo = norm(poVendorName)
+        const nTenant = norm(tenant.name)
+
+        if (nPo && nTenant) {
+            if (nPo === nTenant || nPo.includes(nTenant) || nTenant.includes(nPo)) {
+                return true
+            }
+        }
+    }
+
+    return false
+}

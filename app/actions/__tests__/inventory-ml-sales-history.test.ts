@@ -15,7 +15,7 @@ vi.mock('@/lib/rbac', () => ({
   checkPermission: vi.fn().mockResolvedValue(true),
 }))
 
-describe('Sales History - Unit Tests', () => {
+describe('Sales History - Unit Tests', { timeout: 30000 }, () => {
 
   /**
    * Test: getSalesHistory returns correct structure

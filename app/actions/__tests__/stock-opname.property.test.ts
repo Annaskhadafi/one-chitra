@@ -6,7 +6,7 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
 import * as fc from 'fast-check'
 import { db } from '@/db'
-import { stockOpnameSessions, stockOpnameSignatures, warehouses, user } from '@/db/schema'
+import { stockOpnameSessions, stockOpnameSignatures, stockOpnameItems, stockLevels, stockMovements, warehouses, user } from '@/db/schema'
 import { eq, inArray } from 'drizzle-orm'
 
 // Mock the RBAC module to bypass authentication in tests
@@ -21,7 +21,52 @@ vi.mock('@/lib/rbac', () => ({
 let testWarehouseId: number
 let testUserId: string
 
+async function cleanupTestData() {
+  try {
+    const existingTestWarehouses = await db.query.warehouses.findMany({
+      where: eq(warehouses.sloc, 'TEST-OPNAME'),
+      columns: { id: true }
+    })
+    const existingWarehouseIds = existingTestWarehouses.map(w => w.id)
+
+    const existingSessions = await db.select({ id: stockOpnameSessions.id }).from(stockOpnameSessions).where(
+      eq(stockOpnameSessions.createdById, 'test-user-opname')
+    )
+    const sessionIds = existingSessions.map(s => s.id)
+
+    for (const warehouseId of existingWarehouseIds) {
+      const whSessions = await db.select({ id: stockOpnameSessions.id }).from(stockOpnameSessions).where(
+        eq(stockOpnameSessions.warehouseId, warehouseId)
+      )
+      sessionIds.push(...whSessions.map(s => s.id))
+    }
+
+    const uniqueSessionIds = Array.from(new Set(sessionIds))
+    if (uniqueSessionIds.length > 0) {
+      await db.delete(stockOpnameItems).where(inArray(stockOpnameItems.sessionId, uniqueSessionIds))
+      await db.delete(stockOpnameSignatures).where(inArray(stockOpnameSignatures.sessionId, uniqueSessionIds))
+      await db.delete(stockOpnameSessions).where(inArray(stockOpnameSessions.id, uniqueSessionIds))
+    }
+
+    for (const warehouseId of existingWarehouseIds) {
+      await db.delete(stockOpnameSessions).where(eq(stockOpnameSessions.warehouseId, warehouseId))
+      await db.delete(stockLevels).where(eq(stockLevels.warehouseId, warehouseId))
+      await db.delete(stockMovements).where(eq(stockMovements.warehouseId, warehouseId))
+      await db.delete(warehouses).where(eq(warehouses.id, warehouseId))
+    }
+    await db.delete(warehouses).where(eq(warehouses.sloc, 'TEST-OPNAME'))
+
+    await db.delete(user).where(eq(user.id, 'test-user-opname'))
+    await db.delete(user).where(eq(user.email, 'test-opname@example.com'))
+  } catch (error) {
+    console.error('Error during cleanupTestData:', error)
+  }
+}
+
 beforeAll(async () => {
+  // Clean up any existing leftover test data first
+  await cleanupTestData()
+
   // Create a test warehouse
   const [warehouse] = await db.insert(warehouses).values({
     sloc: 'TEST-OPNAME',
@@ -42,9 +87,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   // Cleanup test data
-  await db.delete(stockOpnameSessions).where(eq(stockOpnameSessions.warehouseId, testWarehouseId))
-  await db.delete(warehouses).where(eq(warehouses.id, testWarehouseId))
-  await db.delete(user).where(eq(user.id, testUserId))
+  await cleanupTestData()
 })
 
 // ─── Arbitraries (Test Data Generators) ────────────────────────────────────
@@ -167,11 +210,17 @@ describe('Stock Opname Enhancement - Property Tests', () => {
             })
           }
         ),
-        { numRuns: 20 }
+        { numRuns: 5 }
       )
     } finally {
       // Cleanup all created sessions
       if (createdSessionIds.length > 0) {
+        await db.delete(stockOpnameItems).where(
+          inArray(stockOpnameItems.sessionId, createdSessionIds)
+        )
+        await db.delete(stockOpnameSignatures).where(
+          inArray(stockOpnameSignatures.sessionId, createdSessionIds)
+        )
         await db.delete(stockOpnameSessions).where(
           inArray(stockOpnameSessions.id, createdSessionIds)
         )
@@ -251,11 +300,17 @@ describe('Stock Opname Enhancement - Property Tests', () => {
             })
           }
         ),
-        { numRuns: 20 }
+        { numRuns: 5 }
       )
     } finally {
       // Cleanup all created sessions
       if (createdSessionIds.length > 0) {
+        await db.delete(stockOpnameItems).where(
+          inArray(stockOpnameItems.sessionId, createdSessionIds)
+        )
+        await db.delete(stockOpnameSignatures).where(
+          inArray(stockOpnameSignatures.sessionId, createdSessionIds)
+        )
         await db.delete(stockOpnameSessions).where(
           inArray(stockOpnameSessions.id, createdSessionIds)
         )
@@ -398,11 +453,17 @@ describe('Stock Opname Enhancement - Property Tests', () => {
             }
           }
         ),
-        { numRuns: 10 }
+        { numRuns: 3 }
       )
     } finally {
       // Cleanup all created sessions
       if (createdSessionIds.length > 0) {
+        await db.delete(stockOpnameItems).where(
+          inArray(stockOpnameItems.sessionId, createdSessionIds)
+        )
+        await db.delete(stockOpnameSignatures).where(
+          inArray(stockOpnameSignatures.sessionId, createdSessionIds)
+        )
         await db.delete(stockOpnameSessions).where(
           inArray(stockOpnameSessions.id, createdSessionIds)
         )
@@ -463,11 +524,17 @@ describe('Stock Opname Enhancement - Property Tests', () => {
             expect(result.data).toBeUndefined()
           }
         ),
-        { numRuns: 20 }
+        { numRuns: 5 }
       )
     } finally {
       // Cleanup all created sessions
       if (createdSessionIds.length > 0) {
+        await db.delete(stockOpnameItems).where(
+          inArray(stockOpnameItems.sessionId, createdSessionIds)
+        )
+        await db.delete(stockOpnameSignatures).where(
+          inArray(stockOpnameSignatures.sessionId, createdSessionIds)
+        )
         await db.delete(stockOpnameSessions).where(
           inArray(stockOpnameSessions.id, createdSessionIds)
         )

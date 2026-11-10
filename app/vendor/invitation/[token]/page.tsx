@@ -3,6 +3,8 @@ import { VendorActivationForm } from "./_components/activation-form"
 import { AlertCircle, Building2, CheckCircle2 } from "lucide-react"
 import Link from "next/link"
 
+export const dynamic = "force-dynamic"
+
 export const metadata = {
     title: "Aktivasi Akun Vendor | One Chitra Partner Portal",
     description: "Aktivasi akun mitra vendor One Chitra melalui tautan undangan resmi.",

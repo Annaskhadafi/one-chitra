@@ -4,6 +4,8 @@ import { VendorInvoiceCreateForm } from "./_components/create-invoice-form"
 import { ArrowLeft, FilePlus } from "lucide-react"
 import Link from "next/link"
 
+export const dynamic = "force-dynamic"
+
 export const metadata = {
     title: "Ajukan Invoice Baru | One Chitra Partner Portal",
     description: "Formulir pengajuan faktur tagihan vendor ke sistem One Chitra.",
@@ -17,7 +19,7 @@ export default async function NewVendorInvoicePage() {
     }
 
     return (
-        <div className="max-w-4xl mx-auto space-y-6 py-4">
+        <div className="w-full space-y-6 py-2">
             <div className="flex items-center gap-3">
                 <Link
                     href="/vendor/dashboard"

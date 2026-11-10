@@ -161,6 +161,17 @@ export async function sendInvoiceVerifiedNotification(params: {
     })
 }
 
+// Alias for backwards-compatibility
+export async function sendInvoiceAdminVerifiedNotification(params: {
+    invoiceNumber: string
+    vendorName: string
+    poNumber: string
+    grandTotal: number | string
+}) {
+    return sendInvoiceVerifiedNotification(params)
+}
+
+
 /**
  * 4. Email Penolakan Invoice ke Vendor (Rejected -> Email ke Vendor dengan Alasan & Revisi)
  */

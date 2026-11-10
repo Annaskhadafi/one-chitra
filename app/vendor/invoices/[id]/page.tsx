@@ -21,6 +21,8 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 
+export const dynamic = "force-dynamic"
+
 function formatCurrency(amount: number | string): string {
     const val = Number(amount) || 0
     return new Intl.NumberFormat("id-ID", {

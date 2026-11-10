@@ -4,6 +4,8 @@ import { CustomerLegalTable } from "./_components/customer-legal-table";
 import { PermissionGuard } from "@/components/permission-guard";
 import { Scale } from "lucide-react";
 
+export const dynamic = "force-dynamic";
+
 export const metadata = {
     title: "Data Legal Customer - One Chitra",
     description: "Manajemen data legalitas, akta, dan perizinan customer",

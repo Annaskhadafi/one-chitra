@@ -157,8 +157,8 @@ describe('AI Inventory Forecast Enhancement - Property Tests', () => {
     await fc.assert(
       fc.property(
         positiveNumberArbitrary().filter(n => n > 10),
-        fc.float({ min: Math.fround(0.1), max: Math.fround(0.3) }), // smaller deviation
-        fc.float({ min: Math.fround(0.4), max: Math.fround(0.8) }), // larger deviation
+        fc.float({ min: Math.fround(0.1), max: Math.fround(0.3), noNaN: true, noDefaultInfinity: true }), // smaller deviation
+        fc.float({ min: Math.fround(0.4), max: Math.fround(0.8), noNaN: true, noDefaultInfinity: true }), // larger deviation
         (actual, smallDeviation, largeDeviation) => {
           const smallDiff = actual * smallDeviation
           const largeDiff = actual * largeDeviation

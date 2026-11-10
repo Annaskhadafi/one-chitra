@@ -287,9 +287,12 @@ export {
     vendorInvoices,
     vendorInvoiceLogs,
     sapVendorMaster,
+    vendorContracts,
+    vendorPoTracking,
     vendorTenantsRelations,
     vendorTenantUsersRelations,
     vendorInvoicesRelations,
     vendorPaymentBatchesRelations,
     vendorInvoiceLogsRelations,
+    vendorContractsRelations,
 } from "./vendor-invoices";

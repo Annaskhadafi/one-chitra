@@ -4,17 +4,25 @@ import React, { useState } from "react"
 import { useRouter } from "next/navigation"
 import {
     approveManagerInvoiceAction,
+    createMasterVendorAction,
     createPaymentBatchCheckoutAction,
+    createVendorContractAction,
+    deleteMasterVendorAction,
+    getVendorContractsAction,
     inviteVendorAction,
     lookupSapPoForVendorAction,
+    lookupVendorContractAction,
     recheckAdminChecklistAction,
     searchSapVendorMasterAction,
     submitInvoiceByAdminAction,
+    updateMasterVendorAction,
     validateFinanceInvoiceAction,
     verifyAdminChecklistAction,
 } from "@/app/actions/vendor-invoices"
 import { uploadFile } from "@/app/actions/upload"
 import { resolveUploadDocumentUrl } from "@/lib/upload-url"
+import { AccentureMasterVendorsView } from "./accenture-master-vendors"
+import { AccentureInvoiceEntry } from "./accenture-invoice-entry"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -38,11 +46,14 @@ import {
     Download,
     ExternalLink,
     Eye,
+    Edit3,
     FileCheck,
     FilePlus2,
+    FileSignature,
     FileSpreadsheet,
     FileText,
     History,
+    Layers,
     Loader2,
     Mail,
     Plus,
@@ -50,6 +61,7 @@ import {
     Send,
     ShieldAlert,
     ShieldCheck,
+    Trash2,
     TrendingUp,
     UploadCloud,
     UserPlus,
@@ -104,11 +116,13 @@ export function VendorInvoicesManagerClient({
     initialInvoices,
     initialTenants,
     initialSapVendors = [],
+    initialContracts = [],
 }: {
     initialStats: any
     initialInvoices: any[]
     initialTenants: any[]
     initialSapVendors?: any[]
+    initialContracts?: any[]
 }) {
     const router = useRouter()
     const [activeTab, setActiveTab] = useState("monitoring")
@@ -123,6 +137,64 @@ export function VendorInvoicesManagerClient({
     const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false)
     const [isInviteVendorModalOpen, setIsInviteVendorModalOpen] = useState(false)
     const [isProcurementEntryOpen, setIsProcurementEntryOpen] = useState(false)
+
+    // Master Vendor State (CRUD)
+    const [tenants, setTenants] = useState<any[]>(initialTenants || [])
+    const [isAddVendorOpen, setIsAddVendorOpen] = useState(false)
+    const [isEditVendorOpen, setIsEditVendorOpen] = useState(false)
+    const [selectedVendorForEdit, setSelectedVendorForEdit] = useState<any | null>(null)
+    const [isSavingVendor, setIsSavingVendor] = useState(false)
+    const [vendorFormError, setVendorFormError] = useState<string | null>(null)
+    const [vendorForm, setVendorForm] = useState({
+        name: "",
+        code: "",
+        sapVendorCode: "",
+        email: "",
+        phone: "",
+        address: "",
+        city: "",
+        isPkp: true,
+        npwp: "",
+        bankName: "",
+        bankAccountNo: "",
+        bankAccountHolder: "",
+        defaultTopDays: 30,
+    })
+
+    // Master Kontrak State (CRUD)
+    const [contracts, setContracts] = useState<any[]>(initialContracts || [])
+    const [isAddContractOpen, setIsAddContractOpen] = useState(false)
+    const [selectedContractDetail, setSelectedContractDetail] = useState<any | null>(null)
+    const [isSavingContract, setIsSavingContract] = useState(false)
+    const [contractFormError, setContractFormError] = useState<string | null>(null)
+    const [contractForm, setContractForm] = useState({
+        contractNumber: "",
+        vendorName: "",
+        vendorSapCode: "",
+        title: "Perjanjian Sewa Menyewa Kendaraan",
+        category: "Sewa Kendaraan",
+        itemName: "MITSUBISHI TRITON 2.5L DC HDX-L (4X4) MT",
+        policeNumber: "DA 8109 HH",
+        chassisNumber: "",
+        year: 2022,
+        location: "Adaro / Tanjung Tabalong",
+        contractValue: 15500000,
+        billingFrequency: "monthly",
+        startDate: "2025-10-09",
+        endDate: "2026-10-08",
+        topDays: 45,
+        isPkp: true,
+        ppnPercent: 11,
+        pphPercent: 2,
+        bankName: "BRI - TANJUNG KOTA",
+        bankAccountNumber: "4595-01-028276-53-9",
+        bankAccountHolder: "CV TRIMICEL JAYA",
+        npwpNumber: "02.919.245.7-735.000",
+        vendorAddress: "",
+        vendorPicName: "Reny Tiurlina",
+        notes: "",
+    })
+    const [contractPdfFile, setContractPdfFile] = useState<File | null>(null)
 
     // Admin Validation Gate State
     const [adminChecklist, setAdminChecklist] = useState({
@@ -148,6 +220,14 @@ export function VendorInvoicesManagerClient({
     const [isSearchingVendorDropdown, setIsSearchingVendorDropdown] = useState(false)
     const [isVendorDropdownOpen, setIsVendorDropdownOpen] = useState(false)
     const [procurementIsPkp, setProcurementIsPkp] = useState(true)
+    const [procurementReferenceType, setProcurementReferenceType] = useState<"PO" | "CONTRACT">("PO")
+    const [procurementContractNumber, setProcurementContractNumber] = useState("")
+    const [procurementContractFile, setProcurementContractFile] = useState<File | null>(null)
+    const [isCheckingProcurementContract, setIsCheckingProcurementContract] = useState(false)
+    const [procurementContractResult, setProcurementContractResult] = useState<any>(null)
+    const [procurementInvoicedItemsCount, setProcurementInvoicedItemsCount] = useState<number>(1)
+    const [procurementTotalPoItemsCount, setProcurementTotalPoItemsCount] = useState<number>(1)
+    const [procurementPoStatus, setProcurementPoStatus] = useState<string>("open")
     const [procurementInvoiceNumber, setProcurementInvoiceNumber] = useState("")
     const [procurementPoNumber, setProcurementPoNumber] = useState("")
     const [procurementInvoiceDate, setProcurementInvoiceDate] = useState(new Date().toISOString().slice(0, 10))
@@ -343,13 +423,183 @@ export function VendorInvoicesManagerClient({
         try {
             const res = await lookupSapPoForVendorAction(procurementPoNumber)
             setProcurementPoResult(res)
-            if (res.found && res.netValue && procurementSubtotal === 0) {
-                setProcurementSubtotal(res.netValue)
+            if (res.found) {
+                if (res.netValue && procurementSubtotal === 0) {
+                    setProcurementSubtotal(res.netValue)
+                }
+                if (res.totalItems) {
+                    setProcurementTotalPoItemsCount(res.totalItems)
+                }
+                if (res.invoicedItems !== undefined) {
+                    const nextItem = res.invoicedItems + 1 > res.totalItems ? res.totalItems : res.invoicedItems + 1
+                    setProcurementInvoicedItemsCount(nextItem)
+                }
+                if (res.poStatus) {
+                    setProcurementPoStatus(res.poStatus)
+                }
             }
         } catch {
             setProcurementPoResult({ found: false, message: "Gagal memeriksa database SAP." })
         } finally {
             setIsCheckingProcurementPo(false)
+        }
+    }
+
+    // Cek Kontrak Vendor untuk Entry Berbasis Kontrak
+    const handleCheckProcurementContract = async () => {
+        if (!procurementContractNumber.trim()) return
+        setIsCheckingProcurementContract(true)
+        setProcurementContractResult(null)
+        try {
+            const res = await lookupVendorContractAction(procurementContractNumber)
+            setProcurementContractResult(res)
+            if (res.found && res.contract) {
+                const c = res.contract
+                if (procurementSubtotal === 0 && c.contractValue) {
+                    setProcurementSubtotal(c.contractValue)
+                }
+                if (c.ppnPercent !== undefined) setProcurementPpnPercent(c.ppnPercent)
+                if (c.pphPercent !== undefined) setProcurementPphPercent(c.pphPercent)
+                if (c.isPkp !== undefined) setProcurementIsPkp(c.isPkp)
+
+                // Hubungkan vendor jika belum dipilih
+                if (!procurementSelectedVendor && c.vendorName) {
+                    const matchTenant = tenants.find((t) => t.name.toLowerCase() === c.vendorName.toLowerCase())
+                    if (matchTenant) {
+                        handleSelectProcurementVendor({
+                            isTenant: true,
+                            id: matchTenant.id,
+                            supplierCode: matchTenant.code,
+                            vendorName: matchTenant.name,
+                            topDays: matchTenant.defaultTopDays || c.topDays || 45,
+                            isPkp: matchTenant.isPkp,
+                            city: matchTenant.city || "",
+                        })
+                    } else {
+                        handleSelectProcurementVendor({
+                            isTenant: false,
+                            id: `sap:${c.vendorSapCode || "contract"}`,
+                            supplierCode: c.vendorSapCode || "KONTRAK",
+                            vendorName: c.vendorName,
+                            topDays: c.topDays || 45,
+                            isPkp: c.isPkp,
+                            city: "",
+                        })
+                    }
+                }
+            }
+        } catch {
+            setProcurementContractResult({ found: false, message: "Gagal memeriksa database Kontrak." })
+        } finally {
+            setIsCheckingProcurementContract(false)
+        }
+    }
+
+    // Handler Master Vendor CRUD
+    const handleSaveVendor = async (e: React.FormEvent) => {
+        e.preventDefault()
+        setVendorFormError(null)
+        if (!vendorForm.name.trim()) {
+            setVendorFormError("Nama vendor wajib diisi.")
+            return
+        }
+        setIsSavingVendor(true)
+        try {
+            if (selectedVendorForEdit) {
+                const res = await updateMasterVendorAction(selectedVendorForEdit.id, vendorForm)
+                if (!res.success) throw new Error(res.error)
+            } else {
+                const res = await createMasterVendorAction(vendorForm)
+                if (!res.success) throw new Error(res.error)
+            }
+            setIsAddVendorOpen(false)
+            setIsEditVendorOpen(false)
+            setSelectedVendorForEdit(null)
+            router.refresh()
+        } catch (err: any) {
+            setVendorFormError(err.message || "Gagal menyimpan data vendor.")
+        } finally {
+            setIsSavingVendor(false)
+        }
+    }
+
+    const handleDeleteVendor = async (vendorId: string) => {
+        if (!confirm("Nonaktifkan master vendor ini?")) return
+        try {
+            const res = await deleteMasterVendorAction(vendorId)
+            if (res.success) {
+                router.refresh()
+            }
+        } catch (err) {
+            console.error(err)
+        }
+    }
+
+    // Handler Master Kontrak CRUD
+    const handleSaveContract = async (e: React.FormEvent) => {
+        e.preventDefault()
+        setContractFormError(null)
+        if (!contractForm.contractNumber.trim()) {
+            setContractFormError("Nomor Kontrak wajib diisi.")
+            return
+        }
+        if (!contractForm.vendorName.trim()) {
+            setContractFormError("Nama Vendor wajib diisi.")
+            return
+        }
+        if (!contractForm.itemName.trim()) {
+            setContractFormError("Nama Barang/Jasa/Unit wajib diisi.")
+            return
+        }
+        setIsSavingContract(true)
+        try {
+            let contractPdfUrl: string | undefined = undefined
+            if (contractPdfFile) {
+                const form = new FormData()
+                form.append("file", contractPdfFile)
+                const up = await uploadFile(form)
+                if (up.success && up.url) contractPdfUrl = up.url
+            }
+
+            const res = await createVendorContractAction({
+                contractNumber: contractForm.contractNumber,
+                vendorName: contractForm.vendorName,
+                vendorSapCode: contractForm.vendorSapCode,
+                title: contractForm.title,
+                category: contractForm.category,
+                itemName: contractForm.itemName,
+                itemDetails: {
+                    policeNumber: contractForm.policeNumber,
+                    chassisNumber: contractForm.chassisNumber,
+                    year: contractForm.year,
+                    location: contractForm.location,
+                },
+                contractValue: Number(contractForm.contractValue) || 0,
+                billingFrequency: contractForm.billingFrequency,
+                startDate: contractForm.startDate,
+                endDate: contractForm.endDate,
+                topDays: Number(contractForm.topDays) || 45,
+                isPkp: contractForm.isPkp,
+                ppnPercent: Number(contractForm.ppnPercent) || 11,
+                pphPercent: Number(contractForm.pphPercent) || 2,
+                bankName: contractForm.bankName,
+                bankAccountNumber: contractForm.bankAccountNumber,
+                bankAccountHolder: contractForm.bankAccountHolder,
+                npwpNumber: contractForm.npwpNumber,
+                vendorAddress: contractForm.vendorAddress,
+                vendorPicName: contractForm.vendorPicName,
+                notes: contractForm.notes,
+                contractFileUrl: contractPdfUrl,
+            })
+
+            if (!res.success) throw new Error(res.error)
+            setIsAddContractOpen(false)
+            setContractPdfFile(null)
+            router.refresh()
+        } catch (err: any) {
+            setContractFormError(err.message || "Gagal menyimpan kontrak.")
+        } finally {
+            setIsSavingContract(false)
         }
     }
 
@@ -481,9 +731,16 @@ export function VendorInvoicesManagerClient({
             setProcurementError("Nomor Invoice wajib diisi.")
             return
         }
-        if (!procurementPoNumber.trim()) {
-            setProcurementError("Nomor PO wajib diisi.")
-            return
+        if (procurementReferenceType === "CONTRACT") {
+            if (!procurementContractNumber.trim()) {
+                setProcurementError("Nomor Kontrak wajib diisi.")
+                return
+            }
+        } else {
+            if (!procurementPoNumber.trim()) {
+                setProcurementError("Nomor PO wajib diisi.")
+                return
+            }
         }
         if (procurementSubtotal <= 0) {
             setProcurementError("Subtotal nominal tagihan harus lebih dari 0.")
@@ -560,10 +817,21 @@ export function VendorInvoicesManagerClient({
                 if (upPo.success && upPo.url) poUrl = upPo.url
             }
 
+            // Upload Contract File if exists
+            let contractUrl: string | undefined = undefined
+            if (procurementContractFile) {
+                const contractFormData = new FormData()
+                contractFormData.append("file", procurementContractFile)
+                const upContract = await uploadFile(contractFormData)
+                if (upContract.success && upContract.url) contractUrl = upContract.url
+            }
+
             const res = await submitInvoiceByAdminAction({
                 tenantId: procurementVendorId,
                 invoiceNumber: procurementInvoiceNumber,
-                poNumber: procurementPoNumber,
+                poNumber: procurementReferenceType === "PO" ? procurementPoNumber : (procurementContractNumber || "-"),
+                referenceType: procurementReferenceType,
+                contractNumber: procurementContractNumber,
                 invoiceDate: procurementInvoiceDate,
                 subtotal: procurementSubtotal,
                 ppnPercent: procurementPpnPercent,
@@ -573,6 +841,10 @@ export function VendorInvoicesManagerClient({
                 deliveryReceiptFileUrl: delivUrl,
                 taxInvoiceFileUrl: taxUrl,
                 poFileUrl: poUrl,
+                contractFileUrl: contractUrl,
+                invoicedItemsCount: procurementInvoicedItemsCount,
+                totalPoItemsCount: procurementTotalPoItemsCount,
+                poStatus: procurementPoStatus,
                 notes: procurementNotes,
             })
 
@@ -584,6 +856,10 @@ export function VendorInvoicesManagerClient({
             setIsProcurementEntryOpen(false)
             setProcurementInvoiceNumber("")
             setProcurementPoNumber("")
+            setProcurementContractNumber("")
+            setProcurementContractFile(null)
+            setProcurementContractResult(null)
+            setProcurementPoResult(null)
             setProcurementSubtotal(0)
             setProcurementInvoiceFile(null)
             setProcurementGrSlipFile(null)
@@ -734,6 +1010,20 @@ export function VendorInvoicesManagerClient({
 
     const { summary, projections, urgentInvoices } = initialStats
 
+    if (isProcurementEntryOpen) {
+        return (
+            <AccentureInvoiceEntry
+                onBack={() => setIsProcurementEntryOpen(false)}
+                onSuccess={() => {
+                    setIsProcurementEntryOpen(false)
+                    router.refresh()
+                }}
+                initialSapVendors={initialSapVendors}
+                initialTenants={tenants}
+            />
+        )
+    }
+
     return (
         <div className="space-y-6">
             {/* Real-Time Urgency Due Date Banner */}
@@ -817,6 +1107,15 @@ export function VendorInvoicesManagerClient({
                             {approvedInvoices.length > 0 && (
                                 <span className="ml-1 px-1.5 py-0.2 bg-purple-600 text-white text-[10px] font-bold rounded-full">
                                     {approvedInvoices.length}
+                                </span>
+                            )}
+                        </TabsTrigger>
+                        <TabsTrigger value="contracts" className="text-xs flex items-center gap-1.5 relative">
+                            <FileText className="w-3.5 h-3.5" />
+                            Master Kontrak
+                            {contracts.length > 0 && (
+                                <span className="ml-1 px-1.5 py-0.2 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 text-[10px] font-bold rounded-full">
+                                    {contracts.length}
                                 </span>
                             )}
                         </TabsTrigger>
@@ -1449,27 +1748,30 @@ export function VendorInvoicesManagerClient({
                     </Card>
                 </TabsContent>
 
-                {/* TAB 6: MASTER VENDOR & UNDANGAN */}
-                <TabsContent value="vendors" className="space-y-4">
+                {/* TAB 5: MASTER KONTRAK */}
+                <TabsContent value="contracts" className="space-y-4">
                     <Card className="shadow-xs border-slate-200 dark:border-slate-800">
                         <CardHeader className="p-4 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                             <div>
                                 <CardTitle className="text-base font-bold flex items-center gap-2">
-                                    <Building2 className="w-5 h-5 text-primary" />
-                                    Database Mitra Vendor Terdaftar (Multi-Tenant)
+                                    <FileText className="w-5 h-5 text-indigo-600" />
+                                    Database Master Kontrak Vendor &amp; Perjanjian Sewa
                                 </CardTitle>
                                 <CardDescription className="text-xs text-slate-500">
-                                    Vendor hanya dapat mengakses portal jika menerima email undangan resmi dan mengaktifkan akunnya.
+                                    Pengelolaan kontrak payung, sewa kendaraan/alat berat, dan jasa rutin vendor sebagai dasar penagihan berulang.
                                 </CardDescription>
                             </div>
 
                             <Button
                                 size="sm"
-                                onClick={() => setIsInviteVendorModalOpen(true)}
-                                className="bg-primary hover:bg-primary/90 text-white text-xs flex items-center gap-1.5"
+                                onClick={() => {
+                                    setContractFormError(null)
+                                    setIsAddContractOpen(true)
+                                }}
+                                className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs flex items-center gap-1.5 shadow-sm"
                             >
                                 <Plus className="w-4 h-4" />
-                                Tambah & Kirim Undangan Vendor
+                                Buat Kontrak Baru
                             </Button>
                         </CardHeader>
                         <CardContent className="p-0">
@@ -1477,125 +1779,95 @@ export function VendorInvoicesManagerClient({
                                 <table className="w-full text-left text-xs">
                                     <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-500 uppercase font-semibold border-b">
                                         <tr>
-                                            <th className="px-4 py-3">Kode & Nama Vendor</th>
-                                            <th className="px-4 py-3">Email Undangan</th>
-                                            <th className="px-4 py-3">Status PKP & NPWP</th>
-                                            <th className="px-4 py-3">Rekening Bank</th>
-                                            <th className="px-4 py-3">TOP Standar</th>
-                                            <th className="px-4 py-3">Status Akun</th>
+                                            <th className="px-4 py-3">No. Kontrak &amp; Judul</th>
+                                            <th className="px-4 py-3">Vendor / Mitra</th>
+                                            <th className="px-4 py-3">Barang / Jasa / Unit</th>
+                                            <th className="px-4 py-3">Nilai Sewa (Bulan)</th>
+                                            <th className="px-4 py-3">Masa Berlaku</th>
+                                            <th className="px-4 py-3">TOP &amp; Status</th>
+                                            <th className="px-4 py-3 text-right">Aksi</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                                        {initialTenants.map((vt) => (
-                                            <tr key={vt.id} className="hover:bg-slate-50/60 transition-colors">
-                                                <td className="px-4 py-3">
-                                                    <div className="font-semibold text-slate-900 dark:text-slate-100">{vt.name}</div>
-                                                    <div className="font-mono text-[10px] text-slate-400">{vt.code}</div>
-                                                </td>
-                                                <td className="px-4 py-3 text-slate-600 dark:text-slate-300 font-mono">
-                                                    {vt.email}
-                                                </td>
-                                                <td className="px-4 py-3">
-                                                    <div>{vt.isPkp ? <Badge className="bg-emerald-50 text-emerald-700 text-[10px]">PKP</Badge> : <Badge variant="secondary" className="text-[10px]">Non-PKP</Badge>}</div>
-                                                    <div className="text-[10px] text-slate-400 font-mono mt-0.5">{vt.npwp || "-"}</div>
-                                                </td>
-                                                <td className="px-4 py-3">
-                                                    <div className="font-semibold">{vt.bankName || "-"}</div>
-                                                    <div className="text-[10px] text-slate-500 font-mono">{vt.bankAccountNo || "-"} (a/n {vt.bankAccountHolder || "-"})</div>
-                                                </td>
-                                                <td className="px-4 py-3 font-semibold">{vt.defaultTopDays} Hari</td>
-                                                <td className="px-4 py-3">
-                                                    {vt.status === "active" ? (
-                                                        <Badge className="bg-emerald-100 text-emerald-800">Aktif</Badge>
-                                                    ) : (
-                                                        <Badge variant="outline" className="text-amber-600 border-amber-300">
-                                                            Menunggu Aktivasi
-                                                        </Badge>
-                                                    )}
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    {/* Master Data Vendor SAP Explorer */}
-                    <Card className="shadow-xs border-slate-200 dark:border-slate-800">
-                        <CardHeader className="p-4 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/60 dark:bg-slate-900/40">
-                            <div>
-                                <CardTitle className="text-sm font-bold flex items-center gap-2">
-                                    <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-                                    Master Data Vendor SAP MKVZ 2026 (1.122 Rekan Vendor)
-                                </CardTitle>
-                                <CardDescription className="text-xs text-slate-500">
-                                    Tersinkronisasi dari master SAP MKVZ. TOP dan mata uang terikat langsung secara read-only.
-                                </CardDescription>
-                            </div>
-                            <div className="w-full sm:w-72 relative">
-                                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
-                                <Input
-                                    placeholder="Cari kode SAP / Nama / Kota..."
-                                    value={sapSearchQuery}
-                                    onChange={(e) => handleSearchSap(e.target.value)}
-                                    className="pl-8 text-xs h-8 bg-white dark:bg-slate-800"
-                                />
-                                {isSearchingSap && (
-                                    <Loader2 className="w-3 h-3 animate-spin absolute right-2.5 top-2.5 text-slate-400" />
-                                )}
-                            </div>
-                        </CardHeader>
-                        <CardContent className="p-0">
-                            <div className="overflow-x-auto max-h-[380px]">
-                                <table className="w-full text-left text-xs">
-                                    <thead className="bg-slate-100 dark:bg-slate-800 text-slate-600 uppercase font-semibold border-b sticky top-0">
-                                        <tr>
-                                            <th className="px-4 py-2.5">Kode SAP</th>
-                                            <th className="px-4 py-2.5">Nama Vendor</th>
-                                            <th className="px-4 py-2.5">Kota & Negara</th>
-                                            <th className="px-4 py-2.5">TOP SAP (Hari)</th>
-                                            <th className="px-4 py-2.5">Mata Uang</th>
-                                            <th className="px-4 py-2.5 text-right">Aksi</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                                        {sapSearchResults.length === 0 ? (
+                                        {contracts.length === 0 ? (
                                             <tr>
-                                                <td colSpan={6} className="px-4 py-6 text-center text-slate-400">
-                                                    Tidak ditemukan vendor SAP dengan kata kunci &quot;{sapSearchQuery}&quot;
+                                                <td colSpan={7} className="px-4 py-8 text-center text-slate-400">
+                                                    Belum ada kontrak vendor yang tercatat. Klik tombol &quot;Buat Kontrak Baru&quot; untuk menambahkan kontrak sewa atau jasa.
                                                 </td>
                                             </tr>
                                         ) : (
-                                            sapSearchResults.map((sv) => (
-                                                <tr key={sv.id || sv.supplierCode} className="hover:bg-slate-50/60 transition-colors">
-                                                    <td className="px-4 py-2.5 font-mono font-semibold text-primary">
-                                                        {sv.supplierCode}
+                                            contracts.map((ct) => (
+                                                <tr key={ct.id} className="hover:bg-slate-50/60 transition-colors">
+                                                    <td className="px-4 py-3">
+                                                        <div className="font-semibold text-slate-900 dark:text-slate-100 font-mono">
+                                                            {ct.contractNumber}
+                                                        </div>
+                                                        <div className="text-[11px] text-slate-500">
+                                                            {ct.title || "Perjanjian Sewa / Kontrak"}
+                                                        </div>
                                                     </td>
-                                                    <td className="px-4 py-2.5 font-medium text-slate-900 dark:text-slate-100">
-                                                        {sv.vendorName}
+                                                    <td className="px-4 py-3">
+                                                        <div className="font-semibold">{ct.vendorName}</div>
+                                                        {ct.vendorSapCode && (
+                                                            <div className="font-mono text-[10px] text-slate-400">
+                                                                SAP: {ct.vendorSapCode}
+                                                            </div>
+                                                        )}
                                                     </td>
-                                                    <td className="px-4 py-2.5 text-slate-500">
-                                                        {sv.city ? `${sv.city}, ${sv.country || ""}` : sv.country || "-"}
+                                                    <td className="px-4 py-3">
+                                                        <div className="font-semibold">{ct.itemName}</div>
+                                                        {ct.itemDetails && typeof ct.itemDetails === "object" && (
+                                                            <div className="text-[10px] text-slate-500 flex items-center gap-1.5 flex-wrap mt-0.5">
+                                                                {ct.itemDetails.policeNumber && (
+                                                                    <Badge variant="outline" className="text-[9px] px-1 py-0 bg-slate-50">
+                                                                        Plat: {ct.itemDetails.policeNumber}
+                                                                    </Badge>
+                                                                )}
+                                                                {ct.itemDetails.location && (
+                                                                    <span>Lokasi: {ct.itemDetails.location}</span>
+                                                                )}
+                                                            </div>
+                                                        )}
                                                     </td>
-                                                    <td className="px-4 py-2.5">
-                                                        <Badge variant="outline" className="font-semibold text-slate-700 bg-slate-50">
-                                                            {sv.topDays} Hari {sv.termsOfPayment ? `(${sv.termsOfPayment})` : ""}
+                                                    <td className="px-4 py-3 font-bold text-slate-900 dark:text-slate-100">
+                                                        {formatCurrency(ct.contractValue)}
+                                                        <span className="text-[10px] text-slate-400 font-normal block">
+                                                            / {ct.billingFrequency === "monthly" ? "bulan" : ct.billingFrequency}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        <div className="font-medium text-slate-700 dark:text-slate-300">
+                                                            {formatDate(ct.startDate)} s.d {formatDate(ct.endDate)}
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        <div className="font-semibold">{ct.topDays || 45} Hari</div>
+                                                        <Badge className={ct.status === "active" ? "bg-emerald-100 text-emerald-800 text-[10px]" : "bg-slate-100 text-slate-600 text-[10px]"}>
+                                                            {ct.status === "active" ? "Aktif" : ct.status}
                                                         </Badge>
                                                     </td>
-                                                    <td className="px-4 py-2.5 font-mono text-[11px]">
-                                                        {sv.orderCurrency || "IDR"}
-                                                    </td>
-                                                    <td className="px-4 py-2.5 text-right">
-                                                        <Button
-                                                            size="sm"
-                                                            variant="outline"
-                                                            className="h-7 text-xs bg-white hover:bg-primary hover:text-white"
-                                                            onClick={() => handleSelectSapForInvite(sv)}
-                                                        >
-                                                            <UserPlus className="w-3 h-3 mr-1" />
-                                                            Undang Mitra
-                                                        </Button>
+                                                    <td className="px-4 py-3 text-right">
+                                                        <div className="flex items-center justify-end gap-1.5">
+                                                            <Button
+                                                                size="sm"
+                                                                variant="outline"
+                                                                onClick={() => setSelectedContractDetail(ct)}
+                                                                className="text-xs h-7 px-2"
+                                                            >
+                                                                Detail
+                                                            </Button>
+                                                            {ct.contractFileUrl && (
+                                                                <a
+                                                                    href={resolveUploadDocumentUrl(ct.contractFileUrl) || ct.contractFileUrl}
+                                                                    target="_blank"
+                                                                    rel="noreferrer"
+                                                                    className="h-7 px-2 text-xs inline-flex items-center gap-1 rounded border border-indigo-200 text-indigo-700 bg-indigo-50/50 hover:bg-indigo-100"
+                                                                >
+                                                                    <ExternalLink className="w-3 h-3" />
+                                                                    PDF
+                                                                </a>
+                                                            )}
+                                                        </div>
                                                     </td>
                                                 </tr>
                                             ))
@@ -1605,6 +1877,11 @@ export function VendorInvoicesManagerClient({
                             </div>
                         </CardContent>
                     </Card>
+                </TabsContent>
+
+                {/* TAB 6: MASTER VENDOR & UNDANGAN (ACCENTURE VPMS STANDARD CRUD) */}
+                <TabsContent value="vendors" className="space-y-4">
+                    <AccentureMasterVendorsView />
                 </TabsContent>
             </Tabs>
 
@@ -1643,57 +1920,194 @@ export function VendorInvoicesManagerClient({
                                 </div>
                             </div>
 
-                            {/* Dokumen Lampiran Link */}
-                            <div className="flex flex-wrap items-center gap-2 p-2.5 bg-blue-50/50 rounded-lg border border-blue-200">
-                                <span className="font-semibold text-blue-900 mr-1">Tinjau Dokumen:</span>
-                                <a
-                                    href={resolveUploadDocumentUrl(selectedInvoice.invoiceFileUrl) || selectedInvoice.invoiceFileUrl}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="px-2 py-1 bg-white rounded border border-blue-200 text-blue-700 font-medium hover:bg-blue-50 flex items-center gap-1"
-                                >
-                                    <ExternalLink className="w-3 h-3" />
-                                    Invoice PDF
-                                </a>
-                                {selectedInvoice.grSlipFileUrl && (
-                                    <a
-                                        href={resolveUploadDocumentUrl(selectedInvoice.grSlipFileUrl) || selectedInvoice.grSlipFileUrl}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="px-2 py-1 bg-blue-600 text-white rounded font-medium hover:bg-blue-700 flex items-center gap-1 shadow-xs"
-                                    >
-                                        <ExternalLink className="w-3 h-3" />
-                                        GR Slip (Wajib)
-                                    </a>
-                                )}
-                                {selectedInvoice.taxInvoiceFileUrl && (
-                                    <a
-                                        href={resolveUploadDocumentUrl(selectedInvoice.taxInvoiceFileUrl) || selectedInvoice.taxInvoiceFileUrl}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="px-2 py-1 bg-white rounded border border-emerald-200 text-emerald-700 font-medium hover:bg-emerald-50 flex items-center gap-1"
-                                    >
-                                        <ExternalLink className="w-3 h-3" />
-                                        e-Faktur Pajak
-                                    </a>
-                                )}
-                                {selectedInvoice.deliveryReceiptFileUrl && (
-                                    <a
-                                        href={resolveUploadDocumentUrl(selectedInvoice.deliveryReceiptFileUrl) || selectedInvoice.deliveryReceiptFileUrl}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="px-2 py-1 bg-white rounded border border-purple-200 text-purple-700 font-medium hover:bg-purple-50 flex items-center gap-1"
-                                    >
-                                        <ExternalLink className="w-3 h-3" />
-                                        Surat Jalan
-                                    </a>
-                                )}
+                            {/* Status PO Tracking & Kontrak */}
+                            <div className="flex items-center justify-between p-2.5 bg-slate-100 dark:bg-slate-800 rounded-lg text-xs">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-slate-500 font-medium">Jenis Dokumen Referensi:</span>
+                                    <Badge className={selectedInvoice.referenceType === "CONTRACT" ? "bg-indigo-600 text-white" : "bg-blue-600 text-white"}>
+                                        {selectedInvoice.referenceType === "CONTRACT" ? "KONTRAK KERJA SAMA" : "PURCHASE ORDER (PO)"}
+                                    </Badge>
+                                    {selectedInvoice.referenceType === "CONTRACT" ? (
+                                        <span className="font-mono font-semibold text-slate-800 dark:text-slate-200">
+                                            No: {selectedInvoice.contractNumber || "-"}
+                                        </span>
+                                    ) : (
+                                        <span className="font-mono font-semibold text-slate-800 dark:text-slate-200">
+                                            PO: {selectedInvoice.poNumber}
+                                        </span>
+                                    )}
+                                </div>
+                                <div>
+                                    {selectedInvoice.referenceType === "CONTRACT" ? (
+                                        <Badge variant="outline" className="text-emerald-700 bg-emerald-50 border-emerald-300">
+                                            Kontrak Aktif
+                                        </Badge>
+                                    ) : (
+                                        <Badge
+                                            className={
+                                                selectedInvoice.poStatus === "completed"
+                                                    ? "bg-emerald-600 text-white"
+                                                    : selectedInvoice.poStatus === "partial"
+                                                    ? "bg-amber-600 text-white"
+                                                    : "bg-slate-600 text-white"
+                                            }
+                                        >
+                                            {selectedInvoice.poStatus === "completed"
+                                                ? "PO COMPLETED (FULL)"
+                                                : selectedInvoice.poStatus === "partial"
+                                                ? `PO PARTIAL (${selectedInvoice.invoicedItemsCount || 0}/${selectedInvoice.totalPoItemsCount || 0} Item)`
+                                                : "PO OPEN"}
+                                        </Badge>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* 5 Dokumen Referensi Berurutan: PO/Kontrak -> DO/BAST/Absen -> GR Slip -> Invoice -> Faktur Pajak */}
+                            <div className="space-y-2 p-3 bg-blue-50/60 dark:bg-blue-950/30 rounded-xl border border-blue-200 dark:border-blue-800">
+                                <div className="flex items-center justify-between">
+                                    <span className="font-bold text-blue-900 dark:text-blue-200 text-xs flex items-center gap-1.5">
+                                        <FileCheck className="w-4 h-4 text-blue-600" />
+                                        Alur 5 Dokumen Referensi Verifikasi (Berurutan):
+                                    </span>
+                                    <span className="text-[10px] text-blue-700 dark:text-blue-300 italic">
+                                        Wajib saling mendukung &amp; sesuai
+                                    </span>
+                                </div>
+
+                                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-1 text-center">
+                                    {/* 1. PO / Kontrak */}
+                                    <div className="p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
+                                        <div>
+                                            <span className="text-[10px] font-bold text-slate-500 block">1. PO / Kontrak</span>
+                                            <span className="text-[11px] font-semibold text-slate-800 dark:text-slate-200 truncate block mt-0.5">
+                                                {selectedInvoice.referenceType === "CONTRACT"
+                                                    ? selectedInvoice.contractNumber || "Kontrak"
+                                                    : selectedInvoice.poNumber || "PO"}
+                                            </span>
+                                        </div>
+                                        <div className="mt-2">
+                                            {selectedInvoice.contractFileUrl || selectedInvoice.poFileUrl ? (
+                                                <a
+                                                    href={resolveUploadDocumentUrl(selectedInvoice.contractFileUrl || selectedInvoice.poFileUrl) || ""}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="w-full py-1 text-[10px] bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded border border-indigo-200 font-semibold inline-flex items-center justify-center gap-1"
+                                                >
+                                                    <ExternalLink className="w-2.5 h-2.5" /> Buka Berkas
+                                                </a>
+                                            ) : (
+                                                <span className="text-[10px] text-slate-400 italic">Data SAP/Sistem</span>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* 2. DO / BAST / Absen */}
+                                    <div className="p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
+                                        <div>
+                                            <span className="text-[10px] font-bold text-slate-500 block">2. DO / BAST / Absen</span>
+                                            <span className="text-[11px] font-semibold text-slate-800 dark:text-slate-200 truncate block mt-0.5">
+                                                Surat Jalan / BAST
+                                            </span>
+                                        </div>
+                                        <div className="mt-2">
+                                            {selectedInvoice.deliveryReceiptFileUrl ? (
+                                                <a
+                                                    href={resolveUploadDocumentUrl(selectedInvoice.deliveryReceiptFileUrl) || selectedInvoice.deliveryReceiptFileUrl}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="w-full py-1 text-[10px] bg-purple-50 text-purple-700 hover:bg-purple-100 rounded border border-purple-200 font-semibold inline-flex items-center justify-center gap-1"
+                                                >
+                                                    <ExternalLink className="w-2.5 h-2.5" /> Buka DO/BAST
+                                                </a>
+                                            ) : (
+                                                <span className="text-[10px] text-amber-600 font-medium">Tidak terlampir</span>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* 3. GR Slip */}
+                                    <div className="p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
+                                        <div>
+                                            <span className="text-[10px] font-bold text-slate-500 block">3. GR Slip</span>
+                                            <span className="text-[11px] font-semibold text-slate-800 dark:text-slate-200 truncate block mt-0.5">
+                                                Goods Receipt
+                                            </span>
+                                        </div>
+                                        <div className="mt-2">
+                                            {selectedInvoice.grSlipFileUrl ? (
+                                                <a
+                                                    href={resolveUploadDocumentUrl(selectedInvoice.grSlipFileUrl) || selectedInvoice.grSlipFileUrl}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="w-full py-1 text-[10px] bg-blue-600 text-white hover:bg-blue-700 rounded font-semibold inline-flex items-center justify-center gap-1 shadow-xs"
+                                                >
+                                                    <ExternalLink className="w-2.5 h-2.5" /> Buka GR Slip
+                                                </a>
+                                            ) : (
+                                                <span className="text-[10px] text-amber-600 font-medium">Tidak terlampir</span>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* 4. Invoice Fisik Tagihan */}
+                                    <div className="p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
+                                        <div>
+                                            <span className="text-[10px] font-bold text-slate-500 block">4. Invoice Fisik</span>
+                                            <span className="text-[11px] font-semibold text-slate-800 dark:text-slate-200 truncate block mt-0.5">
+                                                {selectedInvoice.invoiceNumber}
+                                            </span>
+                                        </div>
+                                        <div className="mt-2">
+                                            {selectedInvoice.invoiceFileUrl ? (
+                                                <a
+                                                    href={resolveUploadDocumentUrl(selectedInvoice.invoiceFileUrl) || selectedInvoice.invoiceFileUrl}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="w-full py-1 text-[10px] bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded border border-emerald-200 font-semibold inline-flex items-center justify-center gap-1"
+                                                >
+                                                    <ExternalLink className="w-2.5 h-2.5" /> Buka Invoice
+                                                </a>
+                                            ) : (
+                                                <span className="text-[10px] text-red-500 font-medium">Wajib Ada</span>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* 5. Faktur Pajak */}
+                                    <div className="p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
+                                        <div>
+                                            <span className="text-[10px] font-bold text-slate-500 block">5. Faktur Pajak</span>
+                                            <span className="text-[11px] font-semibold text-slate-800 dark:text-slate-200 truncate block mt-0.5">
+                                                e-Faktur DJP
+                                            </span>
+                                        </div>
+                                        <div className="mt-2">
+                                            {selectedInvoice.taxInvoiceFileUrl ? (
+                                                <a
+                                                    href={resolveUploadDocumentUrl(selectedInvoice.taxInvoiceFileUrl) || selectedInvoice.taxInvoiceFileUrl}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="w-full py-1 text-[10px] bg-amber-50 text-amber-700 hover:bg-amber-100 rounded border border-amber-200 font-semibold inline-flex items-center justify-center gap-1"
+                                                >
+                                                    <ExternalLink className="w-2.5 h-2.5" /> Buka e-Faktur
+                                                </a>
+                                            ) : (
+                                                <span className="text-[10px] text-slate-400">
+                                                    {selectedInvoice.tenant.isPkp ? "Wajib PKP" : "Non-PKP"}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
 
                             {/* 5 Mandatory Checklists */}
                             <div className="space-y-3 p-4 border rounded-xl bg-white dark:bg-slate-900">
-                                <h4 className="font-bold text-slate-900 dark:text-slate-100 text-xs uppercase tracking-wider">
-                                    5 Butir Pengecekan Wajib (Mandatory Checklist)
+                                <h4 className="font-bold text-slate-900 dark:text-slate-100 text-xs uppercase tracking-wider flex items-center justify-between">
+                                    <span>5 Butir Pengecekan Wajib (Mandatory Checklist)</span>
+                                    <span className="text-[10px] text-blue-600 font-semibold normal-case">
+                                        PO &rarr; DO &rarr; GR Slip &rarr; Invoice &rarr; Faktur Pajak
+                                    </span>
                                 </h4>
 
                                 <div className="space-y-2.5">
@@ -1703,8 +2117,12 @@ export function VendorInvoicesManagerClient({
                                             onCheckedChange={(c) => setAdminChecklist({ ...adminChecklist, docValid: Boolean(c) })}
                                         />
                                         <div>
-                                            <span className="font-semibold text-slate-800 dark:text-slate-200">1. Validitas Dokumen Fisik &amp; Lampiran GR Slip</span>
-                                            <p className="text-[11px] text-slate-500">Berkas PDF/Scan Invoice dan GR Slip asli tidak korup, terbaca jelas, dan lengkap.</p>
+                                            <span className="font-semibold text-slate-800 dark:text-slate-200">
+                                                1. Validitas &amp; Keterbacaan Berkas Fisik Invoice
+                                            </span>
+                                            <p className="text-[11px] text-slate-500">
+                                                Berkas PDF/Scan Invoice asli tidak rusak, nomor invoice, tanggal dan stempel basah terbaca jelas.
+                                            </p>
                                         </div>
                                     </label>
 
@@ -1714,8 +2132,14 @@ export function VendorInvoicesManagerClient({
                                             onCheckedChange={(c) => setAdminChecklist({ ...adminChecklist, poValid: Boolean(c) })}
                                         />
                                         <div>
-                                            <span className="font-semibold text-slate-800 dark:text-slate-200">2. Kesesuaian Purchase Order (PO)</span>
-                                            <p className="text-[11px] text-slate-500">Nomor PO pada invoice cocok dengan data internal SAP One Chitra.</p>
+                                            <span className="font-semibold text-slate-800 dark:text-slate-200">
+                                                2. Kesesuaian Dokumen Referensi Utama (PO / Kontrak)
+                                            </span>
+                                            <p className="text-[11px] text-slate-500">
+                                                {selectedInvoice.referenceType === "CONTRACT"
+                                                    ? `Nomor Kontrak ${selectedInvoice.contractNumber || "-"} sesuai masa berlaku dan perjanjian sewa/jasa One Chitra.`
+                                                    : `Nomor PO ${selectedInvoice.poNumber} cocok dengan SAP. Status PO: ${selectedInvoice.poStatus?.toUpperCase() || "OPEN"}.`}
+                                            </p>
                                         </div>
                                     </label>
 
@@ -1725,8 +2149,12 @@ export function VendorInvoicesManagerClient({
                                             onCheckedChange={(c) => setAdminChecklist({ ...adminChecklist, calcValid: Boolean(c) })}
                                         />
                                         <div>
-                                            <span className="font-semibold text-slate-800 dark:text-slate-200">3. Akurasi Kalkulasi Nominal & Pajak</span>
-                                            <p className="text-[11px] text-slate-500">Sub-total (DPP) + Pajak (PPN/PPh) sesuai dengan Grand Total.</p>
+                                            <span className="font-semibold text-slate-800 dark:text-slate-200">
+                                                3. Kesesuaian Bukti Penerimaan (DO / BAST / Absen &amp; GR Slip)
+                                            </span>
+                                            <p className="text-[11px] text-slate-500">
+                                                Barang/jasa pada DO/BAST sesuai dengan GR Slip yang telah divalidasi bagian penerimaan/lapangan.
+                                            </p>
                                         </div>
                                     </label>
 
@@ -1736,9 +2164,11 @@ export function VendorInvoicesManagerClient({
                                             onCheckedChange={(c) => setAdminChecklist({ ...adminChecklist, bankValid: Boolean(c) })}
                                         />
                                         <div>
-                                            <span className="font-semibold text-slate-800 dark:text-slate-200">4. Kesesuaian Rekening Bank Vendor</span>
+                                            <span className="font-semibold text-slate-800 dark:text-slate-200">
+                                                4. Akurasi Kalkulasi Nominal &amp; Rekening Bank Vendor
+                                            </span>
                                             <p className="text-[11px] text-slate-500">
-                                                Nama dan nomor rekening cocok dengan Master Vendor ({selectedInvoice.tenant.bankName}: {selectedInvoice.tenant.bankAccountNo} a/n {selectedInvoice.tenant.bankAccountHolder}).
+                                                Subtotal DPP ({formatCurrency(selectedInvoice.subtotal)}) + PPN/PPh cocok dengan Grand Total ({formatCurrency(selectedInvoice.grandTotal)}), serta rekening bank sesuai Master Vendor ({selectedInvoice.tenant.bankName}: {selectedInvoice.tenant.bankAccountNo}).
                                             </p>
                                         </div>
                                     </label>
@@ -1749,11 +2179,13 @@ export function VendorInvoicesManagerClient({
                                             onCheckedChange={(c) => setAdminChecklist({ ...adminChecklist, taxValid: Boolean(c) })}
                                         />
                                         <div>
-                                            <span className="font-semibold text-slate-800 dark:text-slate-200">5. Kelengkapan Faktur Pajak e-Faktur</span>
+                                            <span className="font-semibold text-slate-800 dark:text-slate-200">
+                                                5. Kelengkapan Faktur Pajak e-Faktur DJP
+                                            </span>
                                             <p className="text-[11px] text-slate-500">
                                                 {selectedInvoice.tenant.isPkp
-                                                    ? "Vendor PKP: e-Faktur terlampir dan nomor faktur valid."
-                                                    : "Vendor Non-PKP: Dikecualikan dari kewajiban e-Faktur."}
+                                                    ? "Vendor PKP: e-Faktur terlampir, NPWP sesuai, dan nilai PPN sinkron dengan tagihan."
+                                                    : "Vendor Non-PKP: Dikecualikan dari kewajiban Faktur Pajak."}
                                             </p>
                                         </div>
                                     </label>
@@ -2369,407 +2801,482 @@ export function VendorInvoicesManagerClient({
                 </DialogContent>
             </Dialog>
 
-            {/* MODAL 7: ENTRY INVOICE OLEH ADMIN PROCUREMENT */}
-            <Dialog open={isProcurementEntryOpen} onOpenChange={setIsProcurementEntryOpen}>
-                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            {/* MODAL 8: TAMBAH / EDIT MASTER VENDOR */}
+            <Dialog
+                open={isAddVendorOpen || isEditVendorOpen}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        setIsAddVendorOpen(false)
+                        setIsEditVendorOpen(false)
+                        setSelectedVendorForEdit(null)
+                    }
+                }}
+            >
+                <DialogContent className="max-w-lg">
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2 text-base">
-                            <FilePlus2 className="w-5 h-5 text-emerald-600" />
-                            Entry Invoice Vendor oleh Admin Procurement
+                            <Building2 className="w-5 h-5 text-primary" />
+                            {selectedVendorForEdit ? "Edit Master Vendor" : "Tambah Master Vendor Baru"}
                         </DialogTitle>
                         <DialogDescription className="text-xs">
-                            Admin Procurement memasukkan dokumen invoice atas nama rekan vendor dengan lampiran fisik dan GR Slip wajib.
+                            {selectedVendorForEdit
+                                ? "Perbarui informasi legalitas, perpajakan, dan rekening bank vendor."
+                                : "Daftarkan profil mitra vendor rekanan One Chitra ke database sistem."}
                         </DialogDescription>
                     </DialogHeader>
 
-                    {procurementError && (
+                    {vendorFormError && (
                         <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs flex items-center gap-2">
                             <AlertCircle className="w-4 h-4 shrink-0" />
-                            <span>{procurementError}</span>
+                            <span>{vendorFormError}</span>
                         </div>
                     )}
 
-                    <form onSubmit={handleProcurementSubmit} className="space-y-4 text-xs">
-                        {/* 1. Pilih Vendor dari Master SAP atau Tenant Terdaftar */}
-                        <div className="space-y-1.5">
-                            <Label htmlFor="procVendorSelect">Pilih Mitra Vendor (Master Vendor SAP & Terdaftar) *</Label>
-                            
-                            {procurementSelectedVendor ? (
-                                <div className="p-3 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-300 dark:border-emerald-800 rounded-xl flex items-center justify-between gap-3">
-                                    <div className="space-y-0.5">
-                                        <div className="font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                                            <span>{procurementSelectedVendor.vendorName}</span>
-                                            <Badge variant="outline" className="font-mono text-[10px]">
-                                                {procurementSelectedVendor.supplierCode}
-                                            </Badge>
-                                            <Badge className={procurementIsPkp ? "bg-emerald-600 text-white text-[10px]" : "bg-slate-500 text-white text-[10px]"}>
-                                                {procurementIsPkp ? "PKP" : "Non-PKP"}
-                                            </Badge>
-                                        </div>
-                                        <p className="text-[11px] text-slate-600 dark:text-slate-400">
-                                            TOP Standard: <strong>{procurementSelectedVendor.topDays || 30} Hari</strong>
-                                            {procurementSelectedVendor.city ? ` • ${procurementSelectedVendor.city}` : ""}
-                                            {procurementSelectedVendor.isTenant ? " • Mitra Terdaftar" : " • Master Data SAP"}
-                                        </p>
-                                    </div>
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        className="text-xs h-7 shrink-0 bg-white dark:bg-slate-800"
-                                        onClick={() => {
-                                            setProcurementSelectedVendor(null)
-                                            setProcurementVendorId("")
-                                            setProcurementVendorSearch("")
-                                            setIsVendorDropdownOpen(true)
-                                            void handleSearchProcurementVendor("")
-                                        }}
-                                    >
-                                        Ganti Vendor
-                                    </Button>
-                                </div>
-                            ) : (
-                                <div className="relative">
-                                    <div className="relative">
-                                        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
-                                        <Input
-                                            id="procVendorSelect"
-                                            autoComplete="off"
-                                            placeholder="Cari nama atau kode Master Vendor SAP (min. 2 karakter atau klik untuk daftar)..."
-                                            value={procurementVendorSearch}
-                                            onFocus={() => {
-                                                setIsVendorDropdownOpen(true)
-                                                if (procurementVendorSuggestions.length === 0) {
-                                                    void handleSearchProcurementVendor(procurementVendorSearch)
-                                                }
-                                            }}
-                                            onChange={(e) => {
-                                                const query = e.target.value
-                                                setProcurementVendorId("")
-                                                setProcurementSelectedVendor(null)
-                                                setProcurementIsPkp(false)
-                                                setProcurementPpnPercent(0)
-                                                void handleSearchProcurementVendor(query)
-                                            }}
-                                            className="pl-8 text-xs"
-                                            required={!procurementVendorId}
+                    <form onSubmit={handleSaveVendor} className="space-y-3.5 text-xs">
+                        <div className="space-y-1">
+                            <Label htmlFor="mName">Nama Perusahaan Vendor *</Label>
+                            <Input
+                                id="mName"
+                                placeholder="Contoh: PT TRI PUTRA ABADI"
+                                value={vendorForm.name}
+                                onChange={(e) => setVendorForm({ ...vendorForm, name: e.target.value })}
+                                required
+                            />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                                <Label htmlFor="mCode">Kode Vendor (Unik) *</Label>
+                                <Input
+                                    id="mCode"
+                                    placeholder="VND-001"
+                                    value={vendorForm.code}
+                                    onChange={(e) => setVendorForm({ ...vendorForm, code: e.target.value })}
+                                    required
+                                />
+                            </div>
+                            <div className="space-y-1">
+                                <Label htmlFor="mSapCode">Kode SAP (Opsional)</Label>
+                                <Input
+                                    id="mSapCode"
+                                    placeholder="2000001"
+                                    value={vendorForm.sapVendorCode}
+                                    onChange={(e) => setVendorForm({ ...vendorForm, sapVendorCode: e.target.value })}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                                <Label htmlFor="mEmail">Email Kontak *</Label>
+                                <Input
+                                    id="mEmail"
+                                    type="email"
+                                    placeholder="finance@vendor.com"
+                                    value={vendorForm.email}
+                                    onChange={(e) => setVendorForm({ ...vendorForm, email: e.target.value })}
+                                    required
+                                />
+                            </div>
+                            <div className="space-y-1">
+                                <Label htmlFor="mPhone">Telepon / WhatsApp</Label>
+                                <Input
+                                    id="mPhone"
+                                    placeholder="08123456789"
+                                    value={vendorForm.phone}
+                                    onChange={(e) => setVendorForm({ ...vendorForm, phone: e.target.value })}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-3">
+                            <div className="space-y-1">
+                                <Label htmlFor="mBank">Nama Bank</Label>
+                                <Input
+                                    id="mBank"
+                                    placeholder="BRI"
+                                    value={vendorForm.bankName}
+                                    onChange={(e) => setVendorForm({ ...vendorForm, bankName: e.target.value })}
+                                />
+                            </div>
+                            <div className="space-y-1">
+                                <Label htmlFor="mAcc">No. Rekening</Label>
+                                <Input
+                                    id="mAcc"
+                                    placeholder="4595-01-028..."
+                                    value={vendorForm.bankAccountNo}
+                                    onChange={(e) => setVendorForm({ ...vendorForm, bankAccountNo: e.target.value })}
+                                />
+                            </div>
+                            <div className="space-y-1">
+                                <Label htmlFor="mHolder">Atas Nama</Label>
+                                <Input
+                                    id="mHolder"
+                                    placeholder="CV Trimicel Jaya"
+                                    value={vendorForm.bankAccountHolder}
+                                    onChange={(e) => setVendorForm({ ...vendorForm, bankAccountHolder: e.target.value })}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-3">
+                            <div className="space-y-1">
+                                <Label htmlFor="mTop">TOP Default (Hari)</Label>
+                                <Input
+                                    id="mTop"
+                                    type="number"
+                                    value={vendorForm.defaultTopDays}
+                                    onChange={(e) => setVendorForm({ ...vendorForm, defaultTopDays: Number(e.target.value) || 30 })}
+                                />
+                            </div>
+                            <div className="space-y-1">
+                                <Label htmlFor="mNpwp">NPWP</Label>
+                                <Input
+                                    id="mNpwp"
+                                    placeholder="02.919.245..."
+                                    value={vendorForm.npwp}
+                                    onChange={(e) => setVendorForm({ ...vendorForm, npwp: e.target.value })}
+                                />
+                            </div>
+                            <div className="space-y-1">
+                                <Label>Status PKP</Label>
+                                <div className="pt-2">
+                                    <label className="flex items-center gap-2 cursor-pointer font-medium">
+                                        <Checkbox
+                                            checked={vendorForm.isPkp}
+                                            onCheckedChange={(c) => setVendorForm({ ...vendorForm, isPkp: Boolean(c) })}
                                         />
-                                        {isSearchingVendorDropdown && (
-                                            <Loader2 className="w-3.5 h-3.5 animate-spin absolute right-2.5 top-2.5 text-slate-400" />
-                                        )}
-                                    </div>
-
-                                    {isVendorDropdownOpen && procurementVendorSuggestions.length > 0 && (
-                                        <div className="absolute z-30 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-800 bg-white shadow-xl dark:bg-slate-900 divide-y divide-slate-100 dark:divide-slate-800">
-                                            {procurementVendorSuggestions.map((vendor) => (
-                                                <button
-                                                    key={`${vendor.isTenant ? "tenant" : "sap"}-${vendor.supplierCode}`}
-                                                    type="button"
-                                                    className="block w-full p-2.5 text-left hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-                                                    onClick={() => handleSelectProcurementVendor(vendor)}
-                                                >
-                                                    <div className="flex items-center justify-between">
-                                                        <span className="font-semibold text-slate-900 dark:text-slate-100">
-                                                            {vendor.vendorName}
-                                                        </span>
-                                                        <Badge variant="outline" className="font-mono text-[10px]">
-                                                            {vendor.supplierCode}
-                                                        </Badge>
-                                                    </div>
-                                                    <div className="flex items-center gap-2 mt-0.5 text-[10px] text-slate-500">
-                                                        <span>TOP: {vendor.topDays || 30} Hari</span>
-                                                        <span>&bull;</span>
-                                                        <span className={vendor.isPkp ? "text-emerald-600 font-semibold" : ""}>
-                                                            {vendor.isPkp ? "PKP" : "Non-PKP"}
-                                                        </span>
-                                                        <span>&bull;</span>
-                                                        <span className="text-primary font-medium">
-                                                            {vendor.isTenant ? "Mitra Terdaftar" : "Master SAP"}
-                                                        </span>
-                                                        {vendor.city && (
-                                                            <>
-                                                                <span>&bull;</span>
-                                                                <span>{vendor.city}</span>
-                                                            </>
-                                                        )}
-                                                    </div>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    )}
+                                        <span>Pengusaha Kena Pajak</span>
+                                    </label>
                                 </div>
-                            )}
+                            </div>
                         </div>
 
-                        {/* 2. Informasi Faktur & PO */}
+                        <Button
+                            type="submit"
+                            disabled={isSavingVendor}
+                            className="w-full bg-primary hover:bg-primary/90 text-white font-bold py-2 mt-2"
+                        >
+                            {isSavingVendor ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : null}
+                            {selectedVendorForEdit ? "Simpan Perubahan Vendor" : "Daftarkan Vendor"}
+                        </Button>
+                    </form>
+                </DialogContent>
+            </Dialog>
+
+            {/* MODAL 9: BUAT KONTRAK BARU */}
+            <Dialog open={isAddContractOpen} onOpenChange={setIsAddContractOpen}>
+                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2 text-base">
+                            <FileText className="w-5 h-5 text-indigo-600" />
+                            Buat Master Kontrak Vendor &amp; Perjanjian Sewa
+                        </DialogTitle>
+                        <DialogDescription className="text-xs">
+                            Daftarkan kontrak payung atau sewa kendaraan/jasa lengkap dengan spesifikasi unit dan harga sewa.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    {contractFormError && (
+                        <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs flex items-center gap-2">
+                            <AlertCircle className="w-4 h-4 shrink-0" />
+                            <span>{contractFormError}</span>
+                        </div>
+                    )}
+
+                    <form onSubmit={handleSaveContract} className="space-y-3.5 text-xs">
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <div className="space-y-1.5">
-                                <Label htmlFor="procInvoiceNum">Nomor Invoice Tagihan *</Label>
+                            <div className="space-y-1">
+                                <Label htmlFor="cNum">Nomor Kontrak *</Label>
                                 <Input
-                                    id="procInvoiceNum"
-                                    placeholder="Contoh: INV/2026/03/991"
-                                    value={procurementInvoiceNumber}
-                                    onChange={(e) => setProcurementInvoiceNumber(e.target.value)}
+                                    id="cNum"
+                                    placeholder="Contoh: 505/TJ-CP/LV/X/2025"
+                                    value={contractForm.contractNumber}
+                                    onChange={(e) => setContractForm({ ...contractForm, contractNumber: e.target.value })}
                                     required
                                 />
                             </div>
-
-                            <div className="space-y-1.5">
-                                <Label htmlFor="procInvoiceDate">Tanggal Invoice *</Label>
+                            <div className="space-y-1">
+                                <Label htmlFor="cTitle">Judul Kontrak / Perjanjian *</Label>
                                 <Input
-                                    id="procInvoiceDate"
-                                    type="date"
-                                    value={procurementInvoiceDate}
-                                    onChange={(e) => setProcurementInvoiceDate(e.target.value)}
+                                    id="cTitle"
+                                    placeholder="Perjanjian Sewa Menyewa Kendaraan"
+                                    value={contractForm.title}
+                                    onChange={(e) => setContractForm({ ...contractForm, title: e.target.value })}
                                     required
                                 />
                             </div>
                         </div>
 
-                        {/* PO One Chitra with live checker */}
-                        <div className="space-y-1.5">
-                            <Label htmlFor="procPoNum">Nomor Purchase Order (PO) One Chitra *</Label>
-                            <div className="flex gap-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                                <Label htmlFor="cVendor">Nama Rekan Vendor *</Label>
                                 <Input
-                                    id="procPoNum"
-                                    placeholder="Contoh: 4500012345"
-                                    value={procurementPoNumber}
-                                    onChange={(e) => setProcurementPoNumber(e.target.value)}
-                                    required
-                                />
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    onClick={handleCheckProcurementPo}
-                                    disabled={isCheckingProcurementPo || !procurementPoNumber.trim()}
-                                    className="shrink-0 text-xs flex items-center gap-1"
-                                >
-                                    {isCheckingProcurementPo ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
-                                    Cek SAP PO
-                                </Button>
-                            </div>
-                            {procurementPoResult && (
-                                <div className={`p-2.5 rounded-lg text-[11px] border ${procurementPoResult.found ? "bg-emerald-50 border-emerald-200 text-emerald-800" : "bg-amber-50 border-amber-200 text-amber-800"}`}>
-                                    {procurementPoResult.found ? (
-                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                                            <div>
-                                                <p>PO Ditemukan di SAP &bull; Vendor: <strong>{procurementPoResult.vendorName}</strong> &bull; Total Net: <strong>{formatCurrency(procurementPoResult.netValue)}</strong></p>
-                                            </div>
-                                            {procurementPoResult.vendorName && !procurementSelectedVendor && (
-                                                <Button
-                                                    type="button"
-                                                    size="sm"
-                                                    variant="secondary"
-                                                    className="text-[10px] h-6 px-2 bg-emerald-600 text-white hover:bg-emerald-700 shrink-0"
-                                                    onClick={() => handleUsePoVendor(procurementPoResult.vendorName, procurementPoResult.vendorCode)}
-                                                >
-                                                    Gunakan Vendor Ini
-                                                </Button>
-                                            )}
-                                        </div>
-                                    ) : (
-                                        <p>{procurementPoResult.message}</p>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-
-                        {/* 3. Nominal & TOP Read-Only */}
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                            <div className="space-y-1.5">
-                                <Label htmlFor="procSubtotal">Sub-Total (DPP) *</Label>
-                                <Input
-                                    id="procSubtotal"
-                                    type="number"
-                                    min={0}
-                                    placeholder="0"
-                                    value={procurementSubtotal || ""}
-                                    onChange={(e) => setProcurementSubtotal(Number(e.target.value) || 0)}
+                                    id="cVendor"
+                                    placeholder="CV TRIMICEL JAYA"
+                                    value={contractForm.vendorName}
+                                    onChange={(e) => setContractForm({ ...contractForm, vendorName: e.target.value })}
                                     required
                                 />
                             </div>
-
-                            <div className="space-y-1.5">
-                                <Label htmlFor="procPpn">PPN (%)</Label>
+                            <div className="space-y-1">
+                                <Label htmlFor="cVendorCode">Kode SAP Vendor (Opsional)</Label>
                                 <Input
-                                    id="procPpn"
-                                    type="number"
-                                    min={0}
-                                    max={100}
-                                    value={procurementPpnPercent}
-                                    onChange={(e) => setProcurementPpnPercent(Number(e.target.value) || 0)}
-                                />
-                            </div>
-
-                            <div className="space-y-1.5">
-                                <Label htmlFor="procPph">PPh (%)</Label>
-                                <Input
-                                    id="procPph"
-                                    type="number"
-                                    min={0}
-                                    max={100}
-                                    value={procurementPphPercent}
-                                    onChange={(e) => setProcurementPphPercent(Number(e.target.value) || 0)}
+                                    id="cVendorCode"
+                                    placeholder="2000001"
+                                    value={contractForm.vendorSapCode}
+                                    onChange={(e) => setContractForm({ ...contractForm, vendorSapCode: e.target.value })}
                                 />
                             </div>
                         </div>
 
-                        {/* Ringkasan & TOP info */}
-                        <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                            <div>
-                                <span className="text-slate-400 block text-[10px]">Term of Payment (TOP):</span>
-                                <span className="font-bold text-slate-800 dark:text-slate-200">
-                                    {procurementSelectedVendor?.topDays || initialTenants.find((t) => t.id === procurementVendorId)?.defaultTopDays || 30} Hari (Read-Only dari Master Vendor)
-                                </span>
-                            </div>
-                            <div className="text-right">
-                                <span className="text-slate-400 block text-[10px]">Grand Total Estimasi:</span>
-                                <span className="font-extrabold text-base text-primary">
-                                    {formatCurrency(
-                                        procurementSubtotal +
-                                        (procurementSubtotal * procurementPpnPercent) / 100 -
-                                        (procurementSubtotal * procurementPphPercent) / 100
-                                    )}
-                                </span>
-                            </div>
-                        </div>
+                        {/* Rincian Barang / Jasa / Unit Sewa */}
+                        <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl border space-y-2.5">
+                            <span className="font-bold text-slate-800 dark:text-slate-200 block">
+                                Spesifikasi Barang / Jasa / Unit Kendaraan
+                            </span>
 
-                        {/* 4. Berkas Lampiran Dokumen */}
-                        <div className="space-y-3 pt-1">
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 border-b pb-1">
-                                <h4 className="font-semibold text-slate-900 dark:text-slate-100 text-xs">
-                                    Berkas Dokumen Lampiran
-                                </h4>
-                                <span className="text-[10px] text-muted-foreground italic">
-                                    * Wajib Invoice fisik dan minimal salah satu bukti penerimaan (GR Slip / Surat Jalan)
-                                </span>
-                            </div>
-
-                            {/* Banner info bukti penerimaan wajib pilih salah satu */}
-                            <div className="p-2.5 rounded-lg border bg-blue-50/60 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 text-[11px] text-blue-900 dark:text-blue-200 flex items-start gap-2">
-                                <FileCheck className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-                                <div>
-                                    <span className="font-bold">Ketentuan Lampiran Bukti Penerimaan:</span>
-                                    <p className="text-[10px] text-blue-800 dark:text-blue-300">
-                                        Wajib melampirkan minimal salah satu: <strong>Lampiran GR Slip (Goods Receipt)</strong> ATAU <strong>Surat Jalan / BAST / Rekap Absen</strong>.
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                {/* Invoice Fisik - WAJIB */}
-                                <div className="p-3 border border-dashed rounded-xl bg-slate-50 dark:bg-slate-900">
-                                    <div className="flex justify-between items-center mb-1.5">
-                                        <Label className="text-xs font-semibold">Berkas Invoice Fisik *</Label>
-                                        <span className="text-[10px] text-red-500 font-bold">Wajib</span>
-                                    </div>
-                                    <input
-                                        type="file"
-                                        accept=".pdf,image/*"
-                                        onChange={(e) => setProcurementInvoiceFile(e.target.files?.[0] || null)}
-                                        className="block w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-2.5 file:rounded file:border-0 file:text-xs file:bg-primary file:text-white cursor-pointer"
-                                        required
-                                    />
-                                    {procurementInvoiceFile && <p className="text-[10px] text-emerald-600 mt-1 truncate">Terpilih: {procurementInvoiceFile.name}</p>}
-                                </div>
-
-                                {/* Lampiran GR Slip - Wajib salah satu */}
-                                <div className={`p-3 border border-dashed rounded-xl ${procurementGrSlipFile ? "border-emerald-400 bg-emerald-50/30" : "border-blue-300 dark:border-blue-900 bg-blue-50/40 dark:bg-blue-950/20"}`}>
-                                    <div className="flex justify-between items-center mb-1.5">
-                                        <Label className="text-xs font-semibold">Lampiran GR Slip (Goods Receipt)</Label>
-                                        <span className={`text-[10px] font-bold ${procurementDeliveryFile ? "text-slate-500" : "text-blue-600"}`}>
-                                            {procurementDeliveryFile ? "Opsional (Surat Jalan terlampir)" : "Pilih Salah Satu"}
-                                        </span>
-                                    </div>
-                                    <input
-                                        type="file"
-                                        accept=".pdf,image/*"
-                                        onChange={(e) => setProcurementGrSlipFile(e.target.files?.[0] || null)}
-                                        className="block w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-2.5 file:rounded file:border-0 file:text-xs file:bg-blue-600 file:text-white cursor-pointer"
-                                    />
-                                    {procurementGrSlipFile && <p className="text-[10px] text-emerald-600 mt-1 truncate">Terpilih: {procurementGrSlipFile.name}</p>}
-                                </div>
+                            <div className="space-y-1">
+                                <Label htmlFor="cItemName">Nama Barang / Unit *</Label>
+                                <Input
+                                    id="cItemName"
+                                    placeholder="MITSUBISHI TRITON 2.5L DC HDX-L (4X4) MT"
+                                    value={contractForm.itemName}
+                                    onChange={(e) => setContractForm({ ...contractForm, itemName: e.target.value })}
+                                    required
+                                />
                             </div>
 
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                                {/* e-Faktur Pajak - Wajib bagi PKP */}
-                                <div className={`p-2.5 border rounded-lg ${procurementIsPkp || procurementPpnPercent > 0 ? "border-amber-300 bg-amber-50/30" : "bg-slate-50 dark:bg-slate-900"}`}>
-                                    <div className="flex items-center justify-between mb-1">
-                                        <Label className="text-[11px] block font-semibold">e-Faktur Pajak</Label>
-                                        <span className={`text-[9px] font-bold ${procurementIsPkp || procurementPpnPercent > 0 ? "text-amber-700" : "text-slate-400"}`}>
-                                            {procurementIsPkp || procurementPpnPercent > 0 ? "Wajib PKP *" : "Opsional (Non-PKP)"}
-                                        </span>
-                                    </div>
-                                    <input
-                                        type="file"
-                                        accept=".pdf,image/*"
-                                        required={procurementIsPkp || procurementPpnPercent > 0}
-                                        onChange={(e) => setProcurementTaxFile(e.target.files?.[0] || null)}
-                                        className="text-[11px] block w-full text-slate-500 file:mr-1 file:py-0.5 file:px-2 file:rounded file:border-0 file:text-[10px] file:bg-slate-200 file:text-slate-700 cursor-pointer"
+                                <div className="space-y-1">
+                                    <Label htmlFor="cPlate">Nomor Polisi</Label>
+                                    <Input
+                                        id="cPlate"
+                                        placeholder="DA 8109 HH"
+                                        value={contractForm.policeNumber}
+                                        onChange={(e) => setContractForm({ ...contractForm, policeNumber: e.target.value })}
                                     />
-                                    {procurementTaxFile && <p className="text-[10px] text-emerald-600 mt-0.5 truncate">Terpilih: {procurementTaxFile.name}</p>}
                                 </div>
-
-                                {/* Salinan PO */}
-                                <div className="p-2.5 border rounded-lg bg-slate-50 dark:bg-slate-900">
-                                    <div className="flex items-center justify-between mb-1">
-                                        <Label className="text-[11px] block font-semibold">Salinan PO</Label>
-                                        <span className="text-[9px] text-slate-400">Opsional</span>
-                                    </div>
-                                    <input
-                                        type="file"
-                                        accept=".pdf,image/*"
-                                        onChange={(e) => setProcurementPoFile(e.target.files?.[0] || null)}
-                                        className="text-[11px] block w-full text-slate-500 file:mr-1 file:py-0.5 file:px-2 file:rounded file:border-0 file:text-[10px] file:bg-slate-200 file:text-slate-700 cursor-pointer"
+                                <div className="space-y-1">
+                                    <Label htmlFor="cYear">Tahun Pembuatan</Label>
+                                    <Input
+                                        id="cYear"
+                                        type="number"
+                                        placeholder="2022"
+                                        value={contractForm.year}
+                                        onChange={(e) => setContractForm({ ...contractForm, year: Number(e.target.value) || 2022 })}
                                     />
-                                    {procurementPoFile && <p className="text-[10px] text-emerald-600 mt-0.5 truncate">Terpilih: {procurementPoFile.name}</p>}
                                 </div>
-
-                                {/* Surat Jalan / BAST / Rekap Absen - Wajib salah satu */}
-                                <div className={`p-2.5 border rounded-lg ${procurementDeliveryFile ? "border-emerald-400 bg-emerald-50/30" : "bg-slate-50 dark:bg-slate-900"}`}>
-                                    <div className="flex items-center justify-between mb-1">
-                                        <Label className="text-[11px] block font-semibold truncate">Surat Jalan / BAST / Absen</Label>
-                                        <span className={`text-[9px] font-bold ${procurementGrSlipFile ? "text-slate-500" : "text-amber-700"}`}>
-                                            {procurementGrSlipFile ? "Opsional (GR Slip terlampir)" : "Pilih Salah Satu"}
-                                        </span>
-                                    </div>
-                                    <input
-                                        type="file"
-                                        accept=".pdf,image/*"
-                                        onChange={(e) => setProcurementDeliveryFile(e.target.files?.[0] || null)}
-                                        className="text-[11px] block w-full text-slate-500 file:mr-1 file:py-0.5 file:px-2 file:rounded file:border-0 file:text-[10px] file:bg-slate-200 file:text-slate-700 cursor-pointer"
+                                <div className="space-y-1">
+                                    <Label htmlFor="cLoc">Lokasi Kerja</Label>
+                                    <Input
+                                        id="cLoc"
+                                        placeholder="Adaro / Tanjung Tabalong"
+                                        value={contractForm.location}
+                                        onChange={(e) => setContractForm({ ...contractForm, location: e.target.value })}
                                     />
-                                    {procurementDeliveryFile && <p className="text-[10px] text-emerald-600 mt-0.5 truncate">Terpilih: {procurementDeliveryFile.name}</p>}
                                 </div>
                             </div>
                         </div>
 
-                        <div className="space-y-1.5">
-                            <Label htmlFor="procNotes">Catatan Tambahan Procurement (Opsional)</Label>
-                            <Textarea
-                                id="procNotes"
-                                rows={2}
-                                placeholder="Keterangan penyerahan invoice fisik oleh vendor..."
-                                value={procurementNotes}
-                                onChange={(e) => setProcurementNotes(e.target.value)}
+                        {/* Nilai Sewa & Periode */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div className="space-y-1">
+                                <Label htmlFor="cVal">Nilai Sewa (Rupiah/Bulan) *</Label>
+                                <Input
+                                    id="cVal"
+                                    type="number"
+                                    value={contractForm.contractValue}
+                                    onChange={(e) => setContractForm({ ...contractForm, contractValue: Number(e.target.value) || 0 })}
+                                    required
+                                />
+                            </div>
+                            <div className="space-y-1">
+                                <Label htmlFor="cStart">Tanggal Mulai Berlaku *</Label>
+                                <Input
+                                    id="cStart"
+                                    type="date"
+                                    value={contractForm.startDate}
+                                    onChange={(e) => setContractForm({ ...contractForm, startDate: e.target.value })}
+                                    required
+                                />
+                            </div>
+                            <div className="space-y-1">
+                                <Label htmlFor="cEnd">Tanggal Berakhir *</Label>
+                                <Input
+                                    id="cEnd"
+                                    type="date"
+                                    value={contractForm.endDate}
+                                    onChange={(e) => setContractForm({ ...contractForm, endDate: e.target.value })}
+                                    required
+                                />
+                            </div>
+                        </div>
+
+                        {/* TOP & Pajak */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div className="space-y-1">
+                                <Label htmlFor="cTop">Term of Payment (Hari)</Label>
+                                <Input
+                                    id="cTop"
+                                    type="number"
+                                    value={contractForm.topDays}
+                                    onChange={(e) => setContractForm({ ...contractForm, topDays: Number(e.target.value) || 45 })}
+                                />
+                            </div>
+                            <div className="space-y-1">
+                                <Label htmlFor="cPpn">PPN (%)</Label>
+                                <Input
+                                    id="cPpn"
+                                    type="number"
+                                    value={contractForm.ppnPercent}
+                                    onChange={(e) => setContractForm({ ...contractForm, ppnPercent: Number(e.target.value) || 11 })}
+                                />
+                            </div>
+                            <div className="space-y-1">
+                                <Label htmlFor="cPph">PPh (%)</Label>
+                                <Input
+                                    id="cPph"
+                                    type="number"
+                                    value={contractForm.pphPercent}
+                                    onChange={(e) => setContractForm({ ...contractForm, pphPercent: Number(e.target.value) || 2 })}
+                                />
+                            </div>
+                        </div>
+
+                        {/* Rekening Bank Pembayaran */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div className="space-y-1">
+                                <Label htmlFor="cBName">Bank</Label>
+                                <Input
+                                    id="cBName"
+                                    value={contractForm.bankName}
+                                    onChange={(e) => setContractForm({ ...contractForm, bankName: e.target.value })}
+                                />
+                            </div>
+                            <div className="space-y-1">
+                                <Label htmlFor="cBNum">No. Rekening</Label>
+                                <Input
+                                    id="cBNum"
+                                    value={contractForm.bankAccountNumber}
+                                    onChange={(e) => setContractForm({ ...contractForm, bankAccountNumber: e.target.value })}
+                                />
+                            </div>
+                            <div className="space-y-1">
+                                <Label htmlFor="cBOwner">Atas Nama</Label>
+                                <Input
+                                    id="cBOwner"
+                                    value={contractForm.bankAccountHolder}
+                                    onChange={(e) => setContractForm({ ...contractForm, bankAccountHolder: e.target.value })}
+                                />
+                            </div>
+                        </div>
+
+                        {/* Berkas PDF Kontrak */}
+                        <div className="space-y-1">
+                            <Label>Unggah Salinan PDF Kontrak Perjanjian (Opsional)</Label>
+                            <input
+                                type="file"
+                                accept=".pdf"
+                                onChange={(e) => setContractPdfFile(e.target.files?.[0] || null)}
+                                className="block w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-2.5 file:rounded file:border-0 file:text-xs file:bg-indigo-600 file:text-white cursor-pointer"
                             />
                         </div>
 
                         <Button
                             type="submit"
-                            disabled={isSubmittingProcurement}
-                            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 text-xs shadow-md mt-2"
+                            disabled={isSavingContract}
+                            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 mt-2"
                         >
-                            {isSubmittingProcurement ? (
-                                <>
-                                    <Loader2 className="w-4 h-4 animate-spin mr-1.5" />
-                                    Menyimpan &amp; Mengunggah Dokumen Invoice...
-                                </>
-                            ) : (
-                                "Simpan Entry Invoice (Kirim ke Antrean Validation Gate Admin)"
-                            )}
+                            {isSavingContract ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : null}
+                            Simpan Master Kontrak
                         </Button>
                     </form>
+                </DialogContent>
+            </Dialog>
+
+            {/* MODAL 10: DETAIL KONTRAK */}
+            <Dialog open={Boolean(selectedContractDetail)} onOpenChange={() => setSelectedContractDetail(null)}>
+                <DialogContent className="max-w-lg">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2 text-base">
+                            <FileText className="w-5 h-5 text-indigo-600" />
+                            Detail Kontrak Perjanjian Sewa
+                        </DialogTitle>
+                        <DialogDescription className="text-xs">
+                            {selectedContractDetail?.contractNumber}
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    {selectedContractDetail && (
+                        <div className="space-y-3.5 text-xs">
+                            <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl border space-y-1">
+                                <span className="font-bold text-slate-900 dark:text-slate-100 text-sm block">
+                                    {selectedContractDetail.title}
+                                </span>
+                                <p className="text-slate-600 dark:text-slate-400">
+                                    Mitra Rekanan: <strong>{selectedContractDetail.vendorName}</strong>
+                                    {selectedContractDetail.vendorSapCode ? ` (SAP: ${selectedContractDetail.vendorSapCode})` : ""}
+                                </p>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2 p-3 border rounded-xl">
+                                <div>
+                                    <span className="text-[10px] text-slate-400 block">Unit Kendaraan / Barang:</span>
+                                    <span className="font-semibold text-slate-900 dark:text-slate-100">
+                                        {selectedContractDetail.itemName}
+                                    </span>
+                                </div>
+                                <div>
+                                    <span className="text-[10px] text-slate-400 block">Nomor Polisi:</span>
+                                    <span className="font-mono font-bold text-primary">
+                                        {selectedContractDetail.itemDetails?.policeNumber || "-"}
+                                    </span>
+                                </div>
+                                <div>
+                                    <span className="text-[10px] text-slate-400 block">Nilai Sewa per Bulan:</span>
+                                    <span className="font-bold text-emerald-600 text-sm">
+                                        {formatCurrency(selectedContractDetail.contractValue)}
+                                    </span>
+                                </div>
+                                <div>
+                                    <span className="text-[10px] text-slate-400 block">Term of Payment:</span>
+                                    <span className="font-semibold">{selectedContractDetail.topDays || 45} Hari Kalender</span>
+                                </div>
+                                <div>
+                                    <span className="text-[10px] text-slate-400 block">Masa Berlaku:</span>
+                                    <span>{formatDate(selectedContractDetail.startDate)} s.d {formatDate(selectedContractDetail.endDate)}</span>
+                                </div>
+                                <div>
+                                    <span className="text-[10px] text-slate-400 block">Lokasi Unit:</span>
+                                    <span>{selectedContractDetail.itemDetails?.location || "-"}</span>
+                                </div>
+                            </div>
+
+                            <div className="p-3 bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-200 rounded-xl space-y-1">
+                                <span className="font-bold text-indigo-950 dark:text-indigo-200 block text-[11px]">
+                                    Rekening Pembayaran &amp; Perpajakan:
+                                </span>
+                                <p className="text-[11px] text-indigo-900 dark:text-indigo-300">
+                                    {selectedContractDetail.bankName}: <strong>{selectedContractDetail.bankAccountNumber}</strong> a/n {selectedContractDetail.bankAccountHolder}
+                                </p>
+                                <p className="text-[10px] text-indigo-800 dark:text-indigo-400">
+                                    NPWP: {selectedContractDetail.npwpNumber || "-"} &bull; PPN: {selectedContractDetail.ppnPercent}% &bull; PPh: {selectedContractDetail.pphPercent}%
+                                </p>
+                            </div>
+
+                            {selectedContractDetail.contractFileUrl && (
+                                <a
+                                    href={resolveUploadDocumentUrl(selectedContractDetail.contractFileUrl) || selectedContractDetail.contractFileUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="w-full py-2 bg-indigo-600 text-white rounded-lg font-bold flex items-center justify-center gap-2 hover:bg-indigo-700"
+                                >
+                                    <ExternalLink className="w-4 h-4" /> Buka Salinan PDF Kontrak
+                                </a>
+                            )}
+                        </div>
+                    )}
                 </DialogContent>
             </Dialog>
         </div>

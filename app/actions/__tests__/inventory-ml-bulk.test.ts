@@ -51,6 +51,10 @@ function expectBulkSuccess<T extends { success: boolean }>(
 }
 
 beforeAll(async () => {
+  // Clean up any existing test user first
+  await db.delete(user).where(eq(user.id, 'test-user-bulk'))
+  await db.delete(user).where(eq(user.email, 'test-bulk@example.com'))
+
   // Create a test user
   const [testUser] = await db.insert(user).values({
     id: 'test-user-bulk',
@@ -68,7 +72,8 @@ afterAll(async () => {
       inArray(aiInventoryPredictions.id, createdPredictionIds)
     )
   }
-  await db.delete(user).where(eq(user.id, testUserId))
+  await db.delete(user).where(eq(user.id, testUserId || 'test-user-bulk'))
+  await db.delete(user).where(eq(user.email, 'test-bulk@example.com'))
 })
 
 describe('Bulk Prediction Processor - Unit Tests', () => {
