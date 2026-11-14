@@ -41,28 +41,73 @@ export async function POST(req: NextRequest) {
             return Response.json({ error: parsedBody.error.issues[0]?.message || "Invalid payload" }, { status: 400 })
         }
 
-        const apiKey = process.env.MISTRAL_API_KEY
-        if (!apiKey) {
-            return Response.json({ error: "MISTRAL_API_KEY belum diset" }, { status: 500 })
+        const openAiKey = process.env.OPENAI_API_KEY?.trim()
+        const provider = process.env.LLM_PROVIDER?.trim().toLowerCase()
+        const mistralKey = process.env.MISTRAL_API_KEY?.trim()
+
+        if (!openAiKey && !mistralKey) {
+            return Response.json({ error: "Kunci API LLM (OPENAI_API_KEY atau MISTRAL_API_KEY) belum diset" }, { status: 500 })
         }
 
-        const model = process.env.MISTRAL_TEXT_MODEL?.trim() || "mistral-large-latest"
+        let completion: unknown = null
 
-        const completionPayload: Record<string, unknown> = {
-            model,
-            messages: [
-                { role: "system", content: systemPrompt },
-                {
-                    role: "user",
-                    content: `Ekstrak data berikut ke JSON dengan field customer_name, po_number, date, discount, items[] { product_name, quantity, price, unit }.\n\nOCR_TEXT:\n${parsedBody.data.ocrText}`,
-                },
-            ],
-            response_format: { type: "json_object" },
+        if (provider === "openai" || openAiKey) {
+            try {
+                const rawBaseUrl = process.env.OPENAI_BASE_URL?.trim() || "https://9router.chitraparatama.com/v1"
+                const baseUrl = rawBaseUrl.replace(/\/$/, "")
+                const endpoint = baseUrl.endsWith("/chat/completions") ? baseUrl : `${baseUrl}/chat/completions`
+                const model = process.env.OPENAI_MODEL?.trim() || "cx/gpt-5.6-luna"
+
+                const res = await fetch(endpoint, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${openAiKey}`,
+                    },
+                    body: JSON.stringify({
+                        model,
+                        messages: [
+                            { role: "system", content: systemPrompt },
+                            {
+                                role: "user",
+                                content: `Ekstrak data berikut ke JSON dengan field customer_name, po_number, date, discount, items[] { product_name, quantity, price, unit }.\n\nOCR_TEXT:\n${parsedBody.data.ocrText}`,
+                            },
+                        ],
+                        response_format: { type: "json_object" },
+                        temperature: 0.1,
+                    }),
+                    signal: AbortSignal.timeout(25000),
+                })
+
+                if (res.ok) {
+                    completion = await res.json()
+                } else {
+                    const errText = await res.text()
+                    console.warn(`[OCR-Text-Extract] OpenAI HTTP error ${res.status}:`, errText)
+                }
+            } catch (openAiErr) {
+                console.warn("[OCR-Text-Extract] OpenAI failed, falling back to Mistral:", openAiErr)
+            }
         }
-        const completion = await callMistralChatCompletion({
-            apiKey,
-            body: completionPayload,
-        })
+
+        if (!completion && mistralKey) {
+            const model = process.env.MISTRAL_TEXT_MODEL?.trim() || "mistral-large-latest"
+            const completionPayload: Record<string, unknown> = {
+                model,
+                messages: [
+                    { role: "system", content: systemPrompt },
+                    {
+                        role: "user",
+                        content: `Ekstrak data berikut ke JSON dengan field customer_name, po_number, date, discount, items[] { product_name, quantity, price, unit }.\n\nOCR_TEXT:\n${parsedBody.data.ocrText}`,
+                    },
+                ],
+                response_format: { type: "json_object" },
+            }
+            completion = await callMistralChatCompletion({
+                apiKey: mistralKey,
+                body: completionPayload,
+            })
+        }
 
         const modelContent = getMessageContent(completion)
         if (!modelContent) {

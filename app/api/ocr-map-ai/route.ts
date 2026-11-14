@@ -142,12 +142,6 @@ async function tryAiMapping(input: {
     customerCandidates: Array<{ id: number; name: string; customerCode: string | null; score: number }>
     productCandidatesByItem: Array<Array<{ id: number; name: string; materialNumber: string; score: number }>>
 }) {
-    const apiKey = process.env.MISTRAL_API_KEY
-    if (!apiKey) {
-        return null
-    }
-    const model = process.env.MISTRAL_MAP_MODEL?.trim() || "mistral-small-latest"
-
     const promptPayload = {
         extracted: input.basic,
         customer_candidates: input.customerCandidates,
@@ -159,29 +153,73 @@ async function tryAiMapping(input: {
         },
     }
 
-    const completionPayload: Record<string, unknown> = {
-        model,
-        response_format: { type: "json_object" },
-        messages: [
-            { role: "system", content: "Anda memetakan hasil OCR ke master data. Hanya keluarkan JSON valid tanpa teks lain." },
-            { role: "user", content: JSON.stringify(promptPayload) },
-        ],
+    const openAiKey = process.env.OPENAI_API_KEY?.trim()
+    const provider = process.env.LLM_PROVIDER?.trim().toLowerCase()
+
+    // 1. Coba OpenAI / 9Router terlebih dahulu jika dikonfigurasi
+    if (provider === "openai" || openAiKey) {
+        try {
+            const model = process.env.OPENAI_MODEL?.trim() || "cx/gpt-5.6-luna"
+            const completionPayload: Record<string, unknown> = {
+                model,
+                response_format: { type: "json_object" },
+                messages: [
+                    { role: "system", content: "Anda memetakan hasil OCR ke master data. Hanya keluarkan JSON valid tanpa teks lain." },
+                    { role: "user", content: JSON.stringify(promptPayload) },
+                ],
+                temperature: 0.1,
+            }
+
+            const completion = await callOpenAiChatCompletion({
+                apiKey: openAiKey || "",
+                body: completionPayload,
+            })
+            const content = getMessageContent(completion)
+            if (content) {
+                const parsed = parseJsonContent(content)
+                const valid = aiResultSchema.safeParse(parsed)
+                if (valid.success) {
+                    return valid.data
+                }
+            }
+        } catch (err) {
+            console.warn("[OCR-Map-AI] OpenAI mapping error, trying fallback:", err)
+        }
     }
 
-    const completion = await callMistralChatCompletion({
-        apiKey,
-        body: completionPayload,
-    })
-    const content = getMessageContent(completion)
-    if (!content) {
-        return null
+    // 2. Coba Mistral jika API key ada
+    const mistralKey = process.env.MISTRAL_API_KEY?.trim()
+    if (mistralKey) {
+        try {
+            const model = process.env.MISTRAL_MAP_MODEL?.trim() || "mistral-small-latest"
+            const completionPayload: Record<string, unknown> = {
+                model,
+                response_format: { type: "json_object" },
+                messages: [
+                    { role: "system", content: "Anda memetakan hasil OCR ke master data. Hanya keluarkan JSON valid tanpa teks lain." },
+                    { role: "user", content: JSON.stringify(promptPayload) },
+                ],
+            }
+
+            const completion = await callMistralChatCompletion({
+                apiKey: mistralKey,
+                body: completionPayload,
+            })
+            const content = getMessageContent(completion)
+            if (content) {
+                const parsed = parseJsonContent(content)
+                const valid = aiResultSchema.safeParse(parsed)
+                if (valid.success) {
+                    return valid.data
+                }
+            }
+        } catch (err) {
+            console.warn("[OCR-Map-AI] Mistral mapping error, falling back to candidates:", err)
+        }
     }
-    const parsed = parseJsonContent(content)
-    const valid = aiResultSchema.safeParse(parsed)
-    if (!valid.success) {
-        return null
-    }
-    return valid.data
+
+    // Jika semua AI gagal, return null agar sistem otomatis menggunakan fuzzy candidates fallback
+    return null
 }
 
 function buildCustomerCandidates(
@@ -260,6 +298,33 @@ function parseJsonContent(content: string): unknown {
 
 function sanitizeText(value: string): string {
     return String(value || "").replace(/\u0000/g, "")
+}
+
+async function callOpenAiChatCompletion(params: {
+    apiKey: string
+    body: Record<string, unknown>
+}) {
+    const rawBaseUrl = process.env.OPENAI_BASE_URL?.trim() || "https://9router.chitraparatama.com/v1"
+    const baseUrl = rawBaseUrl.replace(/\/$/, "")
+    const endpoint = baseUrl.endsWith("/chat/completions") ? baseUrl : `${baseUrl}/chat/completions`
+
+    const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${params.apiKey}`,
+        },
+        body: JSON.stringify(params.body),
+        signal: AbortSignal.timeout(25000),
+    })
+
+    const text = await response.text()
+    const payload = text ? JSON.parse(text) : null
+    if (!response.ok) {
+        const message = payload?.error?.message || payload?.message || `HTTP ${response.status}`
+        throw new Error(`OPENAI_MAP_UPSTREAM_ERROR ${response.status} ${message}`)
+    }
+    return payload
 }
 
 async function callMistralChatCompletion(params: {
