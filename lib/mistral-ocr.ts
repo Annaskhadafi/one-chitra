@@ -172,6 +172,12 @@ export async function extractStructuredFromDocument(params: {
     filename: string
     pages?: string | number[] | null
 }): Promise<OcrResult> {
+    // Prioritaskan OpenAI Vision jika dikonfigurasi
+    if (Boolean(process.env.OPENAI_API_KEY?.trim()) || process.env.LLM_PROVIDER === "openai" || !process.env.MISTRAL_API_KEY?.trim()) {
+        const { extractStructuredFromPoViaOllama } = await import("./ollama-so-ocr")
+        return await extractStructuredFromPoViaOllama(params)
+    }
+
     const apiKey = process.env.MISTRAL_API_KEY
     const endpoint = process.env.MISTRAL_OCR_ENDPOINT?.trim() || "https://api.mistral.ai/v1/ocr"
     if (!apiKey) {
@@ -263,6 +269,12 @@ export async function extractRawTextFromDocument(params: {
     filename: string
     pages?: string | number[] | null
 }): Promise<RawOcrTextResult> {
+    // Prioritaskan OpenAI Vision jika dikonfigurasi
+    if (Boolean(process.env.OPENAI_API_KEY?.trim()) || process.env.LLM_PROVIDER === "openai" || !process.env.MISTRAL_API_KEY?.trim()) {
+        const { extractRawTextFromDocumentViaOllama } = await import("./ollama-vision-ocr")
+        return await extractRawTextFromDocumentViaOllama(params)
+    }
+
     const apiKey = process.env.MISTRAL_API_KEY
     const endpoint = process.env.MISTRAL_OCR_ENDPOINT?.trim() || "https://api.mistral.ai/v1/ocr"
     if (!apiKey) {

@@ -68,7 +68,7 @@ const quotationSchema = z.object({
     ).default([]),
 }).partial().passthrough()
 
-const DEFAULT_MISTRAL_KEY = "O4w7VrNqbFqRgrKaQRXuZo3M8jax0hgz"
+
 
 /**
  * Primary LLM Chat via OpenAI / 9Router Gateway
@@ -116,110 +116,15 @@ async function callOpenAiChat(systemPrompt: string, userText: string): Promise<s
     return content
 }
 
-async function callMistralChat(systemPrompt: string, userText: string): Promise<string> {
-    const apiKey = process.env.MISTRAL_API_KEY?.trim() || DEFAULT_MISTRAL_KEY
-    if (!apiKey) {
-        throw new Error("MISTRAL_API_KEY is not set")
-    }
-
-    const endpoint = "https://api.mistral.ai/v1/chat/completions"
-    const sanitizedText = userText.length > 12000 ? userText.slice(0, 12000) : userText
-
-    const response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${apiKey}`,
-        },
-        signal: AbortSignal.timeout(15000),
-        body: JSON.stringify({
-            model: "mistral-small-latest",
-            messages: [
-                { role: "system", content: systemPrompt },
-                { role: "user", content: sanitizedText },
-            ],
-            response_format: { type: "json_object" },
-            temperature: 0.1,
-        }),
-    })
-
-    if (!response.ok) {
-        const errText = await response.text().catch(() => "")
-        throw new Error(`Mistral Chat Error ${response.status}: ${errText.slice(0, 300)}`)
-    }
-
-    const json = await response.json()
-    const content = json.choices?.[0]?.message?.content
-    if (!content) {
-        throw new Error("Mistral Chat returned empty response content")
-    }
-    return content
-}
-
 /**
- * Fallback to Ollama Chat if Mistral is unavailable
- */
-async function callOllamaChat(systemPrompt: string, userText: string): Promise<string> {
-    const rawUrl = process.env.OLLAMA_URL || "https://ollama.com/api/chat"
-    const baseUrl = rawUrl.replace(/\/$/, "")
-    const endpoint = baseUrl.endsWith("/api/chat") ? baseUrl : `${baseUrl}/api/chat`
-    const model = process.env.OLLAMA_MODEL || "glm-5.3-flash:cloud"
-    const apiKey = process.env.OLLAMA_API_KEY || "0f6943349a014608a78bbed67356697a.Gjpmub8qLOAkXW_DSM4OMfkH"
-    const sanitizedText = userText.length > 12000 ? userText.slice(0, 12000) : userText
-
-    const response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-        },
-        signal: AbortSignal.timeout(18000),
-        body: JSON.stringify({
-            model,
-            stream: false,
-            format: "json",
-            messages: [
-                { role: "system", content: systemPrompt },
-                { role: "user", content: sanitizedText },
-            ],
-        }),
-    })
-
-    if (!response.ok) {
-        const errText = await response.text().catch(() => "")
-        throw new Error(`Ollama Chat Error ${response.status}: ${errText.slice(0, 300)}`)
-    }
-
-    const json = await response.json()
-    return json.message?.content || "{}"
-}
-
-function extractJsonFromText(text: string): Record<string, unknown> | null {
-    try {
-        return JSON.parse(text)
-    } catch {
-        const match = text.match(/\{[\s\S]*\}/)
-        if (match) {
-            try {
-                return JSON.parse(match[0])
-            } catch {
-                return null
-            }
-        }
-        return null
-    }
-}
-
-/**
- * Execute LLM chat completion with multi-provider fallback
+ * Execute LLM chat completion with OpenAI as primary and Ollama as secondary fallback
  */
 async function completeStructuredChat(systemPrompt: string, userText: string): Promise<string> {
     const errors: string[] = []
-    const provider = process.env.LLM_PROVIDER?.trim().toLowerCase()
     const hasOpenAi = Boolean(process.env.OPENAI_API_KEY?.trim())
 
-    // 1. Try OpenAI / 9Router first if provider is openai or OPENAI_API_KEY is available
-    if (provider === "openai" || hasOpenAi) {
+    // 1. Prioritaskan OpenAI / 9Router
+    if (hasOpenAi || process.env.LLM_PROVIDER === "openai") {
         try {
             return await callOpenAiChat(systemPrompt, userText)
         } catch (err) {
@@ -228,15 +133,7 @@ async function completeStructuredChat(systemPrompt: string, userText: string): P
         }
     }
 
-    // 2. Try Mistral (Fastest & high quality JSON)
-    try {
-        return await callMistralChat(systemPrompt, userText)
-    } catch (err) {
-        console.warn("[AI-Structurer] Mistral chat failed, trying fallback:", err)
-        errors.push(`Mistral: ${err instanceof Error ? err.message : String(err)}`)
-    }
-
-    // 3. Fallback to Ollama Cloud / Local
+    // 2. Fallback to Ollama Cloud / Local
     try {
         return await callOllamaChat(systemPrompt, userText)
     } catch (err) {

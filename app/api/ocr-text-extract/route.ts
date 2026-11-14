@@ -42,57 +42,22 @@ export async function POST(req: NextRequest) {
         }
 
         const openAiKey = process.env.OPENAI_API_KEY?.trim()
-        const provider = process.env.LLM_PROVIDER?.trim().toLowerCase()
-        const mistralKey = process.env.MISTRAL_API_KEY?.trim()
-
-        if (!openAiKey && !mistralKey) {
-            return Response.json({ error: "Kunci API LLM (OPENAI_API_KEY atau MISTRAL_API_KEY) belum diset" }, { status: 500 })
+        if (!openAiKey) {
+            return Response.json({ error: "OPENAI_API_KEY belum diset" }, { status: 500 })
         }
 
-        let completion: unknown = null
+        const rawBaseUrl = process.env.OPENAI_BASE_URL?.trim() || "https://9router.chitraparatama.com/v1"
+        const baseUrl = rawBaseUrl.replace(/\/$/, "")
+        const endpoint = baseUrl.endsWith("/chat/completions") ? baseUrl : `${baseUrl}/chat/completions`
+        const model = process.env.OPENAI_MODEL?.trim() || "cx/gpt-5.6-luna"
 
-        if (provider === "openai" || openAiKey) {
-            try {
-                const rawBaseUrl = process.env.OPENAI_BASE_URL?.trim() || "https://9router.chitraparatama.com/v1"
-                const baseUrl = rawBaseUrl.replace(/\/$/, "")
-                const endpoint = baseUrl.endsWith("/chat/completions") ? baseUrl : `${baseUrl}/chat/completions`
-                const model = process.env.OPENAI_MODEL?.trim() || "cx/gpt-5.6-luna"
-
-                const res = await fetch(endpoint, {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        Authorization: `Bearer ${openAiKey}`,
-                    },
-                    body: JSON.stringify({
-                        model,
-                        messages: [
-                            { role: "system", content: systemPrompt },
-                            {
-                                role: "user",
-                                content: `Ekstrak data berikut ke JSON dengan field customer_name, po_number, date, discount, items[] { product_name, quantity, price, unit }.\n\nOCR_TEXT:\n${parsedBody.data.ocrText}`,
-                            },
-                        ],
-                        response_format: { type: "json_object" },
-                        temperature: 0.1,
-                    }),
-                    signal: AbortSignal.timeout(25000),
-                })
-
-                if (res.ok) {
-                    completion = await res.json()
-                } else {
-                    const errText = await res.text()
-                    console.warn(`[OCR-Text-Extract] OpenAI HTTP error ${res.status}:`, errText)
-                }
-            } catch (openAiErr) {
-                console.warn("[OCR-Text-Extract] OpenAI failed, falling back to Mistral:", openAiErr)
-            }
-        }
-
-        if (!completion && mistralKey) {
-            const model = process.env.MISTRAL_TEXT_MODEL?.trim() || "mistral-large-latest"
-            const completionPayload: Record<string, unknown> = {
+        const res = await fetch(endpoint, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${openAiKey}`,
+            },
+            body: JSON.stringify({
                 model,
                 messages: [
                     { role: "system", content: systemPrompt },
@@ -102,16 +67,21 @@ export async function POST(req: NextRequest) {
                     },
                 ],
                 response_format: { type: "json_object" },
-            }
-            completion = await callMistralChatCompletion({
-                apiKey: mistralKey,
-                body: completionPayload,
-            })
+                temperature: 0.1,
+            }),
+            signal: AbortSignal.timeout(25000),
+        })
+
+        if (!res.ok) {
+            const errText = await res.text()
+            return Response.json({ error: `Gagal memproses LLM OCR: ${errText.slice(0, 200)}` }, { status: 502 })
         }
+
+        const completion = await res.json()
 
         const modelContent = getMessageContent(completion)
         if (!modelContent) {
-            return Response.json({ error: "Respons Mistral kosong" }, { status: 502 })
+            return Response.json({ error: "Respons LLM kosong" }, { status: 502 })
         }
 
         const parsedJson = parseJsonContent(modelContent)
@@ -212,24 +182,4 @@ async function mapCustomerNameToId(customerName: string) {
     }
 }
 
-async function callMistralChatCompletion(params: {
-    apiKey: string
-    body: Record<string, unknown>
-}) {
-    const response = await fetch("https://api.mistral.ai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${params.apiKey}`,
-        },
-        body: JSON.stringify(params.body),
-    })
 
-    const text = await response.text()
-    const payload = text ? JSON.parse(text) : null
-    if (!response.ok) {
-        const message = payload?.error?.message || payload?.message || `HTTP ${response.status}`
-        throw new Error(`MISTRAL_TEXT_UPSTREAM_ERROR ${response.status} ${message}`)
-    }
-    return payload
-}

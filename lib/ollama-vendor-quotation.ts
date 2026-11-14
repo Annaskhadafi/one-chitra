@@ -18,20 +18,96 @@ type OllamaQuotationResult = {
 
 import { extractJsonFromText } from "./ocr-utils"
 
+async function extractVendorQuotationViaOpenAi(imageBase64: string): Promise<OllamaQuotationResult> {
+    const apiKey = process.env.OPENAI_API_KEY?.trim()
+    if (!apiKey) throw new Error("OPENAI_API_KEY is not set")
+
+    const rawBaseUrl = process.env.OPENAI_BASE_URL?.trim() || "https://9router.chitraparatama.com/v1"
+    const baseUrl = rawBaseUrl.replace(/\/$/, "")
+    const endpoint = baseUrl.endsWith("/chat/completions") ? baseUrl : `${baseUrl}/chat/completions`
+    const model = process.env.OPENAI_MODEL?.trim() || "cx/gpt-5.6-luna"
+
+    const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+        },
+        signal: AbortSignal.timeout(35000),
+        body: JSON.stringify({
+            model,
+            response_format: { type: "json_object" },
+            messages: [
+                {
+                    role: "system",
+                    content: `Anda adalah AI ekstraksi data dokumen profesional. 
+Tugas Anda adalah mengekstrak data dari dokumen Vendor Quotation (Penawaran Harga) ke dalam format JSON.
+Fokus pada akurasi item, kuantitas, dan harga.
+
+Kembalikan JSON dengan format:
+{
+  "vendor_name": "Nama Vendor",
+  "quote_number": "Nomor Quote",
+  "quote_date": "Tanggal Quote (YYYY-MM-DD)",
+  "remark": "Catatan umum",
+  "items": [
+    {
+      "item_name": "Nama Barang",
+      "qty": 1,
+      "unit": "Pcs/Unit/dll",
+      "unit_price": 1000,
+      "total_price": 1000,
+      "remark": "Keterangan item"
+    }
+  ]
+}`
+                },
+                {
+                    role: "user",
+                    content: [
+                        { type: "text", text: "Ekstrak semua informasi penting dari quotation ini ke dalam JSON." },
+                        { type: "image_url", image_url: { url: `data:image/jpeg;base64,${imageBase64}` } }
+                    ]
+                }
+            ]
+        })
+    })
+
+    if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`OpenAI Vision Error ${response.status}: ${errorText}`)
+    }
+
+    const json = await response.json()
+    const content = json.choices?.[0]?.message?.content || "{}"
+
+    const extracted = extractJsonFromText(content)
+    if (!extracted) throw new Error("(OpenAI JSON malformed)")
+
+    return {
+        rawText: content,
+        structured: extracted as ExtractedVendorQuotation,
+        model: `9router-vision (${model})`,
+    }
+}
+
 export async function extractVendorQuotationViaOllama(params: {
     fileBuffer: Buffer
     filename: string
 }): Promise<OllamaQuotationResult> {
-    const rawUrl = process.env.OLLAMA_URL?.trim() || "http://localhost:11434"
-    const baseUrl = rawUrl.replace(/\/$/, "")
-    const endpoint = baseUrl.endsWith("/api/chat") ? baseUrl : `${baseUrl}/api/chat`
-    const model = process.env.OLLAMA_MODEL_VISION?.trim() || process.env.OLLAMA_MODEL?.trim() || "glm-5.3-flash:cloud"
-    const apiKey = process.env.OLLAMA_API_KEY?.trim() || ""
-
-    // 1. Prepare image (Ollama Vision needs images)
+    // 1. Prepare image (Vision needs images)
     const imageBase64 = await prepareImageForOllama(params.fileBuffer, params.filename)
 
-    // 2. Call Ollama
+    // 2. Prioritaskan OpenAI Vision jika tersedia
+    if (Boolean(process.env.OPENAI_API_KEY?.trim()) || process.env.LLM_PROVIDER === "openai") {
+        try {
+            return await extractVendorQuotationViaOpenAi(imageBase64)
+        } catch (openAiErr) {
+            console.warn("[Vendor-Quotation] OpenAI Vision failed, falling back to Ollama:", openAiErr)
+        }
+    }
+
+    const rawUrl = process.env.OLLAMA_URL?.trim() || "http://localhost:11434"
     const response = await fetch(endpoint, {
         method: "POST",
         headers: {

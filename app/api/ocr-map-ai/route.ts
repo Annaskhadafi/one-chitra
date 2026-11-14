@@ -183,42 +183,11 @@ async function tryAiMapping(input: {
                 }
             }
         } catch (err) {
-            console.warn("[OCR-Map-AI] OpenAI mapping error, trying fallback:", err)
+            console.warn("[OCR-Map-AI] OpenAI mapping error, using fuzzy candidate fallback:", err)
         }
     }
 
-    // 2. Coba Mistral jika API key ada
-    const mistralKey = process.env.MISTRAL_API_KEY?.trim()
-    if (mistralKey) {
-        try {
-            const model = process.env.MISTRAL_MAP_MODEL?.trim() || "mistral-small-latest"
-            const completionPayload: Record<string, unknown> = {
-                model,
-                response_format: { type: "json_object" },
-                messages: [
-                    { role: "system", content: "Anda memetakan hasil OCR ke master data. Hanya keluarkan JSON valid tanpa teks lain." },
-                    { role: "user", content: JSON.stringify(promptPayload) },
-                ],
-            }
-
-            const completion = await callMistralChatCompletion({
-                apiKey: mistralKey,
-                body: completionPayload,
-            })
-            const content = getMessageContent(completion)
-            if (content) {
-                const parsed = parseJsonContent(content)
-                const valid = aiResultSchema.safeParse(parsed)
-                if (valid.success) {
-                    return valid.data
-                }
-            }
-        } catch (err) {
-            console.warn("[OCR-Map-AI] Mistral mapping error, falling back to candidates:", err)
-        }
-    }
-
-    // Jika semua AI gagal, return null agar sistem otomatis menggunakan fuzzy candidates fallback
+    // Jika AI tidak berhasil atau tidak diset, gunakan fuzzy candidate fallback
     return null
 }
 
@@ -327,24 +296,4 @@ async function callOpenAiChatCompletion(params: {
     return payload
 }
 
-async function callMistralChatCompletion(params: {
-    apiKey: string
-    body: Record<string, unknown>
-}) {
-    const response = await fetch("https://api.mistral.ai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${params.apiKey}`,
-        },
-        body: JSON.stringify(params.body),
-    })
 
-    const text = await response.text()
-    const payload = text ? JSON.parse(text) : null
-    if (!response.ok) {
-        const message = payload?.error?.message || payload?.message || `HTTP ${response.status}`
-        throw new Error(`MISTRAL_MAP_UPSTREAM_ERROR ${response.status} ${message}`)
-    }
-    return payload
-}
