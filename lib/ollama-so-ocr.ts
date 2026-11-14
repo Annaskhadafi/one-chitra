@@ -45,21 +45,110 @@ const documentAnnotationSchema = z.object({
     grand_total: z.any().optional().nullable().transform(v => Number(v) || 0),
 }).partial().passthrough() // Allow partial and extra fields for robustness
 
+async function extractStructuredFromPoViaOpenAi(imageBase64: string): Promise<OcrResult> {
+    const apiKey = process.env.OPENAI_API_KEY?.trim()
+    if (!apiKey) {
+        throw new Error("OPENAI_API_KEY is not set")
+    }
+
+    const rawBaseUrl = process.env.OPENAI_BASE_URL?.trim() || "https://9router.chitraparatama.com/v1"
+    const baseUrl = rawBaseUrl.replace(/\/$/, "")
+    const endpoint = baseUrl.endsWith("/chat/completions") ? baseUrl : `${baseUrl}/chat/completions`
+    const model = process.env.OPENAI_MODEL?.trim() || "cx/gpt-5.6-luna"
+
+    const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+        },
+        signal: AbortSignal.timeout(35000),
+        body: JSON.stringify({
+            model,
+            response_format: { type: "json_object" },
+            messages: [
+                {
+                    role: "system",
+                    content: `Anda adalah AI OCR profesional untuk dokumen Purchase Order (PO).
+Tugas Anda adalah mengekstrak data dari PO pelanggan ke dalam format JSON yang valid.
+Pusatkan pencarian pada: Nama Customer (Pemberi Pesanan), Nomor PO, Tanggal Dokumen, dan Daftar Produk/Barang beserta Kuantitas dan Harga Satuan.
+
+Kembalikan EXPLAINED JSON dengan field:
+{
+  "customer_company_name": "Nama Perusahaan Pelanggan",
+  "po_number": "Nomor Purchase Order",
+  "document_date": "Tanggal PO (YYYY-MM-DD)",
+  "products": [
+    {
+      "name": "Nama Lengkap/Deskripsi Barang",
+      "qty": 1,
+      "unit_price": 1000,
+      "total_price": 1000
+    }
+  ],
+  "tax_total": 0,
+  "grand_total": 0
+}`
+                },
+                {
+                    role: "user",
+                    content: [
+                        { type: "text", text: "Lakukan OCR pada Purchase Order ini dan ekstrak dalam JSON sesuai format." },
+                        { type: "image_url", image_url: { url: `data:image/jpeg;base64,${imageBase64}` } }
+                    ]
+                }
+            ]
+        })
+    })
+
+    if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`OpenAI/9Router Vision Error ${response.status}: ${errorText}`)
+    }
+
+    const json = await response.json()
+    const content = json.choices?.[0]?.message?.content || "{}"
+
+    const extracted = extractJsonFromText(content)
+    if (!extracted) {
+        throw new Error("(OpenAI JSON malformed)")
+    }
+    const validated = documentAnnotationSchema.parse(extracted)
+
+    return {
+        rawText: content,
+        structured: validated as ExtractedSOData,
+        model: `9router-vision (${model})`,
+        pagesProcessed: 1,
+    }
+}
+
 export async function extractStructuredFromPoViaOllama(params: {
     fileBuffer: Buffer
     filename: string
     pages?: string | number[] | null
 }): Promise<OcrResult> {
+    // 1. Prepare image
+    const imageBase64 = await prepareImageForOllama(params.fileBuffer, params.filename)
+
+    // 2. Jika OpenAI/9Router dikonfigurasi, prioritaskan OpenAI Vision
+    const provider = process.env.LLM_PROVIDER?.trim().toLowerCase()
+    const hasOpenAi = Boolean(process.env.OPENAI_API_KEY?.trim())
+
+    if (provider === "openai" || hasOpenAi) {
+        try {
+            return await extractStructuredFromPoViaOpenAi(imageBase64)
+        } catch (openAiErr) {
+            console.warn("[SO-OCR] OpenAI Vision failed, falling back to Ollama:", openAiErr)
+        }
+    }
+
+    // 3. Fallback ke Ollama
     const rawUrl = process.env.OLLAMA_URL?.trim() || "http://localhost:11434"
     const baseUrl = rawUrl.replace(/\/$/, "")
     const endpoint = baseUrl.endsWith("/api/chat") ? baseUrl : `${baseUrl}/api/chat`
-    const model = process.env.OLLAMA_MODEL_VISION?.trim() || "qwen3.5:397b-cloud"
+    const model = process.env.OLLAMA_MODEL_VISION?.trim() || process.env.OLLAMA_MODEL?.trim() || "glm-5.3-flash:cloud"
     const apiKey = process.env.OLLAMA_API_KEY?.trim() || ""
-
-    // 1. Prepare image (Focusing on 1st page for speed, consistent with vendor-quotation)
-    const imageBase64 = await prepareImageForOllama(params.fileBuffer, params.filename)
-
-    // 2. Call Ollama
     const response = await fetch(endpoint, {
         method: "POST",
         headers: {

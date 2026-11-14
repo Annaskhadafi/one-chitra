@@ -31,7 +31,7 @@ export async function extractRawTextFromDocumentViaOllama(params: {
     const rawUrl = process.env.OLLAMA_URL?.trim() || "http://localhost:11434"
     const baseUrl = rawUrl.replace(/\/$/, "")
     const endpoint = baseUrl.endsWith("/api/chat") ? baseUrl : `${baseUrl}/api/chat`
-    const model = process.env.OLLAMA_MODEL?.trim() || "qwen3.5:397b-cloud"
+    const model = process.env.OLLAMA_MODEL?.trim() || "glm-5.3-flash:cloud"
     const apiKey = process.env.OLLAMA_API_KEY?.trim() || ""
 
     const pages = await prepareDocumentPages({

@@ -70,6 +70,52 @@ const quotationSchema = z.object({
 
 const DEFAULT_MISTRAL_KEY = "O4w7VrNqbFqRgrKaQRXuZo3M8jax0hgz"
 
+/**
+ * Primary LLM Chat via OpenAI / 9Router Gateway
+ */
+async function callOpenAiChat(systemPrompt: string, userText: string): Promise<string> {
+    const apiKey = process.env.OPENAI_API_KEY?.trim()
+    if (!apiKey) {
+        throw new Error("OPENAI_API_KEY is not set")
+    }
+
+    const rawBaseUrl = process.env.OPENAI_BASE_URL?.trim() || "https://9router.chitraparatama.com/v1"
+    const baseUrl = rawBaseUrl.replace(/\/$/, "")
+    const endpoint = baseUrl.endsWith("/chat/completions") ? baseUrl : `${baseUrl}/chat/completions`
+    const model = process.env.OPENAI_MODEL?.trim() || "cx/gpt-5.6-luna"
+    const sanitizedText = userText.length > 30000 ? userText.slice(0, 30000) : userText
+
+    const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+        },
+        signal: AbortSignal.timeout(25000),
+        body: JSON.stringify({
+            model,
+            messages: [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: sanitizedText },
+            ],
+            response_format: { type: "json_object" },
+            temperature: 0.1,
+        }),
+    })
+
+    if (!response.ok) {
+        const errText = await response.text().catch(() => "")
+        throw new Error(`OpenAI/9Router Chat Error ${response.status}: ${errText.slice(0, 300)}`)
+    }
+
+    const json = await response.json()
+    const content = json.choices?.[0]?.message?.content
+    if (!content) {
+        throw new Error("OpenAI/9Router Chat returned empty response content")
+    }
+    return content
+}
+
 async function callMistralChat(systemPrompt: string, userText: string): Promise<string> {
     const apiKey = process.env.MISTRAL_API_KEY?.trim() || DEFAULT_MISTRAL_KEY
     if (!apiKey) {
@@ -117,7 +163,7 @@ async function callOllamaChat(systemPrompt: string, userText: string): Promise<s
     const rawUrl = process.env.OLLAMA_URL || "https://ollama.com/api/chat"
     const baseUrl = rawUrl.replace(/\/$/, "")
     const endpoint = baseUrl.endsWith("/api/chat") ? baseUrl : `${baseUrl}/api/chat`
-    const model = process.env.OLLAMA_MODEL || "qwen3.5:397b-cloud"
+    const model = process.env.OLLAMA_MODEL || "glm-5.3-flash:cloud"
     const apiKey = process.env.OLLAMA_API_KEY || "0f6943349a014608a78bbed67356697a.Gjpmub8qLOAkXW_DSM4OMfkH"
     const sanitizedText = userText.length > 12000 ? userText.slice(0, 12000) : userText
 
@@ -169,8 +215,20 @@ function extractJsonFromText(text: string): Record<string, unknown> | null {
  */
 async function completeStructuredChat(systemPrompt: string, userText: string): Promise<string> {
     const errors: string[] = []
+    const provider = process.env.LLM_PROVIDER?.trim().toLowerCase()
+    const hasOpenAi = Boolean(process.env.OPENAI_API_KEY?.trim())
 
-    // 1. Try Mistral (Fastest & high quality JSON)
+    // 1. Try OpenAI / 9Router first if provider is openai or OPENAI_API_KEY is available
+    if (provider === "openai" || hasOpenAi) {
+        try {
+            return await callOpenAiChat(systemPrompt, userText)
+        } catch (err) {
+            console.warn("[AI-Structurer] OpenAI/9Router chat failed, trying fallback:", err)
+            errors.push(`OpenAI/9Router: ${err instanceof Error ? err.message : String(err)}`)
+        }
+    }
+
+    // 2. Try Mistral (Fastest & high quality JSON)
     try {
         return await callMistralChat(systemPrompt, userText)
     } catch (err) {
@@ -178,7 +236,7 @@ async function completeStructuredChat(systemPrompt: string, userText: string): P
         errors.push(`Mistral: ${err instanceof Error ? err.message : String(err)}`)
     }
 
-    // 2. Try Ollama Cloud / Local
+    // 3. Fallback to Ollama Cloud / Local
     try {
         return await callOllamaChat(systemPrompt, userText)
     } catch (err) {

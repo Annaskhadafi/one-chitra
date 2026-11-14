@@ -2045,7 +2045,7 @@ async function callInventoryAdvisorOllama(prompt: string) {
     const rawUrl = process.env.OLLAMA_URL || "http://localhost:11434"
     const baseUrl = rawUrl.replace(/\/$/, "")
     const endpoint = baseUrl.endsWith("/api/chat") ? baseUrl : `${baseUrl}/api/chat`
-    const ollamaModel = process.env.OLLAMA_MODEL || "qwen3.5:397b-cloud"
+    const ollamaModel = process.env.OLLAMA_MODEL || "glm-5.3-flash:cloud"
     const ollamaApiKey = process.env.OLLAMA_API_KEY || ""
 
     const response = await fetch(endpoint, {
