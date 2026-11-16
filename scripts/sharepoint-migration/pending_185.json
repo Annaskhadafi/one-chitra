@@ -1,0 +1,1297 @@
+[
+  {
+    "id": "0bda744a-92a4-4ad1-a18b-1ff1974eb05b",
+    "invoiceNumber": "110/RB/CP/PCRC/X/2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3445_REAL%20BORNEO%20-%20110RBCPPCRCX2026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3445_REAL BORNEO - 110RBCPPCRCX2026.pdf"
+  },
+  {
+    "id": "53e4ea98-95c6-4fdd-a697-ce1c1a8ceb9f",
+    "invoiceNumber": "CPBN260930-01",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3458_BINTANG%20KARET%20-%20CPBN260930-01.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3458_BINTANG KARET - CPBN260930-01.pdf"
+  },
+  {
+    "id": "95fab765-9133-42ae-8ab6-5664f45ceca7",
+    "invoiceNumber": "INVAR2610-0582",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3444_PSM%20-%20INVAR2610-0582.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3444_PSM - INVAR2610-0582.pdf"
+  },
+  {
+    "id": "5b32878a-2c85-46e7-8213-48d28682a7f1",
+    "invoiceNumber": "26/10/0050",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3441_SUPRANUSA%20-%2026100050.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3441_SUPRANUSA - 26100050.pdf"
+  },
+  {
+    "id": "88296a8b-9aee-48f8-ae2c-ab47c3b8a8b8",
+    "invoiceNumber": "T701-2026018753",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3430_ASTRA%20MT%20BPN%20-%20T701-2026018753.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3430_ASTRA MT BPN - T701-2026018753.pdf"
+  },
+  {
+    "id": "b7f8ee1f-5dde-439c-b0c1-4622ed72a287",
+    "invoiceNumber": "13/AR/CP-INV/XIX/2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3429_AR-RAYYAN%20-%2013ARCP-INVXIX2026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3429_AR-RAYYAN - 13ARCP-INVXIX2026.pdf"
+  },
+  {
+    "id": "48f44496-4b8d-498b-978b-b2bf6b83dd54",
+    "invoiceNumber": "46/HS/MT/OKTOBER 2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3433_HATI%20SALJU%20-%2046HSMTOKTOBER%202026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3433_HATI SALJU - 46HSMTOKTOBER 2026.pdf"
+  },
+  {
+    "id": "78747cc5-08f2-45d6-a09d-3b0f9b057b70",
+    "invoiceNumber": "MGK 02601749",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/MGK%2002601749.pdf",
+    "filePath": null
+  },
+  {
+    "id": "cb899457-39ed-4dff-b2fa-7101f2d49726",
+    "invoiceNumber": "INVAR2610-0372",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3412_PSM%20-%20INVAR2610-0372.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3412_PSM - INVAR2610-0372.pdf"
+  },
+  {
+    "id": "93c5ec94-328c-4d6e-b15d-fc7143ab2bdc",
+    "invoiceNumber": "INVAR2610-0438",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3413_PSM%20-%20INVAR2610-0438.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3413_PSM - INVAR2610-0438.pdf"
+  },
+  {
+    "id": "771600f8-c342-4bb3-9b7f-a19fd35d644f",
+    "invoiceNumber": "26-2164/X/AVIAKO",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3420_AVIAKO%20-%2026-2164XAVIAKO.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3420_AVIAKO - 26-2164XAVIAKO.pdf"
+  },
+  {
+    "id": "47dbbe98-7961-4f3d-b318-bb5f75b9696b",
+    "invoiceNumber": "26-2165/X/AVIAKO",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3421_AVIAKO%20-%2026-2165XAVIAKO.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3421_AVIAKO - 26-2165XAVIAKO.pdf"
+  },
+  {
+    "id": "c867b867-e987-4765-b7d2-5688db9ac805",
+    "invoiceNumber": "2026/PIR/10/071",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3406_PUNINAR%20-%202026PIR10071.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3406_PUNINAR - 2026PIR10071.pdf"
+  },
+  {
+    "id": "b744b100-4798-4f4b-8110-bb8dbd43d176",
+    "invoiceNumber": "ID02CORP-SOA202610000048750",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3393_TRAVELOKA%20-%20ID02CORP-SOA202610000048750.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3393_TRAVELOKA - ID02CORP-SOA202610000048750.pdf"
+  },
+  {
+    "id": "c9177508-5791-4573-8376-ad2c8290855b",
+    "invoiceNumber": "26-2106/X/AVIAKO",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3344_AVIAKO%20-%2026-2106XAVIAKO.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3344_AVIAKO - 26-2106XAVIAKO.pdf"
+  },
+  {
+    "id": "566436c5-80d8-4e6a-8067-bee4bd6fc4b1",
+    "invoiceNumber": "ID02CORP-SFC202610000050016",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3392_TRAVELOKA%20-%20ID02CORP-SFC202610000050016.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3392_TRAVELOKA - ID02CORP-SFC202610000050016.pdf"
+  },
+  {
+    "id": "43dc68b4-5c4f-487f-bab0-eec4d9a236ef",
+    "invoiceNumber": "053/TS/SKM/INV/26",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3397_SKM%20-%20053TSSKMINV26.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3397_SKM - 053TSSKMINV26.pdf"
+  },
+  {
+    "id": "c0085813-2e20-4baa-bfc3-cd01e5a73a45",
+    "invoiceNumber": "T701-2026018394",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3399_ASTRA%20MT%20BPN%20-%20T701-2026018394.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3399_ASTRA MT BPN - T701-2026018394.pdf"
+  },
+  {
+    "id": "0f6f1168-5c56-45ff-9223-6ef6779a9b0f",
+    "invoiceNumber": "45/HS/MT/JULI 2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3388_SALJU%20%20-%2045HSMTJULI%202026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3388_SALJU  - 45HSMTJULI 2026.pdf"
+  },
+  {
+    "id": "65e39dec-a1c4-4ca2-addf-0333e16c8819",
+    "invoiceNumber": "3109/TGH-CH/26",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3389_SIJIRO%20-3109TGH-CH26.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3389_SIJIRO -3109TGH-CH26.pdf"
+  },
+  {
+    "id": "2e11e8be-4230-4f6a-90b2-530b5537b687",
+    "invoiceNumber": "086/PMJ-2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3386_PMJ%20-%20086PMJ-2026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3386_PMJ - 086PMJ-2026.pdf"
+  },
+  {
+    "id": "e98d4731-6ac4-4209-bcc9-05eb0629856d",
+    "invoiceNumber": "26-2107/X/AVIAKO",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3345_AVIAKO%20-%2026-2107XAVIAKO.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3345_AVIAKO - 26-2107XAVIAKO.pdf"
+  },
+  {
+    "id": "1f3ec533-d68f-4f4d-96d0-a10f40a9dd2d",
+    "invoiceNumber": "26-2105/X/AVIAKO",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3343_AVIAKO%20-%2026-2105XAVIAKO.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3343_AVIAKO - 26-2105XAVIAKO.pdf"
+  },
+  {
+    "id": "de6a7e90-6858-4154-b46e-916579fef1ae",
+    "invoiceNumber": "BPN/STDNA/01/2610000421",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3346_JNE%20-%20BPNSTDNA012610000421.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3346_JNE - BPNSTDNA012610000421.pdf"
+  },
+  {
+    "id": "e395752b-3ada-4b5e-857a-74d11d31b021",
+    "invoiceNumber": "071/INV-GJMBPN/X/2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3322_GUSNIAN%20-%20071INV-GJMBPNX2026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3322_GUSNIAN - 071INV-GJMBPNX2026.pdf"
+  },
+  {
+    "id": "3a05e06d-36c5-4e7a-a4c2-6c4a6f9585b0",
+    "invoiceNumber": "JV00074952 A",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3325_RESTU%20IBU%20-%20JV00074952%20A.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3325_RESTU IBU - JV00074952 A.pdf"
+  },
+  {
+    "id": "6ca5cf2f-4c05-43ad-b140-99562c7977b1",
+    "invoiceNumber": "1/INV/SAL/X/2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3326_SEKAR%20ARUM%20-%201INVSALX2026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3326_SEKAR ARUM - 1INVSALX2026.pdf"
+  },
+  {
+    "id": "7f62231e-b431-4a8b-a053-45649d97ca71",
+    "invoiceNumber": "037/CP-CLT/IX/2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3330_CLT%20-%20037CP-CLTIX2026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3330_CLT - 037CP-CLTIX2026.pdf"
+  },
+  {
+    "id": "c811bfee-f0fb-46a9-8590-829971a038df",
+    "invoiceNumber": "232011562321-1026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3331_PLN%20-%20232011562321-1026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3331_PLN - 232011562321-1026.pdf"
+  },
+  {
+    "id": "d9bf8f52-3d24-443a-9c40-38540f998aa6",
+    "invoiceNumber": "36/INV-MTHD/TMJ/X/2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3306_TRIMICEL%20-%2036INV-MTHDTMJX2026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3306_TRIMICEL - 36INV-MTHDTMJX2026.pdf"
+  },
+  {
+    "id": "155a1e24-e9e7-42dd-becf-265f00716160",
+    "invoiceNumber": "122617661",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3312_MEDIKA%20PLAZA%20-%20122617661.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3312_MEDIKA PLAZA - 122617661.pdf"
+  },
+  {
+    "id": "4de4d72e-7dc6-499d-949e-4e24edbb53d2",
+    "invoiceNumber": "ID02CORP-SOA202609000048083",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3280_TRAVELOKA%20-%20ID02CORP-SOA202609000048083.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3280_TRAVELOKA - ID02CORP-SOA202609000048083.pdf"
+  },
+  {
+    "id": "bb7c2c06-118a-4e7e-8f8b-cf75bb0554aa",
+    "invoiceNumber": "ID02CORP-SFC202609000049301",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3281_TRAVELOKA%20-%20ID02CORP-SFC202609000049301.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3281_TRAVELOKA - ID02CORP-SFC202609000049301.pdf"
+  },
+  {
+    "id": "df02a501-4bd3-4146-be1f-fe8c11277fbc",
+    "invoiceNumber": "INV0690367",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3282_TELKOMSEL%20-%20INV0690367.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3282_TELKOMSEL - INV0690367.pdf"
+  },
+  {
+    "id": "9607219a-7e72-4902-b253-df707179ea09",
+    "invoiceNumber": "SIJKT-26/06735",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3290_G4S%20-%20SIJKT-2606735.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3290_G4S - SIJKT-2606735.pdf"
+  },
+  {
+    "id": "8a02535a-585d-4a24-90c3-ed666fe425e0",
+    "invoiceNumber": "SIJKT-26/06736",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3289_G4S%20-%20SIJKT-2606736.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3289_G4S - SIJKT-2606736.pdf"
+  },
+  {
+    "id": "13398f72-7972-4322-a37f-d9f511a94a05",
+    "invoiceNumber": "310826/TGH-CH/26",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3278_SIJIRO%20-%20310826TGH-CH26.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3278_SIJIRO - 310826TGH-CH26.pdf"
+  },
+  {
+    "id": "4f2210de-5f1d-4c68-b84d-3c0ad8aab1b5",
+    "invoiceNumber": "INV-T/0358/BAS-BPN/X/26",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3266_BANUA%20ALAM%20-%20INV-T0358BAS-BPNX26.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3266_BANUA ALAM - INV-T0358BAS-BPNX26.pdf"
+  },
+  {
+    "id": "4c792fe2-d172-44f7-8e75-b5ea516e55f0",
+    "invoiceNumber": "T701-2026017151",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3265_ASTRA%20MT%20BPN%20-%20T701-2026017151.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3265_ASTRA MT BPN - T701-2026017151.pdf"
+  },
+  {
+    "id": "73eb140a-da03-4797-9e33-b3e90a4d5b78",
+    "invoiceNumber": "024-CP-SKT/X/2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3275_SKT%20-%20024-CP-SKTX2026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3275_SKT - 024-CP-SKTX2026.pdf"
+  },
+  {
+    "id": "f08439b7-2c7f-4f95-b4ff-2348c2387c7c",
+    "invoiceNumber": "08775/SOHC/INV/IX/2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3274_MEDIKA%20SANGATTA%20-%2008775SOHCINVIX2026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3274_MEDIKA SANGATTA - 08775SOHCINVIX2026.pdf"
+  },
+  {
+    "id": "65fa47b0-676e-4735-819e-996131940cb2",
+    "invoiceNumber": "HBPP\\G000016766",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3271_RS%20HERMINA%20-%20HBPPG000016766.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3271_RS HERMINA - HBPPG000016766.pdf"
+  },
+  {
+    "id": "e92b4e43-351a-467f-ab36-d10b3172083e",
+    "invoiceNumber": "HBPP\\G000016825",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3272_RS%20HERMINA%20BPN%20-%20HBPPG000016825.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3272_RS HERMINA BPN - HBPPG000016825.pdf"
+  },
+  {
+    "id": "5bf05dc4-9501-49c3-a77f-3415d98be65d",
+    "invoiceNumber": "08767/SOHC/INV/IX/2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3273_MEDIKA%20SANGATTA%20-%2008767SOHCINVIX2026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3273_MEDIKA SANGATTA - 08767SOHCINVIX2026.pdf"
+  },
+  {
+    "id": "73681c31-5d8e-4888-9ff3-db062a9d52fc",
+    "invoiceNumber": "660001673774",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3252_BIZNET%20-%20660001673774.PDF",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3252_BIZNET - 660001673774.PDF"
+  },
+  {
+    "id": "b37cfec6-70df-4959-b9df-240a7134aab3",
+    "invoiceNumber": "N03 DN2609 0627",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3235_RS%20PERTAMINA%20-%20N03%20DN2609%200627.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3235_RS PERTAMINA - N03 DN2609 0627.pdf"
+  },
+  {
+    "id": "55456bd6-8c6c-4028-9bc8-2f6e1c46aaab",
+    "invoiceNumber": "PSJ260923007976-0",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3210_PRODIA%20-%20PSJ260923007976-0.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3210_PRODIA - PSJ260923007976-0.pdf"
+  },
+  {
+    "id": "96bb3811-8bec-4c71-85a7-b27b838cee35",
+    "invoiceNumber": "122617660",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3218_MEDIKA%20PLAZA%20-%20122617660.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3218_MEDIKA PLAZA - 122617660.pdf"
+  },
+  {
+    "id": "ee28694f-0bd1-4cb9-8d5d-c11f6e1b18b9",
+    "invoiceNumber": "04/TJS/IX/2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3174_TS%20-%2004TJSIX2026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3174_TS - 04TJSIX2026.pdf"
+  },
+  {
+    "id": "e10c6c6e-ab70-4ab6-aaa4-d44a8ba8099c",
+    "invoiceNumber": "26-1964/IX/AVIAKO",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3177_AVIAKO%20-%2026-1964IXAVIAKO.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3177_AVIAKO - 26-1964IXAVIAKO.pdf"
+  },
+  {
+    "id": "3d993861-c843-4862-8b2c-7df194f7870a",
+    "invoiceNumber": "ID02CORP-SOA202609000047043",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3175_TRAVELOKA%20-%20ID02CORP-SOA202609000047043.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3175_TRAVELOKA - ID02CORP-SOA202609000047043.pdf"
+  },
+  {
+    "id": "d4e86bbb-312d-41dc-a95e-192895d15c09",
+    "invoiceNumber": "26-1970/IX/AVIAKO",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3178_AVIAKO%20-%2026-1970IXAVIAKO.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3178_AVIAKO - 26-1970IXAVIAKO.pdf"
+  },
+  {
+    "id": "cfeb2d22-b8c9-4e3f-8fe3-ed9b0f6df06a",
+    "invoiceNumber": "00108/SMA/MCU/IX/2026/FAK",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3155_SUPRIMA%20-%2000108SMAMCUIX2026FAK.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3155_SUPRIMA - 00108SMAMCUIX2026FAK.pdf"
+  },
+  {
+    "id": "039ac8a7-5d27-49cf-bae3-17ed41e6117b",
+    "invoiceNumber": "OIV2609100242",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3156_SILOAM%20-%20OIV2609100242.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3156_SILOAM - OIV2609100242.pdf"
+  },
+  {
+    "id": "7f18d04b-2876-489c-b845-58c739093e2e",
+    "invoiceNumber": "0735/FIN/BAL/MCU/IX/2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3158_SUPRIMA%20-%200735FINBALMCUIX2026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3158_SUPRIMA - 0735FINBALMCUIX2026.pdf"
+  },
+  {
+    "id": "91243e6f-6e76-4996-b1c2-430d6a47c517",
+    "invoiceNumber": "0739/FIN/BAL/MCU/IX/2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3159_SUPRIMA%20-%200739FINBALMCUIX2026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3159_SUPRIMA - 0739FINBALMCUIX2026.pdf"
+  },
+  {
+    "id": "597acf12-a796-498d-ac47-401c3f6c51dd",
+    "invoiceNumber": "BPN/STDNA/01/2609000377",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3160_JNE%20-%20BPNSTDNA012609000377.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3160_JNE - BPNSTDNA012609000377.pdf"
+  },
+  {
+    "id": "996725ec-412f-49ea-8ad2-23fc3b74a97e",
+    "invoiceNumber": "052/TS/SKM/INV/26",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3163_SETIA%20KARYA%20-%20052TSSKMINV26.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3163_SETIA KARYA - 052TSSKMINV26.pdf"
+  },
+  {
+    "id": "72bd7a8b-fc60-44e1-8c18-1631bf54ceb8",
+    "invoiceNumber": "IIV2609050044",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3157_SILOAM%20-%20IIV2609050044.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3157_SILOAM - IIV2609050044.pdf"
+  },
+  {
+    "id": "128186f6-3b1b-4eec-8db5-f5c34bb49a43",
+    "invoiceNumber": "INV/DJU-1167/IX/2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/INV%2FDJU-1167%2FIX%2F2026.pdf",
+    "filePath": null
+  },
+  {
+    "id": "d143a5b9-140a-47e8-b07c-52f22245537f",
+    "invoiceNumber": "2700/FIN/BEL/MCU/IX/2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3133_SUPRIMA%20-%202700FINBELMCUIX2026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3133_SUPRIMA - 2700FINBELMCUIX2026.pdf"
+  },
+  {
+    "id": "d7657440-a199-4c35-ad77-0d3f06d58e55",
+    "invoiceNumber": "16/RAJ-CAT/IX/2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3129_RIVANO%20-%2016RAJ-CATIX2026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3129_RIVANO - 16RAJ-CATIX2026.pdf"
+  },
+  {
+    "id": "998cff7c-e807-4568-8039-71458465d7c7",
+    "invoiceNumber": "T701-2026015632",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3116_ASTRA%20MT%20-%20T701-2026015632.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3116_ASTRA MT - T701-2026015632.pdf"
+  },
+  {
+    "id": "1af2a0d0-4f57-4cc8-84f6-b86b28949721",
+    "invoiceNumber": "01342CP",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3118_BSG%20-%2001342CP.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3118_BSG - 01342CP.pdf"
+  },
+  {
+    "id": "7b250f9f-dcd0-4fa2-b406-474297bbabb3",
+    "invoiceNumber": "INV-T/0331/BAS-BPN/IX/26",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3117_BAS%20-%20INV-T0331BAS-BPNIX26.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3117_BAS - INV-T0331BAS-BPNIX26.pdf"
+  },
+  {
+    "id": "3ce178d1-4425-49ce-b114-4fcd3c11f2f9",
+    "invoiceNumber": "01343BC",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3120_BSG%20-%2001343BC.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3120_BSG - 01343BC.pdf"
+  },
+  {
+    "id": "4f9ab4c7-498d-4064-bcd2-4ac5612344a1",
+    "invoiceNumber": "01342FEE",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3119_BSG%20-%2001342FEE.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3119_BSG - 01342FEE.pdf"
+  },
+  {
+    "id": "29956d5f-0925-486d-9572-efcebda8cff2",
+    "invoiceNumber": "ISI.2026.08.00056",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3098_KOKAPURA%20-%20ISI.2026.08.00056.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3098_KOKAPURA - ISI.2026.08.00056.pdf"
+  },
+  {
+    "id": "f0268c0a-253e-44de-9122-ab7eacd05d37",
+    "invoiceNumber": "015E2609-05587",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/015E2609-05587.pdf",
+    "filePath": null
+  },
+  {
+    "id": "527294c4-a56a-4326-a384-b0455ec89e37",
+    "invoiceNumber": "232011562321-0926",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3101_PLN%20-%20232011562321-0926.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3101_PLN - 232011562321-0926.pdf"
+  },
+  {
+    "id": "364b5839-232f-4930-a85d-d93391a67109",
+    "invoiceNumber": "T700-2026019319",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3104_astra%20sudirman%20-%20T700-2026019319.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3104_astra sudirman - T700-2026019319.pdf"
+  },
+  {
+    "id": "e2732404-86b3-4019-b113-2e4368c23b77",
+    "invoiceNumber": "036/CP-CLT/VIII/2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3092_CLT%20-%20036CP-CLTVIII2026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3092_CLT - 036CP-CLTVIII2026.pdf"
+  },
+  {
+    "id": "b3afa4ae-13f1-4cdc-8979-40420655ea0f",
+    "invoiceNumber": "SIJKT-26/05988",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3081_G4S%20-%20SIJKT-2605988.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3081_G4S - SIJKT-2605988.pdf"
+  },
+  {
+    "id": "340ceb7f-3957-46da-96ea-38eff78d807f",
+    "invoiceNumber": "SIJKT-26/05989",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3082_G4S%20-%20SIJKT-2605989.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3082_G4S - SIJKT-2605989.pdf"
+  },
+  {
+    "id": "dfe1cf22-2cd5-465b-88e3-a5955a82ce23",
+    "invoiceNumber": "057/INV-GJMBPN/IX/2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3083_GUSNIAN%20-%20057INV-GJMBPNIX2026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3083_GUSNIAN - 057INV-GJMBPNIX2026.pdf"
+  },
+  {
+    "id": "9c943a81-9166-44b8-b73d-e79b1e7fafdd",
+    "invoiceNumber": "08669/SOHC/INV/VIII/2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3084_RS%20MED%20SANGATTA%20-%2008669SOHCINVVIII2026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3084_RS MED SANGATTA - 08669SOHCINVVIII2026.pdf"
+  },
+  {
+    "id": "3e39e3e9-6a42-44d9-a7a2-bb8d829739b8",
+    "invoiceNumber": "08744/SOHC/INV/VII/2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3085_RS%20MED%20SANGATTA%20-%2008744SOHCINVVII2026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3085_RS MED SANGATTA - 08744SOHCINVVII2026.pdf"
+  },
+  {
+    "id": "30fa6deb-67a5-4f70-98f9-1839f4119da6",
+    "invoiceNumber": "T701-2026015104",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3089_ASTRA%20MT%20-%20T701-2026015104.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3089_ASTRA MT - T701-2026015104.pdf"
+  },
+  {
+    "id": "ec760238-f6da-4c45-9297-64984b3448ef",
+    "invoiceNumber": "T700-2026019140",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3090_ASTRA%20SUDIRMAN%20-%20T700-2026019140.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3090_ASTRA SUDIRMAN - T700-2026019140.pdf"
+  },
+  {
+    "id": "663df48d-5996-4d96-89ac-f7df75ba6c8e",
+    "invoiceNumber": "N03 DN2608 0828",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3071_RS%20PERTAMINA%20-%20N03%20DN2608%200828.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3071_RS PERTAMINA - N03 DN2608 0828.pdf"
+  },
+  {
+    "id": "f43b4e9b-3f4f-4dbc-936a-af78f3a19c5f",
+    "invoiceNumber": "26-1818/IX/AVIAKO",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3074_AVIAKO%20-%2026-1818IXAVIAKO.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3074_AVIAKO - 26-1818IXAVIAKO.pdf"
+  },
+  {
+    "id": "b122b507-b3b4-4df3-802b-8539dd7c86a9",
+    "invoiceNumber": "26-1738/VIII/AVIAKO",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3060_AVIAKO%20-%2026-1738VIIIAVIAKO.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3060_AVIAKO - 26-1738VIIIAVIAKO.pdf"
+  },
+  {
+    "id": "108681cf-7d41-4d7f-b799-d26ef2313229",
+    "invoiceNumber": "43/HS/MT/ AGUSTUS 2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3046_HATI%20SALJU%20-%2043HSMT%20AGUSTUS%202026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3046_HATI SALJU - 43HSMT AGUSTUS 2026.pdf"
+  },
+  {
+    "id": "c3275d1c-8661-49cf-91a0-113cf73516aa",
+    "invoiceNumber": "IIV2608290036",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3049_SILOAM%20-%20IIV2608290036.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3049_SILOAM - IIV2608290036.pdf"
+  },
+  {
+    "id": "245984a7-f46c-4b42-81d0-119b6cbed418",
+    "invoiceNumber": "640001587556",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3050_BIZNET%20-%20640001587556.PDF",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3050_BIZNET - 640001587556.PDF"
+  },
+  {
+    "id": "24ef5b14-3261-41dc-b8de-a6b768f3f1a0",
+    "invoiceNumber": "ID02CORP-SOA202608000045704",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3048_TRAVELOKA%20-%20ID02CORP-SOA202608000045704.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3048_TRAVELOKA - ID02CORP-SOA202608000045704.pdf"
+  },
+  {
+    "id": "5c4c3e8f-d77c-420f-8040-51dbd15f805d",
+    "invoiceNumber": "310726/TGH-CH/26",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3037_SIJIRO%20-%20310726TGH-CH26.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3037_SIJIRO - 310726TGH-CH26.pdf"
+  },
+  {
+    "id": "afa4066e-0d8c-4e07-a0de-89fc8d82fec3",
+    "invoiceNumber": "26-1762/VIII/AVIAKO",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3027_AVIAKO%20-%2026-1762VIIIAVIAKO.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3027_AVIAKO - 26-1762VIIIAVIAKO.pdf"
+  },
+  {
+    "id": "5d80d82e-4688-4fcb-b68f-b8d52d4af4f0",
+    "invoiceNumber": "BPN/STDNA/01/2607000312",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3029_TIKI%20-%20BPNSTDNA012607000312.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3029_TIKI - BPNSTDNA012607000312.pdf"
+  },
+  {
+    "id": "4c06d144-e765-49b5-8c61-8347eea1e873",
+    "invoiceNumber": "ID02CORP-SFC202608000046556",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2991_TRAVELOKA%20-%20ID02CORP-SFC202608000046556.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2991_TRAVELOKA - ID02CORP-SFC202608000046556.pdf"
+  },
+  {
+    "id": "682ab58e-31f0-475e-88f8-1376ed12a369",
+    "invoiceNumber": "T700-2026017835",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2997_ASTRA%20SUDIRMAN%20-%20T700-2026017835.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2997_ASTRA SUDIRMAN - T700-2026017835.pdf"
+  },
+  {
+    "id": "c69cf51f-5e6f-4c9f-bef0-9afb1364e4b8",
+    "invoiceNumber": "11239/EXA/VIII/2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2964_EXPRESS%20-%2011239EXAVIII2026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2964_EXPRESS - 11239EXAVIII2026.pdf"
+  },
+  {
+    "id": "9f6bcc10-a907-4258-a210-446a53b4bfb6",
+    "invoiceNumber": "26/07/0193",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2971_SUPRANUSA%20-%2026070193.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2971_SUPRANUSA - 26070193.pdf"
+  },
+  {
+    "id": "4dbc5067-6d42-4594-b101-b5c5bdd37f4f",
+    "invoiceNumber": "084/PMJ-2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2974_PMJ%20-%20084PMJ-2026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2974_PMJ - 084PMJ-2026.pdf"
+  },
+  {
+    "id": "0e1438e3-7047-4c56-ac58-9c1d360c884f",
+    "invoiceNumber": "085/PMJ-2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2975_PMJ%20-%20085PMJ-2026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2975_PMJ - 085PMJ-2026.pdf"
+  },
+  {
+    "id": "34fe4507-9f81-44c9-a196-20ddbca51961",
+    "invoiceNumber": "11/AR/CP-INV/XVII/2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2979_RAYYAN%20-%2011ARCP-INVXVII2026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2979_RAYYAN - 11ARCP-INVXVII2026.pdf"
+  },
+  {
+    "id": "f095622a-331a-41f9-9633-5b420ae5219d",
+    "invoiceNumber": "T701-2026014029",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2980_ASTRA%20-%20T701-2026014029.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2980_ASTRA - T701-2026014029.pdf"
+  },
+  {
+    "id": "83a1a461-70bb-437b-9ed6-23c7e0d83214",
+    "invoiceNumber": "IIV2608080046",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2945_SILOAM%20-%20IIV2608080046.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2945_SILOAM - IIV2608080046.pdf"
+  },
+  {
+    "id": "03ab5f6c-f2bc-4b1a-b5ef-be2c03e7665c",
+    "invoiceNumber": "SHBP260800186",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2929_SILOAM%20-%20SHBP260800186.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2929_SILOAM - SHBP260800186.pdf"
+  },
+  {
+    "id": "c76adddb-614c-4fa1-84b0-c36a4719c0de",
+    "invoiceNumber": "WS/V/H/08/26/00021",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2931_HINO%20-%20WSVH082600021.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2931_HINO - WSVH082600021.pdf"
+  },
+  {
+    "id": "532d16ce-8dfb-47e3-9528-3bf2ec56b1f0",
+    "invoiceNumber": "BPNSTDNA012608000330",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2932_TIKI%20-%20BPNSTDNA012608000330.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2932_TIKI - BPNSTDNA012608000330.pdf"
+  },
+  {
+    "id": "82f27bc0-0177-4521-85f6-ab475b10e5d4",
+    "invoiceNumber": "035/CP-CLT/VIII/2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2936_CLT%20-%20035CP-CLTVIII2026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2936_CLT - 035CP-CLTVIII2026.pdf"
+  },
+  {
+    "id": "96056e26-e8bf-49f6-ad37-4986fb6214d4",
+    "invoiceNumber": "ARN-260800005-ABLP",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2939_ASABA%20-%20ARN-260800005-ABLP.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2939_ASABA - ARN-260800005-ABLP.pdf"
+  },
+  {
+    "id": "ba19a613-3858-4e9c-b0d6-05cbfce04b5f",
+    "invoiceNumber": "26082355",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2941_WARGI%20-%2026082355.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2941_WARGI - 26082355.pdf"
+  },
+  {
+    "id": "e1bed272-f1db-4e99-badf-fbe3f2d1472f",
+    "invoiceNumber": "051/TS/SKM/INV/26",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/051%2FTS%2FSKM%2FINV%2F26.pdf",
+    "filePath": null
+  },
+  {
+    "id": "5cdbfae9-998b-4eed-9736-f39315d893f0",
+    "invoiceNumber": "MJAT/2026/VIII/21-1562",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2926_MJAT%20-%20MJAT2026VIII21-1562.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2926_MJAT - MJAT2026VIII21-1562.pdf"
+  },
+  {
+    "id": "042542b8-dce1-4f7a-bd16-f9242f093967",
+    "invoiceNumber": "550/KEU-24/SM-2/VIII/2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2912_PRAMITA%20-%20550KEU-24SM-2VIII2026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2912_PRAMITA - 550KEU-24SM-2VIII2026.pdf"
+  },
+  {
+    "id": "8a0eb9ed-62c1-4b46-840c-fe32e44f3d2d",
+    "invoiceNumber": "01316FEE",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2916_BSG%20-%2001316FEE.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2916_BSG - 01316FEE.pdf"
+  },
+  {
+    "id": "fa9e75df-964a-4860-8c9f-c8bc482323a6",
+    "invoiceNumber": "01317BC",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2915_BSG%20-%2001317BC.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2915_BSG - 01317BC.pdf"
+  },
+  {
+    "id": "2cad3129-c6e9-422d-981c-cc79fec77fea",
+    "invoiceNumber": "01316CP",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2917_BSG%20-%2001316CP.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2917_BSG - 01316CP.pdf"
+  },
+  {
+    "id": "fe152e98-250b-4f04-b0ee-2d72abfa7d67",
+    "invoiceNumber": "BPN-0053189",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2896_PANDU%20-%20BPN-0053189.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2896_PANDU - BPN-0053189.pdf"
+  },
+  {
+    "id": "253d90f8-faed-4feb-bea9-516a484720fe",
+    "invoiceNumber": "IV00071611 A",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2895_RESTU%20IBU%20-%20IV00071611%20A.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2895_RESTU IBU - IV00071611 A.pdf"
+  },
+  {
+    "id": "16cab832-32c3-44c8-b24c-1e387183a05e",
+    "invoiceNumber": "T701-2026012769",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2907_ASTRA%20BPN%20-%20T701-2026012769.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2907_ASTRA BPN - T701-2026012769.pdf"
+  },
+  {
+    "id": "653fab25-a3c1-45bb-bed9-337062557b50",
+    "invoiceNumber": "26-1574/VIII/AVIAKO",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2875_AVIAKO%20-%2026-1574VIIIAVIAKO.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2875_AVIAKO - 26-1574VIIIAVIAKO.pdf"
+  },
+  {
+    "id": "5f003cc6-52fd-4375-8192-2a6aed699e85",
+    "invoiceNumber": "26-1575/VIII/AVIAKO",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2874_AVAKO%20-%2026-1575VIIIAVIAKO.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2874_AVAKO - 26-1575VIIIAVIAKO.pdf"
+  },
+  {
+    "id": "ac679de1-fef9-4d17-9a8d-31b4b3bd58a4",
+    "invoiceNumber": "34/INV-MTHD/TMJ/VIII/2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/34%2FINV-MTHD%2FTMJ%2FVIII%2F2026.pdf",
+    "filePath": null
+  },
+  {
+    "id": "508f4179-0cd8-44a1-8f8e-18b095599e41",
+    "invoiceNumber": "T.2654/KKM/VIII/2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2870_KLINIK%20KUSUMA%20-%20T.2654KKMVIII2026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2870_KLINIK KUSUMA - T.2654KKMVIII2026.pdf"
+  },
+  {
+    "id": "ca485dd4-e952-4915-9005-31edbb0b7801",
+    "invoiceNumber": "08612/SOHC/INV/VII/2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2869_RS%20MEDIKA%20SGT%20-%2008612SOHCINVVII2026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2869_RS MEDIKA SGT - 08612SOHCINVVII2026.pdf"
+  },
+  {
+    "id": "c174c62f-9136-4bc0-a9b2-12b93b891e9a",
+    "invoiceNumber": "12/RAJ-CAT/VII/2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2855_RIVANO%20-%2012RAJ-CATVII2026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2855_RIVANO - 12RAJ-CATVII2026.pdf"
+  },
+  {
+    "id": "d6026b34-8974-4add-aeab-9ed75bd8f7ee",
+    "invoiceNumber": "10/RAJ-CAT/VII/2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2856_RIVANO%20-%2010RAJ-CATVII2026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2856_RIVANO - 10RAJ-CATVII2026.pdf"
+  },
+  {
+    "id": "9f339b94-c328-4406-b632-e49f321b0631",
+    "invoiceNumber": "232011562321-0826",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2857_PLN%20-%20232011562321-0826.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2857_PLN - 232011562321-0826.pdf"
+  },
+  {
+    "id": "efcae615-b7b1-4ed8-9700-b3457b395cd8",
+    "invoiceNumber": "SIJKT-26/05276",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2858_G4S%20-%20SIJKT-2605276.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2858_G4S - SIJKT-2605276.pdf"
+  },
+  {
+    "id": "dad8b6ab-b5f1-4a61-b9b7-02c4f98923b5",
+    "invoiceNumber": "SIJKT-26/05275",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2859_G4S%20-%20SIJKT-2605275.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2859_G4S - SIJKT-2605275.pdf"
+  },
+  {
+    "id": "48e2f620-4e36-4ffe-8147-3d1df874d8f9",
+    "invoiceNumber": "0619/FIN/BAL/MCU/VII/2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2861_SUPRIMA%20-%200619FINBALMCUVII2026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2861_SUPRIMA - 0619FINBALMCUVII2026.pdf"
+  },
+  {
+    "id": "98bbd7fb-d1be-4efa-bfea-f0de4abae57b",
+    "invoiceNumber": "1100071 381 A",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2862_RESTU%20IBU%20-%201100071%20381%20A.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2862_RESTU IBU - 1100071 381 A.pdf"
+  },
+  {
+    "id": "142d8e12-e581-41a0-b4d6-e418e09454ac",
+    "invoiceNumber": "T711-2026000363",
+    "poNumber": "PO-SAP-IR",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2867_ASTRA%20-%20T711-2026000363.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2867_ASTRA - T711-2026000363.pdf"
+  },
+  {
+    "id": "fbe45089-07f6-4137-9ba6-4a8abcf57412",
+    "invoiceNumber": "0460/KEU/RSBLKPB/VII/2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2838_RSBB%20-%200460KEURSBLKPBVII2026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2838_RSBB - 0460KEURSBLKPBVII2026.pdf"
+  },
+  {
+    "id": "b3ab0992-7dc4-4a17-bf4e-d5f2a7319158",
+    "invoiceNumber": "660001548139",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2843_BIZNET%20-%20660001548139.PDF",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2843_BIZNET - 660001548139.PDF"
+  },
+  {
+    "id": "54ceeb2b-157b-42b2-adb2-3b6ba0a85765",
+    "invoiceNumber": "ID02CORP-SOA202607000044533",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2844_TRAVELOKA%20-%20ID02CORP-SOA202607000044533.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2844_TRAVELOKA - ID02CORP-SOA202607000044533.pdf"
+  },
+  {
+    "id": "4518c9f9-e7fe-432c-8dd5-e630c58429c0",
+    "invoiceNumber": "ID02CORP-SFC202607000045841",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2845_TRAVELOKA%20-%20ID02CORP-SFC202607000045841.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2845_TRAVELOKA - ID02CORP-SFC202607000045841.pdf"
+  },
+  {
+    "id": "f58d14a8-5f7c-44a1-af79-b123d335a4f3",
+    "invoiceNumber": "050/INV-GJMBPN/VIII/2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2831_GJM%20-%20050INV-GJMBPNVIII2026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2831_GJM - 050INV-GJMBPNVIII2026.pdf"
+  },
+  {
+    "id": "c9f6b9b5-3752-4742-ac46-f094d48323c8",
+    "invoiceNumber": "051/INV-GJMBPN/VIII/2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2832_GJM%20-%20051INV-GJMBPNVIII2026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2832_GJM - 051INV-GJMBPNVIII2026.pdf"
+  },
+  {
+    "id": "42823314-d9aa-4ae4-af67-d553ec317206",
+    "invoiceNumber": "41/HS/MT/JULI 2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/41%2FHS%2FMT%2FJULI%202026.pdf",
+    "filePath": null
+  },
+  {
+    "id": "86f9bd5d-666e-4ab4-8787-feb218d0a72e",
+    "invoiceNumber": "025/INV-GJMBPN/VII/2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2830_GJM%20-%20025INV-GJMBPNVII2026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2830_GJM - 025INV-GJMBPNVII2026.pdf"
+  },
+  {
+    "id": "a0df835b-c18a-4321-bc30-a21f2894cd4f",
+    "invoiceNumber": "07/INV/OBL/CP-SGT/VII/2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2828_OBL%20-%2007INVOBLCP-SGTVII2026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2828_OBL - 07INVOBLCP-SGTVII2026.pdf"
+  },
+  {
+    "id": "54bf1a4d-6726-4d18-a28c-547d4b656694",
+    "invoiceNumber": "01730/DIKLAT-I/BPG/INV/2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2819_PPSDM%20-%2001730DIKLAT-IBPGINV2026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2819_PPSDM - 01730DIKLAT-IBPGINV2026.pdf"
+  },
+  {
+    "id": "ce2004ed-aa92-454c-9807-0a010c98d5b4",
+    "invoiceNumber": "0262/FIN/ANG/MCU/III/2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2799_SUPRIMA%20-%200262FINANGMCUIII2026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2799_SUPRIMA - 0262FINANGMCUIII2026.pdf"
+  },
+  {
+    "id": "ab4f2639-b304-48f9-a9bf-2bf1b22a132f",
+    "invoiceNumber": "N03 DN2605 1370",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2774_N03%20DN2605%201370.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2774_N03 DN2605 1370.pdf"
+  },
+  {
+    "id": "c8cf7348-3221-4cdb-859f-32b9c9728144",
+    "invoiceNumber": "N03 DN2606 1496",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2800_RS%20PERTAMINA%20-%20N03%20DN2606%201496.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2800_RS PERTAMINA - N03 DN2606 1496.pdf"
+  },
+  {
+    "id": "4b0c7c97-c30c-4ae0-9e5e-397f4965ce70",
+    "invoiceNumber": "900.1.3.2/1677/KEU/RSKD/VII-2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2802_RS%20KANUJOSO%20-%20900.1.3.21677KEURSKDVII-2026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2802_RS KANUJOSO - 900.1.3.21677KEURSKDVII-2026.pdf"
+  },
+  {
+    "id": "a08ec13c-8e1c-4e8b-893d-78c58e7bdaec",
+    "invoiceNumber": "900.1.3.2/1640/KEU/RSKD/VII-2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2803_RS%20KANUJOSO%20-%20900.1.3.21640KEURSKDVII-2026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2803_RS KANUJOSO - 900.1.3.21640KEURSKDVII-2026.pdf"
+  },
+  {
+    "id": "81f4fad3-9fad-4b13-9a0e-abc9798e748e",
+    "invoiceNumber": "HSMR\\G000017141",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2810_RS%20HERMINA%20-%20HSMRG000017141.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2810_RS HERMINA - HSMRG000017141.pdf"
+  },
+  {
+    "id": "f5379c7e-aafc-4e2b-a81a-ce924558661f",
+    "invoiceNumber": "33/INV-MTHD/TMJ/VII/2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2794_TRIMICEL%20-%2033INV-MTHDTMJVII2026%20REV.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2794_TRIMICEL - 33INV-MTHDTMJVII2026 REV.pdf"
+  },
+  {
+    "id": "4b7ab5cc-4caa-42a8-98c4-5ba37d1171b7",
+    "invoiceNumber": "26072150",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2792_WARGI%2026072150.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2792_WARGI 26072150.pdf"
+  },
+  {
+    "id": "f65cc8e8-8e46-4a81-9a7c-70820cfc75b4",
+    "invoiceNumber": "26-1488/VII/AVIAKO",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2766_26-1488VIIAVIAKO.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2766_26-1488VIIAVIAKO.pdf"
+  },
+  {
+    "id": "453fabdc-a100-4f42-a359-c476f0ebf35f",
+    "invoiceNumber": "26072134",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2769_26072134.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2769_26072134.pdf"
+  },
+  {
+    "id": "4809c4c7-f557-4842-bf61-116bfa88b9c6",
+    "invoiceNumber": "32/INV-MTHD/TMJ/VI/2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2771_32INV-MTHDTMJVI2026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2771_32INV-MTHDTMJVI2026.pdf"
+  },
+  {
+    "id": "d59a8760-7376-47b1-bd9e-44f5798d28aa",
+    "invoiceNumber": "050/TS/SKM/INV/26",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2772_050TSSKMINV26.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2772_050TSSKMINV26.pdf"
+  },
+  {
+    "id": "7689caad-8009-4990-b2f6-1ed271281917",
+    "invoiceNumber": "01290BC",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2738_01290BC.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2738_01290BC.pdf"
+  },
+  {
+    "id": "8758fbfd-1945-4347-97dc-d4dcd09ffc15",
+    "invoiceNumber": "26071923",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2745_26071923.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2745_26071923.pdf"
+  },
+  {
+    "id": "c4b39019-7e94-4c6b-ae5f-9ab22f716b37",
+    "invoiceNumber": "26-1477/VII/AVIAKO",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2747_26-1477VIIAVIAKO.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2747_26-1477VIIAVIAKO.pdf"
+  },
+  {
+    "id": "cb72d6fd-ac90-4f2a-acd9-2cf36005b98b",
+    "invoiceNumber": "01289CP",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2736_01289CP.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2736_01289CP.pdf"
+  },
+  {
+    "id": "b53629b0-8c58-4c53-a1a3-748ed32eec89",
+    "invoiceNumber": "01289FEE",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2737_01289FEE.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2737_01289FEE.pdf"
+  },
+  {
+    "id": "8221392a-59b0-4398-b105-17495cfdd8d3",
+    "invoiceNumber": "36/HS/MT/JUNI 2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2733_36HSMTJUNI%202026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2733_36HSMTJUNI 2026.pdf"
+  },
+  {
+    "id": "476a57a4-ddc3-4c68-a698-b6344ecb4ad7",
+    "invoiceNumber": "ARN-260700030-ABL",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2732_ARN-260700030-ABL.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2732_ARN-260700030-ABL.pdf"
+  },
+  {
+    "id": "39d8b29b-0142-48ae-83e9-0e5a31aa3892",
+    "invoiceNumber": "37/HS/MT/JUNI 2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2734_37HSMTJUNI%202026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2734_37HSMTJUNI 2026.pdf"
+  },
+  {
+    "id": "9e97a12d-b9a4-4d3d-b18e-de3b18c8af6e",
+    "invoiceNumber": "SIJKT-26/04526",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2684_SIJKT-2604526.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2684_SIJKT-2604526.pdf"
+  },
+  {
+    "id": "3613b28b-42a2-42b6-8122-5589aad7ac5a",
+    "invoiceNumber": "SIJKT-26/04527",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2685_SIJKT-2604527.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2685_SIJKT-2604527.pdf"
+  },
+  {
+    "id": "1322af22-83f8-480e-8228-b6ca8ba0c88f",
+    "invoiceNumber": "26061756",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2670_26061756.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2670_26061756.pdf"
+  },
+  {
+    "id": "5e54176b-a8d1-4d8d-8d27-9835e9fdc04b",
+    "invoiceNumber": "26-1344/VII/AVIAKO",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2678_26-1344VIIAVIAKO.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2678_26-1344VIIAVIAKO.pdf"
+  },
+  {
+    "id": "885e38ae-8ac2-4329-96a9-d05d7bc9771f",
+    "invoiceNumber": "00091",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3403_HARDI%20-%2000091.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3403_HARDI - 00091.pdf"
+  },
+  {
+    "id": "331531a2-c36c-4a63-9fee-9a2c6c035b45",
+    "invoiceNumber": "00088",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2749_00088.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2749_00088.pdf"
+  },
+  {
+    "id": "49116404-cfca-4f23-8a8a-a720a4130282",
+    "invoiceNumber": "14/RAJ-CAT/VII/2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2853_RIVANO%20-%2014RAJ-CATVII2026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2853_RIVANO - 14RAJ-CATVII2026.pdf"
+  },
+  {
+    "id": "1af77003-ff86-40bf-badb-1c21c61ed4bc",
+    "invoiceNumber": "900.1.3.2/1820/KEU/RSKD/VII-2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2871_KANUJOSO%20-%20900.1.3.21820KEURSKDVII-2026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2871_KANUJOSO - 900.1.3.21820KEURSKDVII-2026.pdf"
+  },
+  {
+    "id": "ed92b4fc-80ac-4ce5-be3a-0035b13c5e81",
+    "invoiceNumber": "26/07/0201",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2972_SUPRANUSA%20-%2026070201.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2972_SUPRANUSA - 26070201.pdf"
+  },
+  {
+    "id": "1eea515e-fd63-412c-9232-c904badffb9f",
+    "invoiceNumber": "ARN-260900004-ABLP/SON-260900004",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3115_ASABA%20-%20ARN-260900004-ABLPSON-260900004.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3115_ASABA - ARN-260900004-ABLPSON-260900004.pdf"
+  },
+  {
+    "id": "a2ba343d-9e3c-46fc-a3e9-0927524d1663",
+    "invoiceNumber": "26-1817/IX/AVIAKO",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3073_AVIAKO%20-%2026-1817IXAVIAKO.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3073_AVIAKO - 26-1817IXAVIAKO.pdf"
+  },
+  {
+    "id": "556245c5-ecf6-48c6-9ef4-2950e57850b8",
+    "invoiceNumber": "CPBN260814-01",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3075_BINTANG%20KARET%20-%20CPBN260814-01.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3075_BINTANG KARET - CPBN260814-01.pdf"
+  },
+  {
+    "id": "cd505758-79b0-4508-99d9-084e3d3bcc4d",
+    "invoiceNumber": "ARN-261000001-ABLP/SON-261000001",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3335_ASABA%20-%20ARN-261000001-ABLPSON-261000001.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3335_ASABA - ARN-261000001-ABLPSON-261000001.pdf"
+  },
+  {
+    "id": "93680fd0-8310-4f0f-8cd9-f59ee35f3dc4",
+    "invoiceNumber": "52610090303",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3427_RS%20HERMINA%20BPN%20-%2052610090303.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3427_RS HERMINA BPN - 52610090303.pdf"
+  },
+  {
+    "id": "1fd7c2ee-4530-4f28-9751-5e419608a581",
+    "invoiceNumber": "26092711",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3149_WARGI%20-%2026092711.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3149_WARGI - 26092711.pdf"
+  },
+  {
+    "id": "4a4de5d2-f6fb-4d87-bc0c-ad96d5545983",
+    "invoiceNumber": "107/RB/CP/PCRC/VII/2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2817_REAL%20BORNEO%20-%20107RBCPPCRCVII2026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2817_REAL BORNEO - 107RBCPPCRCVII2026.pdf"
+  },
+  {
+    "id": "ef94c8b9-b2b5-4987-9056-c3658723cd29",
+    "invoiceNumber": "26-1343/VII/AVIAKO",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2677_26-1343VIIAVIAKO.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2677_26-1343VIIAVIAKO.pdf"
+  },
+  {
+    "id": "9dd8f4b2-fb89-41b9-a8f9-85b748acbb0a",
+    "invoiceNumber": "T711-2026011357",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3264_ASTRA%20SANGATTA%20-%20T711-2026011357.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3264_ASTRA SANGATTA - T711-2026011357.pdf"
+  },
+  {
+    "id": "1222482d-c45c-496c-9bfc-9f8c6f9638cb",
+    "invoiceNumber": "ID02CORP-SOA202608000045241",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2992_TRAVELOKA%20-%20ID02CORP-SOA202608000045241.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2992_TRAVELOKA - ID02CORP-SOA202608000045241.pdf"
+  },
+  {
+    "id": "adf9f22a-51eb-4a80-8c50-b0adb9248490",
+    "invoiceNumber": "13/RAJ-CAT/VII/2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2854_RIVANO%20-%2013RAJ-CATVII2026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2854_RIVANO - 13RAJ-CATVII2026.pdf"
+  },
+  {
+    "id": "361439bb-9e63-4670-aa5a-920e2865b34d",
+    "invoiceNumber": "ID02CORP-SFC202609000048354",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3176_TRAVELOKA%20-%20ID02CORP-SFC202609000048354.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3176_TRAVELOKA - ID02CORP-SFC202609000048354.pdf"
+  },
+  {
+    "id": "39575b11-990c-4938-abbc-8bba8da9989b",
+    "invoiceNumber": "0000703/K-Kumala/KEU-LAP/VII/2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3100_KLINIK%20KUMALA%20-%200000703K-KumalaKEU-LAPVII2026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3100_KLINIK KUMALA - 0000703K-KumalaKEU-LAPVII2026.pdf"
+  },
+  {
+    "id": "45ef3cd7-53a2-49c0-a4f4-cf3839a356cf",
+    "invoiceNumber": "ID02CORP-SFC202608000047031",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3047_TRAVELOKA%20-%20ID02CORP-SFC202608000047031.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3047_TRAVELOKA - ID02CORP-SFC202608000047031.pdf"
+  },
+  {
+    "id": "51363c12-f276-4a26-b756-8ea97f9a4efd",
+    "invoiceNumber": "01384BC",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3367_BSG%20-%2001384BC.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3367_BSG - 01384BC.pdf"
+  },
+  {
+    "id": "fd5de39a-6b71-4116-b461-0801b23ccc18",
+    "invoiceNumber": "01383CP",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3366_BSG%20-%2001383CP.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3366_BSG - 01383CP.pdf"
+  },
+  {
+    "id": "9edf56c6-0f29-4a16-a4d3-d38d7584d18e",
+    "invoiceNumber": "01383FEE",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3365_BSG%20-%20%2001383FEE.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3365_BSG -  01383FEE.pdf"
+  },
+  {
+    "id": "2be075ea-2674-4359-a864-3da88fb0a90a",
+    "invoiceNumber": "35/JNV-MTHD/TMJ/IX/2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3072_TRIMICEL%20-%2035JNV-MTHDTMJIX2026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3072_TRIMICEL - 35JNV-MTHDTMJIX2026.pdf"
+  },
+  {
+    "id": "aa27b5b3-eb98-4adc-b671-9ac77c79d4a2",
+    "invoiceNumber": "42/HS/MT/JULI 2026",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/3045_HATI%20SALJU%20-%2042HSMTJULI%202026.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\3045_HATI SALJU - 42HSMTJULI 2026.pdf"
+  },
+  {
+    "id": "bdbc607b-c9a1-43ed-b5b1-f27fb051e65d",
+    "invoiceNumber": "26082217",
+    "poNumber": "PO-SAP-PENDING",
+    "invoiceFileUrl": "/api/uploads/vendor-invoices/sharepoint/2886_WARGI%20-%2026082217.pdf",
+    "filePath": "D:\\one chitra\\one-chitra\\public\\uploads\\vendor-invoices\\sharepoint\\2886_WARGI - 26082217.pdf"
+  }
+]

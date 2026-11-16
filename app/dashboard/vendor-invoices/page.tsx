@@ -18,20 +18,14 @@ export const metadata = {
 export default async function VendorInvoicesDashboardPage() {
     const [stats, invoices, tenants, sapVendors, contracts] = await Promise.all([
         getVendorInvoiceDashboardStats(),
-        getVendorInvoicesAction({ limit: 300 }),
+        getVendorInvoicesAction({ limit: 5000 }),
         getAllVendorTenantsAction(),
         getSapVendorMasterListAction({ limit: 50 }),
         getVendorContractsAction(),
     ])
 
     return (
-        <div className="flex-1 space-y-6 p-8 pt-6">
-            <PageHeader
-                title="Vendor Invoice Management & Checkout"
-                subtitle="Kelola seluruh siklus invoice vendor: Validation Gate Admin, Validasi Pajak Finance, Otorisasi Manager, Proyeksi Pembayaran 3 Bulan, dan Batch Payment Checkout."
-                icon={FileSpreadsheet}
-            />
-
+        <div className="flex-1 space-y-4 p-4 md:p-6 pt-4">
             <Suspense
                 fallback={
                     <div className="flex h-[400px] items-center justify-center">

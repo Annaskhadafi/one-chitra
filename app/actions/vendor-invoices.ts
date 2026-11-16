@@ -22,6 +22,15 @@ import {
     getDueDateUrgency,
     isPoOwnedByVendor,
 } from "@/lib/vendor-invoice-calculator"
+import { execute3WayMatching, parseInvoiceOcrText } from "@/lib/vendor-invoice-ocr-matcher"
+import { validateDjpTaxQr, formatNpwp16 } from "@/lib/tax-djp-validator"
+import {
+    generateBcaKlikBcaCsv,
+    generateMandiriMcmCsv,
+    generateUniversalApCsv,
+    BankDisbursementItem,
+} from "@/lib/bank-batch-exporter"
+import { calculateApAging } from "@/lib/vendor-ap-aging"
 import {
     sendInvoiceVerifiedNotification,
     sendInvoiceApprovedNotification,
@@ -343,14 +352,15 @@ export async function lookupSapPoForVendorAction(poNumber: string, expectedTenan
             }
         }
 
-        if (poStatus === "closed" || poStatus === "cancelled") {
+        const poStatusStr = String(poStatus)
+        if (poStatusStr === "closed" || poStatusStr === "cancelled") {
             return {
                 found: false,
                 isClosedOrCancelled: true,
                 poNumber: cleanPo,
                 poStatus,
                 vendorName: first.vendorName,
-                message: `Nomor PO ${cleanPo} berstatus "${poStatus.toUpperCase()}" dan tidak dapat diajukan penagihan.`,
+                message: `Nomor PO ${cleanPo} berstatus "${poStatusStr.toUpperCase()}" dan tidak dapat diajukan penagihan.`,
             }
         }
 
@@ -558,8 +568,11 @@ export async function getVendorInvoiceDashboardStats() {
     const allInvoices = await db
         .select({
             id: vendorInvoices.id,
+            invoiceNumber: vendorInvoices.invoiceNumber,
+            vendorName: vendorTenants.name,
             status: vendorInvoices.status,
             grandTotal: vendorInvoices.grandTotal,
+            netPayable: vendorInvoices.netPayable,
             scheduledPaymentDate: vendorInvoices.scheduledPaymentDate,
             paymentDueDate: vendorInvoices.paymentDueDate,
             invoiceDate: vendorInvoices.invoiceDate,
@@ -567,6 +580,7 @@ export async function getVendorInvoiceDashboardStats() {
             currency: vendorInvoices.currency,
         })
         .from(vendorInvoices)
+        .leftJoin(vendorTenants, eq(vendorInvoices.tenantId, vendorTenants.id))
 
     const now = new Date()
     const curYear = now.getFullYear()
@@ -579,6 +593,7 @@ export async function getVendorInvoiceDashboardStats() {
     let countApprovedManager = 0
     let countPaid = 0
     let countRejected = 0
+    let countOnHold = 0
 
     let totalAmountApproved = 0
     let totalAmountPaidThisMonth = 0
@@ -592,11 +607,15 @@ export async function getVendorInvoiceDashboardStats() {
     }> = []
 
     for (const inv of allInvoices) {
-        const amount = Number(inv.grandTotal) || 0
+        const amount = Number(inv.netPayable) || Number(inv.grandTotal) || 0
 
         switch (inv.status) {
             case "submitted":
                 countSubmitted++
+                totalActive++
+                break
+            case "on_hold":
+                countOnHold++
                 totalActive++
                 break
             case "verified_admin":
@@ -628,7 +647,7 @@ export async function getVendorInvoiceDashboardStats() {
                 break
         }
 
-        if (inv.status !== "paid" && inv.scheduledPaymentDate) {
+        if (inv.status !== "paid" && inv.status !== "on_hold" && inv.scheduledPaymentDate) {
             const urgency = getDueDateUrgency(inv.scheduledPaymentDate, inv.status, now)
             if (urgency.urgency === "overdue" || urgency.urgency === "due_this_week") {
                 urgentInvoices.push({
@@ -651,10 +670,25 @@ export async function getVendorInvoiceDashboardStats() {
         now
     )
 
+    const apAging = calculateApAging(
+        allInvoices.map((inv) => ({
+            id: inv.id,
+            invoiceNumber: inv.invoiceNumber,
+            vendorName: inv.vendorName || "Mitra Vendor",
+            grandTotal: inv.grandTotal,
+            netPayable: inv.netPayable,
+            paymentDueDate: inv.paymentDueDate,
+            scheduledPaymentDate: inv.scheduledPaymentDate,
+            status: inv.status,
+        })),
+        now
+    )
+
     return {
         summary: {
             totalActive,
             countSubmitted,
+            countOnHold,
             countVerifiedAdmin,
             countValidatedFinance,
             countApprovedManager,
@@ -665,6 +699,7 @@ export async function getVendorInvoiceDashboardStats() {
         },
         projections,
         urgentInvoices,
+        apAging,
     }
 }
 
@@ -675,6 +710,8 @@ export async function getVendorInvoicesAction(params?: {
     tenantId?: string
     status?: string
     search?: string
+    sortBy?: "entry_date" | "invoice_date" | "vendor_name" | "top" | "due_date" | "amount"
+    sortOrder?: "asc" | "desc"
     limit?: number
 }) {
     const conditions = []
@@ -692,9 +729,28 @@ export async function getVendorInvoicesAction(params?: {
         conditions.push(
             or(
                 ilike(vendorInvoices.invoiceNumber, query),
-                ilike(vendorInvoices.poNumber, query)
+                ilike(vendorInvoices.poNumber, query),
+                ilike(vendorTenants.name, query),
+                ilike(vendorInvoices.taxInvoiceNumber, query)
             )
         )
+    }
+
+    const isAsc = params?.sortOrder === "asc"
+    let orderClause: any = desc(vendorInvoices.createdAt)
+
+    if (params?.sortBy === "entry_date") {
+        orderClause = isAsc ? asc(vendorInvoices.createdAt) : desc(vendorInvoices.createdAt)
+    } else if (params?.sortBy === "invoice_date") {
+        orderClause = isAsc ? asc(vendorInvoices.invoiceDate) : desc(vendorInvoices.invoiceDate)
+    } else if (params?.sortBy === "vendor_name") {
+        orderClause = isAsc ? asc(vendorTenants.name) : desc(vendorTenants.name)
+    } else if (params?.sortBy === "top") {
+        orderClause = isAsc ? asc(vendorInvoices.topDays) : desc(vendorInvoices.topDays)
+    } else if (params?.sortBy === "due_date") {
+        orderClause = isAsc ? asc(vendorInvoices.paymentDueDate) : desc(vendorInvoices.paymentDueDate)
+    } else if (params?.sortBy === "amount") {
+        orderClause = isAsc ? asc(vendorInvoices.grandTotal) : desc(vendorInvoices.grandTotal)
     }
 
     const list = await db
@@ -723,8 +779,8 @@ export async function getVendorInvoicesAction(params?: {
             eq(vendorInvoices.paymentBatchId, vendorPaymentBatches.id)
         )
         .where(conditions.length > 0 ? and(...conditions) : undefined)
-        .orderBy(desc(vendorInvoices.createdAt))
-        .limit(params?.limit || 100)
+        .orderBy(orderClause)
+        .limit(params?.limit || 5000)
 
     return list.map((item) => ({
         ...item.invoice,
@@ -1105,6 +1161,13 @@ export async function submitVendorInvoiceAction(data: {
     invoicedItemsCount?: number
     totalPoItemsCount?: number
     poStatus?: string
+    // Enterprise P2P Additions
+    projectCategory?: "general" | "sipil" | "pengadaan" | "jasa_lain"
+    retentionPercent?: number
+    dpDeduction?: number
+    taxQrUrl?: string
+    vendorNpwp16?: string
+    taxInvoiceNumber?: string
 }) {
     const currentUser = await getActiveUser()
     if (!currentUser) {
@@ -1169,6 +1232,49 @@ export async function submitVendorInvoiceAction(data: {
         pphPercent: data.pphPercent ?? 0,
     })
 
+    // Retensi 5% khusus Pekerjaan Sipil & Kliring Uang Muka (DP)
+    const projectCategory = data.projectCategory || "general"
+    let retentionPercent = Number(data.retentionPercent) || 0
+    if (projectCategory === "sipil" && (data.retentionPercent === undefined || data.retentionPercent === null)) {
+        retentionPercent = 5.0
+    }
+    const retentionAmount = retentionPercent > 0 ? Math.round(data.subtotal * (retentionPercent / 100)) : 0
+    const retentionStatus = retentionAmount > 0 ? "held" : "none"
+    const dpDeduction = Number(data.dpDeduction) || 0
+    const netPayable = Math.max(0, grandTotal - dpDeduction - retentionAmount)
+
+    // Pemantauan Realisasi Kontrak
+    if (data.referenceType === "CONTRACT" && data.contractNumber?.trim()) {
+        const cMatch = await db
+            .select()
+            .from(vendorContracts)
+            .where(eq(vendorContracts.contractNumber, data.contractNumber.trim()))
+            .limit(1)
+
+        if (cMatch.length > 0) {
+            const invoicedSoFar = Number(cMatch[0].totalInvoiced) || 0
+            await db
+                .update(vendorContracts)
+                .set({
+                    totalInvoiced: String(invoicedSoFar + grandTotal),
+                    updatedAt: new Date(),
+                })
+                .where(eq(vendorContracts.id, cMatch[0].id))
+        }
+    }
+
+    // Tax DJP QR Validation
+    let taxValidationStatus = "unverified"
+    let taxDjpDetails: any = {}
+    if (data.taxQrUrl?.trim()) {
+        const djpRes = validateDjpTaxQr(data.taxQrUrl.trim(), {
+            subtotal: data.subtotal,
+            ppnAmount,
+        })
+        taxValidationStatus = djpRes.status === "valid" ? "coretax_matched" : djpRes.status
+        taxDjpDetails = djpRes
+    }
+
     // TOP vendor READ-ONLY mengikuti Master Vendor masing-masing
     const topDays = tenant[0].defaultTopDays || 30
 
@@ -1193,6 +1299,18 @@ export async function submitVendorInvoiceAction(data: {
             pphAmount: String(pphAmount),
             grandTotal: String(grandTotal),
             currency: data.currency || tenant[0].sapCurrency || "IDR",
+            projectCategory,
+            retentionPercent: String(retentionPercent),
+            retentionAmount: String(retentionAmount),
+            retentionStatus,
+            dpDeduction: String(dpDeduction),
+            netPayable: String(netPayable),
+            taxQrUrl: data.taxQrUrl || null,
+            vendorNpwp16: data.vendorNpwp16 || null,
+            taxInvoiceNumber: data.taxInvoiceNumber || null,
+            taxValidationStatus,
+            taxDjpDetails,
+            ocrStatus: "pending",
             topDays,
             entryMode: "vendor",
             status: "submitted",
@@ -1228,6 +1346,13 @@ export async function submitVendorInvoiceAction(data: {
         console.error("Gagal mengirim email invoice submitted:", e)
     }
 
+    // Trigger Otomatisasi OCR 3-Way Matching (Background / non-blocking)
+    if (newInvoice.invoiceFileUrl) {
+        triggerInvoiceOcrMatchingAction(newInvoice.id).catch((err) => {
+            console.error("Auto OCR background failure:", err)
+        })
+    }
+
     revalidatePath("/vendor/dashboard")
     revalidatePath("/dashboard/vendor-invoices")
     return { success: true, invoice: newInvoice }
@@ -1248,6 +1373,14 @@ export async function submitInvoiceByAdminAction(data: {
     ppnPercent?: number
     pphPercent?: number
     currency?: string
+    projectCategory?: string
+    retentionPercent?: number
+    dpDeduction?: number
+    penaltyAmount?: number
+    penaltyNotes?: string
+    taxInvoiceNumber?: string
+    taxQrUrl?: string
+    vendorNpwp16?: string
     invoiceFileUrl: string
     grSlipFileUrl?: string // Goods Receipt Slip (wajib salah satu dengan deliveryReceiptFileUrl)
     taxInvoiceFileUrl?: string
@@ -1310,8 +1443,8 @@ export async function submitInvoiceByAdminAction(data: {
 
     // Validasi e-Faktur Pajak Wajib bagi Vendor PKP
     const isVendorPkp = tenant[0].isPkp || (data.ppnPercent ?? 0) > 0
-    if (isVendorPkp && !data.taxInvoiceFileUrl?.trim()) {
-        return { success: false, error: "Vendor PKP wajib melampirkan berkas e-Faktur Pajak." }
+    if (isVendorPkp && !data.taxInvoiceFileUrl?.trim() && !data.taxQrUrl?.trim()) {
+        return { success: false, error: "Vendor PKP wajib melampirkan berkas e-Faktur Pajak atau link QR Faktur DJP." }
     }
 
     const { ppnAmount, pphAmount, grandTotal } = calculateTaxAndTotals({
@@ -1319,6 +1452,75 @@ export async function submitInvoiceByAdminAction(data: {
         ppnPercent: data.ppnPercent ?? (tenant[0].isPkp ? 11 : 0),
         pphPercent: data.pphPercent ?? 0,
     })
+
+    // 1. Enterprise P2P: Retensi 5% khusus Pekerjaan Sipil & Kliring Uang Muka (DP)
+    const projectCategory = data.projectCategory || "general"
+    let retentionPercent = Number(data.retentionPercent) || 0
+    if (projectCategory === "sipil" && (data.retentionPercent === undefined || data.retentionPercent === null)) {
+        retentionPercent = 5.0
+    }
+    const retentionAmount = retentionPercent > 0 ? Math.round(data.subtotal * (retentionPercent / 100)) : 0
+    const retentionStatus = retentionAmount > 0 ? "held" : "none"
+    const dpDeduction = Number(data.dpDeduction) || 0
+    const penaltyAmount = Number(data.penaltyAmount) || 0
+    const netPayable = Math.max(0, grandTotal - dpDeduction - retentionAmount - penaltyAmount)
+
+    // 2. Enterprise P2P: Pemantauan Realisasi & Sisa Pagu Kontrak
+    if (data.referenceType === "CONTRACT" && data.contractNumber?.trim()) {
+        const cMatch = await db
+            .select()
+            .from(vendorContracts)
+            .where(eq(vendorContracts.contractNumber, data.contractNumber.trim()))
+            .limit(1)
+
+        if (cMatch.length > 0) {
+            const cVal = Number(cMatch[0].contractValue) || 0
+            const invoicedSoFar = Number(cMatch[0].totalInvoiced) || 0
+            await db
+                .update(vendorContracts)
+                .set({
+                    totalInvoiced: String(invoicedSoFar + grandTotal),
+                    updatedAt: new Date(),
+                })
+                .where(eq(vendorContracts.id, cMatch[0].id))
+        }
+    }
+
+    // 3. Enterprise P2P: Tax Compliance DJP & CoreTax
+    let taxValidationStatus = "unverified"
+    let taxDjpDetails: any = {}
+    if (data.taxQrUrl?.trim()) {
+        const djpRes = validateDjpTaxQr(data.taxQrUrl.trim(), {
+            subtotal: data.subtotal,
+            ppnAmount,
+        })
+        taxValidationStatus = djpRes.status === "valid" ? "coretax_matched" : djpRes.status
+        taxDjpDetails = djpRes
+    }
+
+    // 4. Enterprise P2P: Automated 3-Way Matching Engine
+    let threeWayMatchResult: any = {}
+    let ocrStatus = "not_processed"
+    if ((data.referenceType || "PO") === "PO" && data.poNumber?.trim()) {
+        const poData = await lookupSapPoForVendorAction(data.poNumber.trim(), targetTenantId)
+        if (poData.found) {
+            const matchRes = execute3WayMatching({
+                invoice: {
+                    invoiceNumber: data.invoiceNumber,
+                    subtotal: data.subtotal,
+                    grandTotal,
+                    poNumber: data.poNumber,
+                },
+                poReference: {
+                    poNumber: data.poNumber,
+                    netValue: poData.netValue || 0,
+                    status: poData.poStatus,
+                },
+            })
+            threeWayMatchResult = matchRes
+            ocrStatus = matchRes.matchStatus
+        }
+    }
 
     // TOP read-only dari master vendor
     const topDays = tenant[0].defaultTopDays || 30
@@ -1344,6 +1546,21 @@ export async function submitInvoiceByAdminAction(data: {
             grandTotal: String(grandTotal),
             currency: data.currency || tenant[0].sapCurrency || "IDR",
             topDays,
+            projectCategory,
+            retentionPercent: String(retentionPercent),
+            retentionAmount: String(retentionAmount),
+            retentionStatus,
+            dpDeduction: String(dpDeduction),
+            penaltyAmount: String(penaltyAmount),
+            penaltyNotes: data.penaltyNotes?.trim() || null,
+            netPayable: String(netPayable),
+            threeWayMatchResult,
+            ocrStatus,
+            taxInvoiceNumber: data.taxInvoiceNumber?.trim() || null,
+            taxQrUrl: data.taxQrUrl?.trim() || null,
+            taxValidationStatus,
+            taxDjpDetails,
+            vendorNpwp16: data.vendorNpwp16?.trim() || null,
             entryMode: "admin_procurement",
             enteredBy: currentUser.id,
             status: "submitted",
@@ -1407,7 +1624,7 @@ export async function submitInvoiceByAdminAction(data: {
  */
 export async function verifyAdminChecklistAction(data: {
     invoiceId: string
-    action: "verify" | "reject"
+    action: "verify" | "reject" | "on_hold"
     checklist: {
         checklistDocValid: boolean
         checklistPoValid: boolean
@@ -1473,6 +1690,32 @@ export async function verifyAdminChecklistAction(data: {
         } catch (mailErr) {
             console.error("Gagal mengirim email notifikasi verified_admin:", mailErr)
         }
+    } else if (data.action === "on_hold") {
+        // On-Hold / Sengketa klarifikasi vendor
+        if (!data.notes?.trim()) {
+            return { success: false, error: "Alasan penahanan (on-hold) dan instruksi revisi wajib diisi." }
+        }
+
+        await db
+            .update(vendorInvoices)
+            .set({
+                status: "on_hold",
+                disputeReason: data.notes.trim(),
+                disputeNotes: data.notes.trim(),
+                disputedAt: new Date(),
+                disputedBy: currentUser.id,
+                updatedAt: new Date(),
+            })
+            .where(eq(vendorInvoices.id, data.invoiceId))
+
+        await db.insert(vendorInvoiceLogs).values({
+            invoiceId: data.invoiceId,
+            action: "on_hold",
+            actorId: currentUser.id,
+            actorName: currentUser.name || "Admin",
+            actorRole: "admin",
+            notes: `Tagihan ditahan (On-Hold): ${data.notes.trim()}`,
+        })
     } else {
         // Reject
         if (!data.notes?.trim()) {
@@ -2373,12 +2616,64 @@ export async function getVendorContractsAction(params?: {
         .where(whereClause)
         .orderBy(desc(vendorContracts.createdAt))
 
-    return contracts.map((c) => ({
-        ...c,
-        contractValue: Number(c.contractValue) || 0,
-        ppnPercent: Number(c.ppnPercent) || 0,
-        pphPercent: Number(c.pphPercent) || 0,
-    }))
+    // Real-time calculation of invoices per contract
+    const contractInvoices = await db
+        .select({
+            contractNumber: vendorInvoices.contractNumber,
+            grandTotal: vendorInvoices.grandTotal,
+            netPayable: vendorInvoices.netPayable,
+            status: vendorInvoices.status,
+        })
+        .from(vendorInvoices)
+        .where(
+            and(
+                not(inArray(vendorInvoices.status, ["rejected_admin", "rejected_finance", "rejected_manager"])),
+                sql`${vendorInvoices.contractNumber} IS NOT NULL`
+            )
+        )
+
+    const invoiceSumMap = new Map<string, { totalInvoiced: number; totalPaid: number }>()
+    for (const inv of contractInvoices) {
+        if (!inv.contractNumber) continue
+        const key = inv.contractNumber.trim().toLowerCase()
+        const existing = invoiceSumMap.get(key) || { totalInvoiced: 0, totalPaid: 0 }
+        const amt = Number(inv.netPayable) || Number(inv.grandTotal) || 0
+        existing.totalInvoiced += amt
+        if (inv.status === "paid") {
+            existing.totalPaid += amt
+        }
+        invoiceSumMap.set(key, existing)
+    }
+
+    return contracts.map((c) => {
+        const cVal = Number(c.contractValue) || 0
+        const sums = invoiceSumMap.get(c.contractNumber.trim().toLowerCase()) || {
+            totalInvoiced: Number(c.totalInvoiced) || 0,
+            totalPaid: Number(c.totalPaid) || 0,
+        }
+        const totalInvoiced = sums.totalInvoiced
+        const totalPaid = sums.totalPaid
+        const remainingBalance = Math.max(0, cVal - totalInvoiced)
+        const burnRatePercent = cVal > 0 ? (totalInvoiced / cVal) * 100 : 0
+
+        const isSipil =
+            c.projectCategory === "sipil" ||
+            c.category?.toLowerCase().includes("sipil") ||
+            c.title?.toLowerCase().includes("sipil") ||
+            c.itemName?.toLowerCase().includes("sipil")
+
+        return {
+            ...c,
+            contractValue: cVal,
+            totalInvoiced,
+            totalPaid,
+            remainingBalance,
+            burnRatePercent,
+            projectCategory: isSipil ? "sipil" : (c.projectCategory || "general"),
+            ppnPercent: Number(c.ppnPercent) || 0,
+            pphPercent: Number(c.pphPercent) || 0,
+        }
+    })
 }
 
 export async function createVendorContractAction(data: {
@@ -2666,4 +2961,275 @@ export async function changeVendorPasswordAction(data: {
         .where(eq(account.id, acc[0].id))
 
     return { success: true }
+}
+
+/**
+ * 24. P2P OCR & Automated 3-Way Matching Trigger Action
+ */
+export async function triggerInvoiceOcrMatchingAction(invoiceId: string) {
+    const currentUser = await getActiveUser()
+    if (!currentUser) return { success: false, error: "Unauthorized" }
+
+    const invoice = await getVendorInvoiceByIdAction(invoiceId)
+    if (!invoice) return { success: false, error: "Invoice tidak ditemukan." }
+
+    if (!invoice.poNumber || invoice.referenceType === "CONTRACT") {
+        return {
+            success: false,
+            error: "3-Way Matching otomatis saat ini berlaku untuk invoice berbasis Purchase Order (PO).",
+        }
+    }
+
+    try {
+        const poData = await lookupSapPoForVendorAction(invoice.poNumber, invoice.tenantId)
+        if (!poData.found) {
+            return {
+                success: false,
+                error: `Data PO SAP ${invoice.poNumber} tidak ditemukan di database.`,
+            }
+        }
+
+        const matchResult = execute3WayMatching({
+            invoice: {
+                invoiceNumber: invoice.invoiceNumber,
+                subtotal: Number(invoice.subtotal) || 0,
+                grandTotal: Number(invoice.grandTotal) || 0,
+                poNumber: invoice.poNumber,
+            },
+            poReference: {
+                poNumber: invoice.poNumber,
+                netValue: poData.netValue || 0,
+                status: poData.poStatus,
+            },
+        })
+
+        await db
+            .update(vendorInvoices)
+            .set({
+                threeWayMatchResult: matchResult,
+                ocrStatus: matchResult.matchStatus,
+                checklistPoValid: matchResult.suggestedChecklists.checklistPoValid,
+                checklistCalcValid: matchResult.suggestedChecklists.checklistCalcValid,
+                updatedAt: new Date(),
+            })
+            .where(eq(vendorInvoices.id, invoiceId))
+
+        await db.insert(vendorInvoiceLogs).values({
+            invoiceId,
+            action: "ocr_3way_matched",
+            actorId: currentUser.id,
+            actorName: currentUser.name || "AI OCR Engine",
+            actorRole: "system",
+            notes: `3-Way Match dieksekusi: Status ${matchResult.matchStatus.toUpperCase()}. ${matchResult.summaryMessage}`,
+            metadata: matchResult as any,
+        })
+
+        revalidatePath("/dashboard/vendor-invoices")
+        return { success: true, matchResult }
+    } catch (err: any) {
+        console.error("Gagal menjalankan 3-Way Matching:", err)
+        return { success: false, error: err.message || "Gagal memproses 3-Way Matching." }
+    }
+}
+
+/**
+ * 25. P2P Dispute / On-Hold Hub Action
+ */
+export async function setInvoiceOnHoldAction(data: {
+    invoiceId: string
+    reason: string
+    notes?: string
+}) {
+    const currentUser = await getActiveUser()
+    if (!currentUser) return { success: false, error: "Unauthorized" }
+
+    if (!data.reason?.trim()) {
+        return { success: false, error: "Alasan penahanan (on-hold) wajib diisi." }
+    }
+
+    const invoice = await getVendorInvoiceByIdAction(data.invoiceId)
+    if (!invoice) return { success: false, error: "Invoice tidak ditemukan." }
+
+    const now = new Date()
+    await db
+        .update(vendorInvoices)
+        .set({
+            status: "on_hold",
+            disputeReason: data.reason.trim(),
+            disputeNotes: data.notes?.trim() || null,
+            disputedAt: now,
+            disputedBy: currentUser.id,
+            updatedAt: now,
+        })
+        .where(eq(vendorInvoices.id, data.invoiceId))
+
+    await db.insert(vendorInvoiceLogs).values({
+        invoiceId: data.invoiceId,
+        action: "on_hold",
+        actorId: currentUser.id,
+        actorName: currentUser.name || "Admin/Finance",
+        actorRole: "admin",
+        notes: `Invoice ditahan (On-Hold): ${data.reason.trim()} - ${data.notes || ""}`,
+    })
+
+    revalidatePath("/dashboard/vendor-invoices")
+    return { success: true }
+}
+
+/**
+ * 26. P2P Resolve Dispute / On-Hold Action (Resume Verification)
+ */
+export async function resolveInvoiceDisputeAction(data: {
+    invoiceId: string
+    notes?: string
+}) {
+    const currentUser = await getActiveUser()
+    if (!currentUser) return { success: false, error: "Unauthorized" }
+
+    const invoice = await getVendorInvoiceByIdAction(data.invoiceId)
+    if (!invoice) return { success: false, error: "Invoice tidak ditemukan." }
+
+    const now = new Date()
+    await db
+        .update(vendorInvoices)
+        .set({
+            status: "submitted",
+            disputeResolvedAt: now,
+            updatedAt: now,
+        })
+        .where(eq(vendorInvoices.id, data.invoiceId))
+
+    await db.insert(vendorInvoiceLogs).values({
+        invoiceId: data.invoiceId,
+        action: "dispute_resolved",
+        actorId: currentUser.id,
+        actorName: currentUser.name || "Admin",
+        actorRole: "admin",
+        notes: `Klarifikasi sengketa selesai, status dikembalikan ke Submitted: ${data.notes || "Dokumen telah dikoreksi."}`,
+    })
+
+    revalidatePath("/dashboard/vendor-invoices")
+    return { success: true }
+}
+
+/**
+ * 27. P2P DJP e-Faktur QR Code Validation Action
+ */
+export async function validateDjpTaxInvoiceAction(data: {
+    invoiceId: string
+    qrUrl: string
+}) {
+    const currentUser = await getActiveUser()
+    if (!currentUser) return { success: false, error: "Unauthorized" }
+
+    if (!data.qrUrl?.trim()) {
+        return { success: false, error: "Link QR Code Faktur Pajak wajib diisi." }
+    }
+
+    const invoice = await getVendorInvoiceByIdAction(data.invoiceId)
+    if (!invoice) return { success: false, error: "Invoice tidak ditemukan." }
+
+    const result = validateDjpTaxQr(data.qrUrl.trim(), {
+        subtotal: Number(invoice.subtotal) || 0,
+        ppnAmount: Number(invoice.ppnAmount) || 0,
+    })
+
+    await db
+        .update(vendorInvoices)
+        .set({
+            taxQrUrl: data.qrUrl.trim(),
+            taxInvoiceNumber: result.taxInvoiceNumber || invoice.taxInvoiceNumber,
+            taxValidationStatus: result.status === "valid" ? "coretax_matched" : result.status,
+            taxDjpDetails: result,
+            checklistTaxValid: result.isValid,
+            updatedAt: new Date(),
+        })
+        .where(eq(vendorInvoices.id, data.invoiceId))
+
+    await db.insert(vendorInvoiceLogs).values({
+        invoiceId: data.invoiceId,
+        action: "tax_djp_validated",
+        actorId: currentUser.id,
+        actorName: currentUser.name || "Tax Compliance",
+        actorRole: "system",
+        notes: `Validasi QR e-Faktur DJP: ${result.validationNotes}`,
+        metadata: result as any,
+    })
+
+    revalidatePath("/dashboard/vendor-invoices")
+    return { success: true, result }
+}
+
+/**
+ * 28. P2P Bulk Payment / H2H File Export Action
+ */
+export async function exportBankBatchDisbursementAction(data: {
+    invoiceIds: string[]
+    format: "bca" | "mandiri" | "universal"
+    bankSource?: string
+    batchCode?: string
+}) {
+    const currentUser = await getActiveUser()
+    if (!currentUser) return { success: false, error: "Unauthorized" }
+
+    if (!data.invoiceIds || data.invoiceIds.length === 0) {
+        return { success: false, error: "Pilih minimal 1 invoice untuk di-export." }
+    }
+
+    const invoices = await db
+        .select({
+            invoice: vendorInvoices,
+            tenant: vendorTenants,
+        })
+        .from(vendorInvoices)
+        .innerJoin(vendorTenants, eq(vendorInvoices.tenantId, vendorTenants.id))
+        .where(inArray(vendorInvoices.id, data.invoiceIds))
+
+    if (invoices.length === 0) {
+        return { success: false, error: "Data invoice tidak ditemukan." }
+    }
+
+    const disbursementItems: BankDisbursementItem[] = invoices.map((item) => {
+        const netAmt = Number(item.invoice.netPayable) || Number(item.invoice.grandTotal) || 0
+        return {
+            invoiceId: item.invoice.id,
+            invoiceNumber: item.invoice.invoiceNumber,
+            vendorName: item.tenant.name,
+            bankName: item.tenant.bankName || "BCA",
+            bankAccountNo: item.tenant.bankAccountNo || "",
+            bankAccountHolder: item.tenant.bankAccountHolder || item.tenant.name,
+            amount: netAmt,
+            currency: item.invoice.currency || "IDR",
+            vendorEmail: item.tenant.email,
+            referenceNo: item.invoice.poNumber || item.invoice.contractNumber || undefined,
+            notes: `Pembayaran ${item.invoice.invoiceNumber}`,
+        }
+    })
+
+    const sourceAcc = data.bankSource || "0353123456"
+    let exportResult
+    if (data.format === "bca") {
+        exportResult = generateBcaKlikBcaCsv({
+            sourceAccount: sourceAcc,
+            items: disbursementItems,
+            batchCode: data.batchCode,
+        })
+    } else if (data.format === "mandiri") {
+        exportResult = generateMandiriMcmCsv({
+            sourceAccount: sourceAcc,
+            items: disbursementItems,
+            batchCode: data.batchCode,
+        })
+    } else {
+        exportResult = generateUniversalApCsv({
+            sourceAccount: sourceAcc,
+            items: disbursementItems,
+            batchCode: data.batchCode,
+        })
+    }
+
+    return {
+        success: true,
+        export: exportResult,
+    }
 }

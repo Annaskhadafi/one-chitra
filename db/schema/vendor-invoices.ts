@@ -31,6 +31,7 @@ export const vendorInvoiceStatusEnum = pgEnum("vendor_invoice_status", [
     "approved_manager",
     "rejected_manager",
     "paid",
+    "on_hold",
 ])
 
 // 1. Multi-Tenant Vendor Organizations
@@ -141,6 +142,36 @@ export const vendorInvoices = pgTable(
         grandTotal: numeric("grand_total", { precision: 18, scale: 2 }).default("0").notNull(),
         currency: varchar("currency", { length: 10 }).default("IDR").notNull(),
         topDays: integer("top_days").default(30).notNull(),
+
+        // Enterprise P2P & Construction Specific
+        projectCategory: varchar("project_category", { length: 50 }).default("general").notNull(), // 'general' | 'sipil' | 'sewa_kendaraan' | 'pengadaan_barang' | 'jasa_lainnya'
+        retentionPercent: numeric("retention_percent", { precision: 5, scale: 2 }).default("0").notNull(),
+        retentionAmount: numeric("retention_amount", { precision: 18, scale: 2 }).default("0").notNull(),
+        retentionStatus: varchar("retention_status", { length: 30 }).default("none").notNull(), // 'none' | 'held' | 'released'
+        retentionDueDate: timestamp("retention_due_date"),
+        dpDeduction: numeric("dp_deduction", { precision: 18, scale: 2 }).default("0").notNull(),
+        penaltyAmount: numeric("penalty_amount", { precision: 18, scale: 2 }).default("0").notNull(),
+        penaltyNotes: text("penalty_notes"),
+        netPayable: numeric("net_payable", { precision: 18, scale: 2 }).default("0").notNull(),
+
+        // AI OCR & Automated 3-Way Matching
+        ocrExtractedData: jsonb("ocr_extracted_data").$type<Record<string, any>>().default({}),
+        threeWayMatchResult: jsonb("three_way_match_result").$type<Record<string, any>>().default({}),
+        ocrStatus: varchar("ocr_status", { length: 30 }).default("not_processed").notNull(), // 'not_processed' | 'processing' | 'matched' | 'variance_flagged' | 'failed'
+
+        // Dispute / On-Hold Hub
+        disputeReason: text("dispute_reason"),
+        disputeNotes: text("dispute_notes"),
+        disputedAt: timestamp("disputed_at"),
+        disputedBy: text("disputed_by").references(() => user.id),
+        disputeResolvedAt: timestamp("dispute_resolved_at"),
+
+        // Tax Compliance DJP & CoreTax (16 Digit NPWP)
+        taxInvoiceNumber: varchar("tax_invoice_number", { length: 50 }),
+        taxQrUrl: text("tax_qr_url"),
+        taxValidationStatus: varchar("tax_validation_status", { length: 30 }).default("unverified").notNull(), // 'unverified' | 'valid' | 'invalid' | 'coretax_matched'
+        taxDjpDetails: jsonb("tax_djp_details").$type<Record<string, any>>().default({}),
+        vendorNpwp16: varchar("vendor_npwp_16", { length: 25 }),
 
         // Lifecycle & Status
         status: vendorInvoiceStatusEnum("status").default("submitted").notNull(),
@@ -323,6 +354,9 @@ export const vendorContracts = pgTable(
             uom?: string
         }>().default({}),
         contractValue: numeric("contract_value", { precision: 18, scale: 2 }).default("0").notNull(),
+        totalInvoiced: numeric("total_invoiced", { precision: 18, scale: 2 }).default("0").notNull(),
+        totalPaid: numeric("total_paid", { precision: 18, scale: 2 }).default("0").notNull(),
+        projectCategory: varchar("project_category", { length: 50 }).default("general").notNull(),
         billingFrequency: varchar("billing_frequency", { length: 50 }).default("monthly").notNull(),
         currency: varchar("currency", { length: 10 }).default("IDR").notNull(),
         startDate: timestamp("start_date").notNull(),
