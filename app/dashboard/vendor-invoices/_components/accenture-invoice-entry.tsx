@@ -32,6 +32,10 @@ import {
     Layers,
     ShieldCheck,
     Info,
+    Sparkles,
+    ChevronDown,
+    ChevronUp,
+    FileCheck,
 } from "lucide-react"
 
 interface AccentureInvoiceEntryProps {
@@ -101,12 +105,13 @@ export function AccentureInvoiceEntry({
     const [taxQrUrl, setTaxQrUrl] = useState<string>("")
     const [vendorNpwp16, setVendorNpwp16] = useState<string>("")
 
-    // File Attachments (Urutan SOP 1..5: PO/Kontrak -> DO/BAST/Absen -> GR Slip -> Invoice Fisik -> Faktur Pajak)
+    // File Attachments: Bundel Lengkap (Single PDF) & Opsi Terpisah
+    const [invoiceFile, setInvoiceFile] = useState<File | null>(null)
     const [contractPdfFile, setContractPdfFile] = useState<File | null>(null)
     const [deliveryReceiptFile, setDeliveryReceiptFile] = useState<File | null>(null)
     const [grSlipFile, setGrSlipFile] = useState<File | null>(null)
-    const [invoiceFile, setInvoiceFile] = useState<File | null>(null)
     const [taxInvoiceFile, setTaxInvoiceFile] = useState<File | null>(null)
+    const [showSeparateUploads, setShowSeparateUploads] = useState<boolean>(false)
 
     // Additional Notes
     const [notes, setNotes] = useState("")
@@ -143,8 +148,21 @@ export function AccentureInvoiceEntry({
         const timer = setTimeout(async () => {
             setIsSearchingVendor(true)
             try {
-                const res = await searchSapVendorMasterAction(vendorSearch)
-                setVendorSearchResults(res.slice(0, 8))
+                const raw = await searchSapVendorMasterAction(vendorSearch)
+                // Map SAP vendor master result agar id selalu berbentuk "sap:<supplierCode>" (string)
+                // sehingga action submitInvoiceByAdminAction dapat mendeteksi dan melakukan on-the-fly linking
+                const res = raw.slice(0, 8).map((v: any) => ({
+                    ...v,
+                    id: v.supplierCode ? `sap:${v.supplierCode}` : `sap:${v.id}`,
+                    name: v.vendorName || v.name,
+                    sapVendorCode: v.supplierCode || v.sapVendorCode,
+                    topDays: v.topDays || 30,
+                    isPkp: true,
+                    bankName: v.bankName,
+                    bankAccountNo: v.bankAccountNumber || v.bankAccountNo,
+                    bankAccountHolder: v.bankAccountHolder,
+                }))
+                setVendorSearchResults(res)
             } catch {
                 setVendorSearchResults([])
             } finally {
@@ -291,19 +309,9 @@ export function AccentureInvoiceEntry({
             return
         }
 
-        // Validasi Bukti Penerimaan (SOP: Minimal salah satu antara GR Slip atau Surat Jalan/BAST/Absen)
-        if (!grSlipFile && !deliveryReceiptFile) {
-            setFormError(
-                "Sesuai SOP Penerimaan, wajib melampirkan minimal salah satu bukti penerimaan: GR Slip (Goods Receipt) ATAU Surat Jalan / BAST / Rekap Absen."
-            )
-            return
-        }
+        // Validasi Berkas Dokumen: Bundel berkas lengkap / single PDF wajib ada
         if (!invoiceFile) {
-            setFormError("Berkas scan/PDF Invoice Fisik Tagihan asli bertanda tangan wajib dilampirkan.")
-            return
-        }
-        if ((selectedVendor.isPkp || ppnPercent > 0) && !taxInvoiceFile) {
-            setFormError("Vendor berstatus PKP (kena PPN): Berkas Faktur Pajak e-Faktur resmi DJP wajib dilampirkan.")
+            setFormError("Berkas dokumen faktur tagihan (Single PDF Bundel / Berkas Lengkap) wajib diunggah.")
             return
         }
 
@@ -1203,119 +1211,175 @@ export function AccentureInvoiceEntry({
                 )}
 
                 {/* ============================================================== */}
-                {/* TAB 2: BERKAS DOKUMEN LAMPIRAN (SOP URUTAN 1..5) */}
+                {/* TAB 2: UNGGAH BUNDEL DOKUMEN FAKTUR & LAMPIRAN (ALL-IN-ONE)    */}
                 {/* ============================================================== */}
                 {activeTab === "documents" && (
                     <div className="space-y-6">
-                        <div>
-                            <h3 className="font-bold text-xs uppercase tracking-wide text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
-                                <UploadCloud className="w-4 h-4 text-cyan-600" />
-                                2. Berkas Dokumen Lampiran (Urutan SOP 1..5)
-                            </h3>
-                            <p className="text-[11px] text-slate-500 mt-0.5">
-                                Sebagai dasar verifikasi dan entri invoice, dokumen referensi wajib saling mendukung dengan urutan:{" "}
-                                <strong>1. PO/Kontrak &rarr; 2. DO/BAST/Absen &rarr; 3. GR Slip &rarr; 4. Invoice Fisik &rarr; 5. Faktur Pajak</strong>.
-                            </p>
+                        {/* Info Header */}
+                        <div className="p-4 bg-gradient-to-r from-cyan-50 via-sky-50 to-blue-50 dark:from-cyan-950/30 dark:via-sky-950/20 dark:to-blue-950/30 border border-cyan-200 dark:border-cyan-800 rounded-2xl">
+                            <div className="flex items-start gap-3">
+                                <div className="p-2.5 bg-cyan-600 text-white rounded-xl shadow-xs shrink-0 mt-0.5">
+                                    <Sparkles className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <h3 className="font-bold text-sm text-cyan-950 dark:text-cyan-100 flex items-center gap-2">
+                                        Pemindaian Berkas Tunggal Cerdas (All-in-One Multi-Page Scan)
+                                    </h3>
+                                    <p className="text-xs text-cyan-800/90 dark:text-cyan-300/90 mt-1 leading-relaxed">
+                                        Sistem AI OCR secara otomatis membaca <strong>seluruh halaman berkas PDF</strong> (halaman 1 s/d lampiran belakang).
+                                        Anda <strong>tidak perlu memisahkan berkas secara manual</strong> &mdash; cukup unggah 1 bundel PDF lengkap, sistem akan memilah dan memvalidasi otomatis: <em>Invoice Fisik, Bukti Surat Jalan / BAST, Slip PO/GR SAP, dan Faktur Pajak DJP</em>.
+                                    </p>
+                                </div>
+                            </div>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {/* 1. PO / Kontrak */}
-                            <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 rounded-2xl space-y-2">
-                                <div className="flex items-center justify-between">
-                                    <Label className="font-bold text-xs text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                                        <span className="w-5 h-5 rounded-full bg-cyan-600 text-white inline-flex items-center justify-center text-[10px] font-bold">1</span>
-                                        Dokumen PO / Kontrak Payung
-                                    </Label>
-                                    <span className="text-[10px] text-slate-400">PDF Dasar Pemesanan</span>
+                        {/* Kotak Unggah Utama: Single PDF Bundle */}
+                        <div className="p-6 bg-white dark:bg-slate-900 border-2 border-dashed border-cyan-300 dark:border-cyan-700 hover:border-cyan-500 dark:hover:border-cyan-500 rounded-3xl transition-all shadow-xs">
+                            <div className="max-w-xl mx-auto text-center space-y-4">
+                                <div className="w-16 h-16 rounded-2xl bg-cyan-100 dark:bg-cyan-900/50 text-cyan-700 dark:text-cyan-300 flex items-center justify-center mx-auto shadow-inner">
+                                    <UploadCloud className="w-8 h-8" />
                                 </div>
-                                <input
-                                    type="file"
-                                    accept=".pdf,image/*"
-                                    onChange={(e) => setContractPdfFile(e.target.files?.[0] || null)}
-                                    className="block w-full text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-[11px] file:font-semibold file:bg-cyan-50 file:text-cyan-700 hover:file:bg-cyan-100 cursor-pointer"
-                                />
-                                {contractLookupResult?.contractFileUrl && (
-                                    <span className="text-[10px] text-emerald-600 block">
-                                        &bull; Salinan PDF Kontrak dari Master Data telah tersedia.
+
+                                <div>
+                                    <Label className="text-base font-bold text-slate-800 dark:text-slate-100 block">
+                                        Unggah Bundel Dokumen Faktur (Single PDF) *
+                                    </Label>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                                        Pilih berkas PDF lengkap yang berisi dokumen faktur beserta seluruh lampirannya
+                                    </p>
+                                </div>
+
+                                <div className="pt-2">
+                                    <input
+                                        id="bundleUploadInput"
+                                        type="file"
+                                        accept=".pdf,image/*"
+                                        onChange={(e) => setInvoiceFile(e.target.files?.[0] || null)}
+                                        className="block w-full text-xs text-slate-600 dark:text-slate-300 file:mr-3 file:py-2.5 file:px-5 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-cyan-600 file:text-white hover:file:bg-cyan-700 file:cursor-pointer cursor-pointer border border-slate-200 dark:border-slate-800 rounded-2xl p-2 bg-slate-50 dark:bg-slate-800/40"
+                                    />
+                                </div>
+
+                                {/* Preview & Info Berkas Terpilih */}
+                                {invoiceFile ? (
+                                    <div className="p-4 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-2xl text-left flex items-start justify-between gap-3 animate-in fade-in">
+                                        <div className="flex items-start gap-3">
+                                            <div className="p-2 bg-emerald-600 text-white rounded-lg shrink-0 mt-0.5">
+                                                <FileCheck className="w-5 h-5" />
+                                            </div>
+                                            <div>
+                                                <span className="font-bold text-xs text-emerald-950 dark:text-emerald-100 block truncate max-w-sm">
+                                                    {invoiceFile.name}
+                                                </span>
+                                                <span className="text-[11px] text-emerald-700 dark:text-emerald-300">
+                                                    Ukuran: {(invoiceFile.size / 1024 / 1024).toFixed(2)} MB &bull; Siap diproses multi-halaman
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] shrink-0">
+                                            Bundel Siap
+                                        </Badge>
+                                    </div>
+                                ) : (
+                                    <span className="text-[11px] text-slate-400 block italic">
+                                        Format berkas disarankan: .PDF multi-halaman (atau gambar scan beresolusi tinggi).
                                     </span>
                                 )}
-                            </div>
 
-                            {/* 2. DO / BAST / Rekap Absen */}
-                            <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 rounded-2xl space-y-2">
-                                <div className="flex items-center justify-between">
-                                    <Label className="font-bold text-xs text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                                        <span className="w-5 h-5 rounded-full bg-cyan-600 text-white inline-flex items-center justify-center text-[10px] font-bold">2</span>
-                                        Surat Jalan (DO) / BAST / Rekap Absen
-                                    </Label>
-                                    <span className="text-[10px] text-cyan-600 font-semibold">* Bukti Serah Terima</span>
+                                {/* Rincian Otomatisasi AI OCR */}
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 text-left">
+                                    <div className="p-2.5 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-800">
+                                        <span className="text-[10px] font-bold text-cyan-700 dark:text-cyan-400 block">1. Invoice Fisik</span>
+                                        <span className="text-[10px] text-slate-500 block leading-tight mt-0.5">Nomor, tanggal, DPP &amp; pajak di halaman depan</span>
+                                    </div>
+                                    <div className="p-2.5 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-800">
+                                        <span className="text-[10px] font-bold text-cyan-700 dark:text-cyan-400 block">2. DO / BAST</span>
+                                        <span className="text-[10px] text-slate-500 block leading-tight mt-0.5">Surat jalan &amp; serah terima di lampiran tengah</span>
+                                    </div>
+                                    <div className="p-2.5 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-800">
+                                        <span className="text-[10px] font-bold text-cyan-700 dark:text-cyan-400 block">3. PO / GR SAP</span>
+                                        <span className="text-[10px] text-slate-500 block leading-tight mt-0.5">Slip PO 10 digit &amp; nomor GR di lampiran belakang</span>
+                                    </div>
+                                    <div className="p-2.5 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-800">
+                                        <span className="text-[10px] font-bold text-cyan-700 dark:text-cyan-400 block">4. e-Faktur Pajak</span>
+                                        <span className="text-[10px] text-slate-500 block leading-tight mt-0.5">NSFP 16 digit &amp; validasi barcode DJP</span>
+                                    </div>
                                 </div>
-                                <input
-                                    type="file"
-                                    accept=".pdf,image/*"
-                                    onChange={(e) => setDeliveryReceiptFile(e.target.files?.[0] || null)}
-                                    className="block w-full text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-[11px] file:font-semibold file:bg-cyan-50 file:text-cyan-700 hover:file:bg-cyan-100 cursor-pointer"
-                                />
-                                <span className="text-[10px] text-slate-400 block">Bukti barang diterima atau jasa terlaksana</span>
                             </div>
+                        </div>
 
-                            {/* 3. GR Slip (Goods Receipt Slip SAP) */}
-                            <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 rounded-2xl space-y-2">
-                                <div className="flex items-center justify-between">
-                                    <Label className="font-bold text-xs text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                                        <span className="w-5 h-5 rounded-full bg-cyan-600 text-white inline-flex items-center justify-center text-[10px] font-bold">3</span>
-                                        Lampiran GR Slip (Goods Receipt SAP)
-                                    </Label>
-                                    <span className="text-[10px] text-cyan-600 font-semibold">* Wajib untuk PO</span>
-                                </div>
-                                <input
-                                    type="file"
-                                    accept=".pdf,image/*"
-                                    onChange={(e) => setGrSlipFile(e.target.files?.[0] || null)}
-                                    className="block w-full text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-[11px] file:font-semibold file:bg-cyan-50 file:text-cyan-700 hover:file:bg-cyan-100 cursor-pointer"
-                                />
-                                <span className="text-[10px] text-slate-400 block">Bukti Good Receipt SAP dari warehouse / logistik</span>
-                            </div>
+                        {/* Collapsible: Opsi Tambahan Pisahkan Berkas Manual (Jika user punya berkas pecahan) */}
+                        <div className="border border-slate-200 dark:border-slate-800 rounded-2xl p-4 bg-slate-50/60 dark:bg-slate-800/30">
+                            <button
+                                type="button"
+                                onClick={() => setShowSeparateUploads(!showSeparateUploads)}
+                                className="w-full flex items-center justify-between text-left text-xs font-bold text-slate-700 dark:text-slate-300 hover:text-cyan-600 transition-colors"
+                            >
+                                <span className="flex items-center gap-2">
+                                    <Layers className="w-4 h-4 text-cyan-600" />
+                                    Opsi Tambahan: Lampirkan Berkas Terpisah Secara Manual (Opsional)
+                                </span>
+                                {showSeparateUploads ? (
+                                    <ChevronUp className="w-4 h-4 text-slate-400" />
+                                ) : (
+                                    <ChevronDown className="w-4 h-4 text-slate-400" />
+                                )}
+                            </button>
 
-                            {/* 4. Berkas Scan Invoice Fisik Tagihan */}
-                            <div className="p-4 bg-cyan-50/50 dark:bg-cyan-950/20 border border-cyan-300 dark:border-cyan-800 rounded-2xl space-y-2">
-                                <div className="flex items-center justify-between">
-                                    <Label className="font-bold text-xs text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
-                                        <span className="w-5 h-5 rounded-full bg-cyan-600 text-white inline-flex items-center justify-center text-[10px] font-bold">4</span>
-                                        Scan / PDF Invoice Fisik Asli *
-                                    </Label>
-                                    <Badge variant="secondary" className="bg-red-100 text-red-700 text-[10px] font-bold">
-                                        Wajib
-                                    </Badge>
-                                </div>
-                                <input
-                                    type="file"
-                                    accept=".pdf,image/*"
-                                    onChange={(e) => setInvoiceFile(e.target.files?.[0] || null)}
-                                    className="block w-full text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-[11px] file:font-semibold file:bg-cyan-600 file:text-white hover:file:bg-cyan-700 cursor-pointer"
-                                />
-                                <span className="text-[10px] text-slate-500 block">Invoice asli bermeterai / bertanda tangan basah</span>
-                            </div>
+                            {showSeparateUploads && (
+                                <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700 grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in">
+                                    {/* 1. PO / Kontrak */}
+                                    <div className="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-1.5">
+                                        <Label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block">
+                                            Salinan PO / Kontrak Payung Terpisah
+                                        </Label>
+                                        <input
+                                            type="file"
+                                            accept=".pdf,image/*"
+                                            onChange={(e) => setContractPdfFile(e.target.files?.[0] || null)}
+                                            className="block w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-[11px] file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 cursor-pointer"
+                                        />
+                                    </div>
 
-                            {/* 5. Faktur Pajak e-Faktur */}
-                            <div className="md:col-span-2 p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 rounded-2xl space-y-2">
-                                <div className="flex items-center justify-between">
-                                    <Label className="font-bold text-xs text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                                        <span className="w-5 h-5 rounded-full bg-cyan-600 text-white inline-flex items-center justify-center text-[10px] font-bold">5</span>
-                                        Berkas Faktur Pajak Resmi DJP (e-Faktur)
-                                    </Label>
-                                    <span className="text-[10px] text-amber-700 font-semibold">
-                                        {selectedVendor?.isPkp !== false || ppnPercent > 0 ? "* Wajib Bagi Vendor PKP" : "Opsional jika Non-PKP"}
-                                    </span>
+                                    {/* 2. DO / BAST */}
+                                    <div className="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-1.5">
+                                        <Label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block">
+                                            Surat Jalan (DO) / BAST Terpisah
+                                        </Label>
+                                        <input
+                                            type="file"
+                                            accept=".pdf,image/*"
+                                            onChange={(e) => setDeliveryReceiptFile(e.target.files?.[0] || null)}
+                                            className="block w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-[11px] file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 cursor-pointer"
+                                        />
+                                    </div>
+
+                                    {/* 3. GR Slip */}
+                                    <div className="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-1.5">
+                                        <Label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block">
+                                            Slip Goods Receipt (GR) SAP Terpisah
+                                        </Label>
+                                        <input
+                                            type="file"
+                                            accept=".pdf,image/*"
+                                            onChange={(e) => setGrSlipFile(e.target.files?.[0] || null)}
+                                            className="block w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-[11px] file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 cursor-pointer"
+                                        />
+                                    </div>
+
+                                    {/* 4. Faktur Pajak */}
+                                    <div className="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-1.5">
+                                        <Label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block">
+                                            Berkas Faktur Pajak e-Faktur Terpisah
+                                        </Label>
+                                        <input
+                                            type="file"
+                                            accept=".pdf,image/*"
+                                            onChange={(e) => setTaxInvoiceFile(e.target.files?.[0] || null)}
+                                            className="block w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-[11px] file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 cursor-pointer"
+                                        />
+                                    </div>
                                 </div>
-                                <input
-                                    type="file"
-                                    accept=".pdf,image/*"
-                                    onChange={(e) => setTaxInvoiceFile(e.target.files?.[0] || null)}
-                                    className="block w-full text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-[11px] file:font-semibold file:bg-amber-100 file:text-amber-800 hover:file:bg-amber-200 cursor-pointer"
-                                />
-                                <span className="text-[10px] text-slate-400 block">PDF Faktur Pajak yang divalidasi dengan QR code resmi DJP</span>
-                            </div>
+                            )}
                         </div>
 
                         {/* ACTION BAR TAB 2 */}
@@ -1332,11 +1396,7 @@ export function AccentureInvoiceEntry({
                                 type="button"
                                 onClick={() => {
                                     if (!invoiceFile) {
-                                        setFormError("Berkas scan/PDF Invoice Fisik Tagihan asli bertanda tangan wajib dilampirkan.")
-                                        return
-                                    }
-                                    if (!grSlipFile && !deliveryReceiptFile) {
-                                        setFormError("Wajib melampirkan minimal salah satu bukti penerimaan: GR Slip ATAU Surat Jalan/BAST.")
+                                        setFormError("Silakan pilih berkas bundel dokumen faktur (PDF) terlebih dahulu.")
                                         return
                                     }
                                     setFormError(null)

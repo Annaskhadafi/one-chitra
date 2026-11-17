@@ -1315,10 +1315,10 @@ export async function submitVendorInvoiceAction(data: {
             entryMode: "vendor",
             status: "submitted",
             invoiceFileUrl: data.invoiceFileUrl,
-            grSlipFileUrl: data.grSlipFileUrl,
-            taxInvoiceFileUrl: data.taxInvoiceFileUrl,
-            poFileUrl: data.poFileUrl,
-            deliveryReceiptFileUrl: data.deliveryReceiptFileUrl,
+            grSlipFileUrl: data.grSlipFileUrl || data.invoiceFileUrl,
+            taxInvoiceFileUrl: data.taxInvoiceFileUrl || (isVendorPkp ? data.invoiceFileUrl : null),
+            poFileUrl: data.poFileUrl || data.invoiceFileUrl,
+            deliveryReceiptFileUrl: data.deliveryReceiptFileUrl || data.invoiceFileUrl,
             additionalFileUrl: data.additionalFileUrl,
             createdBy: currentUser.id,
         })
@@ -1414,12 +1414,18 @@ export async function submitInvoiceByAdminAction(data: {
         }
     }
 
-    // Validasi bukti penerimaan: minimal salah satu antara GR Slip atau Surat Jalan/BAST/Absen
-    if (!data.grSlipFileUrl?.trim() && !data.deliveryReceiptFileUrl?.trim()) {
-        return { success: false, error: "Wajib melampirkan minimal salah satu bukti penerimaan: Lampiran GR Slip atau Surat Jalan / BAST / Daftar Absen." }
+    // Validasi berkas fisik: invoiceFileUrl (bundel faktur lengkap / file invoice) wajib dilampirkan
+    if (!data.invoiceFileUrl?.trim()) {
+        return { success: false, error: "Berkas dokumen invoice/faktur (PDF/Gambar) wajib dilampirkan." }
     }
 
-    let targetTenantId = data.tenantId
+    // Jika diunggah sebagai satu berkas bundel dokumen lengkap (Single PDF Multi-Halaman),
+    // berkas tersebut mencakup Invoice, Faktur Pajak, DO/BAST, dan GR Slip secara terpadu.
+    const effectiveDeliveryReceipt = data.deliveryReceiptFileUrl?.trim() || data.grSlipFileUrl?.trim() || data.invoiceFileUrl
+    const effectiveTaxInvoice = data.taxInvoiceFileUrl?.trim() || data.invoiceFileUrl
+    const effectiveGrSlip = data.grSlipFileUrl?.trim() || data.invoiceFileUrl
+
+    let targetTenantId = data.tenantId != null ? String(data.tenantId) : ""
 
     // Jika tenantId berawalan "sap:" atau dikirim sapSupplierCode, lakukan on-the-fly linking
     if (targetTenantId?.startsWith("sap:") || data.sapSupplierCode) {
@@ -1441,10 +1447,10 @@ export async function submitInvoiceByAdminAction(data: {
         return { success: false, error: "Vendor tidak ditemukan." }
     }
 
-    // Validasi e-Faktur Pajak Wajib bagi Vendor PKP
+    // Validasi e-Faktur Pajak Wajib bagi Vendor PKP (bisa berupa berkas terpisah, bundel PDF, atau link QR Faktur DJP)
     const isVendorPkp = tenant[0].isPkp || (data.ppnPercent ?? 0) > 0
-    if (isVendorPkp && !data.taxInvoiceFileUrl?.trim() && !data.taxQrUrl?.trim()) {
-        return { success: false, error: "Vendor PKP wajib melampirkan berkas e-Faktur Pajak atau link QR Faktur DJP." }
+    if (isVendorPkp && !effectiveTaxInvoice && !data.taxQrUrl?.trim()) {
+        return { success: false, error: "Vendor PKP wajib melampirkan berkas e-Faktur Pajak (atau bundel faktur lengkap) atau link QR Faktur DJP." }
     }
 
     const { ppnAmount, pphAmount, grandTotal } = calculateTaxAndTotals({
@@ -1565,10 +1571,10 @@ export async function submitInvoiceByAdminAction(data: {
             enteredBy: currentUser.id,
             status: "submitted",
             invoiceFileUrl: data.invoiceFileUrl,
-            grSlipFileUrl: data.grSlipFileUrl,
-            taxInvoiceFileUrl: data.taxInvoiceFileUrl,
-            poFileUrl: data.poFileUrl,
-            deliveryReceiptFileUrl: data.deliveryReceiptFileUrl,
+            grSlipFileUrl: data.grSlipFileUrl || data.invoiceFileUrl,
+            taxInvoiceFileUrl: data.taxInvoiceFileUrl || (isVendorPkp ? data.invoiceFileUrl : null),
+            poFileUrl: data.poFileUrl || data.invoiceFileUrl,
+            deliveryReceiptFileUrl: data.deliveryReceiptFileUrl || data.invoiceFileUrl,
             additionalFileUrl: data.additionalFileUrl,
             createdBy: currentUser.id,
         })
