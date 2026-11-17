@@ -1,5 +1,5 @@
 import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3"
-import { existsSync } from "fs"
+import { existsSync, readdirSync, statSync } from "fs"
 import { mkdir, readFile, readdir, unlink, writeFile } from "fs/promises"
 import { join } from "path"
 import { v7 as uuidv7 } from "uuid"
@@ -379,21 +379,51 @@ async function saveUploadToLocalDisk(params: {
 export function getUploadReadDirs() {
     return uniquePaths([
         getUploadWriteDir(),
+        projectPath("public", "uploads", "vendor-invoices", "sharepoint"),
+        projectPath("public", "uploads", "vendor-invoices"),
+        projectPath("public", "uploads"),
+        projectPath("uploads", "vendor-invoices", "sharepoint"),
+        projectPath("uploads", "vendor-invoices"),
         projectPath("uploads"),
         projectPath("..", "uploads"),
-        projectPath("public", "uploads"),
+        projectPath(".next", "standalone", "public", "uploads", "vendor-invoices", "sharepoint"),
         projectPath(".next", "standalone", "public", "uploads"),
+        "/mnt/data/one-chitra/uploads/vendor-invoices/sharepoint",
+        "/mnt/data/one-chitra/uploads/vendor-invoices",
         "/mnt/data/one-chitra/uploads",
+        join(DEFAULT_PRODUCTION_UPLOAD_DIR, "vendor-invoices", "sharepoint"),
+        join(DEFAULT_PRODUCTION_UPLOAD_DIR, "vendor-invoices"),
         DEFAULT_PRODUCTION_UPLOAD_DIR,
         "/app/public/uploads",
         "/app/.next/standalone/public/uploads",
     ])
 }
 
+function searchFileRecursively(dir: string, targetFilename: string, depth = 0): string | null {
+    if (depth > 4) return null
+    try {
+        if (!existsSync(dir)) return null
+        const entries = readdirSync(dir, { withFileTypes: true })
+        for (const entry of entries) {
+            const fullPath = join(dir, entry.name)
+            if (entry.isDirectory()) {
+                const found = searchFileRecursively(fullPath, targetFilename, depth + 1)
+                if (found) return found
+            } else if (entry.name.toLowerCase() === targetFilename.toLowerCase()) {
+                return fullPath
+            }
+        }
+    } catch {
+        return null
+    }
+    return null
+}
+
 export function findExistingUploadFilePath(value: string | null | undefined) {
     const filename = extractUploadFilename(value)
     if (!filename) return null
 
+    // 1. Cek langsung di direktori yang terdaftar
     for (const directory of getUploadReadDirs()) {
         const filePath = join(directory, filename)
         if (existsSync(filePath)) {
@@ -401,6 +431,46 @@ export function findExistingUploadFilePath(value: string | null | undefined) {
                 filename,
                 directory,
                 filePath,
+            }
+        }
+    }
+
+    // 2. Jika value berupa relative path (misal "vendor-invoices/sharepoint/file.pdf")
+    const rawNormalized = (value ?? "").trim().replace(/\\/g, "/").replace(/^\/+/, "")
+    if (rawNormalized.includes("/")) {
+        for (const directory of [
+            getUploadWriteDir(),
+            projectPath("public", "uploads"),
+            projectPath("uploads"),
+            "/mnt/data/one-chitra/uploads",
+            DEFAULT_PRODUCTION_UPLOAD_DIR,
+        ]) {
+            const filePath = join(directory, rawNormalized)
+            if (existsSync(filePath)) {
+                return {
+                    filename,
+                    directory,
+                    filePath,
+                }
+            }
+        }
+    }
+
+    // 3. Fallback pencarian rekursif di subdirektori public/uploads dan persist directory
+    const baseDirs = uniquePaths([
+        getUploadWriteDir(),
+        projectPath("public", "uploads"),
+        "/mnt/data/one-chitra/uploads",
+        DEFAULT_PRODUCTION_UPLOAD_DIR,
+    ])
+
+    for (const baseDir of baseDirs) {
+        const foundPath = searchFileRecursively(baseDir, filename)
+        if (foundPath) {
+            return {
+                filename,
+                directory: baseDir,
+                filePath: foundPath,
             }
         }
     }
