@@ -36,6 +36,45 @@ Untuk memastikan seluruh berkas yang diunggah dapat diakses secara persisten di 
 
 ---
 
+# Sinkronisasi Git Wajib Sebelum Bekerja, Commit, Push, dan Merge
+
+* Pada awal **setiap sesi**, sebelum mengubah file, periksa `git status --short --branch` dan upstream branch, lalu jalankan `git pull --ff-only` dari remote/upstream branch aktif.
+* **Ulangi `git pull --ff-only` tepat sebelum setiap commit, push, dan merge.** Sebelum merge, sinkronkan branch sumber dan tujuan dengan upstream masing-masing. Jangan menganggap pull di awal sesi masih cukup.
+* Jika upstream belum tersedia, tentukan remote dan branch yang benar dari konfigurasi repository; jangan menebak atau otomatis memakai `main`.
+* Jika pull gagal karena koneksi, perubahan lokal, branch divergen, atau konflik, hentikan aksi commit/push/merge sampai masalah selesai. Pertahankan pekerjaan pengguna; jangan memakai reset destruktif, menghapus file, melakukan stash otomatis, atau force push.
+* Setelah integrasi perubahan remote, periksa diff dan jalankan ulang pengujian yang relevan bila kode yang diuji berubah. Pastikan hanya file terkait tugas yang masuk commit.
+
+# Pengujian E2E dan Screenshot Wajib
+
+* Setiap perubahan wajib diverifikasi dengan tes E2E pada browser nyata untuk alur yang terdampak, termasuk login dan pemeriksaan hasil akhir. Untuk perubahan instruksi/dokumentasi saja, jalankan smoke test login dan akses dashboard sebagai bukti akses pengujian.
+* **Default E2E adalah `http://localhost:3000`**, dari dev server repository dan worktree yang sedang diubah. Pastikan port 3000 menjalankan ONE-CHITRA yang benar, bukan aplikasi lain. Jangan otomatis pindah port jika port 3000 sedang dipakai; laporkan benturannya. Port lain hanya digunakan atas instruksi pengguna. Runner harus menolak host nonlokal (loopback `127.0.0.1`/`[::1]` diperbolehkan).
+* **Jangan mengganti target ke domain production ketika E2E lokal gagal.** Kode yang belum di-push/deploy belum tersedia di production. Laporkan hambatan lokal dan status belum terverifikasi; tes production hanya boleh menjadi pemeriksaan setelah deployment yang diminta secara terpisah, bukan bukti perubahan lokal.
+* Gunakan akun pengujian ONE-CHITRA yang tersimpan di **`.env.e2e.local`** melalui `E2E_EMAIL`, `E2E_PASSWORD`, dan `E2E_BASE_URL`. Muat file ini secara eksplisit pada runner (misalnya `dotenv.config({ path: '.env.e2e.local', quiet: true })`); jangan mengandalkan Next.js memuatnya otomatis.
+* Kredensial wajib tetap di env lokal yang diabaikan Git. Jangan menulis nilainya ke AGENTS.md, source, test, log, laporan, screenshot, atau variabel `NEXT_PUBLIC_*`. Jangan commit env, cookie, token, maupun browser storage state.
+* Simpan screenshot asli hasil tes di `output/playwright/`, dengan nama fitur dan tanggal yang jelas. Ambil bukti halaman/hasil setelah aksi berhasil, tanpa menampilkan password atau token; jangan memakai mockup sebagai bukti.
+* Sertakan perintah, target URL, hasil assertion (lulus/gagal), dan tautan screenshot pada laporan akhir. Jika E2E terhambat, sebutkan penyebab dan langkah yang belum terverifikasi; jangan mengklaim lulus.
+* **Setelah tes lulus, bukti screenshot tertanam di PPT bulanan, dan PPT terverifikasi, wajib bersihkan hasil tes sementara milik tugas ini dari repository**: screenshot, log, report, trace/video, browser storage state, runner sementara, dan salinan cadangan PPT. Simpan screenshot yang masih diperlukan untuk laporan di lokasi artefak di luar folder kode. Jangan menghapus source test permanen, env lokal, bukti yang belum tersimpan, atau hasil pekerjaan lain; periksa kepemilikan dan path setiap file sebelum menghapusnya. Jangan commit hasil tes sementara.
+
+# Aturan Wajib Pembaruan Slide Presentasi Bulanan
+
+* Setelah E2E selesai dan screenshot berhasil diambil, **wajib jalankan skrip otomasi** untuk mencatat progress pekerjaan, perbaikan bug, atau fitur beserta bukti di `D:\[01] PROJECT\HERO\Monthly`.
+* Gunakan skrip terpusat yang sudah tersedia di repo HERO. Dari repo ONE-CHITRA, jalankan dengan path absolut berikut (ganti judul, deskripsi, screenshot, bulan, dan tahun sesuai pekerjaan):
+
+```powershell
+python "D:\[01] PROJECT\HERO\scripts\update-monthly-presentation.py" `
+  --title "Nama Fitur atau Perbaikan" `
+  --description "Penjelasan singkat perubahan, tujuan, serta hasil E2E yang sebenarnya" `
+  --screenshots "output/playwright/fitur-YYYY-MM-DD.png" `
+  --system "ONE-CHITRA" `
+  --month 11 --year 2026
+```
+
+* `--month` dan `--year` wajib mengikuti tanggal pekerjaan dalam zona **Asia/Makassar**; angka di atas hanya contoh November 2026, bukan nilai tetap. Gunakan `--system "HERO"` untuk pekerjaan HERO dan `"ONE-CHITRA"` untuk pekerjaan ONE-CHITRA.
+* Perbarui `MONTHLY <BULAN> <TAHUN> SDS.pptx` sesuai bulan tersebut. Pertahankan isi dan desain yang sudah ada; tambahkan ringkasan dan slide bukti sebelum bagian planning. Jangan menimpa presentasi bulan lain atau menambahkan klaim keberhasilan ketika tes gagal.
+* Verifikasi file hasil dapat dibuka, teks terbaca, dan screenshot tertanam dengan proporsi yang benar. Sertakan tautan file PPTX dan nomor slide pada laporan akhir. Jika skrip gagal atau PPTX terkunci, laporkan bahwa pembaruan presentasi belum selesai.
+
+---
+
 # Codex Task Management Guide
 
 ## Documentation Available
