@@ -43,7 +43,7 @@ export async function setStandardMarginBaseline(margin: number) {
     }
 }
 
-// Helper: Kirim Notifikasi Email Delivery untuk Alur Approval (Default ke Akun Test wustho.c@gmail.com)
+// Helper: Kirim Notifikasi Email Delivery Resmi untuk Alur Approval
 async function sendQuotationApprovalNotification(input: {
     toEmail: string
     toName: string
@@ -56,75 +56,181 @@ async function sendQuotationApprovalNotification(input: {
     comment?: string | null
 }) {
     try {
+        if (!input.toEmail) return
+
         const baseUrl = process.env.BETTER_AUTH_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
         const link = `${baseUrl}/dashboard/quotations/${input.quotationId}`
-        const testRecipient = "wustho.c@gmail.com"
 
-        let subject = `[Quotation Approval] Permohonan Persetujuan: ${input.quotationNumber}`
-        let title = "Permohonan Persetujuan Quotation Baru"
-        let statusBadge = `<span style="background-color: #fef3c7; color: #92400e; padding: 4px 8px; border-radius: 4px; font-weight: bold;">Menunggu Persetujuan (${input.stepLabel})</span>`
+        let subject = `[Approval] Permohonan Persetujuan Quotation: ${input.quotationNumber}`
+        let headerBadge = "PERMOHONAN PERSETUJUAN"
+        let headerBadgeColor = "#f59e0b"
+        let headerBadgeBg = "#fffbeb"
+        let title = "Persetujuan Quotation Diperlukan"
+        let introText = `Yth. <strong>${input.toName}</strong>,<br/>Terdapat 1 dokumen quotation dengan margin di bawah batas standar baseline yang memerlukan tinjauan dan persetujuan dari Anda untuk <strong>${input.stepLabel}</strong>.`
+        let buttonText = "👉 Tinjau & Proses Dokumen"
+        let statusBadge = `<span style="background-color: #fef3c7; color: #92400e; padding: 4px 10px; border-radius: 9999px; font-weight: 700; font-size: 12px; display: inline-block;">Menunggu Persetujuan (${input.stepLabel})</span>`
 
         if (input.actionType === "approved") {
-            subject = `[Quotation Approved] Dokumen Disetujui: ${input.quotationNumber}`
+            subject = `[Disetujui] Quotation Telah Disetujui Sepenuhnya: ${input.quotationNumber}`
+            headerBadge = "FULL APPROVED"
+            headerBadgeColor = "#10b981"
+            headerBadgeBg = "#f0fdf4"
             title = "Quotation Telah Disetujui Sepenuhnya"
-            statusBadge = `<span style="background-color: #d1fae5; color: #065f46; padding: 4px 8px; border-radius: 4px; font-weight: bold;">Full Approved</span>`
+            introText = `Yth. <strong>${input.toName}</strong>,<br/>Kabar baik! Dokumen quotation berikut telah berhasil disetujui pada seluruh tahapan hierarki dan siap untuk diproses lebih lanjut.`
+            buttonText = "📄 Lihat Dokumen Quotation"
+            statusBadge = `<span style="background-color: #d1fae5; color: #065f46; padding: 4px 10px; border-radius: 9999px; font-weight: 700; font-size: 12px; display: inline-block;">✓ Full Approved</span>`
         } else if (input.actionType === "rejected") {
-            subject = `[Quotation Rejected] Dokumen Ditolak: ${input.quotationNumber}`
+            subject = `[Ditolak] Quotation Memerlukan Revisi: ${input.quotationNumber}`
+            headerBadge = "MEMERLUKAN REVISI"
+            headerBadgeColor = "#ef4444"
+            headerBadgeBg = "#fef2f2"
             title = "Quotation Ditolak oleh Approver"
-            statusBadge = `<span style="background-color: #fee2e2; color: #991b1b; padding: 4px 8px; border-radius: 4px; font-weight: bold;">Ditolak (${input.stepLabel})</span>`
+            introText = `Yth. <strong>${input.toName}</strong>,<br/>Dokumen quotation berikut ditolak pada tahap <strong>${input.stepLabel}</strong>. Silakan periksa catatan approver di bawah ini dan lakukan penyesuaian harga atau margin.`
+            buttonText = "✏️ Buka & Revisi Quotation"
+            statusBadge = `<span style="background-color: #fee2e2; color: #991b1b; padding: 4px 10px; border-radius: 9999px; font-weight: 700; font-size: 12px; display: inline-block;">✕ Ditolak (${input.stepLabel})</span>`
         }
 
+        const isBelowMargin = input.minMargin < 11
+        const marginColor = isBelowMargin ? "#dc2626" : "#16a34a"
+        const marginBg = isBelowMargin ? "#fef2f2" : "#f0fdf4"
+        const marginText = `${input.minMargin}% ${isBelowMargin ? "(Di bawah batas standard 11.00%)" : "(Memenuhi standar baseline)"}`
+
         const html = `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
-                <div style="background-color: #f8fafc; border-left: 4px solid #2563eb; padding: 10px 14px; margin-bottom: 20px; border-radius: 4px; font-size: 12px; color: #334155;">
-                    <strong>[Delivery Mode: Test & Production]</strong><br/>
-                    Penerima Asli: <strong>${input.toName} (${input.toEmail})</strong><br/>
-                    Diteruskan otomatis ke akun uji coba: <strong>${testRecipient}</strong>
-                </div>
-                <h2 style="color: #1e3a8a; margin-top: 0;">${title}</h2>
-                <p>Halo <strong>${input.toName}</strong>,</p>
-                <p>Berikut adalah rincian informasi dokumen quotation yang membutuhkan perhatian Anda:</p>
-                <table style="width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px;">
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${subject}</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b; line-height: 1.6;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #f1f5f9; padding: 30px 10px;">
+        <tr>
+            <td align="center">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width: 620px; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.06); border: 1px solid #e2e8f0;">
+                    
+                    <!-- HEADER BRANDING -->
                     <tr>
-                        <td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b; width: 140px;">No. Quotation</td>
-                        <td style="padding: 8px; border-bottom: 1px solid #e2e8f0; font-weight: bold;">${input.quotationNumber}</td>
+                        <td style="background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%); padding: 26px 32px; text-align: left; border-bottom: 3px solid #f59e0b;">
+                            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                                <tr>
+                                    <td>
+                                        <div style="font-size: 11px; font-weight: 700; letter-spacing: 1.5px; color: #93c5fd; text-transform: uppercase; margin-bottom: 4px;">
+                                            ONE CHITRA • APPROVAL ENGINE
+                                        </div>
+                                        <div style="font-size: 20px; font-weight: 800; color: #ffffff; letter-spacing: 0.5px; text-transform: uppercase;">
+                                            PT CHITRA PARATAMA
+                                        </div>
+                                    </td>
+                                    <td align="right" style="vertical-align: middle;">
+                                        <span style="background-color: ${headerBadgeBg}; color: ${headerBadgeColor}; border: 1px solid ${headerBadgeColor}; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; display: inline-block;">
+                                            ${headerBadge}
+                                        </span>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
                     </tr>
+
+                    <!-- CONTENT BODY -->
                     <tr>
-                        <td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Customer</td>
-                        <td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">${input.customerName}</td>
+                        <td style="padding: 32px 32px 24px 32px;">
+                            <h2 style="margin: 0 0 12px 0; color: #0f172a; font-size: 18px; font-weight: 700;">
+                                ${title}
+                            </h2>
+                            <p style="margin: 0 0 24px 0; color: #475569; font-size: 14px; line-height: 1.6;">
+                                ${introText}
+                            </p>
+
+                            <!-- CARD RINCIAN DOKUMEN -->
+                            <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 20px; margin-bottom: 24px;">
+                                <div style="font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 14px; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px;">
+                                    Ringkasan Informasi Dokumen
+                                </div>
+                                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="font-size: 13px;">
+                                    <tr>
+                                        <td style="padding: 7px 0; color: #64748b; width: 140px; font-weight: 500;">No. Quotation</td>
+                                        <td style="padding: 7px 0; font-weight: 700; color: #0f172a; font-family: 'Courier New', Courier, monospace; font-size: 14px;">
+                                            ${input.quotationNumber}
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td style="padding: 7px 0; color: #64748b; font-weight: 500;">Nama Customer</td>
+                                        <td style="padding: 7px 0; font-weight: 600; color: #1e293b;">
+                                            ${input.customerName}
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td style="padding: 7px 0; color: #64748b; font-weight: 500;">Status Alur</td>
+                                        <td style="padding: 7px 0;">
+                                            ${statusBadge}
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td style="padding: 7px 0; color: #64748b; font-weight: 500;">Margin Terendah</td>
+                                        <td style="padding: 7px 0;">
+                                            <span style="background-color: ${marginBg}; color: ${marginColor}; padding: 3px 8px; border-radius: 4px; font-weight: 700; font-size: 13px; font-family: 'Courier New', Courier, monospace;">
+                                                ${marginText}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                    ${input.comment ? `
+                                    <tr>
+                                        <td style="padding: 10px 0 4px 0; color: #64748b; font-weight: 500; vertical-align: top;">Catatan Approver</td>
+                                        <td style="padding: 10px 0 4px 0; color: #334155; font-style: italic;">
+                                            <div style="background-color: #ffffff; border-left: 3px solid #94a3b8; padding: 8px 12px; border-radius: 0 6px 6px 0; font-size: 13px;">
+                                                &quot;${input.comment}&quot;
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    ` : ""}
+                                </table>
+                            </div>
+
+                            <!-- TOMBOL ACTION CALL TO ACTION -->
+                            <div style="text-align: center; margin: 32px 0 24px 0;">
+                                <a href="${link}" target="_blank" style="display: inline-block; background-color: #2563eb; background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 700; padding: 13px 32px; border-radius: 8px; box-shadow: 0 3px 10px rgba(37, 99, 235, 0.25); letter-spacing: 0.3px;">
+                                    ${buttonText}
+                                </a>
+                            </div>
+
+                            <!-- CATATAN KEAMANAN / DIRECT LINK -->
+                            <div style="background-color: #f1f5f9; border-radius: 6px; padding: 12px 16px; margin-top: 24px; font-size: 11px; color: #64748b; text-align: center;">
+                                Jika tombol di atas tidak dapat diklik, silakan salin dan buka tautan berikut pada browser Anda:<br/>
+                                <a href="${link}" style="color: #2563eb; word-break: break-all; text-decoration: underline;">${link}</a>
+                            </div>
+                        </td>
                     </tr>
+
+                    <!-- FOOTER RESMI -->
                     <tr>
-                        <td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Margin Terendah</td>
-                        <td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #dc2626; font-weight: bold;">${input.minMargin}% (Di bawah batas margin standar)</td>
+                        <td style="background-color: #f8fafc; padding: 24px 32px; border-top: 1px solid #e2e8f0; text-align: center; font-size: 11px; color: #94a3b8; line-height: 1.6;">
+                            <div style="font-weight: 700; color: #475569; margin-bottom: 4px;">
+                                PT CHITRA PARATAMA
+                            </div>
+                            <div>
+                                Total Tire & Fleet Management Solution • One Chitra Enterprise Portal
+                            </div>
+                            <div style="margin-top: 6px; color: #cbd5e1;">
+                                Gedung TMT 1, Lantai 5, Jl. Cilandak KKO No. 1, Jakarta Selatan 12560
+                            </div>
+                            <div style="margin-top: 10px; font-size: 10px; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 8px;">
+                                Pesan ini dikirimkan secara otomatis oleh sistem One Chitra. Harap tidak membalas email ini secara langsung.
+                            </div>
+                        </td>
                     </tr>
-                    <tr>
-                        <td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Status / Tahap</td>
-                        <td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">${statusBadge}</td>
-                    </tr>
-                    ${input.comment ? `
-                    <tr>
-                        <td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Catatan Approver</td>
-                        <td style="padding: 8px; border-bottom: 1px solid #e2e8f0; font-style: italic;">"${input.comment}"</td>
-                    </tr>
-                    ` : ""}
                 </table>
-                <div style="margin-top: 24px; text-align: center;">
-                    <a href="${link}" style="display: inline-block; background-color: #2563eb; color: #ffffff; padding: 10px 20px; text-decoration: none; border-radius: 6px; font-weight: bold;">
-                        Buka Dokumen Quotation
-                    </a>
-                </div>
-                <p style="color: #94a3b8; font-size: 12px; margin-top: 32px; border-top: 1px solid #e2e8f0; padding-top: 12px;">
-                    Email ini dikirim secara otomatis oleh One Chitra Approval Engine.
-                </p>
-            </div>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
         `
 
-        // Kirim ke penerima asli dan selalu copy ke akun test wustho.c@gmail.com
-        const recipients = Array.from(new Set([input.toEmail, testRecipient].filter(Boolean)))
-
+        // Kirim langsung ke penerima email asli
         await sendEmail({
-            to: recipients,
-            subject: `[Quotation Approval] ${input.quotationNumber} - ${input.actionType.toUpperCase()}`,
+            to: input.toEmail,
+            subject,
             html,
             actionUrl: link,
         })
