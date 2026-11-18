@@ -533,6 +533,11 @@ export const navigationConfig: NavSection[] = [
                         url: "/dashboard/approvals/matrix",
                         resource: "approvals-matrix",
                     },
+                    {
+                        title: "Quotation Engine",
+                        url: "/dashboard/settings/approval-engine",
+                        resource: "approvals-engine",
+                    },
                 ],
             },
         ],

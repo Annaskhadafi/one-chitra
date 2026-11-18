@@ -1,4 +1,5 @@
 import { getApprovalInbox } from "@/app/actions/approval"
+import { getApprovalInboxQuotations } from "@/app/actions/approval-engine"
 import { Badge } from "@/components/ui/badge"
 import {
   Table,
@@ -9,11 +10,20 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { InboxTableRow } from "./inbox-table-row"
+import { QuotationInboxSection } from "./quotation-inbox-section"
 
 export async function InboxTab() {
-  const { pendingTasks } = await getApprovalInbox()
+  const [inbox, quoteInbox] = await Promise.all([
+    getApprovalInbox(),
+    getApprovalInboxQuotations(),
+  ])
 
-  if (pendingTasks.length === 0) {
+  const pendingTasks = inbox.pendingTasks
+  const quoteItems = quoteInbox.success && quoteInbox.pendingItems ? (quoteInbox.pendingItems as any) : []
+
+  const totalTasks = pendingTasks.length + quoteItems.length
+
+  if (totalTasks === 0) {
     return (
       <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
         <p className="text-sm font-medium text-muted-foreground">Tidak ada task pending</p>
@@ -25,49 +35,67 @@ export async function InboxTab() {
   }
 
   return (
-    <div className="rounded-lg border">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="w-[120px]">ID</TableHead>
-            <TableHead>Form</TableHead>
-            <TableHead>Step</TableHead>
-            <TableHead className="w-[140px]">Submitted</TableHead>
-            <TableHead className="w-[100px]">Status</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {pendingTasks.map((task) => (
-            <InboxTableRow
-              key={task.assignmentId}
-              href={`/dashboard/approvals/${task.requestId}`}
-            >
-              <TableCell className="font-mono text-xs">
-                {task.requestId.slice(0, 8)}
-              </TableCell>
-              <TableCell>
-                <div className="font-medium">{task.formKey}</div>
-                <div className="text-xs text-muted-foreground">{task.definitionName}</div>
-              </TableCell>
-              <TableCell className="text-sm">
-                {task.stepOrder}. {task.stepName}
-              </TableCell>
-              <TableCell className="text-sm text-muted-foreground">
-                {new Date(task.submittedAt).toLocaleDateString("id-ID", {
-                  day: "numeric",
-                  month: "short",
-                  year: "numeric",
-                })}
-              </TableCell>
-              <TableCell>
-                <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-200 text-xs">
-                  Pending
-                </Badge>
-              </TableCell>
-            </InboxTableRow>
-          ))}
-        </TableBody>
-      </Table>
+    <div className="space-y-6">
+      {/* 1. Quotation Approvals Section */}
+      {quoteItems.length > 0 && (
+        <QuotationInboxSection items={quoteItems} />
+      )}
+
+      {/* 2. Standard Workflow Tasks Section */}
+      {pendingTasks.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-foreground">
+              Workflow Tasks ({pendingTasks.length})
+            </h3>
+          </div>
+          <div className="rounded-lg border bg-card overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[120px]">ID</TableHead>
+                  <TableHead>Form</TableHead>
+                  <TableHead>Step</TableHead>
+                  <TableHead className="w-[140px]">Submitted</TableHead>
+                  <TableHead className="w-[100px]">Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {pendingTasks.map((task) => (
+                  <InboxTableRow
+                    key={task.assignmentId}
+                    href={`/dashboard/approvals/${task.requestId}`}
+                  >
+                    <TableCell className="font-mono text-xs">
+                      {task.requestId.slice(0, 8)}
+                    </TableCell>
+                    <TableCell>
+                      <div className="font-medium">{task.formKey}</div>
+                      <div className="text-xs text-muted-foreground">{task.definitionName}</div>
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {task.stepOrder}. {task.stepName}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {new Date(task.submittedAt).toLocaleDateString("id-ID", {
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric",
+                      })}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-200 text-xs">
+                        Pending
+                      </Badge>
+                    </TableCell>
+                  </InboxTableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
+

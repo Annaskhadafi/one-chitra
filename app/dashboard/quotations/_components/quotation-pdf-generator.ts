@@ -7,6 +7,7 @@ import { generateRosterFromQuotation } from "./quotation-roster-helper"
 interface QuotationPdfData {
     quotationNumber: string | null
     currentRevision?: number
+    status?: string
     quotationDate: Date
     validUntil: Date | null
     salesPerson: { name: string | null } | null
@@ -42,6 +43,7 @@ interface QuotationPdfData {
 type QuotationPdfPayloadSource = {
     quotationNumber: string | null
     currentRevision?: number
+    status?: string
     quotationDate: Date
     validUntil: Date | null
     salesPerson?: { name: string | null } | null
@@ -97,6 +99,7 @@ export function buildQuotationPdfPayload(source: QuotationPdfPayloadSource): Quo
     return {
         quotationNumber: source.quotationNumber,
         currentRevision: source.currentRevision,
+        status: source.status,
         quotationDate: source.quotationDate,
         validUntil: source.validUntil,
         salesPerson: source.salesPerson ? { name: source.salesPerson.name } : null,
@@ -249,12 +252,35 @@ export async function generateQuotationPdf(
         const shouldMergeAttachments = options?.mergeAttachments === true
         const base64data = await getLetterheadDataUrl()
 
-        // Add background to first page
+        // Helper to render Draft/Pending watermark if not fully approved
+        const renderWatermark = () => {
+            if (data.status && data.status !== "approved") {
+                const watermarkText = data.status === "rejected"
+                    ? "REJECTED"
+                    : (data.status === "waiting_approval" ? "WAITING APPROVAL" : "DRAFT")
+
+                doc.saveGraphicsState()
+                doc.setFont("helvetica", "bold")
+                doc.setFontSize(54)
+                doc.setTextColor(220, 38, 38)
+                try {
+                    const gState = new (doc as any).GState({ opacity: 0.12 })
+                    doc.setGState(gState)
+                } catch {
+                    doc.setTextColor(245, 200, 200)
+                }
+                doc.text(watermarkText, 105, 150, { align: "center", angle: 45 })
+                doc.restoreGraphicsState()
+            }
+        }
+
+        // Add background and watermark to first page
         if (base64data) {
             doc.addImage(base64data, 'JPEG', 0, 0, 210, 297)
         }
+        renderWatermark()
 
-        // Override addPage to automatically add background to new pages
+        // Override addPage to automatically add background and watermark to new pages
         const originalAddPage = doc.addPage.bind(doc)
         const mutableDoc = doc as typeof doc & { lastAutoTable?: { finalY: number } }
         doc.addPage = (...args: Parameters<typeof originalAddPage>) => {
@@ -262,6 +288,7 @@ export async function generateQuotationPdf(
             if (base64data) {
                 doc.addImage(base64data, 'JPEG', 0, 0, 210, 297)
             }
+            renderWatermark()
             return doc
         }
 

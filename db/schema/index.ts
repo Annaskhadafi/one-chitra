@@ -296,3 +296,7 @@ export {
     vendorInvoiceLogsRelations,
     vendorContractsRelations,
 } from "./vendor-invoices";
+
+// Quotation Approval Engine
+export * from "./approval-quotation-engine";
+

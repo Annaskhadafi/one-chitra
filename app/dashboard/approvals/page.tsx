@@ -1,6 +1,7 @@
 import { FileCheck2 } from "lucide-react"
 import { Suspense } from "react"
 import { getApprovalInbox } from "@/app/actions/approval"
+import { getApprovalInboxQuotations } from "@/app/actions/approval-engine"
 import { InboxTab } from "./_components/inbox-tab"
 import { ReportsTab } from "./_components/reports-tab"
 import { StatusTab } from "./_components/status-tab"
@@ -18,8 +19,13 @@ export default async function ApprovalPage({ searchParams }: ApprovalPageProps) 
   const { tab } = await searchParams
   const activeTab = tab ?? "inbox"
 
-  const inbox = await getApprovalInbox()
-  const pendingCount = inbox.pendingTasks.length
+  const [inbox, quoteInbox] = await Promise.all([
+    getApprovalInbox(),
+    getApprovalInboxQuotations(),
+  ])
+
+  const quotePendingCount = quoteInbox.success && quoteInbox.pendingItems ? quoteInbox.pendingItems.length : 0
+  const pendingCount = inbox.pendingTasks.length + quotePendingCount
 
   return (
     <div className="space-y-6 p-6">
@@ -49,3 +55,4 @@ export default async function ApprovalPage({ searchParams }: ApprovalPageProps) 
     </div>
   )
 }
+

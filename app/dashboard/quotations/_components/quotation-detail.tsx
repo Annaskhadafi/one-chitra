@@ -136,9 +136,13 @@ interface QuotationDetailData {
     }[]
 }
 
+import { QuotationApprovalTimeline } from "./quotation-approval-timeline"
+import type { getQuotationApprovalDetail } from "@/app/actions/approval-engine"
+
 interface QuotationDetailProps {
     quotation: QuotationDetailData
     autoOpenPdf?: boolean
+    approvalDetail?: Awaited<ReturnType<typeof getQuotationApprovalDetail>>
 }
 
 function isImageAttachment(attachment: QuotationDetailData["attachments"][number]) {
@@ -150,6 +154,7 @@ function isImageAttachment(attachment: QuotationDetailData["attachments"][number
 
 const statusConfig: Record<string, { variant: "default" | "secondary" | "destructive" | "outline"; icon: React.ElementType; label: string; color: string }> = {
     draft: { variant: "secondary", icon: FileText, label: "Draft", color: "text-gray-500" },
+    waiting_approval: { variant: "outline", icon: Clock, label: "Waiting Approval", color: "text-amber-500" },
     sent: { variant: "outline", icon: Send, label: "Sent", color: "text-blue-500" },
     approved: { variant: "default", icon: CheckCircle, label: "Approved", color: "text-green-500" },
     rejected: { variant: "destructive", icon: XCircle, label: "Rejected", color: "text-red-500" },
@@ -187,7 +192,7 @@ function formatDateTime(date: Date) {
     })
 }
 
-export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDetailProps) {
+export function QuotationDetail({ quotation, autoOpenPdf = false, approvalDetail }: QuotationDetailProps) {
     const router = useRouter()
     const [isConverting, setIsConverting] = useState(false)
     const [isDownloadingPdf, setIsDownloadingPdf] = useState(false)
@@ -234,6 +239,7 @@ export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDet
     )
     const canConvert = !poRequiresOcrReview && (quotation.status === "approved" || Boolean(quotation.customerPoNumber))
     const canEdit = ["draft", "sent"].includes(quotation.status)
+    const canRevise = quotation.status === "rejected"
 
     // Calculations
     const itemsSubtotal = quotation.items.reduce((sum, item) => {
@@ -382,6 +388,14 @@ export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDet
                             </Button>
                         </Link>
                     )}
+                    {canRevise && (
+                        <Link href={`/dashboard/quotations/${quotation.id}/edit`}>
+                            <Button variant="outline" className="gap-2 border-red-300 text-red-600 hover:bg-red-50 dark:border-red-900 dark:hover:bg-red-950/40">
+                                <Pencil className="h-4 w-4" />
+                                Revisi Quotation
+                            </Button>
+                        </Link>
+                    )}
                     <Button variant="outline" className="gap-2" onClick={() => setPdfOpen(true)}>
                         <FileText className="h-4 w-4" />
                         Preview
@@ -426,6 +440,21 @@ export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDet
                     )}
                 </div>
             </div>
+
+            {/* Approval Chain Stepper & Action Banner */}
+            {approvalDetail?.evaluation && (
+                <QuotationApprovalTimeline
+                    quotationId={quotation.id}
+                    quotationStatus={quotation.status}
+                    rejectionReason={quotation.rejectionReason}
+                    progressSteps={(approvalDetail.progressSteps || []) as any}
+                    activeStep={(approvalDetail.activeStep || null) as any}
+                    evaluation={approvalDetail.evaluation}
+                    canActOnCurrentStep={Boolean(approvalDetail.canActOnCurrentStep)}
+                    currentUserId={approvalDetail.currentUserId || null}
+                    salesPersonName={quotation.salesPerson?.name}
+                />
+            )}
 
             {/* Top Info Cards */}
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5 lg:grid-cols-3 lg:gap-6">

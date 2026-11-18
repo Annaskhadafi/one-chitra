@@ -412,6 +412,33 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                                         style={{ objectFit: "cover", zIndex: 0 }}
                                     />
 
+                                    {/* Watermark if not approved */}
+                                    {data.status !== "approved" && (
+                                        <div
+                                            style={{
+                                                position: "absolute",
+                                                top: "50%",
+                                                left: "50%",
+                                                transform: "translate(-50%, -50%) rotate(-35deg)",
+                                                fontSize: "65pt",
+                                                fontWeight: 900,
+                                                color: "rgba(220, 38, 38, 0.12)",
+                                                border: "6px dashed rgba(220, 38, 38, 0.18)",
+                                                borderRadius: "20px",
+                                                padding: "16px 54px",
+                                                pointerEvents: "none",
+                                                zIndex: 30,
+                                                letterSpacing: "8px",
+                                                textTransform: "uppercase",
+                                                userSelect: "none",
+                                                whiteSpace: "nowrap",
+                                                textAlign: "center",
+                                            }}
+                                        >
+                                            {data.status === "rejected" ? "REJECTED" : (data.status === "waiting_approval" ? "WAITING APPROVAL" : "DRAFT")}
+                                        </div>
+                                    )}
+
                                     <div className="page-content relative z-10 px-[15mm] pb-[25mm] pt-[14mm] flex flex-col h-full">
                                         {/* HEADER - Only on Page 1 */}
                                         {isFirstPage && (

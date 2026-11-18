@@ -21,6 +21,7 @@ import {
 import { CSS } from "@dnd-kit/utilities"
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers"
 import { createQuotation, getQuotation, updateQuotation } from "@/app/actions/quotation"
+import { submitQuotationForApproval } from "@/app/actions/approval-engine"
 import { getBundleItemsForExpansion } from "@/app/actions/product-bundle"
 import { getSetting } from "@/app/actions/settings"
 import { uploadFileToObjectStorage } from "@/lib/client-upload"
@@ -542,6 +543,26 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
     const [productOpen, setProductOpen] = useState(false)
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [blockedDialog, setBlockedDialog] = useState<ActionBlockedDetails | null>(null)
+
+    const isLockedByApproval = initialData?.status === "waiting_approval"
+
+    const liveMarginSummary = useMemo(() => {
+        let minMargin = 9999
+        let hasItem = false
+        items.forEach(it => {
+            const cost = resolveItemCostIdr(it, exchangeRate)
+            if (cost > 0) {
+                hasItem = true
+                const effectivePrice = Math.max(0, it.unitPrice - (it.discount || 0))
+                const m = ((effectivePrice - cost) / cost) * 100
+                if (m < minMargin) minMargin = m
+            }
+        })
+        return {
+            minMargin: hasItem ? Number(minMargin.toFixed(2)) : 11,
+            requiresApproval: hasItem && minMargin < 11,
+        }
+    }, [items, exchangeRate])
     const [itemSortConfig, setItemSortConfig] = useState<{ key: ItemSortKey; direction: SortDirection }>({
         key: "index",
         direction: "asc",
@@ -1360,6 +1381,10 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
     }, [])
 
     const handleSubmit = async () => {
+        if (isLockedByApproval) {
+            toast.error("Quotation sedang dalam proses approval dan tidak dapat diubah.")
+            return
+        }
         if (!canSubmit) {
             setBlockedDialog(buildPermissionBlockedDetails(
                 isEdit ? "Edit Quotation" : "Create Quotation",
@@ -1430,6 +1455,12 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
             if (result.success) {
                 toast.success(`Quotation ${isEdit ? "updated" : "created"} successfully`)
                 const savedId = isEdit ? initialData!.id : ("id" in result && typeof result.id === "number" ? result.id : null)
+
+                if (savedId && liveMarginSummary.requiresApproval) {
+                    await submitQuotationForApproval(savedId)
+                    toast.info("Quotation otomatis diajukan ke Approval Engine karena margin di bawah 11%.")
+                }
+
                 navigateToQuotationList(savedId)
             } else {
                 setBlockedDialog(buildActionErrorDetails(
@@ -1523,6 +1554,12 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
             if (result.success) {
                 toast.success(`Quotation ${isEdit ? "updated" : "created"} successfully`)
                 const qId = isEdit ? initialData!.id : (result as { id: number }).id
+
+                if (qId && liveMarginSummary.requiresApproval) {
+                    await submitQuotationForApproval(qId)
+                    toast.info("Quotation otomatis diajukan ke Approval Engine karena margin di bawah 11%.")
+                }
+
                 await downloadSavedQuotationPdf(qId)
                 navigateToQuotationList(qId)
             } else {
@@ -1572,16 +1609,65 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                     </div>
                 </div>
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full md:w-auto">
-                    <Button onClick={handleSubmit} disabled={isSubmitting} className="gap-2">
+                    <Button onClick={handleSubmit} disabled={isSubmitting || isLockedByApproval} className="gap-2">
                         <Save className="h-4 w-4" />
                         {isSubmitting ? "Saving..." : "Save"}
                     </Button>
-                    <Button onClick={handleSaveAndDownloadPdf} disabled={isSubmitting} variant="outline" className="gap-2">
+                    <Button onClick={handleSaveAndDownloadPdf} disabled={isSubmitting || isLockedByApproval} variant="outline" className="gap-2">
                         <FileDown className="h-4 w-4" />
                         Save & Download PDF
                     </Button>
                 </div>
             </div>
+
+            {/* Approval Locked Banner */}
+            {isLockedByApproval && (
+                <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 dark:border-amber-900/60 dark:bg-amber-950/30 flex items-start gap-3">
+                    <Clock className="h-5 w-5 text-amber-600 mt-0.5 shrink-0 animate-pulse" />
+                    <div>
+                        <h4 className="font-semibold text-amber-900 dark:text-amber-200 text-sm">
+                            Quotation Sedang Menunggu Persetujuan (Approval In Progress)
+                        </h4>
+                        <p className="text-xs text-amber-800 dark:text-amber-300 mt-1">
+                            Dokumen ini telah diajukan ke Approval Engine karena memiliki margin di bawah standar 11%. Seluruh perubahan harga atau data dikunci sampai approver mengambil keputusan.
+                        </p>
+                    </div>
+                </div>
+            )}
+
+            {/* Live Margin Policy Indicator Banner */}
+            {!isLockedByApproval && items.length > 0 && (
+                <div className={`rounded-xl border p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs transition-all ${
+                    liveMarginSummary.requiresApproval
+                        ? "border-amber-300 bg-amber-50/60 text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200"
+                        : "border-emerald-300 bg-emerald-50/40 text-emerald-900 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-200"
+                }`}>
+                    <div className="flex items-center gap-2.5">
+                        {liveMarginSummary.requiresApproval ? (
+                            <div className="rounded-full bg-amber-200/80 p-1.5 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
+                                <AlertTriangle className="h-4 w-4" />
+                            </div>
+                        ) : (
+                            <div className="rounded-full bg-emerald-200/80 p-1.5 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200">
+                                <CheckCircle className="h-4 w-4" />
+                            </div>
+                        )}
+                        <div>
+                            <div className="font-semibold flex items-center gap-2">
+                                <span>Evaluasi Margin Real-time:</span>
+                                <Badge variant={liveMarginSummary.requiresApproval ? "destructive" : "outline"} className={!liveMarginSummary.requiresApproval ? "bg-emerald-100 text-emerald-800 border-emerald-300 font-mono text-[10px]" : "font-mono text-[10px]"}>
+                                    Margin Minimal: {liveMarginSummary.minMargin}%
+                                </Badge>
+                            </div>
+                            <p className="text-[11px] text-muted-foreground mt-0.5">
+                                {liveMarginSummary.requiresApproval
+                                    ? "Margin di bawah standar 11.00%. Quotation ini akan otomatis masuk ke antrean Approval saat Anda menyimpan."
+                                    : "Margin memenuhi standar default (>= 11.00%). Approval berjenjang tidak diperlukan."}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Validation Alert */}
             {(!customerId || items.length === 0) && (
@@ -2469,11 +2555,11 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
 
             {/* Bottom Save Buttons */}
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pb-6 px-4">
-                <Button onClick={handleSubmit} disabled={isSubmitting} size="lg" className="w-full max-w-xs gap-2">
+                <Button onClick={handleSubmit} disabled={isSubmitting || isLockedByApproval} size="lg" className="w-full max-w-xs gap-2">
                     <Save className="h-4 w-4" />
                     {isSubmitting ? "Saving..." : "Save"}
                 </Button>
-                <Button onClick={handleSaveAndDownloadPdf} disabled={isSubmitting} variant="outline" size="lg" className="w-full max-w-xs gap-2">
+                <Button onClick={handleSaveAndDownloadPdf} disabled={isSubmitting || isLockedByApproval} variant="outline" size="lg" className="w-full max-w-xs gap-2">
                     <FileDown className="h-4 w-4" />
                     Save & Download PDF
                 </Button>
