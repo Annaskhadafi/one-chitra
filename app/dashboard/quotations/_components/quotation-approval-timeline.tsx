@@ -17,6 +17,7 @@ import {
     Send,
     UserCheck,
     FastForward,
+    TrendingDown,
 } from "lucide-react"
 import {
     submitQuotationForApproval,
@@ -173,7 +174,26 @@ export function QuotationApprovalTimeline({
                                 )}
                             </div>
                             <CardDescription className="text-xs mt-0.5">
-                                Margin Terendah: <strong className="text-red-600 dark:text-red-400 font-mono">{evaluation.minItemMargin}%</strong> (Di bawah batas standard 11%) — Memerlukan persetujuan hingga: <strong>{evaluation.worstCasePosition}</strong>
+                                Margin Terendah:{" "}
+                                <strong className={`font-mono ${evaluation.minItemMargin < (evaluation.standardMargin || 11) ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+                                    {evaluation.minItemMargin >= 9999 ? "≥ 11.00%" : `${evaluation.minItemMargin}%`}
+                                </strong>
+                                {typeof evaluation.averageMargin === "number" && (
+                                    <span className="text-muted-foreground ml-1.5">
+                                        (Rata-rata: <strong className="font-mono text-foreground">{evaluation.averageMargin}%</strong>)
+                                    </span>
+                                )}
+                                {" "}
+                                {evaluation.requiresApproval ? (
+                                    <span>
+                                        (Di bawah batas standard {evaluation.standardMargin || 11}%) — Memerlukan persetujuan hingga:{" "}
+                                        <strong className="text-foreground">{evaluation.worstCasePosition}</strong>
+                                    </span>
+                                ) : (
+                                    <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                                        (Memenuhi batas standard {evaluation.standardMargin || 11}% — Disetujui Otomatis)
+                                    </span>
+                                )}
                             </CardDescription>
                         </div>
                     </div>
@@ -290,6 +310,40 @@ export function QuotationApprovalTimeline({
                         })}
                     </div>
                 </div>
+
+                {/* Rincian Evaluasi Margin Tiap Produk */}
+                {evaluation.itemResults && evaluation.itemResults.length > 0 && (
+                    <div className="rounded-xl border bg-muted/20 p-3.5 space-y-2.5">
+                        <div className="flex items-center justify-between">
+                            <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                                <TrendingDown className="h-3.5 w-3.5 text-amber-600" />
+                                Rincian Margin Tiap Item ({evaluation.itemResults.length} Item)
+                            </span>
+                            <span className="text-[11px] text-muted-foreground font-mono">
+                                Baseline: {evaluation.standardMargin || 11}%
+                            </span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                            {evaluation.itemResults.map((r, idx) => {
+                                const isBelow = r.marginPercent < (evaluation.standardMargin || 11)
+                                return (
+                                    <div key={idx} className="rounded-lg border bg-card p-2.5 text-xs flex flex-col justify-between gap-1.5 shadow-sm">
+                                        <div className="flex items-start justify-between gap-2">
+                                            <span className="font-medium truncate text-foreground text-xs" title={r.productName}>{r.productName}</span>
+                                            <span className={`font-mono font-bold px-1.5 py-0.5 rounded text-[11px] shrink-0 ${isBelow ? "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300" : "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"}`}>
+                                                {r.marginPercent > 0 ? `+${r.marginPercent}%` : `${r.marginPercent}%`}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center justify-between text-[10px] text-muted-foreground border-t pt-1.5">
+                                            <span>Kategori: <strong className="uppercase">{r.productCategory === "prime_tyre" ? "Prime Tyre" : "PAS"}</strong></span>
+                                            <span>Limit: <strong className="text-foreground">{r.positionName}</strong></span>
+                                        </div>
+                                    </div>
+                                )
+                            })}
+                        </div>
+                    </div>
+                )}
 
                 {/* INLINE ACTION PANEL FOR THE ACTIVE APPROVER */}
                 {isWaiting && canActOnCurrentStep && activeStep && (

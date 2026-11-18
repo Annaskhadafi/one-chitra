@@ -672,6 +672,7 @@ export function QuotationDetail({ quotation, autoOpenPdf = false, approvalDetail
                 <CardContent className="px-0 pb-0">
                     <div className="space-y-3 px-4 pb-4 sm:hidden">
                         {sortedQuotationItems.map(({ item, index, subtotal: lineSubtotal }) => {
+                            const itemMargin = approvalDetail?.evaluation?.itemResults?.[index]
                             return (
                                 <div key={item.id} className="rounded-xl border p-4">
                                     <div className="flex items-start justify-between gap-3">
@@ -709,8 +710,21 @@ export function QuotationDetail({ quotation, autoOpenPdf = false, approvalDetail
                                             </p>
                                         </div>
                                         <div>
-                                            <p className="text-[11px] text-muted-foreground">Tax</p>
-                                            <p className="mt-1 font-semibold">{Number(item.tax) > 0 ? formatCurrency(Number(item.tax)) : "-"}</p>
+                                            <p className="text-[11px] text-muted-foreground">Margin (%)</p>
+                                            {itemMargin ? (
+                                                <span className={cn(
+                                                    "mt-1 inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-semibold font-mono",
+                                                    itemMargin.marginPercent >= 11
+                                                        ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                                                        : itemMargin.marginPercent >= 1
+                                                            ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                                                            : "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300"
+                                                )}>
+                                                    {itemMargin.marginPercent > 0 ? `+${itemMargin.marginPercent}%` : `${itemMargin.marginPercent}%`}
+                                                </span>
+                                            ) : (
+                                                <p className="mt-1 font-semibold text-muted-foreground">-</p>
+                                            )}
                                         </div>
                                     </div>
 
@@ -735,10 +749,12 @@ export function QuotationDetail({ quotation, autoOpenPdf = false, approvalDetail
                                     <TableHead className="text-right">{renderSortHeader("Discount", "discount", "ml-auto")}</TableHead>
                                     <TableHead className="text-right">{renderSortHeader("Tax", "tax", "ml-auto")}</TableHead>
                                     <TableHead className="text-right">{renderSortHeader("SubTotal", "subtotal", "ml-auto")}</TableHead>
+                                    <TableHead className="text-right">Margin (%)</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {sortedQuotationItems.map(({ item, index, subtotal: lineSubtotal }) => {
+                                    const itemMargin = approvalDetail?.evaluation?.itemResults?.[index]
                                     return (
                                         <TableRow key={item.id}>
                                             <TableCell className="font-mono text-muted-foreground">{index + 1}</TableCell>
@@ -764,6 +780,29 @@ export function QuotationDetail({ quotation, autoOpenPdf = false, approvalDetail
                                             </TableCell>
                                             <TableCell className="text-right">{Number(item.tax) > 0 ? formatCurrency(Number(item.tax)) : "-"}</TableCell>
                                             <TableCell className="text-right font-medium">{formatCurrency(lineSubtotal)}</TableCell>
+                                            <TableCell className="text-right">
+                                                {itemMargin ? (
+                                                    <div className="flex flex-col items-end gap-0.5">
+                                                        <span className={cn(
+                                                            "inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-semibold font-mono",
+                                                            itemMargin.marginPercent >= 11
+                                                                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                                                                : itemMargin.marginPercent >= 1
+                                                                    ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                                                                    : "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300"
+                                                        )}>
+                                                            {itemMargin.marginPercent > 0 ? `+${itemMargin.marginPercent}%` : `${itemMargin.marginPercent}%`}
+                                                        </span>
+                                                        {itemMargin.costIdr > 0 && (
+                                                            <span className="text-[10px] text-muted-foreground font-mono">
+                                                                HPP: {formatCurrency(itemMargin.costIdr)}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-muted-foreground text-xs">-</span>
+                                                )}
+                                            </TableCell>
                                         </TableRow>
                                     )
                                 })}
@@ -832,6 +871,54 @@ export function QuotationDetail({ quotation, autoOpenPdf = false, approvalDetail
                             <span>Grand Total</span>
                             <span className="text-primary">{formatCurrency(grandTotal)}</span>
                         </div>
+
+                        {approvalDetail?.evaluation && (
+                            <>
+                                <Separator className="my-2" />
+                                <div className="rounded-lg bg-muted/40 p-2.5 space-y-2 text-xs">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-muted-foreground font-medium">Estimasi HPP (Modal)</span>
+                                        <span className="font-mono text-foreground font-semibold">
+                                            {formatCurrency(approvalDetail.evaluation.totalCostIdr || 0)}
+                                        </span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-muted-foreground font-medium">Margin Rata-rata</span>
+                                        <span className={cn(
+                                            "inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-semibold font-mono",
+                                            (approvalDetail.evaluation.averageMargin ?? 11) >= 11
+                                                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                                                : (approvalDetail.evaluation.averageMargin ?? 0) >= 1
+                                                    ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                                                    : "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300"
+                                        )}>
+                                            {(approvalDetail.evaluation.averageMargin ?? 0) > 0 ? `+${approvalDetail.evaluation.averageMargin}%` : `${approvalDetail.evaluation.averageMargin ?? 0}%`}
+                                        </span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-muted-foreground font-medium">Margin Terendah (Batas Limit)</span>
+                                        <span className={cn(
+                                            "inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-semibold font-mono",
+                                            (approvalDetail.evaluation.minItemMargin ?? 11) >= 11
+                                                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                                                : (approvalDetail.evaluation.minItemMargin ?? 0) >= 1
+                                                    ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                                                    : "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300"
+                                        )}>
+                                            {approvalDetail.evaluation.minItemMargin >= 9999 ? "≥ 11.00%" : `${approvalDetail.evaluation.minItemMargin}%`}
+                                        </span>
+                                    </div>
+                                    <div className="flex justify-between items-center border-t border-muted/80 pt-1.5 text-[11px]">
+                                        <span className="text-muted-foreground">Kebutuhan Approval</span>
+                                        <span className="font-semibold text-foreground">
+                                            {approvalDetail.evaluation.requiresApproval
+                                                ? `Limit: ${approvalDetail.evaluation.worstCasePosition}`
+                                                : "Memenuhi Standar Baseline (≥ 11%)"}
+                                        </span>
+                                    </div>
+                                </div>
+                            </>
+                        )}
                     </CardContent>
                 </Card>
             </div>

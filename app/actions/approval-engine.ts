@@ -324,6 +324,9 @@ export interface ItemMarginEvaluationResult {
 export interface QuotationMarginEvaluationSummary {
     standardMargin: number // 11
     minItemMargin: number
+    averageMargin: number
+    totalCostIdr: number
+    totalRevenueIdr: number
     maxDiscountGap: number
     requiresApproval: boolean
     worstCaseLevel: number // 0 = Standard (>= 11%), 1..5
@@ -515,9 +518,29 @@ export async function evaluateQuotationMargin(
         }
     }
 
+    // Hitung total revenue, cost, dan rata-rata margin keseluruhan
+    const totalRevenue = items.reduce((sum, it) => sum + (Number(it.unitPrice) || 0) * (Number(it.quantity) || 1), 0)
+    const totalCost = items.reduce((sum, it) => {
+        const cost = (it.costSap && Number(it.costSap) > 0)
+            ? Number(it.costSap) * activeExchangeRate
+            : (Number(it.costIdr) || 0)
+        return sum + cost * (Number(it.quantity) || 1)
+    }, 0)
+    const averageMargin = totalCost > 0
+        ? Number((((totalRevenue - totalCost) / totalCost) * 100).toFixed(2))
+        : (totalRevenue > 0 ? 100 : 0)
+
+    // Jaga agar minItemMargin tidak 9999 di UI jika tidak ada item
+    const safeMinMargin = (items.length === 0 || minItemMargin >= 9999)
+        ? (items.length === 0 ? STANDARD_MARGIN : (itemResults.length > 0 ? Math.min(...itemResults.map(r => r.marginPercent)) : STANDARD_MARGIN))
+        : Number(minItemMargin.toFixed(2))
+
     return {
         standardMargin: STANDARD_MARGIN,
-        minItemMargin: Number(minItemMargin.toFixed(2)),
+        minItemMargin: safeMinMargin,
+        averageMargin,
+        totalCostIdr: Math.round(totalCost),
+        totalRevenueIdr: Math.round(totalRevenue),
         maxDiscountGap: Number(maxDiscountGap.toFixed(2)),
         requiresApproval: requiresOverallApproval,
         worstCaseLevel,
@@ -562,6 +585,7 @@ export async function submitQuotationForApproval(quotationId: number) {
             unitPrice: Number(it.unitPrice),
             quantity: it.quantity,
             costSap: it.product?.costSap ? Number(it.product.costSap) : null,
+            costIdr: it.costIdr ? Number(it.costIdr) : null,
         }))
 
         const evaluation = await evaluateQuotationMargin(evaluationItems, quotation.salesPersonId || quotation.createdBy)
@@ -708,6 +732,7 @@ export async function getQuotationApprovalDetail(quotationId: number) {
             unitPrice: Number(it.unitPrice),
             quantity: it.quantity,
             costSap: it.product?.costSap ? Number(it.product.costSap) : null,
+            costIdr: it.costIdr ? Number(it.costIdr) : null,
         }))
 
         const evaluation = await evaluateQuotationMargin(evaluationItems, quotation.salesPersonId || quotation.createdBy)
