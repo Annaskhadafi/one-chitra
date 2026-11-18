@@ -305,7 +305,7 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
         }
 
         setIsDownloadingPdf(true)
-        toast.info("Sedang menyiapkan PDF A4...")
+        const toastId = toast.loading("Sedang memproses dan mengunduh PDF A4...")
 
         try {
             const { generateQuotationPdf } = await import("./quotation-pdf-generator")
@@ -314,9 +314,10 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                 includeRoster,
                 rosterOverrides,
             })
+            toast.success("PDF A4 berhasil diunduh!", { id: toastId })
         } catch (error) {
             console.error("Failed to download quotation preview PDF:", error)
-            toast.error(error instanceof Error ? error.message : "Download PDF A4 gagal")
+            toast.error(error instanceof Error ? error.message : "Download PDF A4 gagal", { id: toastId })
         } finally {
             setIsDownloadingPdf(false)
         }
@@ -351,16 +352,10 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                                 <Printer className="h-3.5 w-3.5" />
                                 Browser Print
                             </Button>
-                            {visibleAttachments.length === 0 ? (
-                                <Button size="sm" onClick={handleDownloadPdf} disabled={isDownloadingPdf} className="w-full gap-2 sm:w-auto" variant="outline">
-                                    {isDownloadingPdf ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}
-                                    {isDownloadingPdf ? "Preparing PDF..." : "Download PDF A4"}
-                                </Button>
-                            ) : (
-                                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
-                                    Ada attachment, gunakan Browser Print.
-                                </div>
-                            )}
+                            <Button size="sm" onClick={handleDownloadPdf} disabled={isDownloadingPdf} className="w-full gap-2 sm:w-auto" variant="outline">
+                                {isDownloadingPdf ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}
+                                {isDownloadingPdf ? "Preparing PDF..." : "Download PDF A4"}
+                            </Button>
                             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onClose}>
                                 <X className="h-4 w-4" />
                             </Button>

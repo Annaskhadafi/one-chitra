@@ -1421,7 +1421,7 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                 adminNote: adminNote || undefined,
                 clientNote: clientNote || undefined,
                 discountType: discountType,
-                status: status as "draft" | "sent" | "approved" | "rejected" | "expired" | "converted",
+                status: (liveMarginSummary.requiresApproval ? "waiting_approval" : status) as "draft" | "sent" | "approved" | "rejected" | "expired" | "converted",
                 paymentTerms: paymentTerms || undefined,
                 termsConditions: termsConditions || undefined,
                 notes: notes || undefined,
@@ -1517,7 +1517,7 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                 adminNote: adminNote || undefined,
                 clientNote: clientNote || undefined,
                 discountType: discountType,
-                status: status as "draft" | "sent" | "approved" | "rejected" | "expired" | "converted",
+                status: (liveMarginSummary.requiresApproval ? "waiting_approval" : status) as "draft" | "sent" | "approved" | "rejected" | "expired" | "converted",
                 paymentTerms: paymentTerms || undefined,
                 termsConditions: termsConditions || undefined,
                 notes: notes || undefined,
@@ -1886,18 +1886,35 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                                 </Select>
                             </div>
                             <div className="space-y-2">
-                                <Label className="font-semibold">Status</Label>
-                                <Select value={status} onValueChange={setStatus}>
-                                    <SelectTrigger>
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="draft">Draft</SelectItem>
-                                        <SelectItem value="sent">Sent</SelectItem>
-                                        <SelectItem value="approved">Approved</SelectItem>
-                                        <SelectItem value="rejected">Rejected</SelectItem>
-                                    </SelectContent>
-                                </Select>
+                                <div className="flex items-center justify-between">
+                                    <Label className="font-semibold">Status</Label>
+                                    {liveMarginSummary.requiresApproval && (
+                                        <Badge variant="outline" className="border-amber-400 bg-amber-50 text-[10px] text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+                                            Memerlukan Approval
+                                        </Badge>
+                                    )}
+                                </div>
+                                {liveMarginSummary.requiresApproval ? (
+                                    <div className="flex h-10 w-full items-center justify-between rounded-md border border-amber-300 bg-amber-50/50 px-3 py-2 text-xs font-semibold text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+                                        <span className="flex items-center gap-1.5">
+                                            <Clock className="h-3.5 w-3.5 text-amber-600 animate-pulse" />
+                                            Waiting Approval
+                                        </span>
+                                        <span className="text-[10px] font-normal text-muted-foreground">Otomatis diajukan</span>
+                                    </div>
+                                ) : (
+                                    <Select value={status} onValueChange={setStatus}>
+                                        <SelectTrigger>
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="draft">Draft</SelectItem>
+                                            <SelectItem value="sent">Sent</SelectItem>
+                                            <SelectItem value="approved">Approved</SelectItem>
+                                            <SelectItem value="rejected">Rejected</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                )}
                             </div>
                         </div>
 

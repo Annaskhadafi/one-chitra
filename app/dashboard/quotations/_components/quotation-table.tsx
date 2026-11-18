@@ -256,6 +256,7 @@ const statusVariants: Record<string, "default" | "secondary" | "destructive" | "
     rejected: "destructive",
     expired: "secondary",
     converted: "success",
+    waiting_approval: "warning",
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -265,6 +266,7 @@ const STATUS_COLORS: Record<string, string> = {
     rejected: "hsl(346, 77%, 49%)",
     expired: "hsl(220, 9%, 46%)",
     converted: "hsl(270, 76%, 53%)",
+    waiting_approval: "hsl(38, 92%, 50%)",
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -274,6 +276,7 @@ const STATUS_LABELS: Record<string, string> = {
     rejected: "Rejected",
     expired: "Expired",
     converted: "Converted",
+    waiting_approval: "Waiting Approval",
 }
 
 const DELIVERY_STATUS_LABELS: Record<string, string> = {
@@ -1765,8 +1768,9 @@ function QuotationTableInner({ data: initialData, currentUserId: serverUserId, a
                         }}
                     >
                         <SelectTrigger className={cn(
-                            "h-8 w-[120px] text-xs font-medium border-none shadow-none focus:ring-0 transition-colors capitalize",
+                            "h-8 w-[130px] text-xs font-medium border-none shadow-none focus:ring-0 transition-colors capitalize",
                             status === "approved" && "bg-emerald-500 text-white dark:bg-emerald-600",
+                            status === "waiting_approval" && "bg-amber-500 text-white dark:bg-amber-600",
                             status === "sent" && "bg-amber-500 text-white dark:bg-amber-600",
                             status === "rejected" && "bg-destructive text-white",
                             status === "draft" && "bg-blue-500 text-white dark:bg-blue-600",
@@ -1777,6 +1781,7 @@ function QuotationTableInner({ data: initialData, currentUserId: serverUserId, a
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="draft">Draft</SelectItem>
+                            <SelectItem value="waiting_approval">Waiting Approval</SelectItem>
                             <SelectItem value="sent">Sent</SelectItem>
                             <SelectItem value="approved">Approved</SelectItem>
                             <SelectItem value="rejected">Rejected</SelectItem>
@@ -2451,6 +2456,7 @@ function QuotationTableInner({ data: initialData, currentUserId: serverUserId, a
                             minWidthClassName="min-w-[150px]"
                             options={[
                                 { value: "draft", label: "Draft" },
+                                { value: "waiting_approval", label: "Waiting Approval" },
                                 { value: "sent", label: "Sent" },
                                 { value: "approved", label: "Approved" },
                                 { value: "rejected", label: "Rejected" },
@@ -3127,6 +3133,7 @@ function QuotationTableInner({ data: initialData, currentUserId: serverUserId, a
                         records={filteredQuotations}
                         statuses={[
                             { key: "draft", label: "Draft", variant: "secondary" },
+                            { key: "waiting_approval", label: "Waiting Approval", variant: "warning" },
                             { key: "sent", label: "Sent", variant: "warning" },
                             { key: "approved", label: "Approved", variant: "success" },
                             { key: "converted", label: "Converted", variant: "outline" },

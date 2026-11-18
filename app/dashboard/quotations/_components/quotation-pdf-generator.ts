@@ -254,10 +254,10 @@ export async function generateQuotationPdf(
 
         // Helper to render Draft/Pending watermark if not fully approved
         const renderWatermark = () => {
-            if (data.status && data.status !== "approved") {
-                const watermarkText = data.status === "rejected"
+            if (quotation.status && quotation.status !== "approved") {
+                const watermarkText = quotation.status === "rejected"
                     ? "REJECTED"
-                    : (data.status === "waiting_approval" ? "WAITING APPROVAL" : "DRAFT")
+                    : (quotation.status === "waiting_approval" ? "WAITING APPROVAL" : "DRAFT")
 
                 doc.saveGraphicsState()
                 doc.setFont("helvetica", "bold")

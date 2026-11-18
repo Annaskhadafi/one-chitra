@@ -343,9 +343,23 @@ export interface QuotationMarginEvaluationSummary {
 export async function evaluateQuotationMargin(
     items: QuotationItemEvaluationInput[],
     salesPersonId?: string | null,
-    exchangeRate: number = 1
+    exchangeRate?: number | null
 ): Promise<QuotationMarginEvaluationSummary> {
-    const STANDARD_MARGIN = 11.0
+    const standardBaseline = await getStandardMarginBaseline()
+    const STANDARD_MARGIN = typeof standardBaseline === "number" && !isNaN(standardBaseline) ? standardBaseline : 11.0
+
+    // Resolve exchange rate dari setting jika tidak disediakan atau <= 1
+    let activeExchangeRate = typeof exchangeRate === "number" && exchangeRate > 1 ? exchangeRate : 1
+    if (activeExchangeRate <= 1) {
+        try {
+            const rateSetting = await getSetting("manual_usd_rate")
+            if (rateSetting && Number(rateSetting) > 1) {
+                activeExchangeRate = Number(rateSetting)
+            }
+        } catch {
+            activeExchangeRate = 16000 // Fallback realistis USD-IDR
+        }
+    }
 
     // 1. Ambil seluruh tier rules
     const tiers = await db.query.quotationApprovalTiers.findMany({
@@ -363,7 +377,7 @@ export async function evaluateQuotationMargin(
     for (let i = 0; i < items.length; i++) {
         const item = items[i]
         const costIdr = (item.costSap && Number(item.costSap) > 0)
-            ? Number(item.costSap) * exchangeRate
+            ? Number(item.costSap) * activeExchangeRate
             : (Number(item.costIdr) || 0)
 
         const unitPrice = Number(item.unitPrice) || 0
@@ -540,11 +554,7 @@ export async function submitQuotationForApproval(quotationId: number) {
             return { success: false as const, error: "Quotation not found" }
         }
 
-        if (quotation.status === "approved") {
-            return { success: false as const, error: "Quotation is already approved" }
-        }
-
-        // Evaluasi margin
+        // Evaluasi margin dengan kurs aktual
         const evaluationItems: QuotationItemEvaluationInput[] = quotation.items.map(it => ({
             productId: it.productId,
             category: it.product?.category,
@@ -555,6 +565,11 @@ export async function submitQuotationForApproval(quotationId: number) {
         }))
 
         const evaluation = await evaluateQuotationMargin(evaluationItems, quotation.salesPersonId || quotation.createdBy)
+
+        // Jika quotation sudah approved dan evaluasi margin memang aman (>= 11%), tidak perlu submit ulang
+        if (quotation.status === "approved" && !evaluation.requiresApproval) {
+            return { success: false as const, error: "Quotation is already approved and meets margin baseline" }
+        }
 
         // Jika tidak butuh approval, langsung auto-approve!
         if (!evaluation.requiresApproval) {
