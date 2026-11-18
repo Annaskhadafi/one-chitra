@@ -1,10 +1,11 @@
 import { NextRequest } from "next/server"
 import { readManagedUpload } from "@/lib/upload-storage"
-import { extractRawTextFromDocumentViaOllama } from "@/lib/ollama-vision-ocr"
+import { extractPdfViaInspector } from "@/lib/vision-pdf-inspector"
+import { structureDeliveryOrderFromMarkdown } from "@/lib/ai-document-structurer"
 
 export const runtime = "nodejs"
 
-type MatchSource = "label" | "pattern" | "none"
+type MatchSource = "label" | "pattern" | "ai" | "none"
 
 export async function POST(req: NextRequest) {
     try {
@@ -29,32 +30,56 @@ export async function POST(req: NextRequest) {
             return Response.json({ error: "File tidak ditemukan" }, { status: 404 })
         }
 
-        const ocr = await extractRawTextFromDocumentViaOllama({
-            fileBuffer: uploaded.buffer,
-            filename: uploaded.filename,
-            pages: pages ?? "all",
+        const inspectorResult = await extractPdfViaInspector(uploaded.buffer, uploaded.filename, {
+            auto_ocr: true,
+            pages: pages ?? "1",
+            contentType: uploaded.contentType,
+            timeoutMs: 15000,
         })
 
-        const directInternalNo = normalizeInternalNo(ocr.fields.internalNo)
-        const extracted = directInternalNo
-            ? { internalNo: directInternalNo, source: "label" as MatchSource }
-            : extractInternalNo(ocr.focusedText || ocr.rawText)
+        const markdown = inspectorResult.data?.markdown || ""
+        let extractedInternal = extractInternalNo(markdown)
+        let deliveryNumber = extractDeliveryNumber(markdown)
+
+        if (!extractedInternal.internalNo || !deliveryNumber) {
+            try {
+                const structured = await structureDeliveryOrderFromMarkdown(markdown)
+                if (!extractedInternal.internalNo && structured.internal_no) {
+                    extractedInternal = {
+                        internalNo: normalizeInternalNo(structured.internal_no),
+                        source: "ai",
+                    }
+                }
+                if (!deliveryNumber && structured.delivery_number) {
+                    deliveryNumber = structured.delivery_number
+                }
+            } catch (aiErr) {
+                console.warn("[DO-OCR-API] OpenAI fallback warning:", aiErr)
+            }
+        }
+
+        const fields = {
+            deliveryNo: deliveryNumber,
+            internalNo: extractedInternal.internalNo,
+        }
 
         return Response.json({
-            internalNo: extracted.internalNo,
-            detectionSource: extracted.source,
-            rawText: sanitizeText(selectDisplayText(ocr.focusedText, ocr.rawText)),
-            fields: ocr.fields,
-            model: ocr.model,
-            pagesProcessed: ocr.pagesProcessed,
+            deliveryNumber,
+            internalNo: extractedInternal.internalNo,
+            detectionSource: extractedInternal.source,
+            rawText: sanitizeText(markdown),
+            fields,
+            model: `vision-pdf-inspector (${inspectorResult.data?.pdf_type || "ocr"})`,
+            pagesProcessed: inspectorResult.data?.page_count || 1,
         })
     } catch (error) {
         const message = error instanceof Error ? error.message : "OCR scan DO gagal"
-        if (message.includes("OLLAMA_UPSTREAM_ERROR")) {
-            return Response.json({ error: `Gagal memproses OCR dari Ollama: ${message}` }, { status: 502 })
-        }
         return Response.json({ error: message }, { status: 500 })
     }
+}
+
+function sanitizeText(value: string | null | undefined): string {
+    return String(value ?? "").replace(/\u0000/g, " ").trim()
 }
 
 function extractInternalNo(rawText: string): { internalNo: string | null; source: MatchSource } {
@@ -82,6 +107,23 @@ function extractInternalNo(rawText: string): { internalNo: string | null; source
     return { internalNo: null, source: "none" }
 }
 
+function extractDeliveryNumber(rawText: string): string | null {
+    const normalizedText = sanitizeText(rawText)
+    const patterns = [
+        /delivery\s*(?:no|order|number|#)\s*[:.;-]?\s*([a-z0-9\-\/]+)/i,
+        /surat\s*jalan\s*(?:no|#)?\s*[:.;-]?\s*([a-z0-9\-\/]+)/i,
+        /\b(CP\/SCD\/\d{4}\/\d{3,4})\b/i,
+    ]
+
+    for (const pattern of patterns) {
+        const match = normalizedText.match(pattern)
+        if (match?.[1]) {
+            return match[1].trim()
+        }
+    }
+    return null
+}
+
 function normalizeInternalNo(value: string | null | undefined): string | null {
     if (!value) return null
 
@@ -107,14 +149,4 @@ function forceDeliveryYear2026(dateToken: string) {
         return `2026${dateToken.slice(4)}`
     }
     return dateToken
-}
-
-function sanitizeText(value: string | null | undefined): string {
-    return String(value ?? "").replace(/\u0000/g, " ").trim()
-}
-
-function selectDisplayText(focusedText: string | null | undefined, rawText: string | null | undefined) {
-    const focused = sanitizeText(focusedText)
-    const raw = sanitizeText(rawText)
-    return focused || raw
 }

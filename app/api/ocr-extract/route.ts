@@ -1,7 +1,7 @@
 import { requireApiSession } from "@/lib/api-auth"
 import { NextRequest } from "next/server"
 import { readManagedUpload } from "@/lib/upload-storage"
-import { extractStructuredFromDocument } from "@/lib/mistral-ocr"
+import { extractStructuredPoViaVision } from "@/lib/vision-pdf-inspector"
 import { db } from "@/db"
 import { ocrPoSessions } from "@/db/schema/ocr-po-sessions"
 import { ocrExtractions } from "@/db/schema/ocr-extractions"
@@ -25,10 +25,10 @@ export async function POST(req: NextRequest) {
         if (!read) {
             return Response.json({ error: "File not found" }, { status: 404 })
         }
-        const ocr = await extractStructuredFromDocument({
-            fileBuffer: read.buffer,
-            filename: read.filename,
-            pages: pages ?? "all",
+        const ocr = await extractStructuredPoViaVision(read.buffer, read.filename, {
+            contentType: read.contentType,
+            pages: pages ?? "1,2,3",
+            timeoutMs: 15000,
         })
         const normalizedItems = normalizeProducts(ocr.structured.products)
         const safeRawText = sanitizeText(ocr.rawText)
@@ -58,8 +58,8 @@ export async function POST(req: NextRequest) {
         })
         return Response.json({
             structured: ocr.structured,
-            productBoxes: ocr.productBoxes,
-            entityBoxes: ocr.entityBoxes,
+            productBoxes: [],
+            entityBoxes: {},
             model: ocr.model,
             pagesProcessed: ocr.pagesProcessed,
             sessionId,

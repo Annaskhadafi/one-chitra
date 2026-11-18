@@ -153,10 +153,45 @@ async function tryAiMapping(input: {
         },
     }
 
+    const visionKey = process.env.RARAY_VISION_API_KEY?.trim()
+    if (visionKey) {
+        try {
+            const rawBaseUrl = process.env.RARAY_VISION_API_BASE_URL || "https://vision.chitraparatama.com/api/v1"
+            const endpoint = `${rawBaseUrl.replace(/\/$/, "")}/rag/chat`
+            const res = await fetch(endpoint, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: visionKey,
+                },
+                signal: AbortSignal.timeout(25000),
+                body: JSON.stringify({
+                    query: JSON.stringify(promptPayload),
+                    system_prompt: "Anda memetakan hasil OCR ke master data. Hanya keluarkan JSON valid tanpa teks lain.",
+                    enable_rerank: false,
+                    top_k: 0,
+                }),
+            })
+            if (res.ok) {
+                const json = await res.json()
+                const answer = json.data?.answer || json.answer || ""
+                if (answer) {
+                    const parsed = parseJsonContent(answer)
+                    const valid = aiResultSchema.safeParse(parsed)
+                    if (valid.success) {
+                        return valid.data
+                    }
+                }
+            }
+        } catch (err) {
+            console.warn("[OCR-Map-AI] Vision AI mapping error, trying OpenAI fallback:", err)
+        }
+    }
+
     const openAiKey = process.env.OPENAI_API_KEY?.trim()
     const provider = process.env.LLM_PROVIDER?.trim().toLowerCase()
 
-    // 1. Coba OpenAI / 9Router terlebih dahulu jika dikonfigurasi
+    // 2. Coba OpenAI / 9Router jika dikonfigurasi
     if (provider === "openai" || openAiKey) {
         try {
             const model = process.env.OPENAI_MODEL?.trim() || "cx/gpt-5.6-luna"
@@ -273,7 +308,10 @@ async function callOpenAiChatCompletion(params: {
     apiKey: string
     body: Record<string, unknown>
 }) {
-    const rawBaseUrl = process.env.OPENAI_BASE_URL?.trim() || "https://9router.chitraparatama.com/v1"
+    let rawBaseUrl = process.env.OPENAI_BASE_URL?.trim() || "https://9router.chitraparatama.com/v1"
+    if (rawBaseUrl.includes("127.0.0.1:8045") || rawBaseUrl.includes("localhost:8045")) {
+        rawBaseUrl = "https://9router.chitraparatama.com/v1"
+    }
     const baseUrl = rawBaseUrl.replace(/\/$/, "")
     const endpoint = baseUrl.endsWith("/chat/completions") ? baseUrl : `${baseUrl}/chat/completions`
 

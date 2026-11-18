@@ -263,38 +263,38 @@ export async function processVendorQuotationOcrCore(options: ProcessVendorQuotat
         let extractedData: ExtractedQuotationPayload | null = null
         let ocrError: string | null = null
 
-        // 2. Jika PDF -> Utamakan PDF Inspector Microservice + AI LLM Mapping
-        if (isPdf) {
-            try {
-                console.log(`[Quotation-Processor] Processing PDF via Inspector: ${filename}...`)
-                const inspectorResult = await extractPdfViaInspector(buffer, filename, {
-                    auto_ocr: true,
-                    pages: "1,2,3",
-                    timeoutMs: 15000,
-                })
-                const markdown = inspectorResult.data?.markdown || ""
+        // 2. Ekstraksi Cepat via vision.chitraparatama.com + OpenAI LLM Mapping (< 5s)
+        try {
+            console.log(`[Quotation-Processor] Processing via vision.chitraparatama.com: ${filename}...`)
+            const inspectorResult = await extractPdfViaInspector(buffer, filename, {
+                auto_ocr: true,
+                pages: "1,2,3",
+                contentType,
+                timeoutMs: 15000,
+            })
+            const markdown = inspectorResult.data?.markdown || ""
 
-                if (markdown.trim()) {
-                    console.log(`[Quotation-Processor] Parsing markdown structure via AI LLM...`)
-                    const structured = await structureVendorQuotationFromMarkdown(markdown)
-                    extractedData = normalizeExtracted({
-                        vendorName: structured.vendor_name,
-                        quoteNumber: structured.quote_number,
-                        quoteDate: structured.quote_date,
-                        remark: structured.remark,
-                        items: (structured.items || []).map((item) => ({
-                            itemName: item.item_name,
-                            qty: item.qty,
-                            unit: item.unit,
-                            unitPrice: item.unit_price,
-                            totalPrice: item.total_price,
-                            remark: item.remark,
-                        })),
-                    })
-                }
-            } catch (inspectorErr) {
-                console.warn("[Quotation-Processor] PDF Inspector failed, falling back to Mistral/Ollama:", inspectorErr)
+            if (markdown.trim()) {
+                console.log(`[Quotation-Processor] Parsing markdown structure via OpenAI LLM...`)
+                const structured = await structureVendorQuotationFromMarkdown(markdown)
+                extractedData = normalizeExtracted({
+                    vendorName: structured.vendor_name,
+                    quoteNumber: structured.quote_number,
+                    quoteDate: structured.quote_date,
+                    remark: structured.remark,
+                    items: (structured.items || []).map((item) => ({
+                        itemName: item.item_name,
+                        qty: item.qty,
+                        unit: item.unit,
+                        unitPrice: item.unit_price,
+                        totalPrice: item.total_price,
+                        remark: item.remark,
+                    })),
+                })
             }
+        } catch (inspectorErr) {
+            console.warn("[Quotation-Processor] vision.chitraparatama.com failed:", inspectorErr)
+            ocrError = inspectorErr instanceof Error ? inspectorErr.message : String(inspectorErr)
         }
 
         // 3. Jika Gambar atau PDF Inspector gagal -> Fallback ke Mistral Vision OCR / Ollama

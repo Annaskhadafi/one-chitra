@@ -1,9 +1,9 @@
 "use server"
 
 import { createManagedUploadFilename, saveManagedUpload } from "@/lib/upload-storage"
-import { extractStructuredFromPoViaOllama } from "@/lib/ollama-so-ocr"
-import { extractStructuredFromDocument } from "@/lib/mistral-ocr"
-import { extractRawTextFromDocumentViaOllama } from "@/lib/ollama-vision-ocr"
+import { extractPdfViaInspector } from "@/lib/vision-pdf-inspector"
+import { structurePoFromMarkdown, structureDeliveryOrderFromMarkdown } from "@/lib/ai-document-structurer"
+import { tryHeuristicPoParse } from "@/lib/heuristic-document-parser"
 
 type BasicOcrItem = {
     product: string
@@ -27,12 +27,12 @@ type DeliveryOrderBoxFields = {
     customerPoDate?: string | null
 }
 
-import { extractPdfViaInspector } from "@/lib/vision-pdf-inspector"
-import { structurePoFromMarkdown } from "@/lib/ai-document-structurer"
-import { tryHeuristicPoParse } from "@/lib/heuristic-document-parser"
+type DetectionSource = "label" | "pattern" | "ai" | "none"
 
-type DetectionSource = "label" | "pattern" | "none"
-
+/**
+ * Fast PO OCR Trigger menggunakan vision.chitraparatama.com + Heuristic/OpenAI Mapping
+ * Target waktu ekstraksi < 5 detik.
+ */
 export async function triggerSalesOrderBasicOcrFast(formData: FormData) {
     try {
         const file = formData.get("file")
@@ -54,141 +54,69 @@ export async function triggerSalesOrderBasicOcrFast(formData: FormData) {
             buffer,
             contentType: file.type,
         })
-        // Keep the background write observed if OCR fails before its result is needed.
         savedUploadPromise.catch(() => undefined)
 
         let basic: BasicOcrResult | null = null
         let rawText = ""
-        let model = "pdf-inspector-v1"
+        let model = "vision-pdf-inspector-v1"
         let pagesProcessed = 1
         let providerWarning: string | undefined
 
-        // 1. JIKA FILE PDF -> PRIORITASKAN PDF INSPECTOR MICROSERVICE (FAST)
-        if (isPdf) {
-            try {
-                console.log(`[SO-OCR] Processing PDF via PDF Inspector microservice: ${file.name}`)
-                const inspectorResult = await extractPdfViaInspector(buffer, file.name, {
-                    auto_ocr: true,
-                    pages: "1,2,3",
-                    timeoutMs: 12000,
-                })
-                const markdown = inspectorResult.data?.markdown || ""
-                rawText = markdown
-                pagesProcessed = inspectorResult.data?.page_count || 1
+        // Ekstraksi teks & markdown dokumen melalui engine vision.chitraparatama.com
+        try {
+            console.log(`[SO-OCR] Memproses dokumen via vision.chitraparatama.com: ${file.name}`)
+            const inspectorResult = await extractPdfViaInspector(buffer, file.name, {
+                auto_ocr: true,
+                pages: "1,2,3",
+                contentType: file.type,
+                timeoutMs: 15000,
+            })
 
-                if (markdown.trim()) {
-                    const heuristic = tryHeuristicPoParse(markdown)
-                    if (heuristic.success && heuristic.data?.products && heuristic.data.products.length > 0) {
-                        basic = {
-                            customer_name: sanitizeText(heuristic.data.customer_company_name),
-                            po_number: sanitizeText(heuristic.data.po_number),
-                            date: sanitizeText(heuristic.data.document_date),
-                            items: heuristic.data.products.map((p) => ({
-                                product: sanitizeText(p.name),
-                                qty: Number(p.qty) || 0,
-                                price: Number(p.unit_price) || 0,
-                            })),
-                        }
-                        model = `pdf-inspector-heuristic (${inspectorResult.data?.pdf_type || "fast"})`
-                    } else {
-                        console.log(`[SO-OCR] Structuring extracted PDF markdown via Fast Engine...`)
-                        const structured = await structurePoFromMarkdown(markdown)
-                        basic = {
-                            customer_name: sanitizeText(structured.customer_company_name),
-                            po_number: sanitizeText(structured.po_number),
-                            date: sanitizeText(structured.document_date),
-                            items: (structured.products || []).map((p) => ({
-                                product: sanitizeText(p.name),
-                                qty: Number(p.qty) || 0,
-                                price: Number(p.unit_price) || 0,
-                            })),
-                        }
-                        model = `pdf-inspector-ai (${inspectorResult.data?.pdf_type || "fast"})`
+            const markdown = inspectorResult.data?.markdown || ""
+            rawText = markdown
+            pagesProcessed = inspectorResult.data?.page_count || 1
+
+            if (markdown.trim()) {
+                // Layer 1: Coba Heuristic Fast Deterministic Table & Anchor Parser (< 5ms)
+                const heuristic = tryHeuristicPoParse(markdown)
+                if (heuristic.success && heuristic.data?.products && heuristic.data.products.length > 0) {
+                    basic = {
+                        customer_name: sanitizeText(heuristic.data.customer_company_name),
+                        po_number: sanitizeText(heuristic.data.po_number),
+                        date: sanitizeText(heuristic.data.document_date),
+                        items: heuristic.data.products.map((p) => ({
+                            product: sanitizeText(p.name),
+                            qty: Number(p.qty) || 0,
+                            price: Number(p.unit_price) || 0,
+                        })),
                     }
-                }
-            } catch (microserviceErr) {
-                console.warn("[SO-OCR] PDF Inspector failed, falling back to legacy Vision OCR:", microserviceErr)
-                providerWarning = `Microservice dialihkan ke fallback: ${getErrorMessage(microserviceErr)}`
-            }
-        }
-
-        // 2. FALLBACK ATAU FILE GAMBAR -> GUNAKAN OCR VISION LAMA
-        if (!basic || !hasMeaningfulBasicResult(basic)) {
-            const hasMistralKey = Boolean(process.env.MISTRAL_API_KEY?.trim())
-            let ocr
-
-            if (hasMistralKey) {
-                const fastMistral = await tryExtractStructured({
-                    fileBuffer: buffer,
-                    filename: file.name,
-                    pages: [1],
-                })
-
-                if (fastMistral.success) {
-                    ocr = fastMistral.result
-                    const fastBasic = toBasicPayload(ocr)
-
-                    if (hasMeaningfulBasicResult(fastBasic)) {
-                        return {
-                            success: true as const,
-                            fileUrl: (await savedUploadPromise).url,
-                            fileName: file.name,
-                            fileType: file.type,
-                            basic: fastBasic,
-                            rawText: sanitizeText(ocr.rawText),
-                            model: ocr.model,
-                            pagesProcessed: ocr.pagesProcessed,
-                            providerWarning,
-                        }
-                    }
-
-                    const fullMistral = await tryExtractStructured({
-                        fileBuffer: buffer,
-                        filename: file.name,
-                        pages: "all",
-                    })
-
-                    if (fullMistral.success) {
-                        ocr = fullMistral.result
-                        providerWarning = "OCR memakai eskalasi semua halaman karena hasil halaman pertama belum cukup jelas."
-                    } else {
-                        providerWarning = [
-                            "OCR halaman pertama belum cukup jelas.",
-                            `OCR semua halaman gagal: ${getErrorMessage(fullMistral.error)}`,
-                            "Dialihkan ke fallback cepat.",
-                        ].join(" ")
-                        ocr = await extractStructuredFromPoViaOllama({
-                            fileBuffer: buffer,
-                            filename: file.name,
-                            pages: [1],
-                        })
-                    }
+                    model = `vision-pdf-inspector-heuristic (${inspectorResult.data?.pdf_type || "fast"})`
                 } else {
-                    providerWarning = `OCR utama gagal, dialihkan ke fallback: ${getErrorMessage(fastMistral.error)}`
-                    ocr = await extractStructuredFromPoViaOllama({
-                        fileBuffer: buffer,
-                        filename: file.name,
-                        pages: [1],
-                    })
+                    // Layer 2: OpenAI API Structuring jika format dokumen non-standar
+                    console.log(`[SO-OCR] Memetakan Markdown ke struktur PO via OpenAI API...`)
+                    const structured = await structurePoFromMarkdown(markdown)
+                    basic = {
+                        customer_name: sanitizeText(structured.customer_company_name),
+                        po_number: sanitizeText(structured.po_number),
+                        date: sanitizeText(structured.document_date),
+                        items: (structured.products || []).map((p) => ({
+                            product: sanitizeText(p.name),
+                            qty: Number(p.qty) || 0,
+                            price: Number(p.unit_price) || 0,
+                        })),
+                    }
+                    model = `vision-pdf-inspector-openai (${inspectorResult.data?.pdf_type || "fast"})`
                 }
-            } else {
-                ocr = await extractStructuredFromPoViaOllama({
-                    fileBuffer: buffer,
-                    filename: file.name,
-                    pages: [1],
-                })
             }
-
-            basic = toBasicPayload(ocr)
-            rawText = sanitizeText(ocr.rawText)
-            model = ocr.model
-            pagesProcessed = ocr.pagesProcessed
+        } catch (microserviceErr) {
+            console.error("[SO-OCR] vision.chitraparatama.com failed:", microserviceErr)
+            providerWarning = `Engine OCR gagal: ${getErrorMessage(microserviceErr)}`
         }
 
         if (!basic || !hasMeaningfulBasicResult(basic)) {
             return {
                 success: false as const,
-                error: "OCR belum berhasil membaca data PO. Coba file yang lebih jelas atau ulangi proses.",
+                error: providerWarning || "OCR belum berhasil membaca data PO. Pastikan dokumen terbaca jelas atau ulangi proses.",
                 fileUrl: (await savedUploadPromise).url,
                 rawText: sanitizeText(rawText),
             }
@@ -213,19 +141,9 @@ export async function triggerSalesOrderBasicOcrFast(formData: FormData) {
     }
 }
 
-async function tryExtractStructured(params: {
-    fileBuffer: Buffer
-    filename: string
-    pages?: string | number[] | null
-}) {
-    try {
-        const result = await extractStructuredFromDocument(params)
-        return { success: true as const, result }
-    } catch (error) {
-        return { success: false as const, error }
-    }
-}
-
+/**
+ * Fast Delivery Order (DO) OCR Trigger menggunakan vision.chitraparatama.com
+ */
 export async function triggerDoScanOcrFast(formData: FormData) {
     try {
         const file = formData.get("file")
@@ -233,9 +151,11 @@ export async function triggerDoScanOcrFast(formData: FormData) {
             return { success: false as const, error: "File wajib diisi" }
         }
 
-        const allowedTypes = new Set(["application/pdf"])
-        if (!allowedTypes.has(file.type)) {
-            return { success: false as const, error: "Hanya file PDF yang didukung untuk OCR DO" }
+        const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")
+        const isImage = file.type.startsWith("image/") || /\.(png|jpe?g|webp)$/i.test(file.name)
+
+        if (!isPdf && !isImage) {
+            return { success: false as const, error: "Hanya file PDF atau Gambar yang didukung untuk OCR DO" }
         }
 
         const buffer = Buffer.from(await file.arrayBuffer())
@@ -246,26 +166,51 @@ export async function triggerDoScanOcrFast(formData: FormData) {
             contentType: file.type,
         })
 
-        const ocr = await extractRawTextFromDocumentViaOllama({
-            fileBuffer: buffer,
-            filename: file.name,
-            pages: [1],
+        // Ekstraksi markdown via vision.chitraparatama.com
+        const inspectorResult = await extractPdfViaInspector(buffer, file.name, {
+            auto_ocr: true,
+            pages: "1",
+            contentType: file.type,
+            timeoutMs: 15000,
         })
 
-        const directInternalNo = normalizeInternalNo(ocr.fields.internalNo)
-        const extracted = directInternalNo
-            ? { internalNo: directInternalNo, source: "label" as DetectionSource }
-            : extractInternalNo(ocr.focusedText || ocr.rawText)
+        const markdown = inspectorResult.data?.markdown || ""
+        let extractedInternal = extractInternalNo(markdown)
+        let deliveryNumber = extractDeliveryNumber(markdown)
+
+        // Jika pola regex belum menemukan internal no atau delivery no, gunakan OpenAI
+        if (!extractedInternal.internalNo || !deliveryNumber) {
+            try {
+                const structured = await structureDeliveryOrderFromMarkdown(markdown)
+                if (!extractedInternal.internalNo && structured.internal_no) {
+                    extractedInternal = {
+                        internalNo: normalizeInternalNo(structured.internal_no),
+                        source: "ai",
+                    }
+                }
+                if (!deliveryNumber && structured.delivery_number) {
+                    deliveryNumber = structured.delivery_number
+                }
+            } catch (aiErr) {
+                console.warn("[DO-OCR] OpenAI DO fallback warning:", aiErr)
+            }
+        }
+
+        const fields: DeliveryOrderBoxFields = {
+            deliveryNo: deliveryNumber,
+            internalNo: extractedInternal.internalNo,
+        }
 
         return {
             success: true as const,
             fileUrl: savedUpload.url,
-            internalNo: extracted.internalNo,
-            detectionSource: extracted.source,
-            rawText: sanitizeText(selectDisplayText(ocr.focusedText, ocr.rawText)),
-            fields: ocr.fields as DeliveryOrderBoxFields,
-            model: ocr.model,
-            pagesProcessed: ocr.pagesProcessed,
+            deliveryNumber,
+            internalNo: extractedInternal.internalNo,
+            detectionSource: extractedInternal.source,
+            rawText: sanitizeText(markdown),
+            fields,
+            model: `vision-pdf-inspector (${inspectorResult.data?.pdf_type || "ocr"})`,
+            pagesProcessed: inspectorResult.data?.page_count || 1,
         }
     } catch (error) {
         return {
@@ -277,28 +222,6 @@ export async function triggerDoScanOcrFast(formData: FormData) {
 
 function sanitizeText(value: string | null | undefined): string {
     return String(value ?? "").replace(/\u0000/g, " ").trim()
-}
-
-function toBasicPayload(ocr: {
-    structured: {
-        customer_company_name: string
-        po_number: string
-        document_date: string
-        products: Array<{ name: string; qty: number; unit_price: number }>
-    }
-}) {
-    return {
-        customer_name: sanitizeText(ocr.structured.customer_company_name),
-        po_number: sanitizeText(ocr.structured.po_number),
-        date: sanitizeText(ocr.structured.document_date),
-        items: ocr.structured.products
-            .map((item) => ({
-                product: sanitizeText(item.name),
-                qty: Number.isFinite(item.qty) ? item.qty : 0,
-                price: Number.isFinite(item.unit_price) ? item.unit_price : 0,
-            }))
-            .filter((item) => item.product || item.qty > 0 || item.price > 0),
-    } satisfies BasicOcrResult
 }
 
 function hasMeaningfulBasicResult(result: BasicOcrResult) {
@@ -340,6 +263,23 @@ function extractInternalNo(rawText: string): { internalNo: string | null; source
     return { internalNo: null, source: "none" }
 }
 
+function extractDeliveryNumber(rawText: string): string | null {
+    const normalizedText = sanitizeText(rawText)
+    const patterns = [
+        /delivery\s*(?:no|order|number|#)\s*[:.;-]?\s*([a-z0-9\-\/]+)/i,
+        /surat\s*jalan\s*(?:no|#)?\s*[:.;-]?\s*([a-z0-9\-\/]+)/i,
+        /\b(CP\/SCD\/\d{4}\/\d{3,4})\b/i,
+    ]
+
+    for (const pattern of patterns) {
+        const match = normalizedText.match(pattern)
+        if (match?.[1]) {
+            return match[1].trim()
+        }
+    }
+    return null
+}
+
 function normalizeInternalNo(value: string | null | undefined): string | null {
     if (!value) return null
 
@@ -365,12 +305,6 @@ function forceDeliveryYear2026(dateToken: string) {
         return `2026${dateToken.slice(4)}`
     }
     return dateToken
-}
-
-function selectDisplayText(focusedText: string | null | undefined, rawText: string | null | undefined) {
-    const focused = sanitizeText(focusedText)
-    const raw = sanitizeText(rawText)
-    return focused || raw
 }
 
 function getErrorMessage(error: unknown) {

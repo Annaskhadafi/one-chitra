@@ -22,7 +22,7 @@ import { auth } from "@/lib/auth"
 import { headers } from "next/headers"
 import { deleteFile } from "./upload"
 import { readManagedUpload } from "@/lib/upload-storage"
-import { extractStructuredFromDocument } from "@/lib/mistral-ocr"
+import { extractStructuredPoViaVision, type StructuredPoOcrResult } from "@/lib/vision-pdf-inspector"
 import { mapExtractedToMaster } from "@/lib/so-mapping"
 import { extractUploadFilename } from "@/lib/upload-url"
 import { recordActivity } from "@/lib/audit"
@@ -187,7 +187,7 @@ function buildComparableQuotationItems(
     })
 }
 
-function buildMappedDataFromOcr(ocr: Awaited<ReturnType<typeof extractStructuredFromDocument>>, mapping: Awaited<ReturnType<typeof mapExtractedToMaster>>) {
+function buildMappedDataFromOcr(ocr: StructuredPoOcrResult, mapping: Awaited<ReturnType<typeof mapExtractedToMaster>>) {
     return {
         customerId: mapping.customer.id,
         customerName: ocr.structured.customer_company_name,
@@ -216,7 +216,7 @@ function buildMappedDataFromOcr(ocr: Awaited<ReturnType<typeof extractStructured
     }
 }
 
-function buildExtractedDataFromOcr(ocr: Awaited<ReturnType<typeof extractStructuredFromDocument>>) {
+function buildExtractedDataFromOcr(ocr: StructuredPoOcrResult) {
     return {
         customerName: ocr.structured.customer_company_name,
         customerCode: ocr.structured.customer_code || null,
@@ -251,7 +251,7 @@ function comparePoOcrAgainstQuotation(params: {
             } | null
         }>
     }
-    ocr: Awaited<ReturnType<typeof extractStructuredFromDocument>>
+    ocr: StructuredPoOcrResult
     mapping: Awaited<ReturnType<typeof mapExtractedToMaster>>
 }): QuotationPoValidationSummary {
     const quoteItems = buildComparableQuotationItems(params.quotation)
@@ -2028,11 +2028,14 @@ export async function uploadQuotationCustomerPo(input: z.infer<typeof quotationC
                 throw new Error("Uploaded PO file not found for OCR validation")
             }
 
-            const ocr = await extractStructuredFromDocument({
-                fileBuffer: uploadedPo.buffer,
-                filename: uploadedPo.filename,
-                pages: "all",
-            })
+            const ocr = await extractStructuredPoViaVision(
+                uploadedPo.buffer,
+                uploadedPo.filename,
+                {
+                    contentType: uploadedPo.contentType,
+                    pages: "1,2,3",
+                }
+            )
             const mapping = await mapExtractedToMaster(ocr.structured)
             const mappedData = buildMappedDataFromOcr(ocr, mapping)
             const extractedData = buildExtractedDataFromOcr(ocr)

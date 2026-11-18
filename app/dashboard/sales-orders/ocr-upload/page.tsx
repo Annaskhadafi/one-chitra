@@ -199,11 +199,7 @@ export default function OcrUploadPage() {
             // Upload and extraction share one server action and one request.
             setCurrentStep("inspecting")
             setSmoothProgress(70, 25)
-            if (isPdf) {
-                setStatusMessage("Tahap 2/3: Ekstraksi cepat via PDF Inspector Microservice...")
-            } else {
-                setStatusMessage("Tahap 2/3: Ekstraksi gambar via Vision Engine OCR...")
-            }
+            setStatusMessage("Tahap 2/3: Ekstraksi cepat via vision.chitraparatama.com (< 5s)...")
 
             setCurrentStep("structuring")
             setSmoothProgress(90, 30)
@@ -214,7 +210,7 @@ export default function OcrUploadPage() {
             extractFormData.append("file", uploadFile)
             let timeoutId: ReturnType<typeof setTimeout> | undefined
             const timeoutPromise = new Promise<never>((_, reject) => {
-                timeoutId = setTimeout(() => reject(new Error("Waktu OCR habis (45 detik). Silakan coba lagi.")), 45_000)
+                timeoutId = setTimeout(() => reject(new Error("Waktu OCR habis (30 detik). Silakan coba lagi.")), 30_000)
             })
             const responseData = await Promise.race([
                 triggerSalesOrderBasicOcrFast(extractFormData),

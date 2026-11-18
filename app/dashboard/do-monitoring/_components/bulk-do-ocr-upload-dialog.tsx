@@ -5,6 +5,7 @@ import { useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { getDoMonitoringDeliveryOptions, updateDoMonitoringFields } from "@/app/actions/delivery"
 import { uploadFile } from "@/app/actions/upload"
+import { triggerDoScanOcrFast } from "@/app/actions/ocr-fast"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -190,7 +191,7 @@ export function BulkDoOcrUploadDialog() {
         try {
             for (let index = 0; index < nextFiles.length; index++) {
                 const current = nextFiles[index]
-                nextFiles[index] = { ...current, status: "uploading", message: "Mengunggah dokumen..." }
+                nextFiles[index] = { ...current, status: "uploading", message: "Memindai dokumen via Vision OCR..." }
                 setFiles([...nextFiles])
                 const itemStartProgress = Math.max(5, Math.round((index / nextFiles.length) * 100))
                 setProgress(itemStartProgress)
@@ -198,29 +199,66 @@ export function BulkDoOcrUploadDialog() {
                 const formData = new FormData()
                 formData.append("file", current.file)
 
-                const body = await uploadFile(formData) as {
-                    success?: boolean
-                    error?: string
-                    url?: string
+                let fileUrl: string | undefined
+                let detectedDoNumber: string | undefined
+
+                const ocrResult = await triggerDoScanOcrFast(formData)
+                if (ocrResult.success && ocrResult.fileUrl) {
+                    fileUrl = ocrResult.fileUrl
+                    detectedDoNumber = ocrResult.deliveryNumber || ocrResult.internalNo || undefined
+                } else {
+                    // Fallback ke upload file biasa jika OCR gagal
+                    const body = await uploadFile(formData) as {
+                        success?: boolean
+                        error?: string
+                        url?: string
+                    }
+
+                    if (!body?.success || body.error || !body.url) {
+                        nextFiles[index] = {
+                            ...nextFiles[index],
+                            status: "failed",
+                            message: body?.error || ocrResult.error || "Upload dokumen gagal",
+                        }
+                        setFiles([...nextFiles])
+                        setProgress(Math.round(((index + 1) / nextFiles.length) * 100))
+                        continue
+                    }
+                    fileUrl = body.url
                 }
 
-                if (!body?.success || body.error || !body.url) {
+                // Coba auto-matching dengan deliveryOptions
+                let matchedDelivery: DeliveryOption | undefined
+                if (detectedDoNumber) {
+                    const normDetected = detectedDoNumber.toLowerCase().replace(/[^a-z0-9]/g, "")
+                    matchedDelivery = deliveryOptions.find((d) => {
+                        const normDlv = d.deliveryNumber.toLowerCase().replace(/[^a-z0-9]/g, "")
+                        const normSap = (d.doSap || "").toLowerCase().replace(/[^a-z0-9]/g, "")
+                        return (normDlv && normDetected.includes(normDlv)) || (normSap && normDetected.includes(normSap)) || (normDlv && normDlv.includes(normDetected))
+                    })
+                }
+
+                if (matchedDelivery) {
                     nextFiles[index] = {
                         ...nextFiles[index],
-                        status: "failed",
-                        message: body?.error || "Upload dokumen gagal",
+                        fileUrl,
+                        status: "matched",
+                        deliveryNumber: matchedDelivery.deliveryNumber,
+                        mappedDeliveryId: matchedDelivery.id,
+                        mappedDeliveryLabel: formatDeliveryLabel(matchedDelivery),
+                        message: `Terdeteksi otomatis: ${matchedDelivery.deliveryNumber}. Klik Save untuk menyimpan.`,
+                        saved: false,
                     }
-                    setFiles([...nextFiles])
-                    setProgress(Math.round(((index + 1) / nextFiles.length) * 100))
-                    continue
-                }
-
-                nextFiles[index] = {
-                    ...nextFiles[index],
-                    fileUrl: body.url,
-                    status: "unmatched",
-                    message: "Dokumen siap dipreview. Pilih Delivery/DO No untuk manual matching.",
-                    saved: false,
+                } else {
+                    nextFiles[index] = {
+                        ...nextFiles[index],
+                        fileUrl,
+                        status: "unmatched",
+                        message: detectedDoNumber
+                            ? `Terbaca: ${detectedDoNumber}. Silakan pilih Delivery/DO No target.`
+                            : "Dokumen siap dipreview. Pilih Delivery/DO No untuk manual matching.",
+                        saved: false,
+                    }
                 }
                 setFiles([...nextFiles])
                 setProgress(Math.round(((index + 1) / nextFiles.length) * 100))
