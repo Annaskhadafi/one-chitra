@@ -1080,6 +1080,7 @@ export async function createQuotation(data: QuotationInput) {
                     adminNote: normalizeText(data.adminNote),
                     clientNote: normalizeText(data.clientNote),
                     discountType: data.discountType || "fixed",
+                    attachmentLayoutRows: data.attachmentLayoutRows ?? 2,
                     currentRevision: 1,
                     lastRevisionAt: now,
                 })
@@ -1098,6 +1099,7 @@ export async function createQuotation(data: QuotationInput) {
                         unitPrice: item.unitPrice.toString(),
                         discount: item.discount.toString(),
                         tax: item.tax.toString(),
+                        imageUrl: item.imageUrl || null,
                     })),
                 )
             }
@@ -1113,6 +1115,9 @@ export async function createQuotation(data: QuotationInput) {
                         mimeType: attachment.mimeType || null,
                         fileSize: attachment.fileSize || 0,
                         description: normalizeText(attachment.description),
+                        productId: attachment.productId || null,
+                        partNumber: normalizeText(attachment.partNumber),
+                        priceNote: normalizeText(attachment.priceNote),
                         includeInPdf: attachment.includeInPdf ?? true,
                         uploadedBy: userId,
                     }))
@@ -1185,6 +1190,7 @@ export async function updateQuotation(id: number, data: QuotationInput) {
                     adminNote: normalizeText(data.adminNote),
                     clientNote: normalizeText(data.clientNote),
                     discountType: data.discountType || "fixed",
+                    attachmentLayoutRows: data.attachmentLayoutRows ?? 2,
                     expiredAt: data.status === "expired" ? new Date() : null,
                     updatedAt: new Date(),
                 })
@@ -1203,6 +1209,7 @@ export async function updateQuotation(id: number, data: QuotationInput) {
                         unitPrice: item.unitPrice.toString(),
                         discount: item.discount.toString(),
                         tax: item.tax.toString(),
+                        imageUrl: item.imageUrl || null,
                     })),
                 )
             }
@@ -1231,6 +1238,9 @@ export async function updateQuotation(id: number, data: QuotationInput) {
                         mimeType: attachment.mimeType || null,
                         fileSize: attachment.fileSize || 0,
                         description: normalizeText(attachment.description),
+                        productId: attachment.productId || null,
+                        partNumber: normalizeText(attachment.partNumber),
+                        priceNote: normalizeText(attachment.priceNote),
                         includeInPdf: attachment.includeInPdf ?? true,
                         uploadedBy: userId,
                     }))

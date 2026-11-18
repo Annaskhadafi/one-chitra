@@ -149,6 +149,7 @@ export const quotations = pgTable("quotations", {
     poValidationSummary: jsonb("po_validation_summary").$type<QuotationPoValidationSummary>(),
     autoConvertedAt: timestamp("auto_converted_at"),
     autoConvertedBy: varchar("auto_converted_by").references(() => user.id),
+    attachmentLayoutRows: integer("attachment_layout_rows").default(2).notNull(),
 }, (table) => ({
     customerIdIdx: index("quotations_customer_id_idx").on(table.customerId),
     createdByIdx: index("quotations_created_by_idx").on(table.createdBy),
@@ -169,6 +170,7 @@ export const quotationItems = pgTable("quotation_items", {
     unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).notNull(),
     discount: numeric("discount", { precision: 12, scale: 2 }).default("0").notNull(),
     tax: numeric("tax", { precision: 12, scale: 2 }).default("0").notNull(),
+    imageUrl: text("image_url"),
 }, (table) => ({
     quotationIdIdx: index("quotation_items_quotation_id_idx").on(table.quotationId),
     productIdIdx: index("quotation_items_product_id_idx").on(table.productId),
@@ -184,6 +186,9 @@ export const quotationAttachments = pgTable("quotation_attachments", {
     mimeType: varchar("mime_type", { length: 150 }),
     fileSize: integer("file_size").default(0).notNull(),
     description: text("description"),
+    productId: integer("product_id").references(() => products.id),
+    partNumber: varchar("part_number", { length: 150 }),
+    priceNote: text("price_note"),
     includeInPdf: boolean("include_in_pdf").default(true).notNull(),
     uploadedBy: varchar("uploaded_by").references(() => user.id).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),

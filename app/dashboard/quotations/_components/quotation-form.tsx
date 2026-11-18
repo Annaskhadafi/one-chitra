@@ -73,7 +73,8 @@ import {
 import { Card, CardContent } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
-import { ArrowLeft, Plus, Trash2, Save, Search, ChevronsUpDown, Check, CheckCircle, Clock, Package, FileDown, Pencil, AlertTriangle, XCircle, Loader2, Calculator, Copy, Eye, EyeOff, Truck, BadgeDollarSign, DollarSign, Building2, ChevronUp, ChevronDown, GripVertical, Paperclip, Image, UploadCloud } from "lucide-react"
+import { ArrowLeft, Plus, Trash2, Save, Search, ChevronsUpDown, Check, CheckCircle, Clock, Package, FileDown, Pencil, AlertTriangle, XCircle, Loader2, Calculator, Copy, Eye, EyeOff, Truck, BadgeDollarSign, DollarSign, Building2, ChevronUp, ChevronDown, GripVertical, Paperclip, Image, UploadCloud, ImagePlus, LayoutGrid, X } from "lucide-react"
+import { resolveUploadDocumentUrl } from "@/lib/upload-url"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 import type { Customer, Product } from "@/lib/types"
@@ -107,6 +108,7 @@ interface QuotationItemRow {
     bundleGroupId?: string
     bundleRole?: "parent" | "child"
     bundleComponentQuantity?: number
+    imageUrl?: string | null
 }
 
 type ItemSortKey = "index" | "description" | "quantity" | "unitPrice" | "tax" | "amount"
@@ -274,6 +276,7 @@ interface QuotationFormProps {
         discount: string
         tax: string
         shipping: string
+        attachmentLayoutRows?: number
         items: {
             productId: number
             description: string | null
@@ -282,6 +285,7 @@ interface QuotationFormProps {
             unitPrice: string
             discount: string
             tax: string
+            imageUrl?: string | null
             product: Product | null
         }[]
         attachments?: {
@@ -293,6 +297,9 @@ interface QuotationFormProps {
             mimeType?: string | null
             fileSize: number
             description?: string | null
+            productId?: number | null
+            partNumber?: string | null
+            priceNote?: string | null
             includeInPdf: boolean
         }[]
     }
@@ -481,6 +488,7 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
     const [discount, setDiscount] = useState(Number(initialData?.discount || 0))
     const [tax] = useState(Number(initialData?.tax || 0))
     const [shipping, setShipping] = useState(Number(initialData?.shipping || 0))
+    const [attachmentLayoutRows, setAttachmentLayoutRows] = useState<number>(initialData?.attachmentLayoutRows || 2)
     const [globalMargin, setGlobalMargin] = useState<number>(standardBaseline)
     const [exchangeRate, setExchangeRate] = useState<number>(1)
     const [isApplyingMargin, startApplyingMarginTransition] = useTransition()
@@ -513,6 +521,7 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
             costIdr: Number(item.product?.costSap || 0) * 1, // Will be updated by useEffect if needed
             costSap: Number(item.product?.costSap || 0),
             materialNumber: item.product?.materialNumber || "",
+            imageUrl: (item as any).imageUrl || item.product?.imageUrl || null,
             bundleRole: item.product?.isBundle ? "parent" : undefined,
         })) || []
     )
@@ -527,6 +536,9 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
             mimeType: attachment.mimeType,
             fileSize: attachment.fileSize,
             description: attachment.description || "",
+            productId: attachment.productId || null,
+            partNumber: attachment.partNumber || "",
+            priceNote: attachment.priceNote || "",
             includeInPdf: attachment.includeInPdf ?? true,
         })) || []
     )
@@ -537,6 +549,10 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
     const [tempFileName, setTempFileName] = useState("")
     const [tempFileSize, setTempFileSize] = useState(0)
     const [tempMimeType, setTempMimeType] = useState("")
+    const [tempProductId, setTempProductId] = useState<number | null>(null)
+    const [tempPartNumber, setTempPartNumber] = useState("")
+    const [tempPriceNote, setTempPriceNote] = useState("")
+    const [tempSelectedProductIndex, setTempSelectedProductIndex] = useState<string>("custom")
     const [tempIncludeInPdf, setTempIncludeInPdf] = useState(true)
     const [isUploading, setIsUploading] = useState(false)
 
@@ -1013,6 +1029,7 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                 costIdr: costIdr,
                 costSap: costSap,
                 materialNumber: product.materialNumber,
+                imageUrl: product.imageUrl || null,
             }])
         }
         setProductOpen(false)
@@ -1127,7 +1144,7 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
         })
     }
 
-    const updateItem = (index: number, field: keyof QuotationItemRow, value: number | string) => {
+    const updateItem = (index: number, field: keyof QuotationItemRow, value: number | string | null) => {
         setItems(prev => {
             const targetItem = prev[index]
             if (!targetItem) {
@@ -1187,6 +1204,30 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                 return nextItem
             })
         })
+    }
+
+    const handleItemImageUpload = async (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+
+        if (!file.type.startsWith("image/")) {
+            toast.error("Format file tidak didukung. Harap unggah file gambar (PNG, JPG, JPEG, WebP).")
+            return
+        }
+
+        const toastId = toast.loading("Mengunggah foto produk...")
+        try {
+            const result = await uploadFileToObjectStorage(file)
+            if (result.success && result.url) {
+                updateItem(index, "imageUrl", result.url)
+                toast.success("Foto produk berhasil diunggah", { id: toastId })
+            } else {
+                toast.error(result.error || "Gagal mengunggah foto", { id: toastId })
+            }
+        } catch (error) {
+            console.error("Item image upload error:", error)
+            toast.error("Terjadi kesalahan saat mengunggah foto produk", { id: toastId })
+        }
     }
 
     const itemDndSensors = useSensors(
@@ -1315,6 +1356,9 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
             mimeType: tempMimeType,
             fileSize: tempFileSize,
             description: tempDescription.trim() || null,
+            productId: tempProductId,
+            partNumber: tempPartNumber.trim() || null,
+            priceNote: tempPriceNote.trim() || null,
             includeInPdf: tempIncludeInPdf,
         }
 
@@ -1326,6 +1370,10 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
         setTempFileName("")
         setTempFileSize(0)
         setTempMimeType("")
+        setTempProductId(null)
+        setTempPartNumber("")
+        setTempPriceNote("")
+        setTempSelectedProductIndex("custom")
         setTempIncludeInPdf(true)
         toast.success("Lampiran ditambahkan ke daftar")
     }
@@ -1421,6 +1469,7 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                 adminNote: adminNote || undefined,
                 clientNote: clientNote || undefined,
                 discountType: discountType,
+                attachmentLayoutRows,
                 status: (liveMarginSummary.requiresApproval ? "waiting_approval" : status) as "draft" | "sent" | "approved" | "rejected" | "expired" | "converted",
                 paymentTerms: paymentTerms || undefined,
                 termsConditions: termsConditions || undefined,
@@ -1436,6 +1485,7 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                     unitPrice: item.unitPrice,
                     discount: item.discount,
                     tax: item.tax,
+                    imageUrl: item.imageUrl || undefined,
                 })),
                 attachments: attachments.map(attachment => ({
                     id: attachment.id,
@@ -1446,6 +1496,9 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                     mimeType: attachment.mimeType,
                     fileSize: attachment.fileSize,
                     description: attachment.description || undefined,
+                    productId: attachment.productId || undefined,
+                    partNumber: attachment.partNumber || undefined,
+                    priceNote: attachment.priceNote || undefined,
                     includeInPdf: attachment.includeInPdf,
                 })),
             }
@@ -1517,6 +1570,7 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                 adminNote: adminNote || undefined,
                 clientNote: clientNote || undefined,
                 discountType: discountType,
+                attachmentLayoutRows,
                 status: (liveMarginSummary.requiresApproval ? "waiting_approval" : status) as "draft" | "sent" | "approved" | "rejected" | "expired" | "converted",
                 paymentTerms: paymentTerms || undefined,
                 termsConditions: termsConditions || undefined,
@@ -1532,6 +1586,7 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                     unitPrice: item.unitPrice,
                     discount: item.discount,
                     tax: item.tax,
+                    imageUrl: item.imageUrl || undefined,
                 })),
                 attachments: attachments.map(attachment => ({
                     id: attachment.id,
@@ -1542,6 +1597,9 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                     mimeType: attachment.mimeType,
                     fileSize: attachment.fileSize,
                     description: attachment.description || undefined,
+                    productId: attachment.productId || undefined,
+                    partNumber: attachment.partNumber || undefined,
+                    priceNote: attachment.priceNote || undefined,
                     includeInPdf: attachment.includeInPdf,
                 })),
             }
@@ -1633,40 +1691,6 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                         <p className="text-xs text-amber-800 dark:text-amber-300 mt-1">
                             Dokumen ini telah diajukan ke Approval Engine karena memiliki margin di bawah standar {standardBaseline.toFixed(2)}%. Seluruh perubahan harga atau data dikunci sampai approver mengambil keputusan.
                         </p>
-                    </div>
-                </div>
-            )}
-
-            {/* Live Margin Policy Indicator Banner */}
-            {!isLockedByApproval && items.length > 0 && (
-                <div className={`rounded-xl border p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs transition-all ${
-                    liveMarginSummary.requiresApproval
-                        ? "border-amber-300 bg-amber-50/60 text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200"
-                        : "border-emerald-300 bg-emerald-50/40 text-emerald-900 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-200"
-                }`}>
-                    <div className="flex items-center gap-2.5">
-                        {liveMarginSummary.requiresApproval ? (
-                            <div className="rounded-full bg-amber-200/80 p-1.5 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
-                                <AlertTriangle className="h-4 w-4" />
-                            </div>
-                        ) : (
-                            <div className="rounded-full bg-emerald-200/80 p-1.5 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200">
-                                <CheckCircle className="h-4 w-4" />
-                            </div>
-                        )}
-                        <div>
-                            <div className="font-semibold flex items-center gap-2">
-                                <span>Evaluasi Margin Real-time:</span>
-                                <Badge variant={liveMarginSummary.requiresApproval ? "destructive" : "outline"} className={!liveMarginSummary.requiresApproval ? "bg-emerald-100 text-emerald-800 border-emerald-300 font-mono text-[10px]" : "font-mono text-[10px]"}>
-                                    Margin Minimal: {liveMarginSummary.minMargin}%
-                                </Badge>
-                            </div>
-                            <p className="text-[11px] text-muted-foreground mt-0.5">
-                                {liveMarginSummary.requiresApproval
-                                    ? `Margin di bawah standar ${standardBaseline.toFixed(2)}%. Quotation ini akan otomatis masuk ke antrean Approval saat Anda menyimpan.`
-                                    : `Margin memenuhi standar default (>= ${standardBaseline.toFixed(2)}%). Approval berjenjang tidak diperlukan.`}
-                            </p>
-                        </div>
                     </div>
                 </div>
             )}
@@ -2014,6 +2038,40 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                 </Button>
             </div>
 
+            {/* Live Margin Policy Indicator Banner (Di atas Tabel Produk) */}
+            {!isLockedByApproval && items.length > 0 && (
+                <div className={`rounded-xl border p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs transition-all ${
+                    liveMarginSummary.requiresApproval
+                        ? "border-amber-300 bg-amber-50/60 text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200"
+                        : "border-emerald-300 bg-emerald-50/40 text-emerald-900 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-200"
+                }`}>
+                    <div className="flex items-center gap-2.5">
+                        {liveMarginSummary.requiresApproval ? (
+                            <div className="rounded-full bg-amber-200/80 p-1.5 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
+                                <AlertTriangle className="h-4 w-4" />
+                            </div>
+                        ) : (
+                            <div className="rounded-full bg-emerald-200/80 p-1.5 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200">
+                                <CheckCircle className="h-4 w-4" />
+                            </div>
+                        )}
+                        <div>
+                            <div className="font-semibold flex items-center gap-2">
+                                <span>Evaluasi Margin Real-time:</span>
+                                <Badge variant={liveMarginSummary.requiresApproval ? "destructive" : "outline"} className={!liveMarginSummary.requiresApproval ? "bg-emerald-100 text-emerald-800 border-emerald-300 font-mono text-[10px]" : "font-mono text-[10px]"}>
+                                    Margin Minimal: {liveMarginSummary.minMargin}%
+                                </Badge>
+                            </div>
+                            <p className="text-[11px] text-muted-foreground mt-0.5">
+                                {liveMarginSummary.requiresApproval
+                                    ? `Margin di bawah standar ${standardBaseline.toFixed(2)}%. Quotation ini akan otomatis masuk ke antrean Approval saat Anda menyimpan.`
+                                    : `Margin memenuhi standar default (>= ${standardBaseline.toFixed(2)}%). Approval berjenjang tidak diperlukan.`}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <Card>
                 <CardContent className="p-6">
                     <div className="space-y-4">
@@ -2107,6 +2165,55 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                                                             </div>
                                                         </div>
                                                         <CardContent className="p-4 space-y-4">
+                                                            {/* Thumbnail Foto Produk (Mobile) */}
+                                                            <div className="flex items-center gap-3 p-2 rounded-lg border bg-slate-50/50 dark:bg-slate-900/40">
+                                                                <div className="relative group/thumb w-14 h-14 rounded-md border bg-white dark:bg-slate-800 flex items-center justify-center overflow-hidden shrink-0 shadow-xs">
+                                                                    {item.imageUrl ? (
+                                                                        <>
+                                                                            <img
+                                                                                src={resolveUploadDocumentUrl(item.imageUrl) || item.imageUrl}
+                                                                                alt="Thumbnail"
+                                                                                className="w-full h-full object-cover"
+                                                                            />
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => updateItem(index, "imageUrl", null)}
+                                                                                className="absolute -top-1 -right-1 bg-red-600 text-white rounded-full p-0.5 shadow"
+                                                                                title="Hapus foto"
+                                                                            >
+                                                                                <X className="h-3 w-3" />
+                                                                            </button>
+                                                                        </>
+                                                                    ) : (
+                                                                        <label className="cursor-pointer flex flex-col items-center justify-center w-full h-full text-slate-400 hover:text-blue-600 transition-colors">
+                                                                            <ImagePlus className="h-5 w-5" />
+                                                                            <span className="text-[9px] mt-0.5 font-medium">+ Foto</span>
+                                                                            <input
+                                                                                type="file"
+                                                                                accept="image/*"
+                                                                                className="hidden"
+                                                                                onChange={(e) => handleItemImageUpload(index, e)}
+                                                                            />
+                                                                        </label>
+                                                                    )}
+                                                                </div>
+                                                                <div className="flex-1 min-w-0">
+                                                                    <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">Foto / Thumbnail Produk</p>
+                                                                    <p className="text-[10px] text-muted-foreground truncate">Foto ini akan ditampilkan pada tabel PDF penawaran</p>
+                                                                    {item.imageUrl && (
+                                                                        <label className="cursor-pointer text-[11px] font-medium text-blue-600 hover:underline inline-block mt-0.5">
+                                                                            Ganti Foto
+                                                                            <input
+                                                                                type="file"
+                                                                                accept="image/*"
+                                                                                className="hidden"
+                                                                                onChange={(e) => handleItemImageUpload(index, e)}
+                                                                            />
+                                                                        </label>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+
                                                             <div className="space-y-2">
                                                                 {renderBundleBadges(item)}
                                                                 <Label className="text-xs text-muted-foreground">Description</Label>
@@ -2195,6 +2302,7 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                                         <TableHeader>
                                             <TableRow className="bg-blue-600 hover:bg-blue-600">
                                                 <TableHead className="w-[72px] text-white">{renderItemSortHeader("# Item", "index")}</TableHead>
+                                                <TableHead className="w-[85px] text-white text-center">Foto</TableHead>
                                                 <TableHead className="text-white">{renderItemSortHeader("Description", "description")}</TableHead>
                                                 <TableHead className="w-[100px] text-white">{renderItemSortHeader("Qty", "quantity")}</TableHead>
                                                 <TableHead className="w-[200px] text-white">
@@ -2214,7 +2322,7 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                                         <TableBody>
                                             {items.length === 0 ? (
                                                 <TableRow>
-                                                    <TableCell colSpan={7} className="h-32 text-center">
+                                                    <TableCell colSpan={8} className="h-32 text-center">
                                                         <div className="flex flex-col items-center gap-2 text-muted-foreground">
                                                             <Package className="h-10 w-10 opacity-30" />
                                                             <p>No data</p>
@@ -2232,6 +2340,51 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                                                                             {dragHandle}
                                                                             <span>{index + 1}</span>
                                                                             {renderItemInsights(item, true)}
+                                                                        </div>
+                                                                    </TableCell>
+                                                                    <TableCell className="w-[85px] p-2 text-center align-middle">
+                                                                        <div className="flex flex-col items-center gap-1">
+                                                                            <div className="relative group/thumb w-14 h-14 rounded-md border bg-slate-50 dark:bg-slate-800 flex items-center justify-center overflow-hidden shadow-xs">
+                                                                                {item.imageUrl ? (
+                                                                                    <>
+                                                                                        <img
+                                                                                            src={resolveUploadDocumentUrl(item.imageUrl) || item.imageUrl}
+                                                                                            alt="Thumbnail"
+                                                                                            className="w-full h-full object-cover"
+                                                                                        />
+                                                                                        <button
+                                                                                            type="button"
+                                                                                            onClick={() => updateItem(index, "imageUrl", null)}
+                                                                                            className="absolute -top-1 -right-1 bg-red-600 text-white rounded-full p-0.5 opacity-0 group-hover/thumb:opacity-100 transition-opacity shadow"
+                                                                                            title="Hapus foto"
+                                                                                        >
+                                                                                            <X className="h-3 w-3" />
+                                                                                        </button>
+                                                                                    </>
+                                                                                ) : (
+                                                                                    <label className="cursor-pointer flex flex-col items-center justify-center w-full h-full text-slate-400 hover:text-blue-600 transition-colors">
+                                                                                        <ImagePlus className="h-5 w-5" />
+                                                                                        <span className="text-[9px] mt-0.5 font-medium">+ Foto</span>
+                                                                                        <input
+                                                                                            type="file"
+                                                                                            accept="image/*"
+                                                                                            className="hidden"
+                                                                                            onChange={(e) => handleItemImageUpload(index, e)}
+                                                                                        />
+                                                                                    </label>
+                                                                                )}
+                                                                            </div>
+                                                                            {item.imageUrl && (
+                                                                                <label className="cursor-pointer text-[10px] text-blue-600 hover:underline">
+                                                                                    Ubah
+                                                                                    <input
+                                                                                        type="file"
+                                                                                        accept="image/*"
+                                                                                        className="hidden"
+                                                                                        onChange={(e) => handleItemImageUpload(index, e)}
+                                                                                    />
+                                                                                </label>
+                                                                            )}
                                                                         </div>
                                                                     </TableCell>
                                                                     <TableCell>
@@ -2416,26 +2569,107 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
             {/* Seksi Attachment & Keterangan Produk */}
             <Card className="border-blue-100 bg-blue-50/10 dark:bg-blue-950/5">
                 <CardContent className="p-6 space-y-6">
-                    <div className="flex items-center gap-2 border-b pb-3 border-blue-100 dark:border-blue-900">
-                        <Paperclip className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                        <div>
-                            <h3 className="text-lg font-bold text-blue-900 dark:text-blue-100">Attachment & Keterangan Product</h3>
-                            <p className="text-xs text-muted-foreground">Tambahkan lampiran gambar beserta keterangan produk yang akan disertakan pada PDF</p>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4 border-blue-100 dark:border-blue-900">
+                        <div className="flex items-center gap-2">
+                            <Paperclip className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                            <div>
+                                <h3 className="text-lg font-bold text-blue-900 dark:text-blue-100">Attachment & Keterangan Product</h3>
+                                <p className="text-xs text-muted-foreground">Tambahkan lampiran gambar beserta keterangan produk yang akan disertakan pada PDF</p>
+                            </div>
+                        </div>
+
+                        {/* Pengaturan Grid Layout A4 */}
+                        <div className="flex items-center gap-2.5 bg-white dark:bg-zinc-900 px-3 py-1.5 rounded-lg border shadow-2xs">
+                            <LayoutGrid className="h-4 w-4 text-blue-600 shrink-0" />
+                            <div className="text-right">
+                                <Label className="text-xs font-semibold block">Grid Lampiran A4</Label>
+                                <span className="text-[10px] text-muted-foreground">Layout per halaman</span>
+                            </div>
+                            <Select 
+                                value={attachmentLayoutRows.toString()} 
+                                onValueChange={(val) => setAttachmentLayoutRows(Number(val))}
+                            >
+                                <SelectTrigger className="w-[155px] h-8 text-xs bg-muted/40 font-medium">
+                                    <SelectValue placeholder="Pilih Grid" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="1">1 Baris / Hal (Besar)</SelectItem>
+                                    <SelectItem value="2">2 Baris / Hal (Standar)</SelectItem>
+                                    <SelectItem value="3">3 Baris / Hal (Kompak)</SelectItem>
+                                </SelectContent>
+                            </Select>
                         </div>
                     </div>
 
                     {/* Form Input Lampiran Baru */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-white dark:bg-zinc-900/50 p-4 rounded-lg border border-blue-50 dark:border-zinc-800">
                         <div className="space-y-4">
+                            {/* Dropdown Tautkan ke Produk */}
+                            <div className="space-y-1.5 p-2.5 bg-blue-50/50 dark:bg-blue-950/20 rounded-md border border-blue-100 dark:border-blue-900/50">
+                                <Label className="text-xs font-bold text-blue-900 dark:text-blue-200 flex items-center justify-between">
+                                    <span>Tautkan ke Produk dari Penawaran:</span>
+                                    <span className="font-normal text-[10px] text-blue-700 dark:text-blue-300">Auto-fill keterangan & harga</span>
+                                </Label>
+                                <Select 
+                                    value={tempSelectedProductIndex} 
+                                    onValueChange={(val) => {
+                                        setTempSelectedProductIndex(val)
+                                        if (val === "custom") {
+                                            setTempProductId(null)
+                                            setTempPartNumber("")
+                                            setTempPriceNote("")
+                                        } else {
+                                            const idx = Number(val)
+                                            const selected = items[idx]
+                                            if (selected) {
+                                                setTempProductId(selected.productId || null)
+                                                setTempTitle(selected.description || selected.productName || "Lampiran Produk")
+                                                setTempPartNumber(selected.materialNumber || "")
+                                                const priceFormatted = `Rp ${Number(selected.unitPrice).toLocaleString("id-ID")}`
+                                                setTempPriceNote(priceFormatted)
+                                                if (selected.imageUrl && !tempFileUrl) {
+                                                    setTempFileUrl(selected.imageUrl)
+                                                    setTempFileName("foto-produk.jpg")
+                                                }
+                                                const descParts = [
+                                                    selected.materialNumber ? `Part Number: ${selected.materialNumber}` : "",
+                                                    selected.longDescription ? `Spesifikasi: ${selected.longDescription}` : "",
+                                                    `Harga Penawaran: ${priceFormatted} / Unit`
+                                                ].filter(Boolean)
+                                                setTempDescription(descParts.join("\n"))
+                                            }
+                                        }
+                                    }}
+                                >
+                                    <SelectTrigger className="h-8 text-xs bg-white dark:bg-zinc-900">
+                                        <SelectValue placeholder="-- Pilih Produk atau Input Bebas --" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="custom">-- Input Bebas / Keterangan Custom --</SelectItem>
+                                        {items.map((it, idx) => (
+                                            <SelectItem key={it.clientId || idx} value={idx.toString()}>
+                                                #{idx + 1} - {it.description || it.productName} (Rp {Number(it.unitPrice).toLocaleString("id-ID")})
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
                             <div className="space-y-2">
                                 <Label className="text-sm font-semibold">File Gambar Lampiran</Label>
                                 <div className="flex flex-col gap-2">
                                     {tempFileUrl ? (
                                         <div className="relative flex items-center justify-between p-2 border rounded bg-zinc-50 dark:bg-zinc-800/50">
                                             <div className="flex items-center gap-2 truncate pr-6">
-                                                <Image className="h-5 w-5 text-emerald-600 flex-shrink-0" />
-                                                <span className="text-sm font-medium truncate">{tempFileName}</span>
-                                                <span className="text-xs text-muted-foreground">({(tempFileSize / 1024).toFixed(1)} KB)</span>
+                                                <img 
+                                                    src={resolveUploadDocumentUrl(tempFileUrl) || tempFileUrl} 
+                                                    alt="Preview" 
+                                                    className="h-10 w-10 rounded object-cover border flex-shrink-0" 
+                                                />
+                                                <div className="min-w-0">
+                                                    <span className="text-sm font-medium truncate block">{tempFileName || "Gambar Terpilih"}</span>
+                                                    <span className="text-xs text-muted-foreground">{tempFileSize > 0 ? `${(tempFileSize / 1024).toFixed(1)} KB` : "Tersedia"}</span>
+                                                </div>
                                             </div>
                                             <Button 
                                                 type="button" 
@@ -2469,19 +2703,31 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                                 </div>
                             </div>
 
-                            <div className="space-y-2">
-                                <Label className="text-sm font-semibold">Judul Lampiran</Label>
-                                <Input 
-                                    placeholder="Contoh: Detail Ban 12R22.5, Dimensi Produk..."
-                                    value={tempTitle}
-                                    onChange={(e) => setTempTitle(e.target.value)}
-                                />
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs font-semibold">Judul / Nama Barang</Label>
+                                    <Input 
+                                        placeholder="Contoh: Ban 12R22.5 X-Force..."
+                                        value={tempTitle}
+                                        onChange={(e) => setTempTitle(e.target.value)}
+                                        className="h-8 text-xs"
+                                    />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs font-semibold">Harga Penawaran</Label>
+                                    <Input 
+                                        placeholder="Contoh: Rp 8.931.000"
+                                        value={tempPriceNote}
+                                        onChange={(e) => setTempPriceNote(e.target.value)}
+                                        className="h-8 text-xs"
+                                    />
+                                </div>
                             </div>
 
                             <div className="flex items-center justify-between p-2 border rounded bg-zinc-50 dark:bg-zinc-800/50">
                                 <div className="space-y-0.5">
                                     <Label className="text-sm font-semibold">Sertakan di PDF / Preview</Label>
-                                    <p className="text-xs text-muted-foreground">Aktifkan untuk merender gambar ini sebagai halaman A4 baru di PDF</p>
+                                    <p className="text-xs text-muted-foreground">Aktifkan untuk merender gambar ini pada halaman lampiran PDF</p>
                                 </div>
                                 <input
                                     type="checkbox"
@@ -2494,12 +2740,12 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
 
                         <div className="space-y-4 flex flex-col">
                             <div className="space-y-2 flex-1 flex flex-col">
-                                <Label className="text-sm font-semibold">Keterangan Product</Label>
+                                <Label className="text-sm font-semibold">Keterangan / Spesifikasi Product (Di Samping Gambar)</Label>
                                 <Textarea 
-                                    placeholder="Masukkan penjelasan detail produk, dimensi, spesifikasi, atau info lainnya yang akan tampil di bawah gambar lampiran..."
+                                    placeholder="Masukkan penjelasan detail produk, part number, dimensi, spesifikasi teknis, atau info lainnya yang akan tampil di samping gambar lampiran..."
                                     value={tempDescription}
                                     onChange={(e) => setTempDescription(e.target.value)}
-                                    className="resize-none flex-1 min-h-[140px]"
+                                    className="resize-none flex-1 min-h-[140px] text-xs font-mono"
                                 />
                             </div>
 
@@ -2525,11 +2771,11 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                         ) : (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {attachments.map((attachment, idx) => (
-                                    <div key={idx} className="relative flex gap-3 p-3 border rounded-lg bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 shadow-sm">
-                                        <div className="h-16 w-16 bg-zinc-100 dark:bg-zinc-800 rounded overflow-hidden flex-shrink-0 flex items-center justify-center border border-zinc-200">
+                                    <div key={idx} className="relative flex gap-3 p-3 border rounded-lg bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 shadow-xs">
+                                        <div className="h-20 w-20 bg-zinc-100 dark:bg-zinc-800 rounded-md overflow-hidden flex-shrink-0 flex items-center justify-center border border-zinc-200">
                                             {attachment.fileUrl ? (
                                                 <img 
-                                                    src={attachment.fileUrl} 
+                                                    src={resolveUploadDocumentUrl(attachment.fileUrl) || attachment.fileUrl} 
                                                     alt={attachment.title} 
                                                     className="h-full w-full object-cover"
                                                 />
@@ -2546,11 +2792,16 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                                                     <Badge variant="outline" className="text-[10px] h-4">Skip PDF</Badge>
                                                 )}
                                             </div>
+                                            {attachment.priceNote && (
+                                                <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 mb-1">
+                                                    {attachment.priceNote}
+                                                </p>
+                                            )}
                                             <p className="text-xs text-muted-foreground truncate mb-1">
-                                                File: <span className="font-mono">{attachment.fileName}</span> ({(attachment.fileSize / 1024).toFixed(1)} KB)
+                                                File: <span className="font-mono">{attachment.fileName}</span>
                                             </p>
                                             {attachment.description && (
-                                                <p className="text-xs text-zinc-600 dark:text-zinc-400 line-clamp-2 bg-zinc-50 dark:bg-zinc-800/30 p-1.5 rounded border border-zinc-100 dark:border-zinc-800/50">
+                                                <p className="text-xs text-zinc-600 dark:text-zinc-400 line-clamp-2 bg-zinc-50 dark:bg-zinc-800/30 p-1.5 rounded border border-zinc-100 dark:border-zinc-800/50 whitespace-pre-line">
                                                     {attachment.description}
                                                 </p>
                                             )}

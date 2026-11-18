@@ -151,6 +151,7 @@ export const quotationItemSchema = z.object({
     unitPrice: z.number().min(0, "Unit price must be >= 0"),
     discount: z.number().min(0).default(0),
     tax: z.number().min(0).default(0),
+    imageUrl: z.string().optional().nullable(),
 })
 
 export const quotationAttachmentSchema = z.object({
@@ -162,6 +163,9 @@ export const quotationAttachmentSchema = z.object({
     mimeType: z.string().optional().nullable(),
     fileSize: z.number().default(0),
     description: z.string().optional().nullable(),
+    productId: z.number().optional().nullable(),
+    partNumber: z.string().optional().nullable(),
+    priceNote: z.string().optional().nullable(),
     includeInPdf: z.boolean().default(true),
 })
 
@@ -171,7 +175,7 @@ export const quotationSchema = z.object({
     quotationDate: z.string().or(z.date()),
     validUntil: z.string().or(z.date()).optional().nullable(),
     subject: z.string().optional(),
-    status: z.enum(["draft", "sent", "approved", "rejected", "expired", "converted"]).default("draft"),
+    status: z.enum(["draft", "sent", "approved", "rejected", "expired", "converted", "waiting_approval"]).default("draft"),
     paymentTerms: z.string().optional(),
     termsConditions: z.string().optional(),
     notes: z.string().optional(),
@@ -188,6 +192,7 @@ export const quotationSchema = z.object({
     adminNote: z.string().optional(),
     clientNote: z.string().optional(),
     discountType: z.enum(["percent", "fixed"]).default("fixed"),
+    attachmentLayoutRows: z.number().default(2),
     items: z.array(quotationItemSchema).min(1, "At least one item is required"),
     attachments: z.array(quotationAttachmentSchema).optional().default([]),
 })

@@ -17,8 +17,6 @@ import type { InferSelectModel } from "drizzle-orm"
 import { normalizeQuotationText } from "@/lib/quotation-text"
 import { buildQuotationPdfPayload } from "./quotation-pdf-generator"
 import { resolveUploadDocumentUrl } from "@/lib/upload-url"
-import { Switch } from "@/components/ui/switch"
-import { generateRosterFromQuotation } from "./quotation-roster-helper"
 
 type User = InferSelectModel<typeof user>
 
@@ -48,6 +46,7 @@ interface QuotationPdfData {
     discount: string
     tax: string
     shipping: string
+    attachmentLayoutRows?: number
     customer: Customer
     items: {
         id: number
@@ -58,6 +57,7 @@ interface QuotationPdfData {
         unitPrice: string
         discount: string
         tax: string
+        imageUrl?: string | null
         product: Product | null
     }[]
     attachments?: {
@@ -69,6 +69,9 @@ interface QuotationPdfData {
         kind: string
         includeInPdf: boolean
         description?: string | null
+        productId?: number | null
+        partNumber?: string | null
+        priceNote?: string | null
     }[]
 }
 
@@ -125,23 +128,6 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
     const [mobileScale, setMobileScale] = useState(1)
     const [mobileScaledHeight, setMobileScaledHeight] = useState<number | null>(null)
     const [isDownloadingPdf, setIsDownloadingPdf] = useState(false)
-    const [includeRoster, setIncludeRoster] = useState(true)
-    const [rosterOverrides, setRosterOverrides] = useState<Record<string, Record<number, "11" | "FB">>>({})
-
-    const handleToggleCell = (personId: string, day: number) => {
-        setRosterOverrides((prev) => {
-            const currentPerson = prev[personId] || {}
-            const currentVal = currentPerson[day] || "11"
-            const nextVal = currentVal === "11" ? "FB" : "11"
-            return {
-                ...prev,
-                [personId]: {
-                    ...currentPerson,
-                    [day]: nextVal,
-                },
-            }
-        })
-    }
 
     const A4_PAGE_WIDTH = 794
     const A4_PAGE_HEIGHT = 1123
@@ -171,8 +157,8 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
         quotation.customer.address3,
     ].filter(Boolean)
     const visibleAttachments = quotation.attachments
-        ?.filter((attachment) => attachment.includeInPdf && isImageAttachment(attachment))
-        .slice(0, 4) ?? []
+        ?.filter((attachment) => attachment.includeInPdf && isImageAttachment(attachment)) ?? []
+    const hasAnyItemImage = quotation.items.some((item) => !!(item.imageUrl || item.product?.imageUrl))
 
     // Helper to paginate items
     const paginateItems = () => {
@@ -252,17 +238,14 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                 <title>Quotation ${quotation.quotationNumber}</title>
                 <style>
                     @page { size: A4 portrait; margin: 0; }
-                    @page roster-landscape { size: A4 landscape; margin: 0; }
                     * { box-sizing: border-box; }
                     html, body { margin: 0; padding: 0; background: #ffffff; }
                     body { font-family: Arial, Helvetica, sans-serif; color: #163153; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
                     .print-pages-container { width: 100%; display: flex; flex-direction: column; align-items: center; }
                     .print-page { width: 210mm; height: 297mm; position: relative; overflow: hidden; page-break-after: always; background: white; }
-                    .print-page-landscape { width: 297mm !important; height: 210mm !important; min-width: 297mm !important; min-height: 210mm !important; page: roster-landscape !important; page-break-before: always !important; }
                     @media print {
                         .print-page { page-break-after: always; }
                         .print-page:last-child { page-break-after: auto; }
-                        .print-page-landscape { page: roster-landscape !important; page-break-before: always !important; page-break-after: auto !important; }
                     }
                     .bg-letterhead { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; pointer-events: none; }
                     .page-content { position: relative; z-index: 10; padding: 14mm 15mm 22mm 15mm; height: 100%; display: flex; flex-direction: column; }
@@ -311,8 +294,6 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
             const { generateQuotationPdf } = await import("./quotation-pdf-generator")
             await generateQuotationPdf(buildQuotationPdfPayload(quotation), {
                 mergeAttachments: visibleAttachments.length > 0,
-                includeRoster,
-                rosterOverrides,
             })
             toast.success("PDF A4 berhasil diunduh!", { id: toastId })
         } catch (error) {
@@ -333,21 +314,6 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                         <DialogTitle className="pr-10 text-base sm:text-lg">Quotation Preview</DialogTitle>
                         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-                            {/* Switch Roster */}
-                            <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 shadow-2xs">
-                                <Switch
-                                    id="toggle-roster-switch"
-                                    checked={includeRoster}
-                                    onCheckedChange={setIncludeRoster}
-                                />
-                                <label
-                                    htmlFor="toggle-roster-switch"
-                                    className="cursor-pointer text-xs font-semibold text-slate-700 select-none"
-                                >
-                                    Roster (Landscape)
-                                </label>
-                            </div>
-
                             <Button size="sm" onClick={handlePrint} className="w-full gap-2 bg-blue-600 text-white hover:bg-blue-700 sm:w-auto">
                                 <Printer className="h-3.5 w-3.5" />
                                 Browser Print
@@ -513,21 +479,46 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                                             <table style={{ width: "100%", borderCollapse: "collapse" }}>
                                                 <thead>
                                                     <tr style={{ background: "#3b5998", color: "#ffffff" }}>
-                                                        <th style={{ width: "15mm", padding: "3.5mm 3mm", fontSize: "9pt", fontWeight: 700, textAlign: "center" }}>#</th>
+                                                        <th style={{ width: hasAnyItemImage ? "10mm" : "15mm", padding: "3.5mm 3mm", fontSize: "9pt", fontWeight: 700, textAlign: "center" }}>#</th>
+                                                        {hasAnyItemImage && (
+                                                            <th style={{ width: "18mm", padding: "3.5mm 2mm", fontSize: "8.5pt", fontWeight: 700, textAlign: "center" }}>PHOTO</th>
+                                                        )}
                                                         <th style={{ padding: "3.5mm 4mm", fontSize: "9pt", fontWeight: 700, textAlign: "left" }}>ITEM</th>
-                                                        <th style={{ width: "18mm", padding: "3.5mm 3mm", fontSize: "9pt", fontWeight: 700, textAlign: "center" }}>QTY</th>
-                                                        <th style={{ width: "30mm", padding: "3.5mm 4mm", fontSize: "9pt", fontWeight: 700, textAlign: "right" }}>PRICE</th>
-                                                        <th style={{ width: "35mm", padding: "3.5mm 4mm", fontSize: "9pt", fontWeight: 700, textAlign: "right" }}>AMOUNT</th>
+                                                        <th style={{ width: hasAnyItemImage ? "15mm" : "18mm", padding: "3.5mm 3mm", fontSize: "9pt", fontWeight: 700, textAlign: "center" }}>QTY</th>
+                                                        <th style={{ width: hasAnyItemImage ? "28mm" : "30mm", padding: "3.5mm 4mm", fontSize: "9pt", fontWeight: 700, textAlign: "right" }}>PRICE</th>
+                                                        <th style={{ width: hasAnyItemImage ? "30mm" : "35mm", padding: "3.5mm 4mm", fontSize: "9pt", fontWeight: 700, textAlign: "right" }}>AMOUNT</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
                                                     {pageItems.map((item, idx) => {
                                                         const lineAmount = item.quantity * Number(item.unitPrice)
                                                         const globalIndex = itemStartIndex + idx + 1
+                                                        const itemPhotoUrl = item.imageUrl || item.product?.imageUrl
 
                                                         return (
                                                             <tr key={item.id || idx} style={{ verticalAlign: "top", background: idx % 2 === 1 ? "#f8fafc" : "#ffffff" }}>
                                                                 <td style={{ padding: "2.5mm 3mm", fontSize: "8.5pt", color: "#475569", textAlign: "center", borderBottom: "1px solid #e2e8f0" }}>{globalIndex}</td>
+                                                                {hasAnyItemImage && (
+                                                                    <td style={{ padding: "1.5mm 2mm", textAlign: "center", verticalAlign: "middle", borderBottom: "1px solid #e2e8f0" }}>
+                                                                        {itemPhotoUrl ? (
+                                                                            <img
+                                                                                src={resolveUploadDocumentUrl(itemPhotoUrl)}
+                                                                                alt=""
+                                                                                style={{
+                                                                                    width: "14mm",
+                                                                                    height: "14mm",
+                                                                                    objectFit: "cover",
+                                                                                    borderRadius: "1mm",
+                                                                                    border: "1px solid #cbd5e1",
+                                                                                    display: "block",
+                                                                                    margin: "0 auto",
+                                                                                }}
+                                                                            />
+                                                                        ) : (
+                                                                            <div style={{ width: "14mm", height: "14mm", background: "#f8fafc", borderRadius: "1mm", border: "1px dashed #cbd5e1", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto", fontSize: "6pt", color: "#94a3b8" }}>-</div>
+                                                                        )}
+                                                                    </td>
+                                                                )}
                                                                 <td style={{ padding: "2.5mm 4mm", fontSize: "8.5pt", color: "#0f172a", borderBottom: "1px solid #e2e8f0" }}>
                                                                     <div style={{ fontWeight: 700 }}>{getItemLabel(item)}</div>
                                                                     {item.longDescription ? (
@@ -632,13 +623,14 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                             )
                         })}
 
-                        {/* Rendering Lampiran sebagai Halaman A4 Tambahan dengan Grid 2x2 */}
+                        {/* Rendering Lampiran sebagai Halaman A4 Tambahan dengan Layout Grid Dinamis (1, 2, atau 3 Baris) */}
                         {(() => {
-                            // Group attachments into pages of 4 per page
+                            const rowsPerPage = Math.min(Math.max(Number(quotation.attachmentLayoutRows) || 2, 1), 3)
                             const pages: typeof visibleAttachments[] = []
-                            for (let i = 0; i < visibleAttachments.length; i += 4) {
-                                pages.push(visibleAttachments.slice(i, i + 4))
+                            for (let i = 0; i < visibleAttachments.length; i += rowsPerPage) {
+                                pages.push(visibleAttachments.slice(i, i + rowsPerPage))
                             }
+
                             return pages.map((pageAttachments, pageIdx) => (
                                 <div
                                     key={`attachment-page-${pageIdx}`}
@@ -672,68 +664,50 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
 
                                         {/* Header Halaman Lampiran */}
                                         <div style={{ marginBottom: "5mm", borderBottom: "2px solid #2563eb", paddingBottom: "2mm", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                                            <div style={{ fontSize: "11pt", fontWeight: 700, color: "#2563eb", textTransform: "uppercase" }}>
-                                                LAMPIRAN PENDUKUNG
+                                            <div style={{ fontSize: "11pt", fontWeight: 700, color: "#2563eb", textTransform: "uppercase", display: "flex", alignItems: "center", gap: "2mm" }}>
+                                                LAMPIRAN SPESIFIKASI & GAMBAR PENDUKUNG
                                             </div>
                                             <div style={{ fontSize: "8pt", color: "#64748b" }}>
-                                                Halaman {pageIdx + 1} dari {pages.length}
+                                                Lampiran {pageIdx + 1} dari {pages.length} ({rowsPerPage} baris per hal)
                                             </div>
                                         </div>
 
-                                        {/* Grid 2-kolom x 2-baris attachment */}
-                                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gridTemplateRows: "1fr 1fr", gap: "4mm", flex: 1, minHeight: 0 }}>
+                                        {/* Container Baris Lampiran */}
+                                        <div style={{ display: "flex", flexDirection: "column", gap: "4mm", flex: 1, minHeight: 0 }}>
                                             {pageAttachments.map((attachment, itemIdx) => {
-                                                const globalIdx = pageIdx * 4 + itemIdx
+                                                const globalIdx = pageIdx * rowsPerPage + itemIdx
                                                 const resolvedUrl = resolveUploadDocumentUrl(attachment.fileUrl)
+
+                                                // Style sizing adaptif sesuai rowsPerPage
+                                                const imageWidth = rowsPerPage === 1 ? "95mm" : (rowsPerPage === 2 ? "80mm" : "62mm")
+                                                const titleFontSize = rowsPerPage === 1 ? "10.5pt" : (rowsPerPage === 2 ? "9.5pt" : "8.5pt")
+                                                const descFontSize = rowsPerPage === 1 ? "8.5pt" : (rowsPerPage === 2 ? "8pt" : "7.5pt")
+
                                                 return (
                                                     <div
                                                         key={`att-${globalIdx}`}
                                                         style={{
                                                             display: "flex",
-                                                            flexDirection: "column",
+                                                            flexDirection: "row",
+                                                            flex: 1,
                                                             background: "#f8fafc",
-                                                            border: "1px solid #dde6f0",
+                                                            border: "1px solid #cbd5e1",
                                                             borderRadius: "2mm",
                                                             overflow: "hidden",
                                                             minHeight: 0,
                                                         }}
                                                     >
-                                                        {/* Card Header: Judul */}
+                                                        {/* Sisi Kiri: Foto / Gambar Produk */}
                                                         <div style={{
-                                                            background: "#2563eb",
-                                                            padding: "2.5mm 3.5mm",
-                                                            display: "flex",
-                                                            alignItems: "center",
-                                                            gap: "2mm"
-                                                        }}>
-                                                            <div style={{
-                                                                background: "rgba(255,255,255,0.25)",
-                                                                borderRadius: "50%",
-                                                                width: "5mm",
-                                                                height: "5mm",
-                                                                display: "flex",
-                                                                alignItems: "center",
-                                                                justifyContent: "center",
-                                                                fontSize: "7pt",
-                                                                color: "#fff",
-                                                                fontWeight: 700,
-                                                                flexShrink: 0
-                                                            }}>{globalIdx + 1}</div>
-                                                            <div style={{ fontSize: "8.5pt", fontWeight: 700, color: "#ffffff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                                                {attachment.title}
-                                                            </div>
-                                                        </div>
-
-                                                        {/* Gambar */}
-                                                        <div style={{
-                                                            flex: 1,
+                                                            width: imageWidth,
+                                                            minWidth: imageWidth,
+                                                            borderRight: "1px solid #cbd5e1",
+                                                            background: "#ffffff",
                                                             display: "flex",
                                                             alignItems: "center",
                                                             justifyContent: "center",
-                                                            padding: "2mm",
-                                                            background: "#fff",
-                                                            minHeight: 0,
-                                                            overflow: "hidden"
+                                                            padding: "3mm",
+                                                            position: "relative",
                                                         }}>
                                                             {resolvedUrl ? (
                                                                 <img
@@ -745,7 +719,6 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                                                                         objectFit: "contain"
                                                                     }}
                                                                     onError={(e) => {
-                                                                        // fallback: try original fileUrl
                                                                         const el = e.currentTarget
                                                                         if (el.src !== attachment.fileUrl) {
                                                                             el.src = attachment.fileUrl
@@ -755,22 +728,82 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                                                             ) : (
                                                                 <div style={{ fontSize: "8pt", color: "#94a3b8" }}>Gambar tidak tersedia</div>
                                                             )}
+                                                            <div style={{
+                                                                position: "absolute",
+                                                                top: "2mm",
+                                                                left: "2mm",
+                                                                background: "#2563eb",
+                                                                color: "#fff",
+                                                                fontSize: "7pt",
+                                                                fontWeight: 700,
+                                                                borderRadius: "1mm",
+                                                                padding: "0.5mm 1.5mm",
+                                                            }}>
+                                                                #{globalIdx + 1}
+                                                            </div>
                                                         </div>
 
-                                                        {/* Keterangan */}
-                                                        {attachment.description && (
-                                                            <div style={{
-                                                                padding: "2mm 3mm",
-                                                                borderTop: "1px solid #e2e8f0",
-                                                                fontSize: "7.5pt",
-                                                                color: "#475569",
-                                                                lineHeight: 1.25,
-                                                                whiteSpace: "pre-line"
-                                                            }}>
-                                                                <span style={{ fontWeight: 700, color: "#1e293b" }}>Ket: </span>
-                                                                {attachment.description}
+                                                        {/* Sisi Kanan: Panel Info Produk & Keterangan */}
+                                                        <div style={{
+                                                            flex: 1,
+                                                            display: "flex",
+                                                            flexDirection: "column",
+                                                            padding: "3.5mm 4.5mm",
+                                                            overflow: "hidden",
+                                                        }}>
+                                                            {/* Judul Barang */}
+                                                            <div style={{ fontSize: titleFontSize, fontWeight: 700, color: "#0f172a", marginBottom: "1.5mm" }}>
+                                                                {attachment.title}
                                                             </div>
-                                                        )}
+
+                                                            {/* Part Number & Harga Penawaran */}
+                                                            <div style={{ display: "flex", flexWrap: "wrap", gap: "2mm", marginBottom: "2mm" }}>
+                                                                {attachment.partNumber && (
+                                                                    <div style={{
+                                                                        background: "#e2e8f0",
+                                                                        color: "#1e293b",
+                                                                        fontSize: "7.5pt",
+                                                                        fontWeight: 600,
+                                                                        padding: "0.5mm 2mm",
+                                                                        borderRadius: "1mm",
+                                                                    }}>
+                                                                        PN: {attachment.partNumber}
+                                                                    </div>
+                                                                )}
+                                                                {attachment.priceNote && (
+                                                                    <div style={{
+                                                                        background: "#dcfce7",
+                                                                        color: "#15803d",
+                                                                        fontSize: "7.5pt",
+                                                                        fontWeight: 700,
+                                                                        padding: "0.5mm 2mm",
+                                                                        borderRadius: "1mm",
+                                                                        border: "1px solid #bbf7d0",
+                                                                    }}>
+                                                                        {attachment.priceNote}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+
+                                                            {/* Deskripsi & Spesifikasi Lengkap */}
+                                                            {attachment.description && (
+                                                                <div style={{
+                                                                    flex: 1,
+                                                                    fontSize: descFontSize,
+                                                                    color: "#334155",
+                                                                    lineHeight: 1.35,
+                                                                    whiteSpace: "pre-line",
+                                                                    overflowY: "hidden",
+                                                                    borderTop: "1px dashed #cbd5e1",
+                                                                    paddingTop: "2mm",
+                                                                }}>
+                                                                    <div style={{ fontWeight: 700, fontSize: "7pt", color: "#64748b", textTransform: "uppercase", marginBottom: "0.5mm" }}>
+                                                                        Deskripsi & Spesifikasi Teknis:
+                                                                    </div>
+                                                                    {attachment.description}
+                                                                </div>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 )
                                             })}
@@ -778,179 +811,6 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                                     </div>
                                 </div>
                             ))
-                        })()}
-
-                        {/* Rendering Halaman Roster (Landscape A4: 297mm x 210mm) */}
-                        {includeRoster && (() => {
-                            const roster = generateRosterFromQuotation(quotation.quotationDate, quotation.items, rosterOverrides)
-
-                            return (
-                                <div
-                                    key="roster-page"
-                                    className="print-page print-page-landscape relative bg-white shadow-2xl ring-1 ring-slate-200"
-                                    style={{
-                                        width: "297mm",
-                                        height: "210mm",
-                                        minWidth: "297mm",
-                                        minHeight: "210mm",
-                                        position: "relative",
-                                        overflow: "hidden",
-                                        background: "#ffffff",
-                                        color: "#163153",
-                                        fontFamily: "Arial, Helvetica, sans-serif",
-                                        lineHeight: "1.3",
-                                        pageBreakBefore: "always",
-                                        flexShrink: 0,
-                                    }}
-                                >
-                                    <div className="page-content relative z-10 px-[12mm] py-[10mm] flex flex-col h-full">
-                                        {/* Header Roster */}
-                                        <div className="flex items-start justify-between border-b-2 border-blue-600 pb-2 mb-2.5">
-                                            <div>
-                                                <div className="text-sm font-bold text-blue-800 tracking-wide uppercase">
-                                                    JADWAL ROSTER KERJA (OPERATION ROSTER PLAN)
-                                                </div>
-                                                <div className="text-xs text-slate-500 font-medium">
-                                                    PT Chitra Paratama - Mining & Heavy Equipment Tire Service
-                                                </div>
-                                            </div>
-                                            <div className="text-right text-xs">
-                                                <div className="font-bold text-slate-900">
-                                                    Quotation: {quotation.quotationNumber || "DRAFT"}
-                                                </div>
-                                                <div className="text-slate-600">
-                                                    Customer: {quotation.customer.name}
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Sub-Header Metadata & Legend */}
-                                        <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5 rounded-md bg-slate-50 p-2 border border-slate-200 text-xs">
-                                            <div className="flex items-center gap-4">
-                                                <div>
-                                                    <span className="text-slate-500 font-semibold">Periode: </span>
-                                                    <span className="font-bold text-slate-800">{roster.monthName} {roster.year}</span>
-                                                </div>
-                                                <div>
-                                                    <span className="text-slate-500 font-semibold">Total Personil: </span>
-                                                    <span className="font-bold text-slate-800">{roster.persons.length} Orang</span>
-                                                </div>
-                                            </div>
-                                            <div className="flex items-center gap-3">
-                                                <span className="text-slate-500 font-semibold">Keterangan:</span>
-                                                <span className="inline-flex items-center gap-1 rounded bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-700 border border-emerald-200">
-                                                    11 = Shift Kerja (11 Jam)
-                                                </span>
-                                                <span className="inline-flex items-center gap-1 rounded bg-rose-50 px-2 py-0.5 text-xs font-bold text-rose-700 border border-rose-200">
-                                                    FB = Field Break / Off
-                                                </span>
-                                            </div>
-                                        </div>
-
-                                        {/* Table Grid Roster */}
-                                        <div className="flex-1 overflow-hidden">
-                                            <table className="w-full border-collapse text-[8pt]">
-                                                <thead>
-                                                    <tr className="bg-blue-800 text-white font-bold">
-                                                        <th className="border border-blue-900 px-1 py-1 text-center w-[22px]">#</th>
-                                                        <th className="border border-blue-900 px-2 py-1 text-left min-w-[120px] max-w-[170px]">
-                                                            Nama / Posisi
-                                                        </th>
-                                                        {roster.daysArray.map((day) => (
-                                                            <th key={day} className="border border-blue-900 px-0.5 py-1 text-center w-[21px]">
-                                                                {day}
-                                                            </th>
-                                                        ))}
-                                                        <th className="border border-blue-900 px-1 py-1 text-center w-[30px] bg-emerald-900">
-                                                            11
-                                                        </th>
-                                                        <th className="border border-blue-900 px-1 py-1 text-center w-[30px] bg-rose-900">
-                                                            FB
-                                                        </th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {roster.persons.map((person, pIdx) => (
-                                                        <tr key={person.id} className={pIdx % 2 === 1 ? "bg-slate-50" : "bg-white"}>
-                                                            <td className="border border-slate-300 px-1 py-0.5 text-center text-slate-600 font-mono">
-                                                                {pIdx + 1}
-                                                            </td>
-                                                            <td className="border border-slate-300 px-2 py-0.5 font-semibold text-slate-800 truncate" title={person.name}>
-                                                                {person.name}
-                                                            </td>
-                                                            {roster.daysArray.map((day) => {
-                                                                const shift = person.shifts[day] || "11"
-                                                                const isFb = shift === "FB"
-                                                                return (
-                                                                    <td
-                                                                        key={day}
-                                                                        onClick={() => handleToggleCell(person.id, day)}
-                                                                        title="Klik untuk switch 11 / FB"
-                                                                        className={`border border-slate-300 px-0.5 py-0.5 text-center font-bold text-[7pt] cursor-pointer select-none transition-colors ${
-                                                                            isFb
-                                                                                ? "bg-rose-50 text-rose-700 hover:bg-rose-100"
-                                                                                : "bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
-                                                                        }`}
-                                                                    >
-                                                                        {shift}
-                                                                    </td>
-                                                                )
-                                                            })}
-                                                            <td className="border border-slate-300 px-1 py-0.5 text-center font-bold text-emerald-800 bg-emerald-50/60">
-                                                                {person.total11}
-                                                            </td>
-                                                            <td className="border border-slate-300 px-1 py-0.5 text-center font-bold text-rose-700 bg-rose-50/60">
-                                                                {person.totalFb}
-                                                            </td>
-                                                        </tr>
-                                                    ))}
-                                                    {/* Summary Row */}
-                                                    <tr className="bg-slate-100 font-bold text-slate-800 border-t-2 border-slate-400">
-                                                        <td colSpan={2} className="border border-slate-300 px-2 py-1 text-right text-[7.5pt]">
-                                                            TOTAL SHIFT / HARI
-                                                        </td>
-                                                        {roster.daysArray.map((day) => {
-                                                            const count11 = roster.persons.filter((p) => p.shifts[day] === "11").length
-                                                            return (
-                                                                <td key={day} className="border border-slate-300 px-0.5 py-1 text-center text-[7pt] text-emerald-800">
-                                                                    {count11}
-                                                                </td>
-                                                            )
-                                                        })}
-                                                        <td className="border border-slate-300 px-1 py-1 text-center text-emerald-800 bg-emerald-100">
-                                                            {roster.totalAll11}
-                                                        </td>
-                                                        <td className="border border-slate-300 px-1 py-1 text-center text-rose-800 bg-rose-100">
-                                                            {roster.totalAllFb}
-                                                        </td>
-                                                    </tr>
-                                                </tbody>
-                                            </table>
-                                        </div>
-
-                                        {/* Footer Signatures */}
-                                        <div className="mt-2.5 pt-2 border-t border-slate-200 flex justify-between items-end text-xs text-slate-600">
-                                            <div>
-                                                <p className="text-[9px] text-slate-400 italic">
-                                                    * Klik angka pada sel untuk switch antara shift "11" dan "FB" sebelum print/download PDF.
-                                                </p>
-                                            </div>
-                                            <div className="flex gap-10 text-center text-[9.5px]">
-                                                <div>
-                                                    <p className="font-semibold text-slate-700">Dibuat Oleh,</p>
-                                                    <div className="h-7" />
-                                                    <p className="border-t border-slate-400 pt-0.5 font-bold text-slate-900">{quotation.salesPerson?.name || "Site Coordinator"}</p>
-                                                </div>
-                                                <div>
-                                                    <p className="font-semibold text-slate-700">Disetujui Oleh,</p>
-                                                    <div className="h-7" />
-                                                    <p className="border-t border-slate-400 pt-0.5 font-bold text-slate-900">{quotation.attn || quotation.customer.name}</p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            )
                         })()}
                     </div>
                 </div>

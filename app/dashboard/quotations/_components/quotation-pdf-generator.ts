@@ -2,7 +2,6 @@ import { toast } from "sonner"
 import type { Customer, Product } from "@/lib/types"
 import { normalizeQuotationText } from "@/lib/quotation-text"
 import { resolveUploadDocumentUrl } from "@/lib/upload-url"
-import { generateRosterFromQuotation } from "./quotation-roster-helper"
 
 interface QuotationPdfData {
     quotationNumber: string | null
@@ -21,6 +20,7 @@ interface QuotationPdfData {
     shipping: string
     termsConditions: string | null
     clientNote: string | null
+    attachmentLayoutRows?: number
     items: {
         product: Product | null
         description: string | null
@@ -29,6 +29,7 @@ interface QuotationPdfData {
         unitPrice: string
         discount?: string
         tax?: string
+        imageUrl?: string | null
     }[]
     attachments?: {
         title: string
@@ -37,6 +38,10 @@ interface QuotationPdfData {
         mimeType?: string | null
         kind: string
         includeInPdf: boolean
+        description?: string | null
+        productId?: number | null
+        partNumber?: string | null
+        priceNote?: string | null
     }[]
 }
 
@@ -57,6 +62,7 @@ type QuotationPdfPayloadSource = {
     shipping: string
     termsConditions: string | null
     clientNote: string | null
+    attachmentLayoutRows?: number
     items: {
         product: Product | null
         description: string | null
@@ -65,6 +71,7 @@ type QuotationPdfPayloadSource = {
         unitPrice: string
         discount?: string
         tax?: string
+        imageUrl?: string | null
     }[]
     attachments?: {
         title: string
@@ -73,6 +80,10 @@ type QuotationPdfPayloadSource = {
         mimeType?: string | null
         kind: string
         includeInPdf: boolean
+        description?: string | null
+        productId?: number | null
+        partNumber?: string | null
+        priceNote?: string | null
     }[]
 }
 
@@ -113,6 +124,7 @@ export function buildQuotationPdfPayload(source: QuotationPdfPayloadSource): Quo
         shipping: source.shipping,
         termsConditions: normalizeQuotationText(source.termsConditions) ?? null,
         clientNote: normalizeQuotationText(source.clientNote) ?? null,
+        attachmentLayoutRows: source.attachmentLayoutRows ?? 2,
         items: source.items.map((item) => ({
             product: item.product,
             description: item.description,
@@ -121,6 +133,7 @@ export function buildQuotationPdfPayload(source: QuotationPdfPayloadSource): Quo
             unitPrice: item.unitPrice,
             discount: item.discount,
             tax: item.tax,
+            imageUrl: item.imageUrl || item.product?.imageUrl || null,
         })),
         attachments: source.attachments?.map((attachment) => ({
             title: attachment.title,
@@ -129,6 +142,10 @@ export function buildQuotationPdfPayload(source: QuotationPdfPayloadSource): Quo
             mimeType: attachment.mimeType,
             kind: attachment.kind,
             includeInPdf: attachment.includeInPdf,
+            description: normalizeQuotationText(attachment.description) ?? null,
+            productId: attachment.productId ?? null,
+            partNumber: attachment.partNumber ?? null,
+            priceNote: attachment.priceNote ?? null,
         })),
     }
 }
@@ -217,12 +234,27 @@ async function getLetterheadDataUrl() {
     return await cachedLetterheadDataUrlPromise
 }
 
+async function loadImageAsDataUrl(url: string): Promise<string | null> {
+    try {
+        const resolved = resolveUploadDocumentUrl(url)
+        if (!resolved) return null
+        const response = await fetch(resolved, { cache: "no-store" })
+        if (!response.ok) return null
+        const blob = await response.blob()
+        return await new Promise<string>((resolve) => {
+            const reader = new FileReader()
+            reader.onloadend = () => resolve((reader.result as string) || "")
+            reader.readAsDataURL(blob)
+        })
+    } catch {
+        return null
+    }
+}
+
 export async function generateQuotationPdf(
     quotation: QuotationPdfData,
     options?: {
         mergeAttachments?: boolean
-        includeRoster?: boolean
-        rosterOverrides?: Record<string, Record<number, "11" | "FB">>
     },
 ) {
     try {
@@ -251,6 +283,31 @@ export async function generateQuotationPdf(
 
         const shouldMergeAttachments = options?.mergeAttachments === true
         const base64data = await getLetterheadDataUrl()
+
+        // Preload item thumbnails and attachment images as Data URLs for reliable rendering
+        const itemThumbnails = await Promise.all(
+            quotation.items.map(async (item) => {
+                const imgUrl = item.imageUrl || item.product?.imageUrl
+                if (!imgUrl) return null
+                return await loadImageAsDataUrl(imgUrl)
+            })
+        )
+
+        const imageAttachments = quotation.attachments?.filter((att) => {
+            if (!att.includeInPdf || !att.fileUrl) return false
+            const ext = (att.fileName.split(".").pop() || "").toLowerCase()
+            const mime = (att.mimeType || "").toLowerCase()
+            return mime.startsWith("image/") || ["png", "jpg", "jpeg", "webp"].includes(ext)
+        }) || []
+
+        const attachmentImageDataUrls = await Promise.all(
+            imageAttachments.map(async (att) => {
+                if (!att.fileUrl) return null
+                return await loadImageAsDataUrl(att.fileUrl)
+            })
+        )
+
+        const hasAnyItemImage = itemThumbnails.some((thumb) => !!thumb)
 
         // Helper to render Draft/Pending watermark if not fully approved
         const renderWatermark = () => {
@@ -427,13 +484,29 @@ export async function generateQuotationPdf(
         currentY = metaBoxY + metaBoxHeight + 10
 
         // Items Table
+        const itemColIndex = hasAnyItemImage ? 2 : 1
+        const itemTextWidth = hasAnyItemImage ? 64 : 75
+
+        const tableHead = hasAnyItemImage
+            ? [['#', 'IMG', 'ITEM', 'QTY', 'PRICE', 'AMOUNT']]
+            : [['#', 'ITEM', 'QTY', 'PRICE', 'AMOUNT']]
+
         const tableBody = quotation.items.map((item, index) => {
             const lineTitle = getItemLabel(item)
-            // We just pass it simply to keep row data, we will wipe display and custom draw
             const combinedContent = lineTitle
-
             const amount = item.quantity * Number(item.unitPrice)
             
+            if (hasAnyItemImage) {
+                return [
+                    (index + 1).toString(),
+                    "", // Placeholder for image
+                    combinedContent,
+                    item.quantity.toString(),
+                    Number(item.unitPrice).toLocaleString(),
+                    amount.toLocaleString()
+                ]
+            }
+
             return [
                 (index + 1).toString(),
                 combinedContent,
@@ -443,12 +516,29 @@ export async function generateQuotationPdf(
             ]
         })
 
+        const columnStylesConfig: Record<number, { cellWidth?: number; halign?: "center" | "left" | "right" }> = hasAnyItemImage
+            ? {
+                0: { cellWidth: 10, halign: 'center' },
+                1: { cellWidth: 16, halign: 'center' },
+                2: { cellWidth: 71 },
+                3: { cellWidth: 15, halign: 'center' },
+                4: { cellWidth: 30, halign: 'right' },
+                5: { cellWidth: 34, halign: 'right' },
+            }
+            : {
+                0: { cellWidth: 15, halign: 'center' },
+                1: { cellWidth: 82 },
+                2: { cellWidth: 18, halign: 'center' },
+                3: { cellWidth: 30, halign: 'right' },
+                4: { cellWidth: 35, halign: 'right' },
+            }
+
         let finalY = currentY
 
         autoTable(doc, {
             startY: currentY,
             margin: { top: 50, bottom: 65, left: 15, right: 15 },
-            head: [['#', 'ITEM', 'QTY', 'PRICE', 'AMOUNT']],
+            head: tableHead,
             body: tableBody,
             theme: 'plain',
             headStyles: {
@@ -456,73 +546,81 @@ export async function generateQuotationPdf(
                 textColor: [255, 255, 255] as [number, number, number],
                 fontStyle: 'bold',
                 fontSize: 9,
-                cellPadding: 5,
+                cellPadding: 4,
             },
             bodyStyles: {
-                fontSize: 9,
-                cellPadding: 5,
+                fontSize: 8.5,
+                cellPadding: 4,
                 textColor: darkText,
             },
-            columnStyles: {
-                0: { cellWidth: 15, halign: 'center' },
-                1: { cellWidth: 82 }, // dynamic custom drawn
-                2: { cellWidth: 18, halign: 'center' },
-                3: { cellWidth: 30, halign: 'right' },
-                4: { cellWidth: 35, halign: 'right' },
-            },
+            columnStyles: columnStylesConfig,
             alternateRowStyles: {
                 fillColor: [248, 250, 252] as [number, number, number]
             },
-            // The critical part to avoid page cuts for descriptions
             pageBreak: 'auto',
-            rowPageBreak: 'avoid', // Keep items together
+            rowPageBreak: 'avoid',
             didParseCell: (data: AutoTableHookData) => {
-                if (data.section === 'body' && data.column.index === 1) {
+                if (data.section === 'body' && data.column.index === itemColIndex) {
                     const item = quotation.items[data.row.index]
                     const doc = data.doc
 
                     let totalHeight = 8 
                     
-                    doc.setFontSize(10.5)
+                    doc.setFontSize(10)
                     const descText = getItemLabel(item)
-                    totalHeight += doc.splitTextToSize(descText, 75).length * 4.2
+                    totalHeight += doc.splitTextToSize(descText, itemTextWidth).length * 4
                     
                     if (item.longDescription) {
-                        doc.setFontSize(8.5)
+                        doc.setFontSize(8)
                         totalHeight += 2
-                        totalHeight += doc.splitTextToSize(item.longDescription, 75).length * 3.4
+                        totalHeight += doc.splitTextToSize(item.longDescription, itemTextWidth).length * 3.2
                     }
                     
-                    data.cell.styles.minCellHeight = totalHeight + 2
+                    const minRowH = (hasAnyItemImage && itemThumbnails[data.row.index]) ? 17 : totalHeight + 2
+                    data.cell.styles.minCellHeight = minRowH
                 }
             },
             willDrawCell: (data: AutoTableHookData) => {
-                if (data.section === 'body' && data.column.index === 1) {
-                    data.cell.text = []; // Clear text to prevent autoTable from rendering double text
+                if (data.section === 'body') {
+                    if (data.column.index === itemColIndex || (hasAnyItemImage && data.column.index === 1)) {
+                        data.cell.text = []; // Clear text to prevent autoTable double text
+                    }
                 }
             },
             didDrawCell: (data: AutoTableHookData) => {
+                // Draw product thumbnail if present
+                if (hasAnyItemImage && data.section === 'body' && data.column.index === 1) {
+                    const thumbUrl = itemThumbnails[data.row.index]
+                    if (thumbUrl) {
+                        try {
+                            doc.addImage(thumbUrl, 'JPEG', data.cell.x + 1, data.cell.y + 1.5, 14, 14, undefined, 'FAST')
+                        } catch (err) {
+                            console.error("Failed to draw thumbnail in cell", err)
+                        }
+                    }
+                }
+
                 // Custom drawn cell text for Item column
-                if (data.section === 'body' && data.column.index === 1) {
+                if (data.section === 'body' && data.column.index === itemColIndex) {
                     const item = quotation.items[data.row.index]
                     const doc = data.doc
-                    const x = data.cell.x + 5
-                    let y = data.cell.y + 5 + 3.5 // offset to baseline
+                    const x = data.cell.x + 4
+                    let y = data.cell.y + 4 + 3.2
 
                     const descText = getItemLabel(item)
                     doc.setFont("helvetica", "bold")
-                    doc.setFontSize(10.5)
+                    doc.setFontSize(10)
                     doc.setTextColor(15, 23, 42)
-                    const descLines = doc.splitTextToSize(descText, 75)
+                    const descLines = doc.splitTextToSize(descText, itemTextWidth)
                     doc.text(descLines, x, y)
-                    y += descLines.length * 4.2
+                    y += descLines.length * 4
 
                     if (item.longDescription) {
                         doc.setFont("helvetica", "italic")
-                        doc.setFontSize(8.5)
+                        doc.setFontSize(8)
                         doc.setTextColor(100, 116, 139)
-                        const longDescLines = doc.splitTextToSize(item.longDescription, 75)
-                        y += 2
+                        const longDescLines = doc.splitTextToSize(item.longDescription, itemTextWidth)
+                        y += 1.5
                         doc.text(longDescLines, x, y)
                     }
                 }
@@ -615,139 +713,126 @@ export async function generateQuotationPdf(
             finalY = termsY + (formattedTerms.length * 4) + 12
         }
 
-        const includedAttachments = quotation.attachments?.filter((attachment) => attachment.includeInPdf) ?? []
-        if (includedAttachments.length > 0) {
-            let attachmentY = finalY
-            if (attachmentY > 235) {
-                doc.addPage()
-                attachmentY = 55
+        // Rendering Lampiran Gambar Terstruktur pada Halaman A4 Tambahan (1, 2, atau 3 Baris per Halaman)
+        if (imageAttachments.length > 0) {
+            const rowsPerPage = Math.min(Math.max(Number(quotation.attachmentLayoutRows) || 2, 1), 3)
+            const attachmentPages: typeof imageAttachments[] = []
+            const attachmentDataUrlPages: (string | null)[][] = []
+
+            for (let i = 0; i < imageAttachments.length; i += rowsPerPage) {
+                attachmentPages.push(imageAttachments.slice(i, i + rowsPerPage))
+                attachmentDataUrlPages.push(attachmentImageDataUrls.slice(i, i + rowsPerPage))
             }
 
-            doc.setFillColor(248, 250, 252)
-            doc.rect(15, attachmentY - 5, 180, Math.max(18, includedAttachments.length * 7 + 12), 'F')
-            doc.setFont("helvetica", "bold")
-            doc.setFontSize(9)
-            doc.setTextColor(darkText[0], darkText[1], darkText[2])
-            doc.text("ATTACHMENT PACKAGE", 20, attachmentY + 2)
+            attachmentPages.forEach((pageAtts, pageIdx) => {
+                doc.addPage() // Background letterhead & watermark otomatis ditambahkan
 
-            let lineY = attachmentY + 9
-            doc.setFont("helvetica", "normal")
-            doc.setFontSize(8.5)
-            doc.setTextColor(grayText[0], grayText[1], grayText[2])
-            includedAttachments.forEach((attachment, index) => {
-                doc.text(`${index + 1}. ${attachment.title} (${attachment.fileName})`, 20, lineY)
-                lineY += 6
-            })
-        }
+                // Header Halaman Lampiran
+                doc.setFont("helvetica", "bold")
+                doc.setFontSize(11)
+                doc.setTextColor(37, 99, 235) // brand blue
+                doc.text("LAMPIRAN SPESIFIKASI & GAMBAR PENDUKUNG", 15, 48)
 
-        // Roster Manpower Page (Landscape A4: 297mm x 210mm)
-        if (options?.includeRoster) {
-            doc.addPage("a4", "landscape")
+                doc.setFont("helvetica", "normal")
+                doc.setFontSize(8)
+                doc.setTextColor(grayText[0], grayText[1], grayText[2])
+                doc.text(`Lampiran ${pageIdx + 1} dari ${attachmentPages.length} (${rowsPerPage} baris per hal)`, 195, 48, { align: "right" })
 
-            // Title & Info
-            doc.setFont("helvetica", "bold")
-            doc.setFontSize(14)
-            doc.setTextColor(30, 64, 175) // blue-800
-            doc.text("JADWAL ROSTER KERJA (OPERATION ROSTER PLAN)", 14, 16)
+                doc.setDrawColor(37, 99, 235)
+                doc.setLineWidth(0.5)
+                doc.line(15, 51, 195, 51)
 
-            doc.setFontSize(8.5)
-            doc.setFont("helvetica", "normal")
-            doc.setTextColor(darkText[0], darkText[1], darkText[2])
+                // Layout baris per halaman
+                const startY = 55
+                const availableHeight = 220
+                const gap = 4
+                const rowHeight = (availableHeight - (rowsPerPage - 1) * gap) / rowsPerPage
+                const imageWidth = rowsPerPage === 1 ? 90 : (rowsPerPage === 2 ? 75 : 55)
 
-            const roster = generateRosterFromQuotation(quotation.quotationDate, quotation.items, options?.rosterOverrides)
+                pageAtts.forEach((att, rIdx) => {
+                    const itemY = startY + rIdx * (rowHeight + gap)
+                    const globalIdx = pageIdx * rowsPerPage + rIdx + 1
+                    const imgDataUrl = attachmentDataUrlPages[pageIdx][rIdx]
 
-            // Sub-info box
-            doc.text(`Quotation No : ${quotation.quotationNumber || "DRAFT"}`, 14, 23)
-            doc.text(`Customer     : ${quotation.customer.name}`, 14, 28)
-            doc.text(`Periode      : ${roster.monthName} ${roster.year}`, 150, 23)
-            doc.text(`Total Personil: ${roster.persons.length} Orang`, 150, 28)
+                    // Box border luar
+                    doc.setFillColor(248, 250, 252)
+                    doc.setDrawColor(203, 213, 225)
+                    doc.setLineWidth(0.3)
+                    doc.roundedRect(15, itemY, 180, rowHeight, 2, 2, 'FD')
 
-            // Legend badge
-            doc.setFont("helvetica", "bold")
-            doc.setTextColor(22, 101, 52) // green-800
-            doc.text("Keterangan: 11 = Shift Kerja (11 Jam)   |   FB = Field Break / Off", 14, 34)
+                    // Sisi Kiri: Box Gambar
+                    doc.setFillColor(255, 255, 255)
+                    doc.rect(15, itemY, imageWidth, rowHeight, 'FD')
 
-            // Table columns: #, NAMA / POSISI, 1..daysInMonth, Total 11, Total FB
-            const headCols = ["#", "NAMA / POSISI", ...roster.daysArray.map((d) => d.toString()), "11", "FB"]
-
-            const rosterBody = roster.persons.map((person, idx) => {
-                const dayCols = roster.daysArray.map((d) => person.shifts[d] || "11")
-                return [
-                    (idx + 1).toString(),
-                    person.name,
-                    ...dayCols,
-                    person.total11.toString(),
-                    person.totalFb.toString(),
-                ]
-            })
-
-            // Summary row at bottom
-            const summaryRow = [
-                "",
-                "TOTAL SHIFT / HARI",
-                ...roster.daysArray.map((d) => {
-                    const count11 = roster.persons.filter((p) => p.shifts[d] === "11").length
-                    return count11.toString()
-                }),
-                roster.totalAll11.toString(),
-                roster.totalAllFb.toString(),
-            ]
-
-            const dayColWidth = Math.max(4.5, (270 - 48) / (roster.daysInMonth + 3))
-
-            const columnStylesConfig: Record<number, { cellWidth?: number; halign?: "center" | "left" | "right" }> = {
-                0: { cellWidth: 8, halign: "center" },
-                1: { cellWidth: 42, halign: "left" },
-            }
-
-            roster.daysArray.forEach((_, dIdx) => {
-                columnStylesConfig[dIdx + 2] = { cellWidth: dayColWidth, halign: "center" }
-            })
-
-            columnStylesConfig[roster.daysInMonth + 2] = { cellWidth: 12, halign: "center" }
-            columnStylesConfig[roster.daysInMonth + 3] = { cellWidth: 12, halign: "center" }
-
-            autoTable(doc, {
-                startY: 37,
-                margin: { left: 14, right: 14 },
-                head: [headCols],
-                body: [...rosterBody, summaryRow],
-                theme: "grid",
-                headStyles: {
-                    fillColor: [30, 64, 175],
-                    textColor: [255, 255, 255],
-                    fontSize: 7.5,
-                    fontStyle: "bold",
-                    halign: "center",
-                    cellPadding: 1.5,
-                },
-                bodyStyles: {
-                    fontSize: 7,
-                    cellPadding: 1.5,
-                    textColor: [30, 41, 59],
-                },
-                columnStyles: columnStylesConfig,
-                didParseCell: (data) => {
-                    if (data.section === "body") {
-                        const isLastRow = data.row.index === rosterBody.length
-                        if (isLastRow) {
-                            data.cell.styles.fontStyle = "bold"
-                            data.cell.styles.fillColor = [241, 245, 249]
-                        } else if (data.column.index >= 2 && data.column.index < roster.daysInMonth + 2) {
-                            const val = data.cell.raw
-                            if (val === "FB") {
-                                data.cell.styles.textColor = [185, 28, 28]
-                                data.cell.styles.fontStyle = "bold"
-                                data.cell.styles.fillColor = [254, 242, 242]
-                            } else if (val === "11") {
-                                data.cell.styles.textColor = [22, 101, 52]
-                                data.cell.styles.fontStyle = "bold"
-                            }
+                    if (imgDataUrl) {
+                        try {
+                            const pad = 2
+                            doc.addImage(imgDataUrl, 'JPEG', 15 + pad, itemY + pad, imageWidth - pad * 2, rowHeight - pad * 2, undefined, 'FAST')
+                        } catch (err) {
+                            console.error("Failed to add image to PDF:", err)
                         }
                     }
-                },
+
+                    // Badge nomor urut #1
+                    doc.setFillColor(37, 99, 235)
+                    doc.roundedRect(16, itemY + 1.5, 7, 4.5, 1, 1, 'F')
+                    doc.setFont("helvetica", "bold")
+                    doc.setFontSize(6.5)
+                    doc.setTextColor(255, 255, 255)
+                    doc.text(`#${globalIdx}`, 19.5, itemY + 4.5, { align: "center" })
+
+                    // Sisi Kanan: Info Panel
+                    const rightX = 15 + imageWidth + 4
+                    const rightWidth = 180 - imageWidth - 8
+                    let textY = itemY + 6
+
+                    // Judul Barang
+                    doc.setFont("helvetica", "bold")
+                    doc.setFontSize(rowsPerPage === 1 ? 11 : (rowsPerPage === 2 ? 9.5 : 8.5))
+                    doc.setTextColor(darkText[0], darkText[1], darkText[2])
+                    const titleLines = doc.splitTextToSize(att.title || att.fileName, rightWidth)
+                    doc.text(titleLines, rightX, textY)
+                    textY += titleLines.length * (rowsPerPage === 1 ? 4.5 : 3.8) + 1.5
+
+                    // Part Number & Harga Penawaran
+                    let badgeLine = ""
+                    if (att.partNumber) badgeLine += `PN: ${att.partNumber}   `
+                    if (att.priceNote) badgeLine += `|   ${att.priceNote}`
+
+                    if (badgeLine) {
+                        doc.setFont("helvetica", "bold")
+                        doc.setFontSize(rowsPerPage === 1 ? 8.5 : 7.5)
+                        doc.setTextColor(22, 101, 52) // emerald-800
+                        doc.text(badgeLine, rightX, textY)
+                        textY += 4
+                    }
+
+                    // Divider garis tipis
+                    doc.setDrawColor(226, 232, 240)
+                    doc.line(rightX, textY - 1, rightX + rightWidth, textY - 1)
+                    textY += 2
+
+                    // Deskripsi / Spesifikasi Teknis
+                    if (att.description) {
+                        doc.setFont("helvetica", "bold")
+                        doc.setFontSize(6.5)
+                        doc.setTextColor(grayText[0], grayText[1], grayText[2])
+                        doc.text("SPESIFIKASI / KETERANGAN:", rightX, textY)
+                        textY += 3.2
+
+                        doc.setFont("helvetica", "normal")
+                        doc.setFontSize(rowsPerPage === 1 ? 8 : (rowsPerPage === 2 ? 7.5 : 7))
+                        doc.setTextColor(51, 65, 85)
+                        const descLines = doc.splitTextToSize(att.description, rightWidth)
+                        const maxDescLines = Math.floor((itemY + rowHeight - textY - 2) / 3.2)
+                        const visibleDescLines = descLines.slice(0, Math.max(maxDescLines, 1))
+                        doc.text(visibleDescLines, rightX, textY)
+                    }
+                })
             })
         }
+
+        const includedAttachments = quotation.attachments?.filter((attachment) => attachment.includeInPdf) ?? []
 
         const basePdfBytes = doc.output("arraybuffer")
         const outputFilename = `Quotation_${sanitizeFilenamePart(quotation.quotationNumber)}.pdf`

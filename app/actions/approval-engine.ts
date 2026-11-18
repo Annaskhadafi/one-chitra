@@ -671,6 +671,7 @@ export async function submitQuotationForApproval(quotationId: number) {
         const quotation = await db.query.quotations.findFirst({
             where: eq(quotations.id, quotationId),
             with: {
+                customer: true,
                 items: {
                     with: {
                         product: true,
@@ -691,7 +692,7 @@ export async function submitQuotationForApproval(quotationId: number) {
             unitPrice: Number(it.unitPrice),
             quantity: it.quantity,
             costSap: it.product?.costSap ? Number(it.product.costSap) : null,
-            costIdr: it.costIdr ? Number(it.costIdr) : null,
+            costIdr: (it as any).costIdr ? Number((it as any).costIdr) : (it.product?.costSap ? Number(it.product.costSap) : null),
         }))
 
         const evaluation = await evaluateQuotationMargin(evaluationItems, quotation.salesPersonId || quotation.createdBy)
@@ -838,7 +839,7 @@ export async function getQuotationApprovalDetail(quotationId: number) {
             unitPrice: Number(it.unitPrice),
             quantity: it.quantity,
             costSap: it.product?.costSap ? Number(it.product.costSap) : null,
-            costIdr: it.costIdr ? Number(it.costIdr) : null,
+            costIdr: (it as any).costIdr ? Number((it as any).costIdr) : (it.product?.costSap ? Number(it.product.costSap) : null),
         }))
 
         const evaluation = await evaluateQuotationMargin(evaluationItems, quotation.salesPersonId || quotation.createdBy)

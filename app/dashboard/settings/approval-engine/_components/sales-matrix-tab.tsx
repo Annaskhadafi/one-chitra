@@ -158,7 +158,7 @@ export function SalesMatrixTab({ matrixRows, allUsers, onRefresh }: SalesMatrixT
                         disabled={availableUsersForSales.length === 0}
                     >
                         <Plus className="h-3.5 w-3.5" />
-                        Tambah Sales
+                        Tambah Sales Person
                     </Button>
                 </div>
             </div>
@@ -286,6 +286,7 @@ export function SalesMatrixTab({ matrixRows, allUsers, onRefresh }: SalesMatrixT
                 onOpenChange={setIsDialogOpen}
                 row={selectedRow}
                 allUsers={allUsers}
+                availableUsersForSales={availableUsersForSales}
                 onSaved={onRefresh}
             />
         </div>
