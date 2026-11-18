@@ -73,7 +73,7 @@ import {
 import { Card, CardContent } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
-import { ArrowLeft, Plus, Trash2, Save, Search, ChevronsUpDown, Check, Package, FileDown, Pencil, AlertTriangle, XCircle, Loader2, Calculator, Copy, Eye, EyeOff, Truck, BadgeDollarSign, DollarSign, Building2, ChevronUp, ChevronDown, GripVertical, Paperclip, Image, UploadCloud } from "lucide-react"
+import { ArrowLeft, Plus, Trash2, Save, Search, ChevronsUpDown, Check, CheckCircle, Clock, Package, FileDown, Pencil, AlertTriangle, XCircle, Loader2, Calculator, Copy, Eye, EyeOff, Truck, BadgeDollarSign, DollarSign, Building2, ChevronUp, ChevronDown, GripVertical, Paperclip, Image, UploadCloud } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 import type { Customer, Product } from "@/lib/types"
@@ -249,6 +249,7 @@ interface QuotationFormProps {
     users: User[]
     vendorQuotations: VendorQuotationWithItems[]
     currentUserId?: string
+    initialStandardMargin?: number
     initialData?: {
         id: number
         quotationNumber: string | null
@@ -431,9 +432,10 @@ function calculateBundleSnapshotFromRows(
     })
 }
 
-export function QuotationForm({ customers, products, users, vendorQuotations, currentUserId, initialData }: QuotationFormProps) {
+export function QuotationForm({ customers, products, users, vendorQuotations, currentUserId, initialStandardMargin, initialData }: QuotationFormProps) {
     const router = useRouter()
     const isEdit = !!initialData
+    const standardBaseline = initialStandardMargin ?? 11
     const { hasResourcePermission } = usePermissions()
     const canSubmit = hasResourcePermission("quotations", isEdit ? "edit" : "create")
     const [isVendorQuotationOpen, setIsVendorQuotationOpen] = useState(false)
@@ -479,11 +481,11 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
     const [discount, setDiscount] = useState(Number(initialData?.discount || 0))
     const [tax] = useState(Number(initialData?.tax || 0))
     const [shipping, setShipping] = useState(Number(initialData?.shipping || 0))
-    const [globalMargin, setGlobalMargin] = useState<number>(11)
+    const [globalMargin, setGlobalMargin] = useState<number>(standardBaseline)
     const [exchangeRate, setExchangeRate] = useState<number>(1)
     const [isApplyingMargin, startApplyingMarginTransition] = useTransition()
     const [calculatorBasePrice, setCalculatorBasePrice] = useState<number>(0)
-    const [calculatorMargin, setCalculatorMargin] = useState<number>(11)
+    const [calculatorMargin, setCalculatorMargin] = useState<number>(standardBaseline)
     const [calculatorDiscountType, setCalculatorDiscountType] = useState<"fixed" | "percent">("percent")
     const [calculatorDiscountValue, setCalculatorDiscountValue] = useState<number>(0)
 
@@ -559,10 +561,10 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
             }
         })
         return {
-            minMargin: hasItem ? Number(minMargin.toFixed(2)) : 11,
-            requiresApproval: hasItem && minMargin < 11,
+            minMargin: hasItem ? Number(minMargin.toFixed(2)) : standardBaseline,
+            requiresApproval: hasItem && minMargin < standardBaseline,
         }
-    }, [items, exchangeRate])
+    }, [items, exchangeRate, standardBaseline])
     const [itemSortConfig, setItemSortConfig] = useState<{ key: ItemSortKey; direction: SortDirection }>({
         key: "index",
         direction: "asc",
@@ -1629,7 +1631,7 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                             Quotation Sedang Menunggu Persetujuan (Approval In Progress)
                         </h4>
                         <p className="text-xs text-amber-800 dark:text-amber-300 mt-1">
-                            Dokumen ini telah diajukan ke Approval Engine karena memiliki margin di bawah standar 11%. Seluruh perubahan harga atau data dikunci sampai approver mengambil keputusan.
+                            Dokumen ini telah diajukan ke Approval Engine karena memiliki margin di bawah standar {standardBaseline.toFixed(2)}%. Seluruh perubahan harga atau data dikunci sampai approver mengambil keputusan.
                         </p>
                     </div>
                 </div>
@@ -1661,8 +1663,8 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                             </div>
                             <p className="text-[11px] text-muted-foreground mt-0.5">
                                 {liveMarginSummary.requiresApproval
-                                    ? "Margin di bawah standar 11.00%. Quotation ini akan otomatis masuk ke antrean Approval saat Anda menyimpan."
-                                    : "Margin memenuhi standar default (>= 11.00%). Approval berjenjang tidak diperlukan."}
+                                    ? `Margin di bawah standar ${standardBaseline.toFixed(2)}%. Quotation ini akan otomatis masuk ke antrean Approval saat Anda menyimpan.`
+                                    : `Margin memenuhi standar default (>= ${standardBaseline.toFixed(2)}%). Approval berjenjang tidak diperlukan.`}
                             </p>
                         </div>
                     </div>

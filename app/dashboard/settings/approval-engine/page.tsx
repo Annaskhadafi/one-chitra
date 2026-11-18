@@ -1,5 +1,5 @@
 import { Settings2 } from "lucide-react"
-import { getQuotationApprovalTiers, getSalesApproverMatrix } from "@/app/actions/approval-engine"
+import { getQuotationApprovalTiers, getSalesApproverMatrix, getStandardMarginBaseline } from "@/app/actions/approval-engine"
 import { db } from "@/db"
 import { user } from "@/db/schema/auth"
 import { ApprovalEngineClient } from "./_components/approval-engine-client"
@@ -10,7 +10,7 @@ export const metadata = {
 }
 
 export default async function ApprovalEnginePage() {
-    const [tiersRes, matrixRes, allUsers] = await Promise.all([
+    const [tiersRes, matrixRes, allUsers, standardMargin] = await Promise.all([
         getQuotationApprovalTiers(),
         getSalesApproverMatrix(),
         db.select({
@@ -19,6 +19,7 @@ export default async function ApprovalEnginePage() {
             email: user.email,
             role: user.role,
         }).from(user).orderBy(asc(user.name)),
+        getStandardMarginBaseline(),
     ])
 
     const tiers = tiersRes.success && tiersRes.data ? tiersRes.data : []
@@ -42,6 +43,7 @@ export default async function ApprovalEnginePage() {
                 initialTiers={tiers as any}
                 initialMatrixRows={matrixRows as any}
                 allUsers={allUsers}
+                initialStandardMargin={standardMargin}
             />
         </div>
     )

@@ -19,15 +19,18 @@ interface ApprovalEngineClientProps {
     initialTiers: TierData[]
     initialMatrixRows: MatrixRowData[]
     allUsers: ApproverUser[]
+    initialStandardMargin?: number
 }
 
 export function ApprovalEngineClient({
     initialTiers,
     initialMatrixRows,
     allUsers,
+    initialStandardMargin = 11,
 }: ApprovalEngineClientProps) {
     const router = useRouter()
     const [activeTab, setActiveTab] = useState("tiers")
+    const standardMargin = initialStandardMargin
 
     // Simulator state
     const [simCategory, setSimCategory] = useState<"prime_tyre" | "pas">("prime_tyre")
@@ -39,11 +42,11 @@ export function ApprovalEngineClient({
     const costNum = Number(simCost) || 0
     const priceNum = Number(simPrice) || 0
     const marginPercent = costNum > 0 ? ((priceNum - costNum) / costNum) * 100 : 0
-    const discountGap = Math.max(0, 11 - marginPercent)
+    const discountGap = Math.max(0, standardMargin - marginPercent)
 
     // Determine tier
     const activeTiers = initialTiers.filter(t => t.productCategory === simCategory).sort((a, b) => a.stagingLevel - b.stagingLevel)
-    const isAboveStandard = marginPercent >= 11
+    const isAboveStandard = marginPercent >= standardMargin
     const matchedTier = isAboveStandard
         ? null
         : (activeTiers.find(t => marginPercent >= Number(t.minMargin) && marginPercent <= Number(t.maxMargin)) || activeTiers[activeTiers.length - 1])
@@ -74,7 +77,7 @@ export function ApprovalEngineClient({
 
             {/* TAB 1: LIMIT MARGIN */}
             <TabsContent value="tiers" className="space-y-4">
-                <TiersTab tiers={initialTiers} onRefresh={onRefresh} />
+                <TiersTab tiers={initialTiers} initialStandardMargin={initialStandardMargin} onRefresh={onRefresh} />
             </TabsContent>
 
             {/* TAB 2: SALES MATRIX */}

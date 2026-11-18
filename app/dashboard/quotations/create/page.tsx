@@ -2,6 +2,7 @@ import { getCustomers } from "@/app/actions/customer"
 import { getProductsForQuotation } from "@/app/actions/product"
 import { getQuotationUsers } from "@/app/actions/users"
 import { getVendorQuotations } from "@/app/actions/vendor-quotation"
+import { getStandardMarginBaseline } from "@/app/actions/approval-engine"
 import { QuotationForm } from "../_components/quotation-form"
 import { auth } from "@/lib/auth"
 import { headers } from "next/headers"
@@ -11,12 +12,22 @@ export default async function CreateQuotationPage() {
         headers: await headers()
     })
 
-    const [customers, products, users, vendorQuotations] = await Promise.all([
+    const [customers, products, users, vendorQuotations, standardMargin] = await Promise.all([
         getCustomers(),
         getProductsForQuotation(),
         getQuotationUsers(),
         getVendorQuotations(50),
+        getStandardMarginBaseline(),
     ])
 
-    return <QuotationForm customers={customers} products={products} users={users as any} vendorQuotations={vendorQuotations} currentUserId={session?.user.id} />
+    return (
+        <QuotationForm
+            customers={customers}
+            products={products}
+            users={users as any}
+            vendorQuotations={vendorQuotations}
+            currentUserId={session?.user.id}
+            initialStandardMargin={standardMargin}
+        />
+    )
 }

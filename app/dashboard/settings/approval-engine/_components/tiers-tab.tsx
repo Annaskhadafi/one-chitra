@@ -5,17 +5,29 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Edit2, ShieldAlert, CheckCircle2, Layers } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
+import { Edit2, ShieldAlert, CheckCircle2, Layers, SlidersHorizontal, Loader2 } from "lucide-react"
 import { EditTierDialog, type TierData } from "./edit-tier-dialog"
+import { setStandardMarginBaseline } from "@/app/actions/approval-engine"
+import { toast } from "sonner"
 
 interface TiersTabProps {
     tiers: TierData[]
+    initialStandardMargin?: number
     onRefresh: () => void
 }
 
-export function TiersTab({ tiers, onRefresh }: TiersTabProps) {
+export function TiersTab({ tiers, initialStandardMargin = 11, onRefresh }: TiersTabProps) {
     const [selectedTier, setSelectedTier] = useState<TierData | null>(null)
     const [isDialogOpen, setIsDialogOpen] = useState(false)
+
+    // Standard Baseline state
+    const [standardMargin, setStandardMargin] = useState(initialStandardMargin)
+    const [isBaselineDialogOpen, setIsBaselineDialogOpen] = useState(false)
+    const [baselineInput, setBaselineInput] = useState(initialStandardMargin.toString())
+    const [isSavingBaseline, setIsSavingBaseline] = useState(false)
 
     const tyreTiers = tiers.filter(t => t.productCategory === "prime_tyre").sort((a, b) => a.stagingLevel - b.stagingLevel)
     const pasTiers = tiers.filter(t => t.productCategory === "pas").sort((a, b) => a.stagingLevel - b.stagingLevel)
@@ -23,6 +35,31 @@ export function TiersTab({ tiers, onRefresh }: TiersTabProps) {
     const handleEdit = (tier: TierData) => {
         setSelectedTier(tier)
         setIsDialogOpen(true)
+    }
+
+    const handleSaveBaseline = async () => {
+        const val = parseFloat(baselineInput)
+        if (isNaN(val) || val <= 0) {
+            toast.error("Margin standard baseline harus berupa angka positif")
+            return
+        }
+
+        setIsSavingBaseline(true)
+        try {
+            const res = await setStandardMarginBaseline(val)
+            if (res.success) {
+                setStandardMargin(val)
+                toast.success(`Standard margin baseline berhasil diubah menjadi ${val}%`)
+                setIsBaselineDialogOpen(false)
+                onRefresh()
+            } else {
+                toast.error(res.error || "Gagal mengubah margin standard baseline")
+            }
+        } catch {
+            toast.error("Terjadi kesalahan saat menyimpan margin baseline")
+        } finally {
+            setIsSavingBaseline(false)
+        }
     }
 
     return (
@@ -35,15 +72,27 @@ export function TiersTab({ tiers, onRefresh }: TiersTabProps) {
                     </div>
                     <div>
                         <div className="flex items-center gap-2">
-                            <h3 className="font-semibold text-foreground">Standard Margin Baseline: 11.00%</h3>
+                            <h3 className="font-semibold text-foreground">Standard Margin Baseline: {Number(standardMargin).toFixed(2)}%</h3>
                             <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white font-mono">Auto Approved</Badge>
                         </div>
                         <p className="text-xs text-muted-foreground mt-1">
-                            Setiap Quotation yang memiliki margin $\ge$ 11% disetujui secara otomatis tanpa memerlukan persetujuan berjenjang.
-                            Jika salah satu item memiliki margin di bawah 11%, alur berjenjang diaktifkan sesuai limit kategori produk masing-masing.
+                            Setiap Quotation yang memiliki margin &ge; {Number(standardMargin).toFixed(2)}% disetujui secara otomatis tanpa memerlukan persetujuan berjenjang.
+                            Jika salah satu item memiliki margin di bawah {Number(standardMargin).toFixed(2)}%, alur berjenjang diaktifkan sesuai limit kategori produk masing-masing.
                         </p>
                     </div>
                 </div>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0 gap-2 border-blue-300 text-blue-700 hover:bg-blue-100/60 dark:border-blue-800 dark:text-blue-300 dark:hover:bg-blue-900/40"
+                    onClick={() => {
+                        setBaselineInput(standardMargin.toString())
+                        setIsBaselineDialogOpen(true)
+                    }}
+                >
+                    <SlidersHorizontal className="h-4 w-4" />
+                    Ubah Baseline
+                </Button>
             </div>
 
             {/* Table 1: Prime Product (Tyre) */}
@@ -85,7 +134,7 @@ export function TiersTab({ tiers, onRefresh }: TiersTabProps) {
                                 <TableRow className="bg-emerald-500/5 hover:bg-emerald-500/10 border-b">
                                     <TableCell className="font-semibold text-emerald-800 dark:text-emerald-300">Standard</TableCell>
                                     <TableCell className="font-medium">Semua Sales</TableCell>
-                                    <TableCell className="text-center font-mono text-xs">11.00%</TableCell>
+                                    <TableCell className="text-center font-mono text-xs font-bold text-emerald-700 dark:text-emerald-400">{Number(standardMargin).toFixed(2)}%</TableCell>
                                     <TableCell className="text-center font-mono text-xs">9999%</TableCell>
                                     <TableCell className="text-center font-mono text-xs">0%</TableCell>
                                     <TableCell className="text-center">
@@ -192,7 +241,7 @@ export function TiersTab({ tiers, onRefresh }: TiersTabProps) {
                                 <TableRow className="bg-emerald-500/5 hover:bg-emerald-500/10 border-b">
                                     <TableCell className="font-semibold text-emerald-800 dark:text-emerald-300">Standard</TableCell>
                                     <TableCell className="font-medium">Semua Sales</TableCell>
-                                    <TableCell className="text-center font-mono text-xs">11.00%</TableCell>
+                                    <TableCell className="text-center font-mono text-xs font-bold text-emerald-700 dark:text-emerald-400">{Number(standardMargin).toFixed(2)}%</TableCell>
                                     <TableCell className="text-center font-mono text-xs">9999%</TableCell>
                                     <TableCell className="text-center font-mono text-xs">0%</TableCell>
                                     <TableCell className="text-center">
@@ -266,6 +315,68 @@ export function TiersTab({ tiers, onRefresh }: TiersTabProps) {
                 tier={selectedTier}
                 onSaved={onRefresh}
             />
+
+            {/* Baseline Margin Edit Dialog */}
+            <Dialog open={isBaselineDialogOpen} onOpenChange={setIsBaselineDialogOpen}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <SlidersHorizontal className="h-5 w-5 text-primary" />
+                            Konfigurasi Standard Margin Baseline
+                        </DialogTitle>
+                        <DialogDescription>
+                            Tentukan batas margin standar perusahaan. Penawaran harga (Quotation) dengan margin di atas nilai ini akan berstatus Auto Approved. Jika berada di bawah nilai ini, sistem akan mengaktifkan approval berjenjang.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-4 py-3">
+                        <div className="space-y-2">
+                            <Label htmlFor="baseline-margin-input" className="text-sm font-medium">
+                                Standard Margin Baseline (%)
+                            </Label>
+                            <div className="relative">
+                                <Input
+                                    id="baseline-margin-input"
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    max="100"
+                                    value={baselineInput}
+                                    onChange={(e) => setBaselineInput(e.target.value)}
+                                    placeholder="Contoh: 11.00"
+                                    className="pr-10 font-mono text-base font-semibold"
+                                />
+                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground font-semibold">
+                                    %
+                                </span>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                                Nilai ini otomatis tersinkronisasi sebagai margin default saat Sales membuat Quotation baru.
+                            </p>
+                        </div>
+                    </div>
+
+                    <DialogFooter className="gap-2 sm:gap-0">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setIsBaselineDialogOpen(false)}
+                            disabled={isSavingBaseline}
+                        >
+                            Batal
+                        </Button>
+                        <Button
+                            type="button"
+                            onClick={handleSaveBaseline}
+                            disabled={isSavingBaseline}
+                            className="gap-2"
+                        >
+                            {isSavingBaseline && <Loader2 className="h-4 w-4 animate-spin" />}
+                            Simpan Perubahan
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }

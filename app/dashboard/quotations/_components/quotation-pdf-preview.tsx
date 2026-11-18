@@ -413,7 +413,7 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                                     />
 
                                     {/* Watermark if not approved */}
-                                    {data.status !== "approved" && (
+                                    {quotation.status !== "approved" && (
                                         <div
                                             style={{
                                                 position: "absolute",
@@ -435,7 +435,7 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                                                 textAlign: "center",
                                             }}
                                         >
-                                            {data.status === "rejected" ? "REJECTED" : (data.status === "waiting_approval" ? "WAITING APPROVAL" : "DRAFT")}
+                                            {quotation.status === "rejected" ? "REJECTED" : (quotation.status === "waiting_approval" ? "WAITING APPROVAL" : "DRAFT")}
                                         </div>
                                     )}
 

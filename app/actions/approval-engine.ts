@@ -15,6 +15,123 @@ import {
     user,
     customers,
 } from "@/db/schema"
+import { sendEmail } from "@/lib/email"
+import { getSetting, updateSetting } from "@/app/actions/settings"
+
+// Standar Baseline Margin (Bisa dikonfigurasi & tersync dengan Quotation)
+export async function getStandardMarginBaseline(): Promise<number> {
+    try {
+        const val = await getSetting("quotation_standard_margin")
+        return val ? Number(val) : 11.0
+    } catch {
+        return 11.0
+    }
+}
+
+export async function setStandardMarginBaseline(margin: number) {
+    try {
+        const currentUser = await getCurrentUser()
+        if (!currentUser) return { success: false as const, error: "Unauthorized" }
+        await updateSetting("quotation_standard_margin", margin.toString())
+        revalidatePath("/dashboard/settings/approval-engine")
+        revalidatePath("/dashboard/quotations/create")
+        revalidatePath("/dashboard/quotations")
+        return { success: true as const }
+    } catch (error) {
+        console.error("Failed to update standard margin baseline:", error)
+        return { success: false as const, error: "Gagal menyimpan margin standard baseline" }
+    }
+}
+
+// Helper: Kirim Notifikasi Email Delivery untuk Alur Approval (Default ke Akun Test wustho.c@gmail.com)
+async function sendQuotationApprovalNotification(input: {
+    toEmail: string
+    toName: string
+    quotationNumber: string
+    customerName: string
+    stepLabel: string
+    minMargin: number
+    quotationId: number
+    actionType: "pending_review" | "approved" | "rejected"
+    comment?: string | null
+}) {
+    try {
+        const baseUrl = process.env.BETTER_AUTH_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
+        const link = `${baseUrl}/dashboard/quotations/${input.quotationId}`
+        const testRecipient = "wustho.c@gmail.com"
+
+        let subject = `[Quotation Approval] Permohonan Persetujuan: ${input.quotationNumber}`
+        let title = "Permohonan Persetujuan Quotation Baru"
+        let statusBadge = `<span style="background-color: #fef3c7; color: #92400e; padding: 4px 8px; border-radius: 4px; font-weight: bold;">Menunggu Persetujuan (${input.stepLabel})</span>`
+
+        if (input.actionType === "approved") {
+            subject = `[Quotation Approved] Dokumen Disetujui: ${input.quotationNumber}`
+            title = "Quotation Telah Disetujui Sepenuhnya"
+            statusBadge = `<span style="background-color: #d1fae5; color: #065f46; padding: 4px 8px; border-radius: 4px; font-weight: bold;">Full Approved</span>`
+        } else if (input.actionType === "rejected") {
+            subject = `[Quotation Rejected] Dokumen Ditolak: ${input.quotationNumber}`
+            title = "Quotation Ditolak oleh Approver"
+            statusBadge = `<span style="background-color: #fee2e2; color: #991b1b; padding: 4px 8px; border-radius: 4px; font-weight: bold;">Ditolak (${input.stepLabel})</span>`
+        }
+
+        const html = `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
+                <div style="background-color: #f8fafc; border-left: 4px solid #2563eb; padding: 10px 14px; margin-bottom: 20px; border-radius: 4px; font-size: 12px; color: #334155;">
+                    <strong>[Delivery Mode: Test & Production]</strong><br/>
+                    Penerima Asli: <strong>${input.toName} (${input.toEmail})</strong><br/>
+                    Diteruskan otomatis ke akun uji coba: <strong>${testRecipient}</strong>
+                </div>
+                <h2 style="color: #1e3a8a; margin-top: 0;">${title}</h2>
+                <p>Halo <strong>${input.toName}</strong>,</p>
+                <p>Berikut adalah rincian informasi dokumen quotation yang membutuhkan perhatian Anda:</p>
+                <table style="width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px;">
+                    <tr>
+                        <td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b; width: 140px;">No. Quotation</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #e2e8f0; font-weight: bold;">${input.quotationNumber}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Customer</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">${input.customerName}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Margin Terendah</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #dc2626; font-weight: bold;">${input.minMargin}% (Di bawah batas margin standar)</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Status / Tahap</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">${statusBadge}</td>
+                    </tr>
+                    ${input.comment ? `
+                    <tr>
+                        <td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Catatan Approver</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #e2e8f0; font-style: italic;">"${input.comment}"</td>
+                    </tr>
+                    ` : ""}
+                </table>
+                <div style="margin-top: 24px; text-align: center;">
+                    <a href="${link}" style="display: inline-block; background-color: #2563eb; color: #ffffff; padding: 10px 20px; text-decoration: none; border-radius: 6px; font-weight: bold;">
+                        Buka Dokumen Quotation
+                    </a>
+                </div>
+                <p style="color: #94a3b8; font-size: 12px; margin-top: 32px; border-top: 1px solid #e2e8f0; padding-top: 12px;">
+                    Email ini dikirim secara otomatis oleh One Chitra Approval Engine.
+                </p>
+            </div>
+        `
+
+        // Kirim ke penerima asli dan selalu copy ke akun test wustho.c@gmail.com
+        const recipients = Array.from(new Set([input.toEmail, testRecipient].filter(Boolean)))
+
+        await sendEmail({
+            to: recipients,
+            subject: `[Quotation Approval] ${input.quotationNumber} - ${input.actionType.toUpperCase()}`,
+            html,
+            actionUrl: link,
+        })
+    } catch (err) {
+        console.error("Gagal mengirim notifikasi email approval:", err)
+    }
+}
 
 // Helper to get authenticated user
 async function getCurrentUser() {
@@ -498,6 +615,26 @@ export async function submitQuotationForApproval(quotationId: number) {
             })
             .where(eq(quotations.id, quotationId))
 
+        // Kirim Email Notifikasi ke Approver Pertama yang Aktif
+        const firstActiveStep = progressInserts.find(s => s.status === "pending")
+        if (firstActiveStep) {
+            const approverUser = await db.query.user.findFirst({
+                where: eq(user.id, firstActiveStep.assignedUserId),
+            })
+            if (approverUser?.email) {
+                await sendQuotationApprovalNotification({
+                    toEmail: approverUser.email,
+                    toName: approverUser.name || "Approver",
+                    quotationNumber: quotation.quotationNumber || `Quote #${quotationId}`,
+                    customerName: quotation.customer?.name || "Customer",
+                    stepLabel: firstActiveStep.stepLabel,
+                    minMargin: evaluation.minItemMargin,
+                    quotationId,
+                    actionType: "pending_review",
+                })
+            }
+        }
+
         revalidatePath(`/dashboard/quotations/${quotationId}`)
         revalidatePath("/dashboard/quotations")
         revalidatePath("/dashboard/approvals")
@@ -632,6 +769,22 @@ export async function processQuotationApprovalAction(input: {
                 })
                 .where(eq(quotations.id, input.quotationId))
 
+            // Kirim notifikasi email penolakan ke sales / pembuat quotation
+            const requesterEmail = detail.quotation.salesPerson?.email || detail.quotation.createdByUser?.email
+            if (requesterEmail) {
+                await sendQuotationApprovalNotification({
+                    toEmail: requesterEmail,
+                    toName: detail.quotation.salesPerson?.name || detail.quotation.createdByUser?.name || "Sales",
+                    quotationNumber: detail.quotation.quotationNumber || `Quote #${input.quotationId}`,
+                    customerName: detail.quotation.customer?.name || "Customer",
+                    stepLabel: activeStep.stepLabel,
+                    minMargin: detail.evaluation.minItemMargin,
+                    quotationId: input.quotationId,
+                    actionType: "rejected",
+                    comment: input.comment,
+                })
+            }
+
             revalidatePath(`/dashboard/quotations/${input.quotationId}`)
             revalidatePath("/dashboard/quotations")
             revalidatePath("/dashboard/approvals")
@@ -682,11 +835,45 @@ export async function processQuotationApprovalAction(input: {
                     })
                     .where(eq(quotations.id, input.quotationId))
 
+                // Kirim email persetujuan lengkap ke sales / pembuat quotation
+                const requesterEmail = detail.quotation.salesPerson?.email || detail.quotation.createdByUser?.email
+                if (requesterEmail) {
+                    await sendQuotationApprovalNotification({
+                        toEmail: requesterEmail,
+                        toName: detail.quotation.salesPerson?.name || detail.quotation.createdByUser?.name || "Sales",
+                        quotationNumber: detail.quotation.quotationNumber || `Quote #${input.quotationId}`,
+                        customerName: detail.quotation.customer?.name || "Customer",
+                        stepLabel: "Persetujuan Lengkap",
+                        minMargin: detail.evaluation.minItemMargin,
+                        quotationId: input.quotationId,
+                        actionType: "approved",
+                        comment: input.comment,
+                    })
+                }
+
                 revalidatePath(`/dashboard/quotations/${input.quotationId}`)
                 revalidatePath("/dashboard/quotations")
                 revalidatePath("/dashboard/approvals")
                 return { success: true as const, message: "Quotation telah disetujui sepenuhnya (Full Approved)!" }
             } else {
+                // Kirim notifikasi email ke approver langkah berikutnya
+                const nextStep = remainingPendingSteps[0]
+                const nextApprover = await db.query.user.findFirst({
+                    where: eq(user.id, nextStep.assignedUserId),
+                })
+                if (nextApprover?.email) {
+                    await sendQuotationApprovalNotification({
+                        toEmail: nextApprover.email,
+                        toName: nextApprover.name || "Approver",
+                        quotationNumber: detail.quotation.quotationNumber || `Quote #${input.quotationId}`,
+                        customerName: detail.quotation.customer?.name || "Customer",
+                        stepLabel: nextStep.stepLabel,
+                        minMargin: detail.evaluation.minItemMargin,
+                        quotationId: input.quotationId,
+                        actionType: "pending_review",
+                    })
+                }
+
                 revalidatePath(`/dashboard/quotations/${input.quotationId}`)
                 revalidatePath("/dashboard/quotations")
                 revalidatePath("/dashboard/approvals")

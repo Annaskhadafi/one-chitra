@@ -70,6 +70,7 @@ export const dashboardRoutePermissionRules: DashboardRoutePermissionRule[] = [
     { prefix: "/dashboard/sales-orders", resource: "sales-orders" },
     { prefix: "/dashboard/summary-order", resource: "sales-order-summary" },
     { prefix: "/dashboard/security", resource: "security" },
+    { prefix: "/dashboard/settings/approval-engine", resource: "approvals-engine" },
     { prefix: "/dashboard/settings/approvals", resource: "approvals-settings" },
     { prefix: "/dashboard/settings/email", resource: "email-settings" },
     { prefix: "/dashboard/settings/navbar", resource: "admin" },
