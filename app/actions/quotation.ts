@@ -937,7 +937,7 @@ export async function getQuotations(options?: GetQuotationsOptions) {
                     stepOrder: activeStep.stepOrder,
                     stepLabel: activeStep.stepLabel,
                     assignedUserName: activeStep.assignedUser?.name || null,
-                    roleKey: activeStep.roleKey,
+                    roleKey: (activeStep as any).stepRole || (activeStep as any).roleKey || null,
                 }
                 : null,
             isRejected,

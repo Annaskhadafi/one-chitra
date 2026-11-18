@@ -312,21 +312,47 @@ export async function generateQuotationPdf(
         // Helper to render Draft/Pending watermark if not fully approved
         const renderWatermark = () => {
             if (quotation.status && quotation.status !== "approved") {
-                const watermarkText = quotation.status === "rejected"
+                const isRejected = quotation.status === "rejected"
+                const isWaiting = quotation.status === "waiting_approval"
+                const watermarkText = isRejected
                     ? "REJECTED"
-                    : (quotation.status === "waiting_approval" ? "WAITING APPROVAL" : "DRAFT")
+                    : (isWaiting ? "WAITING APPROVAL" : "DRAFT")
 
                 doc.saveGraphicsState()
+
+                // 1. Watermark di paling atas (Top Header)
                 doc.setFont("helvetica", "bold")
-                doc.setFontSize(54)
-                doc.setTextColor(220, 38, 38)
+                doc.setFontSize(10)
+                if (isRejected) {
+                    doc.setTextColor(220, 38, 38)
+                } else if (isWaiting) {
+                    doc.setTextColor(217, 119, 6)
+                } else {
+                    doc.setTextColor(100, 116, 139)
+                }
                 try {
-                    const gState = new (doc as any).GState({ opacity: 0.12 })
-                    doc.setGState(gState)
+                    const topGState = new (doc as any).GState({ opacity: 0.7 })
+                    doc.setGState(topGState)
+                } catch {}
+                doc.text(`[ ${watermarkText} ]`, 105, 8.5, { align: "center" })
+
+                // 2. Watermark di tengah halaman secara diagonal (Center Diagonal)
+                doc.setFont("helvetica", "bold")
+                doc.setFontSize(isWaiting ? 40 : 52)
+                if (isRejected) {
+                    doc.setTextColor(220, 38, 38)
+                } else if (isWaiting) {
+                    doc.setTextColor(217, 119, 6)
+                } else {
+                    doc.setTextColor(220, 38, 38)
+                }
+                try {
+                    const centerGState = new (doc as any).GState({ opacity: 0.13 })
+                    doc.setGState(centerGState)
                 } catch {
                     doc.setTextColor(245, 200, 200)
                 }
-                doc.text(watermarkText, 105, 150, { align: "center", angle: 45 })
+                doc.text(watermarkText, 105, 152, { align: "center", angle: 32 })
                 doc.restoreGraphicsState()
             }
         }
@@ -363,7 +389,7 @@ export async function generateQuotationPdf(
         doc.setFontSize(11)
         doc.setTextColor(grayText[0], grayText[1], grayText[2])
         doc.text(
-            `${quotation.quotationNumber || "DRAFT"}${quotation.currentRevision ? `  |  Rev.${quotation.currentRevision}` : ""}`,
+            quotation.quotationNumber || "DRAFT",
             195,
             56,
             { align: "right" },

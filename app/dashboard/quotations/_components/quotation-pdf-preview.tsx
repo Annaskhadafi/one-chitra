@@ -375,29 +375,58 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
 
                                     {/* Watermark if not approved */}
                                     {quotation.status !== "approved" && (
-                                        <div
-                                            style={{
-                                                position: "absolute",
-                                                top: "50%",
-                                                left: "50%",
-                                                transform: "translate(-50%, -50%) rotate(-35deg)",
-                                                fontSize: "65pt",
-                                                fontWeight: 900,
-                                                color: "rgba(220, 38, 38, 0.12)",
-                                                border: "6px dashed rgba(220, 38, 38, 0.18)",
-                                                borderRadius: "20px",
-                                                padding: "16px 54px",
-                                                pointerEvents: "none",
-                                                zIndex: 30,
-                                                letterSpacing: "8px",
-                                                textTransform: "uppercase",
-                                                userSelect: "none",
-                                                whiteSpace: "nowrap",
-                                                textAlign: "center",
-                                            }}
-                                        >
-                                            {quotation.status === "rejected" ? "REJECTED" : (quotation.status === "waiting_approval" ? "WAITING APPROVAL" : "DRAFT")}
-                                        </div>
+                                        <>
+                                            {/* Watermark di paling atas */}
+                                            <div
+                                                style={{
+                                                    position: "absolute",
+                                                    top: "6mm",
+                                                    left: "50%",
+                                                    transform: "translateX(-50%)",
+                                                    fontSize: "10.5pt",
+                                                    fontWeight: 800,
+                                                    color: quotation.status === "rejected" ? "rgba(220, 38, 38, 0.75)" : (quotation.status === "waiting_approval" ? "rgba(217, 119, 6, 0.8)" : "rgba(100, 116, 139, 0.75)"),
+                                                    backgroundColor: quotation.status === "rejected" ? "rgba(254, 242, 242, 0.9)" : (quotation.status === "waiting_approval" ? "rgba(254, 243, 199, 0.9)" : "rgba(241, 245, 249, 0.9)"),
+                                                    border: `1.5px solid ${quotation.status === "rejected" ? "rgba(220, 38, 38, 0.35)" : (quotation.status === "waiting_approval" ? "rgba(217, 119, 6, 0.4)" : "rgba(148, 163, 184, 0.35)")}`,
+                                                    borderRadius: "5px",
+                                                    padding: "2px 16px",
+                                                    letterSpacing: "2.5px",
+                                                    textTransform: "uppercase",
+                                                    pointerEvents: "none",
+                                                    zIndex: 40,
+                                                    userSelect: "none",
+                                                    whiteSpace: "nowrap",
+                                                    textAlign: "center",
+                                                }}
+                                            >
+                                                [ {quotation.status === "rejected" ? "REJECTED" : (quotation.status === "waiting_approval" ? "WAITING APPROVAL" : "DRAFT")} ]
+                                            </div>
+
+                                            {/* Watermark di tengah secara diagonal */}
+                                            <div
+                                                style={{
+                                                    position: "absolute",
+                                                    top: "52%",
+                                                    left: "50%",
+                                                    transform: "translate(-50%, -50%) rotate(-30deg)",
+                                                    fontSize: quotation.status === "waiting_approval" ? "44pt" : "56pt",
+                                                    fontWeight: 900,
+                                                    color: quotation.status === "rejected" ? "rgba(220, 38, 38, 0.12)" : (quotation.status === "waiting_approval" ? "rgba(217, 119, 6, 0.13)" : "rgba(220, 38, 38, 0.12)"),
+                                                    border: `4px dashed ${quotation.status === "rejected" ? "rgba(220, 38, 38, 0.18)" : (quotation.status === "waiting_approval" ? "rgba(217, 119, 6, 0.18)" : "rgba(220, 38, 38, 0.18)")}`,
+                                                    borderRadius: "16px",
+                                                    padding: "12px 36px",
+                                                    pointerEvents: "none",
+                                                    zIndex: 30,
+                                                    letterSpacing: "5px",
+                                                    textTransform: "uppercase",
+                                                    userSelect: "none",
+                                                    whiteSpace: "nowrap",
+                                                    textAlign: "center",
+                                                }}
+                                            >
+                                                {quotation.status === "rejected" ? "REJECTED" : (quotation.status === "waiting_approval" ? "WAITING APPROVAL" : "DRAFT")}
+                                            </div>
+                                        </>
                                     )}
 
                                     <div className="page-content relative z-10 px-[15mm] pb-[25mm] pt-[14mm] flex flex-col h-full">
@@ -420,7 +449,7 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                                                             QUOTATION
                                                         </div>
                                                         <div style={{ fontSize: "11pt", color: "#334155", fontWeight: 700, marginBottom: "7mm" }}>
-                                                            {quotation.quotationNumber || "DRAFT"}{quotation.currentRevision ? ` | Rev.${quotation.currentRevision}` : ""}
+                                                            {quotation.quotationNumber || "DRAFT"}
                                                         </div>
                                                     </div>
                                                 </div>

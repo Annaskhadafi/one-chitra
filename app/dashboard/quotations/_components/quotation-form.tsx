@@ -182,6 +182,11 @@ function SortableQuotationItemCard({
     id: string
     children: (dragHandle: React.ReactNode) => React.ReactNode
 }) {
+    const [mounted, setMounted] = useState(false)
+    useEffect(() => {
+        setMounted(true)
+    }, [])
+
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
 
     return (
@@ -199,8 +204,7 @@ function SortableQuotationItemCard({
                     variant="ghost"
                     size="icon"
                     className="h-7 w-7 cursor-grab text-white/90 hover:bg-white/15 hover:text-white active:cursor-grabbing touch-none"
-                    {...attributes}
-                    {...listeners}
+                    {...(mounted ? { ...attributes, ...listeners } : {})}
                 >
                     <GripVertical className="h-4 w-4" />
                     <span className="sr-only">Drag to reorder item</span>
@@ -217,6 +221,11 @@ function SortableQuotationItemRow({
     id: string
     children: (dragHandle: React.ReactNode) => React.ReactNode
 }) {
+    const [mounted, setMounted] = useState(false)
+    useEffect(() => {
+        setMounted(true)
+    }, [])
+
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
 
     return (
@@ -234,8 +243,7 @@ function SortableQuotationItemRow({
                     variant="ghost"
                     size="icon"
                     className="h-7 w-7 cursor-grab text-slate-500 hover:bg-slate-100 hover:text-slate-700 active:cursor-grabbing touch-none"
-                    {...attributes}
-                    {...listeners}
+                    {...(mounted ? { ...attributes, ...listeners } : {})}
                 >
                     <GripVertical className="h-4 w-4" />
                     <span className="sr-only">Drag to reorder item</span>
@@ -2138,6 +2146,7 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                                 </div>
                             ) : (
                                 <DndContext
+                                    id="quotation-items-mobile-dnd"
                                     collisionDetection={closestCenter}
                                     modifiers={[restrictToVerticalAxis]}
                                     onDragEnd={handleItemDragEnd}
@@ -2293,6 +2302,7 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                         <div className="hidden md:block rounded-md border overflow-hidden">
                             <div className="overflow-x-auto">
                                 <DndContext
+                                    id="quotation-items-desktop-dnd"
                                     collisionDetection={closestCenter}
                                     modifiers={[restrictToVerticalAxis]}
                                     onDragEnd={handleItemDragEnd}
