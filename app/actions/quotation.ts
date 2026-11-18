@@ -4,6 +4,7 @@ import { db } from "@/db"
 import {
     deliveries,
     ocrPoSessions,
+    quotationApprovalProgress,
     quotationAttachments,
     quotationItems,
     quotationRevisions,
@@ -884,22 +885,35 @@ export async function getQuotations(options?: GetQuotationsOptions) {
         )
     )
 
-    if (salesOrderIds.length === 0) {
-        return rows.map((quotation) => ({
-            ...quotation,
-            attachments: [],
-            relatedDeliveries: [],
-        }))
-    }
+    const quotationIds = rows.map((r) => r.id)
+    const [progressRows, relatedDeliveries] = await Promise.all([
+        quotationIds.length > 0
+            ? db.query.quotationApprovalProgress.findMany({
+                where: inArray(quotationApprovalProgress.quotationId, quotationIds),
+                with: {
+                    assignedUser: true,
+                },
+                orderBy: [asc(quotationApprovalProgress.stepOrder)],
+            })
+            : [],
+        salesOrderIds.length > 0
+            ? db.query.deliveries.findMany({
+                where: inArray(deliveries.salesOrderId, salesOrderIds),
+                with: {
+                    warehouse: true,
+                    items: true,
+                },
+                orderBy: [desc(deliveries.scheduledDate), desc(deliveries.createdAt)],
+            })
+            : [],
+    ])
 
-    const relatedDeliveries = await db.query.deliveries.findMany({
-        where: inArray(deliveries.salesOrderId, salesOrderIds),
-        with: {
-            warehouse: true,
-            items: true,
-        },
-        orderBy: [desc(deliveries.scheduledDate), desc(deliveries.createdAt)],
-    })
+    const progressMap = new Map<number, typeof progressRows>()
+    for (const p of progressRows) {
+        const arr = progressMap.get(p.quotationId) || []
+        arr.push(p)
+        progressMap.set(p.quotationId, arr)
+    }
 
     const deliveryMap = new Map<number, typeof relatedDeliveries>()
     for (const delivery of relatedDeliveries) {
@@ -908,11 +922,34 @@ export async function getQuotations(options?: GetQuotationsOptions) {
         deliveryMap.set(delivery.salesOrderId, current)
     }
 
-    return rows.map((quotation) => ({
-        ...quotation,
-        attachments: [],
-        relatedDeliveries: quotation.salesOrderId ? (deliveryMap.get(quotation.salesOrderId) ?? []) : [],
-    }))
+    return rows.map((quotation) => {
+        const steps = progressMap.get(quotation.id) || []
+        const activeStep = steps.find((s) => s.status === "pending")
+        const totalSteps = steps.length
+        const approvedSteps = steps.filter((s) => s.status === "approved").length
+        const isRejected = quotation.status === "rejected" || steps.some((s) => s.status === "rejected")
+
+        const approvalInfo = {
+            totalSteps,
+            approvedSteps,
+            activeStep: activeStep
+                ? {
+                    stepOrder: activeStep.stepOrder,
+                    stepLabel: activeStep.stepLabel,
+                    assignedUserName: activeStep.assignedUser?.name || null,
+                    roleKey: activeStep.roleKey,
+                }
+                : null,
+            isRejected,
+        }
+
+        return {
+            ...quotation,
+            attachments: [],
+            relatedDeliveries: quotation.salesOrderId ? (deliveryMap.get(quotation.salesOrderId) ?? []) : [],
+            approvalInfo,
+        }
+    })
 }
 
 export async function getQuotationCreators() {

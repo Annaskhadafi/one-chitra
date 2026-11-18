@@ -66,7 +66,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
-import { Search, Pencil, Trash2, Eye, FileText, Clock, CheckCircle, ArrowRightLeft, User, ChevronUp, ChevronDown, Copy, Calendar, Filter, ShoppingCart, Loader2, BarChart3, Download, FileUp, ExternalLink, FileSearch, Truck, ChevronRight, Maximize2, Minimize2, MoreHorizontal, ChevronsUpDown } from "lucide-react"
+import { Search, Pencil, Trash2, Eye, FileText, Clock, CheckCircle, CheckCircle2, XCircle, ArrowRightLeft, User, ChevronUp, ChevronDown, Copy, Calendar, Filter, ShoppingCart, Loader2, BarChart3, Download, FileUp, ExternalLink, FileSearch, Truck, ChevronRight, Maximize2, Minimize2, MoreHorizontal, ChevronsUpDown } from "lucide-react"
 import { ProgressLoading } from "@/components/ui/progress-loading"
 import { ScoreCard } from "@/components/score-card"
 import { BulkActions } from "@/components/bulk-actions"
@@ -170,6 +170,17 @@ interface QuotationWithRelations {
         includeInPdf: boolean
         description?: string | null
     }[]
+    approvalInfo?: {
+        totalSteps: number
+        approvedSteps: number
+        activeStep: {
+            stepOrder: number
+            stepLabel: string
+            assignedUserName: string | null
+            roleKey: string
+        } | null
+        isRejected: boolean
+    } | null
 }
 
 interface QuotationTableProps {
@@ -1777,7 +1788,9 @@ function QuotationTableInner({ data: initialData, currentUserId: serverUserId, a
                             status === "expired" && "bg-slate-500 text-white dark:bg-slate-600",
                             status === "converted" && "bg-purple-500 text-white dark:bg-purple-600"
                         )}>
-                            <SelectValue />
+                            <SelectValue placeholder={STATUS_LABELS[status] || status}>
+                                {STATUS_LABELS[status] || status}
+                            </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="draft">Draft</SelectItem>
@@ -1791,9 +1804,87 @@ function QuotationTableInner({ data: initialData, currentUserId: serverUserId, a
                     </Select>
                 ) : (
                     <Badge variant={statusVariants[status] || "secondary"} className="gap-1">
-                        {status.charAt(0).toUpperCase() + status.slice(1)}
+                        {STATUS_LABELS[status] || (status.charAt(0).toUpperCase() + status.slice(1))}
                     </Badge>
                 )
+            },
+        },
+        {
+            id: "approvalProgress",
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                    Approval
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : <ChevronsUpDown className="ml-2 h-3.5 w-3.5 opacity-70" />}
+                </Button>
+            ),
+            cell: ({ row }) => {
+                const q = row.original
+                const info = q.approvalInfo
+                const status = q.status
+
+                if (status === "approved") {
+                    return (
+                        <div className="flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-400 font-medium">
+                            <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                            <span>
+                                {info && info.totalSteps > 0
+                                    ? `Full Approved (${info.totalSteps}/${info.totalSteps})`
+                                    : "Auto Approved (≥ 11%)"}
+                            </span>
+                        </div>
+                    )
+                }
+
+                if (status === "rejected") {
+                    return (
+                        <div className="flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400 font-medium">
+                            <XCircle className="h-3.5 w-3.5 shrink-0 text-red-600" />
+                            <span>Ditolak</span>
+                        </div>
+                    )
+                }
+
+                if (status === "waiting_approval") {
+                    if (info?.activeStep) {
+                        return (
+                            <div className="flex flex-col gap-0.5 text-xs">
+                                <div className="flex items-center gap-1 text-amber-700 dark:text-amber-400 font-semibold">
+                                    <Clock className="h-3 w-3 shrink-0 text-amber-600 animate-pulse" />
+                                    <span>
+                                        Tahap {info.activeStep.stepOrder}: {info.activeStep.stepLabel.replace(/^Approval \d+:\s*/, "")}
+                                    </span>
+                                </div>
+                                <div className="text-[11px] text-muted-foreground flex items-center gap-1">
+                                    <User className="h-2.5 w-2.5 shrink-0" />
+                                    <span className="truncate max-w-[130px]">
+                                        {info.activeStep.assignedUserName || "Menunggu Antrean"}
+                                    </span>
+                                    {info.totalSteps > 0 && (
+                                        <span className="text-[10px] text-muted-foreground font-mono">
+                                            ({info.approvedSteps}/{info.totalSteps})
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                        )
+                    }
+                    return (
+                        <div className="flex items-center gap-1 text-xs text-amber-600 font-medium">
+                            <Clock className="h-3 w-3 shrink-0" />
+                            <span>Menunggu Review</span>
+                        </div>
+                    )
+                }
+
+                if (status === "draft") {
+                    return <span className="text-xs text-muted-foreground italic">Draft (Belum diajukan)</span>
+                }
+
+                if (status === "converted") {
+                    return <span className="text-xs text-purple-600 font-medium">Converted to SO</span>
+                }
+
+                return <span className="text-xs text-muted-foreground">-</span>
             },
         },
         {
