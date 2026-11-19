@@ -2,9 +2,10 @@
   "name": "one-chitra-wa-gateway",
   "version": "1.0.0",
   "description": "WhatsApp Baileys Gateway Service for ONE-CHITRA",
-  "main": "src/index.ts",
+  "main": "dist/index.js",
   "scripts": {
-    "start": "tsx src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts"
   },
   "dependencies": {

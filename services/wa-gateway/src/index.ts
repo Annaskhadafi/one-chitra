@@ -16,7 +16,7 @@ import { Boom } from "@hapi/boom";
 
 dotenv.config();
 
-const PORT = process.env.PORT || process.env.WA_GATEWAY_PORT || 3001;
+const PORT = process.env.WA_GATEWAY_PORT || 3001;
 const AUTH_DIR =
     process.env.WA_AUTH_DIR ||
     (fs.existsSync("/app/uploads")
@@ -292,7 +292,7 @@ app.post("/api/send-document", async (req: Request, res: Response) => {
 });
 
 // Start Server
-app.listen(PORT, () => {
+app.listen(Number(PORT), "0.0.0.0", () => {
     logger.info(`WhatsApp Gateway Service berjalan pada port ${PORT}`);
     startWhatsAppSocket().catch((err) => {
         logger.error("Gagal memulai WhatsApp socket:", err);

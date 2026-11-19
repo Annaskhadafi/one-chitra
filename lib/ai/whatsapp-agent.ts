@@ -17,7 +17,7 @@ import {
     generateQuotationPdfBuffer,
 } from "@/lib/mcp/tools";
 
-const WA_GATEWAY_URL = process.env.WA_GATEWAY_URL || "http://localhost:3001";
+const WA_GATEWAY_URL = process.env.WA_GATEWAY_URL || "http://127.0.0.1:3001";
 
 /**
  * Standardize Indonesian phone number to format 628xxx

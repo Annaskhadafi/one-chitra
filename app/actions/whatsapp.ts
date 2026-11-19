@@ -11,7 +11,7 @@ import { revalidatePath } from "next/cache";
 import { broadcastCustomMessage } from "@/lib/whatsapp/notifications";
 import { normalizePhoneNumber } from "@/lib/ai/whatsapp-agent";
 
-const WA_GATEWAY_URL = process.env.WA_GATEWAY_URL || "http://localhost:3001";
+const WA_GATEWAY_URL = process.env.WA_GATEWAY_URL || "http://127.0.0.1:3001";
 
 /**
  * 1. Gateway Status & QR

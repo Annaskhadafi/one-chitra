@@ -20,6 +20,9 @@ ENV NODE_OPTIONS="--max-old-space-size=8192"
 # Build using webpack (without --turbopack) for stable, memory-efficient Docker builds
 RUN npx next build --webpack
 
+# Build WhatsApp Gateway microservice to dist
+RUN cd ./services/wa-gateway && npm install && npm run build
+
 # Stage 3: Runner
 FROM node:22-bookworm-slim AS runner
 WORKDIR /app
@@ -83,6 +86,6 @@ CMD ["sh", "-c", " \
         echo 'WARNING: Migrations failed. Check your database connection.'; \
     fi; \
     echo 'Starting WhatsApp Gateway on port 3001...'; \
-    (cd services/wa-gateway && tsx src/index.ts) & \
+    (cd services/wa-gateway && node dist/index.js) & \
     echo 'Starting Next.js Server on port 3000...'; \
     node server.js"]
