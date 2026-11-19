@@ -3,6 +3,7 @@ export const DEFAULT_QUOTATION_TERMS = [
     "Stock :",
     "DDP :",
     "Exclude Tax",
+    "Delivery time :",
     "",
     "PT. CHITRA PARATAMA",
     "BANK MANDIRI",

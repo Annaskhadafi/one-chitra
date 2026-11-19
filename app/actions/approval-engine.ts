@@ -680,7 +680,7 @@ export async function evaluateQuotationMargin(
 // 4. SUBMIT / INITIATE QUOTATION APPROVAL
 // ==========================================
 
-export async function submitQuotationForApproval(quotationId: number) {
+export async function submitQuotationForApproval(quotationId: number, justification?: string) {
     try {
         const currentUser = await getCurrentUser()
         if (!currentUser) {
@@ -772,14 +772,19 @@ export async function submitQuotationForApproval(quotationId: number) {
         await db.insert(quotationApprovalProgress).values(progressInserts)
 
         // Set status quotation menjadi waiting_approval
+        const quotationUpdatePayload: Record<string, any> = {
+            status: "waiting_approval",
+            rejectedAt: null,
+            rejectedBy: null,
+            rejectionReason: null,
+            updatedAt: new Date(),
+        }
+        if (typeof justification === "string" && justification.trim()) {
+            quotationUpdatePayload.adminNote = justification.trim()
+        }
+
         await db.update(quotations)
-            .set({
-                status: "waiting_approval",
-                rejectedAt: null,
-                rejectedBy: null,
-                rejectionReason: null,
-                updatedAt: new Date(),
-            })
+            .set(quotationUpdatePayload)
             .where(eq(quotations.id, quotationId))
 
         // Kirim Email Notifikasi ke Approver Pertama yang Aktif
@@ -1054,6 +1059,34 @@ export async function processQuotationApprovalAction(input: {
     } catch (error) {
         console.error("Failed to process approval action:", error)
         return { success: false as const, error: "Failed to process approval action" }
+    }
+}
+
+export async function updateQuotationJustification(input: {
+    quotationId: number
+    justification: string
+}) {
+    try {
+        const currentUser = await getCurrentUser()
+        if (!currentUser) {
+            return { success: false as const, error: "Unauthorized" }
+        }
+
+        await db.update(quotations)
+            .set({
+                adminNote: input.justification.trim() || null,
+                updatedAt: new Date(),
+            })
+            .where(eq(quotations.id, input.quotationId))
+
+        revalidatePath(`/dashboard/quotations/${input.quotationId}`)
+        revalidatePath("/dashboard/quotations")
+        revalidatePath("/dashboard/approvals")
+
+        return { success: true as const, message: "Catatan alasan margin berhasil diperbarui." }
+    } catch (error) {
+        console.error("Failed to update quotation justification:", error)
+        return { success: false as const, error: "Gagal memperbarui catatan alasan margin." }
     }
 }
 

@@ -1052,6 +1052,18 @@ export async function generateQuotationNumber() {
 
 export async function createQuotation(data: QuotationInput) {
     try {
+        if (data.validUntil && data.quotationDate) {
+            const qDate = new Date(data.quotationDate)
+            const vDate = new Date(data.validUntil)
+            const diffDays = Math.round((vDate.getTime() - qDate.getTime()) / (1000 * 60 * 60 * 24))
+            if (diffDays > 14) {
+                return { success: false as const, error: "Masa berlaku (Expiry Date) maksimal 14 hari dari Quo Date." }
+            }
+            if (diffDays < 0) {
+                return { success: false as const, error: "Expiry Date tidak boleh lebih awal dari Quo Date." }
+            }
+        }
+
         const session = await auth.api.getSession({
             headers: await headers(),
         })
@@ -1153,6 +1165,18 @@ export async function createQuotation(data: QuotationInput) {
 
 export async function updateQuotation(id: number, data: QuotationInput) {
     try {
+        if (data.validUntil && data.quotationDate) {
+            const qDate = new Date(data.quotationDate)
+            const vDate = new Date(data.validUntil)
+            const diffDays = Math.round((vDate.getTime() - qDate.getTime()) / (1000 * 60 * 60 * 24))
+            if (diffDays > 14) {
+                return { success: false as const, error: "Masa berlaku (Expiry Date) maksimal 14 hari dari Quo Date." }
+            }
+            if (diffDays < 0) {
+                return { success: false as const, error: "Expiry Date tidak boleh lebih awal dari Quo Date." }
+            }
+        }
+
         const userId = (await getAuthenticatedUserId()) || "system"
 
         const result = await db.transaction(async (tx) => {

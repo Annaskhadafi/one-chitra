@@ -447,6 +447,14 @@ function calculateBundleSnapshotFromRows(
     })
 }
 
+function calculateMaxValidUntil(dateStr: string): string {
+    if (!dateStr) return ""
+    const d = new Date(dateStr)
+    if (isNaN(d.getTime())) return ""
+    d.setDate(d.getDate() + 14)
+    return d.toISOString().split("T")[0]
+}
+
 export function QuotationForm({ customers, products, users, vendorQuotations, currentUserId, initialStandardMargin, initialData }: QuotationFormProps) {
     const router = useRouter()
     const isEdit = !!initialData
@@ -473,11 +481,43 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
             ? new Date(initialData.quotationDate).toISOString().split("T")[0]
             : new Date().toISOString().split("T")[0]
     )
-    const [validUntil, setValidUntil] = useState(
-        initialData?.validUntil
-            ? new Date(initialData.validUntil).toISOString().split("T")[0]
-            : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
-    )
+    const [validUntil, setValidUntil] = useState(() => {
+        if (initialData?.validUntil) {
+            return new Date(initialData.validUntil).toISOString().split("T")[0]
+        }
+        const baseDate = initialData
+            ? new Date(initialData.quotationDate).toISOString().split("T")[0]
+            : new Date().toISOString().split("T")[0]
+        return calculateMaxValidUntil(baseDate)
+    })
+
+    const handleQuotationDateChange = (newDate: string) => {
+        setQuotationDate(newDate)
+        if (!newDate) return
+        const maxDate = calculateMaxValidUntil(newDate)
+        if (!validUntil || validUntil > maxDate || validUntil < newDate) {
+            setValidUntil(maxDate)
+        }
+    }
+
+    const handleValidUntilChange = (newDate: string) => {
+        if (!newDate) {
+            setValidUntil("")
+            return
+        }
+        const maxDate = calculateMaxValidUntil(quotationDate)
+        if (maxDate && newDate > maxDate) {
+            toast.warning("Masa berlaku (Expiry Date) maksimal 14 hari dari Quo Date.")
+            setValidUntil(maxDate)
+            return
+        }
+        if (quotationDate && newDate < quotationDate) {
+            toast.warning("Expiry Date tidak boleh lebih awal dari Quo Date.")
+            setValidUntil(quotationDate)
+            return
+        }
+        setValidUntil(newDate)
+    }
     const [subject, setSubject] = useState(initialData?.subject || "")
     const [salesPersonId, setSalesPersonId] = useState(initialData?.salesPersonId || currentUserId || "")
     const [attn, setAttn] = useState(initialData?.attn || "")
@@ -1545,6 +1585,20 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
             return
         }
 
+        if (validUntil && quotationDate) {
+            const qDate = new Date(quotationDate)
+            const vDate = new Date(validUntil)
+            const diffDays = Math.round((vDate.getTime() - qDate.getTime()) / (1000 * 60 * 60 * 24))
+            if (diffDays > 14) {
+                toast.error("Masa berlaku (Expiry Date) maksimal 14 hari dari Quo Date.")
+                return
+            }
+            if (diffDays < 0) {
+                toast.error("Expiry Date tidak boleh lebih awal dari Quo Date.")
+                return
+            }
+        }
+
         setIsSubmitting(true)
         try {
             const payload = {
@@ -1644,6 +1698,20 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
         if (items.length === 0) {
             setBlockedDialog(buildValidationBlockedDetails("Quotation belum bisa disimpan", ["Belum ada produk. Tambahkan minimal 1 produk"]))
             return
+        }
+
+        if (validUntil && quotationDate) {
+            const qDate = new Date(quotationDate)
+            const vDate = new Date(validUntil)
+            const diffDays = Math.round((vDate.getTime() - qDate.getTime()) / (1000 * 60 * 60 * 24))
+            if (diffDays > 14) {
+                toast.error("Masa berlaku (Expiry Date) maksimal 14 hari dari Quo Date.")
+                return
+            }
+            if (diffDays < 0) {
+                toast.error("Expiry Date tidak boleh lebih awal dari Quo Date.")
+                return
+            }
         }
 
         setIsSubmitting(true)
@@ -1901,16 +1969,24 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                                 <Input
                                     type="date"
                                     value={quotationDate}
-                                    onChange={(e) => setQuotationDate(e.target.value)}
+                                    onChange={(e) => handleQuotationDateChange(e.target.value)}
                                 />
                             </div>
                             <div className="space-y-2">
-                                <Label className="font-semibold">Expiry Date</Label>
+                                <div className="flex items-center justify-between">
+                                    <Label className="font-semibold">Expiry Date</Label>
+                                    <span className="text-[11px] text-muted-foreground font-medium">Maks. 14 hari</span>
+                                </div>
                                 <Input
                                     type="date"
                                     value={validUntil}
-                                    onChange={(e) => setValidUntil(e.target.value)}
+                                    min={quotationDate || undefined}
+                                    max={calculateMaxValidUntil(quotationDate) || undefined}
+                                    onChange={(e) => handleValidUntilChange(e.target.value)}
                                 />
+                                <p className="text-[11px] text-muted-foreground">
+                                    Maksimal 14 hari dari Quo Date (boleh kurang).
+                                </p>
                             </div>
                         </div>
 
@@ -2087,12 +2163,23 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
 
                         {/* Admin Note */}
                         <div className="space-y-2">
-                            <Label className="font-semibold text-muted-foreground">Admin Note</Label>
+                            <div className="flex items-center justify-between">
+                                <Label className={`font-semibold ${liveMarginSummary.requiresApproval ? "text-amber-800 dark:text-amber-300 flex items-center gap-1.5" : "text-muted-foreground"}`}>
+                                    {liveMarginSummary.requiresApproval && <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />}
+                                    {liveMarginSummary.requiresApproval ? "Alasan Margin Minus / Catatan Pengajuan (Admin Note)" : "Admin Note"}
+                                </Label>
+                                {liveMarginSummary.requiresApproval && (
+                                    <span className="text-[10px] text-amber-700 dark:text-amber-400 font-medium">
+                                        Wajib / Disarankan untuk pertimbangan Approver
+                                    </span>
+                                )}
+                            </div>
                             <Textarea
                                 rows={4}
                                 value={adminNote}
                                 onChange={(e) => setAdminNote(e.target.value)}
-                                className="resize-none"
+                                placeholder={liveMarginSummary.requiresApproval ? "Jelaskan alasan mengapa harga/margin di bawah standar (misal: penyesuaian pasar, tender khusus, bundling volume, dsb)..." : "Catatan internal untuk tim..."}
+                                className={`resize-none ${liveMarginSummary.requiresApproval ? "border-amber-300 focus-visible:ring-amber-400 bg-amber-50/20" : ""}`}
                             />
                         </div>
                     </CardContent>

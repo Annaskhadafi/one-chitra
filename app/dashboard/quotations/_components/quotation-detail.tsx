@@ -453,6 +453,14 @@ export function QuotationDetail({ quotation, autoOpenPdf = false, approvalDetail
                     canActOnCurrentStep={Boolean(approvalDetail.canActOnCurrentStep)}
                     currentUserId={approvalDetail.currentUserId || null}
                     salesPersonName={quotation.salesPerson?.name}
+                    adminNote={quotation.adminNote}
+                    creatorNotes={quotation.notes}
+                    creatorName={quotation.salesPerson?.name || (quotation as any).createdByUser?.name || "Pembuat Quotation"}
+                    createdAt={quotation.createdAt}
+                    isCreatorOrSales={Boolean(
+                        approvalDetail.currentUserId &&
+                        (approvalDetail.currentUserId === quotation.createdBy || approvalDetail.currentUserId === quotation.salesPersonId)
+                    )}
                 />
             )}
 

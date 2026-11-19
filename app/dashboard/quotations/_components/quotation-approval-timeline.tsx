@@ -18,12 +18,25 @@ import {
     UserCheck,
     FastForward,
     TrendingDown,
+    MessageSquare,
+    FileText,
+    Pencil,
+    History,
 } from "lucide-react"
 import {
     submitQuotationForApproval,
     processQuotationApprovalAction,
+    updateQuotationJustification,
     type QuotationMarginEvaluationSummary,
 } from "@/app/actions/approval-engine"
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 
@@ -56,6 +69,25 @@ interface QuotationApprovalTimelineProps {
     canActOnCurrentStep: boolean
     currentUserId: string | null
     salesPersonName?: string | null
+    adminNote?: string | null
+    creatorNotes?: string | null
+    creatorName?: string | null
+    createdAt?: Date | string | null
+    isCreatorOrSales?: boolean
+}
+
+function formatDateTime(date: Date | string | null | undefined): string {
+    if (!date) return "-"
+    const d = new Date(date)
+    if (isNaN(d.getTime())) return "-"
+    return new Intl.DateTimeFormat("id-ID", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+    }).format(d)
 }
 
 export function QuotationApprovalTimeline({
@@ -68,6 +100,11 @@ export function QuotationApprovalTimeline({
     canActOnCurrentStep,
     currentUserId,
     salesPersonName,
+    adminNote: initialAdminNote,
+    creatorNotes,
+    creatorName,
+    createdAt,
+    isCreatorOrSales,
 }: QuotationApprovalTimelineProps) {
     const router = useRouter()
     const [submittingApproval, setSubmittingApproval] = useState(false)
@@ -75,13 +112,48 @@ export function QuotationApprovalTimeline({
     const [actionComment, setActionComment] = useState("")
     const [rejectConfirmOpen, setRejectConfirmOpen] = useState(false)
 
+    // Justification Note State (Alasan Margin Minus Pembuat)
+    const [currentAdminNote, setCurrentAdminNote] = useState(initialAdminNote || "")
+    const [isEditingJustification, setIsEditingJustification] = useState(false)
+    const [justificationInput, setJustificationInput] = useState(initialAdminNote || "")
+    const [savingJustification, setSavingJustification] = useState(false)
+
+    // Submit dialog state (Prompt alasan minus jika submit)
+    const [submitModalOpen, setSubmitModalOpen] = useState(false)
+    const [submitJustification, setSubmitJustification] = useState(initialAdminNote || "")
+
+    // Handle save justification note
+    const handleSaveJustification = async () => {
+        setSavingJustification(true)
+        try {
+            const res = await updateQuotationJustification({
+                quotationId,
+                justification: justificationInput,
+            })
+            if (res.success) {
+                toast.success(res.message || "Catatan alasan margin berhasil disimpan")
+                setCurrentAdminNote(justificationInput)
+                setIsEditingJustification(false)
+                router.refresh()
+            } else {
+                toast.error(res.error || "Gagal menyimpan catatan alasan")
+            }
+        } catch {
+            toast.error("Terjadi kesalahan sistem")
+        } finally {
+            setSavingJustification(false)
+        }
+    }
+
     // Handle submit for approval
     const handleSubmitApproval = async () => {
         setSubmittingApproval(true)
         try {
-            const res = await submitQuotationForApproval(quotationId)
+            const res = await submitQuotationForApproval(quotationId, submitJustification)
             if (res.success) {
                 toast.success(res.message || "Approval berhasil diajukan")
+                setSubmitModalOpen(false)
+                setCurrentAdminNote(submitJustification)
                 router.refresh()
             } else {
                 toast.error(res.error || "Gagal mengajukan approval")
@@ -203,7 +275,14 @@ export function QuotationApprovalTimeline({
                         <Button
                             size="sm"
                             className="h-8 gap-1.5 text-xs bg-amber-600 hover:bg-amber-700 text-white shadow-sm"
-                            onClick={handleSubmitApproval}
+                            onClick={() => {
+                                if (evaluation.requiresApproval) {
+                                    setSubmitJustification(currentAdminNote || "")
+                                    setSubmitModalOpen(true)
+                                } else {
+                                    handleSubmitApproval()
+                                }
+                            }}
                             disabled={submittingApproval}
                         >
                             {submittingApproval ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
@@ -365,14 +444,14 @@ export function QuotationApprovalTimeline({
                         </div>
 
                         <div className="grid gap-1.5">
-                            <Label htmlFor="inlineComment" className="text-xs">
-                                Catatan / Komentar (Wajib diisi jika menolak)
+                            <Label htmlFor="inlineComment" className="text-xs font-semibold">
+                                Catatan / Komentar Approver (Tercatat di riwayat untuk pembuat &amp; approver selanjutnya):
                             </Label>
                             <Textarea
                                 id="inlineComment"
                                 value={actionComment}
                                 onChange={(e) => setActionComment(e.target.value)}
-                                placeholder="Tuliskan catatan persetujuan atau alasan jika menolak..."
+                                placeholder="Tuliskan catatan persetujuan atau alasan/instruksi jika menolak agar diketahui oleh pembuat dan approver selanjutnya..."
                                 rows={2}
                                 className="text-xs bg-background"
                             />
@@ -419,6 +498,283 @@ export function QuotationApprovalTimeline({
                         </span>
                     </div>
                 )}
+
+                {/* 1. CATATAN / ALASAN MARGIN MINUS DARI PEMBUAT QUOTATION */}
+                <div className="rounded-xl border border-amber-200/80 bg-amber-50/30 dark:border-amber-950/50 dark:bg-amber-950/10 p-4 space-y-2.5">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="flex items-center gap-2.5">
+                            <div className="p-1.5 rounded-md bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300">
+                                <FileText className="h-4 w-4" />
+                            </div>
+                            <div>
+                                <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                                    Catatan / Alasan Margin Minus Pembuat Quotation
+                                    <Badge variant="outline" className="text-[10px] bg-background">
+                                        Pembuat (Maker)
+                                    </Badge>
+                                </span>
+                                <p className="text-[11px] text-muted-foreground mt-0.5">
+                                    Oleh: <strong className="text-foreground">{creatorName || salesPersonName || "Pembuat Quotation"}</strong>
+                                    {createdAt && <span> • {formatDateTime(createdAt)}</span>}
+                                </p>
+                            </div>
+                        </div>
+
+                        {(isCreatorOrSales || canActOnCurrentStep || !currentAdminNote) && (
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground self-start sm:self-auto"
+                                onClick={() => {
+                                    setIsEditingJustification(!isEditingJustification)
+                                    setJustificationInput(currentAdminNote)
+                                }}
+                            >
+                                <Pencil className="h-3 w-3" />
+                                {isEditingJustification ? "Batal" : currentAdminNote ? "Ubah Catatan Alasan" : "Tambah Catatan Alasan"}
+                            </Button>
+                        )}
+                    </div>
+
+                    {isEditingJustification ? (
+                        <div className="space-y-2 pt-1">
+                            <Textarea
+                                value={justificationInput}
+                                onChange={(e) => setJustificationInput(e.target.value)}
+                                placeholder="Tuliskan alasan mengapa quotation ini memiliki margin minus/di bawah standar (contoh: kesepakatan volume tender, promo strategis, bundling servis, dsb)..."
+                                rows={3}
+                                className="text-xs bg-background"
+                            />
+                            <div className="flex items-center justify-end gap-2">
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 text-xs"
+                                    onClick={() => setIsEditingJustification(false)}
+                                    disabled={savingJustification}
+                                >
+                                    Batal
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    className="h-7 text-xs bg-amber-600 hover:bg-amber-700 text-white gap-1"
+                                    onClick={handleSaveJustification}
+                                    disabled={savingJustification}
+                                >
+                                    {savingJustification && <Loader2 className="h-3 w-3 animate-spin" />}
+                                    Simpan Catatan Alasan
+                                </Button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="rounded-lg border border-amber-200/60 bg-background/80 p-3 text-xs shadow-xs">
+                            {currentAdminNote || creatorNotes ? (
+                                <p className="whitespace-pre-line text-foreground leading-relaxed">
+                                    &quot;{currentAdminNote || creatorNotes}&quot;
+                                </p>
+                            ) : (
+                                <p className="text-muted-foreground italic text-[11px]">
+                                    Belum ada catatan alasan margin minus yang disertakan oleh pembuat quotation.
+                                </p>
+                            )}
+                        </div>
+                    )}
+                </div>
+
+                {/* 2. RIWAYAT CATATAN APPROVAL (NOTES APPROVER BERJENJANG DENGAN TIMESTAMP) */}
+                <div className="rounded-xl border bg-card p-4 space-y-3 shadow-sm">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 border-b pb-2.5">
+                        <div className="flex items-center gap-2">
+                            <div className="p-1.5 rounded-md bg-primary/10 text-primary">
+                                <History className="h-4 w-4" />
+                            </div>
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs font-semibold text-foreground">
+                                        Riwayat Catatan Persetujuan (Approval Notes History)
+                                    </span>
+                                    <Badge variant="secondary" className="text-[10px] h-5">
+                                        {progressSteps.filter(s => s.status === "approved" || s.status === "rejected").length} dari {progressSteps.length} Tahap Selesai
+                                    </Badge>
+                                </div>
+                                <p className="text-[11px] text-muted-foreground">
+                                    Daftar catatan &amp; alasan tindakan dari para approver beserta timestamp, dapat dilihat oleh pembuat dan approver tahapan selanjutnya.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Progress Steps Feed */}
+                    <div className="space-y-2.5 pt-1">
+                        {progressSteps.length === 0 ? (
+                            <div className="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground space-y-1">
+                                <Clock className="h-4 w-4 mx-auto text-amber-500 animate-pulse" />
+                                <p className="font-medium">Belum ada catatan alur persetujuan.</p>
+                            </div>
+                        ) : (
+                            progressSteps.map((step) => {
+                                const isStepApproved = step.status === "approved"
+                                const isStepRejected = step.status === "rejected"
+                                const isStepSkipped = step.status === "skipped"
+                                const isStepPending = step.status === "pending"
+
+                                let stepCardBg = "border-muted/80 bg-muted/10"
+                                if (isStepApproved) {
+                                    stepCardBg = "border-emerald-200/90 bg-emerald-50/20 dark:border-emerald-950 dark:bg-emerald-950/10"
+                                } else if (isStepRejected) {
+                                    stepCardBg = "border-red-200/90 bg-red-50/30 dark:border-red-950 dark:bg-red-950/20"
+                                } else if (isStepSkipped) {
+                                    stepCardBg = "border-blue-200/80 bg-blue-50/20 dark:border-blue-950 dark:bg-blue-950/10"
+                                } else if (isStepPending) {
+                                    stepCardBg = "border-amber-300/80 bg-amber-50/30 dark:border-amber-950 dark:bg-amber-950/10"
+                                }
+
+                                return (
+                                    <div
+                                        key={step.id}
+                                        className={`rounded-lg border p-3 text-xs transition-colors space-y-2 ${stepCardBg}`}
+                                    >
+                                        {/* Header Row */}
+                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                <Badge variant="outline" className="font-bold text-[11px] bg-background">
+                                                    Tahap {step.stepOrder}: {step.stepLabel}
+                                                </Badge>
+                                                <span className="text-muted-foreground">•</span>
+                                                <div className="flex items-center gap-1 font-medium text-foreground">
+                                                    <UserCheck className="h-3.5 w-3.5 text-muted-foreground" />
+                                                    <span>
+                                                        {isStepSkipped && step.comment?.includes("Tidak ada")
+                                                            ? "(Dilewati - Tidak ada pejabat)"
+                                                            : (step.assignedUser?.name || "Pejabat Terkait")}
+                                                    </span>
+                                                    {step.assignedUser?.email && (
+                                                        <span className="text-[10px] text-muted-foreground hidden md:inline">
+                                                            ({step.assignedUser.email})
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            <div className="flex items-center gap-2 shrink-0">
+                                                {isStepApproved && (
+                                                    <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] gap-1 h-5">
+                                                        <CheckCircle2 className="h-3 w-3" /> Disetujui
+                                                    </Badge>
+                                                )}
+                                                {isStepRejected && (
+                                                    <Badge variant="destructive" className="text-[10px] gap-1 h-5">
+                                                        <XCircle className="h-3 w-3" /> Ditolak
+                                                    </Badge>
+                                                )}
+                                                {isStepSkipped && (
+                                                    <Badge variant="outline" className="border-blue-300 text-blue-700 bg-blue-50 dark:bg-blue-950/50 dark:text-blue-300 text-[10px] gap-1 h-5">
+                                                        <FastForward className="h-3 w-3" /> Dilewati (Auto-skip)
+                                                    </Badge>
+                                                )}
+                                                {isStepPending && (
+                                                    <Badge variant="outline" className="border-amber-300 text-amber-800 bg-amber-50 dark:bg-amber-950/50 dark:text-amber-300 text-[10px] gap-1 h-5 animate-pulse">
+                                                        <Clock className="h-3 w-3" /> Menunggu Tindakan
+                                                    </Badge>
+                                                )}
+
+                                                {step.actedAt && (
+                                                    <span className="text-[11px] text-muted-foreground font-mono">
+                                                        {formatDateTime(step.actedAt)}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Comment / Note Box */}
+                                        <div className="pt-0.5">
+                                            {step.comment ? (
+                                                <div className={`rounded-md border p-2.5 text-xs text-foreground bg-background shadow-2xs ${isStepRejected ? "border-red-200" : isStepApproved ? "border-emerald-100" : ""}`}>
+                                                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
+                                                        Catatan Approver:
+                                                    </span>
+                                                    <p className="whitespace-pre-line leading-relaxed font-normal">
+                                                        &quot;{step.comment}&quot;
+                                                    </p>
+                                                </div>
+                                            ) : isStepApproved ? (
+                                                <p className="text-[11px] text-muted-foreground italic">
+                                                    Disetujui tanpa catatan khusus.
+                                                </p>
+                                            ) : isStepPending ? (
+                                                <p className="text-[11px] text-muted-foreground italic">
+                                                    Menunggu catatan dan tindakan dari approver tahap ini.
+                                                </p>
+                                            ) : null}
+                                        </div>
+                                    </div>
+                                )
+                            })
+                        )}
+                    </div>
+                </div>
+
+                {/* MODAL KONFIRMASI SUBMIT APPROVAL DENGAN ALASAN MINUS */}
+                <Dialog open={submitModalOpen} onOpenChange={setSubmitModalOpen}>
+                    <DialogContent className="sm:max-w-md">
+                        <DialogHeader>
+                            <DialogTitle className="flex items-center gap-2">
+                                <Send className="h-4 w-4 text-amber-600" />
+                                Pengajuan Persetujuan Margin Quotation
+                            </DialogTitle>
+                            <DialogDescription className="text-xs">
+                                Quotation ini memerlukan persetujuan berjenjang karena memiliki margin di bawah standar baseline ({evaluation.minItemMargin}%).
+                            </DialogDescription>
+                        </DialogHeader>
+
+                        <div className="space-y-3 py-2 text-xs">
+                            <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-2.5 dark:border-amber-900/60 dark:bg-amber-950/20 text-amber-900 dark:text-amber-200">
+                                <strong>Target Approval:</strong> Memerlukan persetujuan hingga <strong>{evaluation.worstCasePosition}</strong>.
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <Label htmlFor="submitJustification" className="text-xs font-semibold">
+                                    Catatan / Alasan Margin Minus (Untuk Approver):
+                                </Label>
+                                <Textarea
+                                    id="submitJustification"
+                                    value={submitJustification}
+                                    onChange={(e) => setSubmitJustification(e.target.value)}
+                                    placeholder="Tuliskan alasan mengapa quotation memiliki margin di bawah standar/minus untuk dipertimbangkan oleh para approver..."
+                                    rows={3}
+                                    className="text-xs"
+                                />
+                                <p className="text-[11px] text-muted-foreground">
+                                    Catatan ini akan langsung terlihat oleh seluruh approver dalam riwayat approval.
+                                </p>
+                            </div>
+                        </div>
+
+                        <DialogFooter className="gap-2 sm:gap-0">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="text-xs"
+                                onClick={() => setSubmitModalOpen(false)}
+                                disabled={submittingApproval}
+                            >
+                                Batal
+                            </Button>
+                            <Button
+                                type="button"
+                                size="sm"
+                                className="text-xs bg-amber-600 hover:bg-amber-700 text-white gap-1.5"
+                                onClick={handleSubmitApproval}
+                                disabled={submittingApproval}
+                            >
+                                {submittingApproval && <Loader2 className="h-3 w-3 animate-spin" />}
+                                Ajukan Sekarang
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
             </CardContent>
         </Card>
     )
