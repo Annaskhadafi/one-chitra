@@ -21,7 +21,7 @@ ENV NODE_OPTIONS="--max-old-space-size=8192"
 RUN npx next build --webpack
 
 # Build WhatsApp Gateway microservice to dist
-RUN cd ./services/wa-gateway && npm install && npm run build
+RUN cd ./services/wa-gateway && npm install --include=dev && npm run build
 
 # Stage 3: Runner
 FROM node:22-bookworm-slim AS runner

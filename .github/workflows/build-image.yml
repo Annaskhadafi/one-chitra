@@ -23,7 +23,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 1. Build Main ONE-CHITRA App
+      # Build Main ONE-CHITRA App (includes WhatsApp Gateway in same container)
       - uses: docker/metadata-action@v5
         id: meta-app
         with:
@@ -41,27 +41,10 @@ jobs:
           labels: ${{ steps.meta-app.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          build-args: |
+            NODE_OPTIONS=--max-old-space-size=8192
 
-      # 2. Build WhatsApp Gateway Microservice
-      - uses: docker/metadata-action@v5
-        id: meta-wa
-        with:
-          images: ghcr.io/${{ github.repository }}-wa-gateway
-          tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=sha
-
-      - uses: docker/build-push-action@v6
-        with:
-          context: ./services/wa-gateway
-          file: ./services/wa-gateway/Dockerfile
-          push: true
-          tags: ${{ steps.meta-wa.outputs.tags }}
-          labels: ${{ steps.meta-wa.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      # 3. Deploy webhook to Dokploy
+      # Deploy webhook to Dokploy
       - name: Deploy to Dokploy
         env:
           DOKPLOY_WEBHOOK_URL: ${{ secrets.DOKPLOY_WEBHOOK_URL }}

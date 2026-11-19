@@ -17,13 +17,43 @@ import { Boom } from "@hapi/boom";
 dotenv.config();
 
 const PORT = process.env.WA_GATEWAY_PORT || 3001;
-const AUTH_DIR =
-    process.env.WA_AUTH_DIR ||
-    (fs.existsSync("/app/uploads")
-        ? "/app/uploads/baileys_auth"
-        : fs.existsSync("/app/baileys_auth")
-        ? "/app/baileys_auth"
-        : path.join(__dirname, "..", "baileys_auth"));
+
+// Resilient AUTH_DIR resolution
+let AUTH_DIR = process.env.WA_AUTH_DIR;
+if (!AUTH_DIR) {
+    if (fs.existsSync("/app/uploads")) {
+        try {
+            const testDir = "/app/uploads/baileys_auth";
+            fs.mkdirSync(testDir, { recursive: true });
+            AUTH_DIR = testDir;
+        } catch {
+            AUTH_DIR = "/app/baileys_auth";
+        }
+    } else if (fs.existsSync("/app/baileys_auth")) {
+        AUTH_DIR = "/app/baileys_auth";
+    } else {
+        AUTH_DIR = path.join(__dirname, "..", "baileys_auth");
+    }
+}
+
+try {
+    if (!fs.existsSync(AUTH_DIR)) {
+        fs.mkdirSync(AUTH_DIR, { recursive: true });
+    }
+} catch (err) {
+    console.warn("[WA Gateway] Fallback auth directory to /tmp/baileys_auth due to:", err);
+    AUTH_DIR = "/tmp/baileys_auth";
+    fs.mkdirSync(AUTH_DIR, { recursive: true });
+}
+
+// Global safety catch
+process.on("uncaughtException", (err) => {
+    console.error("[WA Gateway uncaughtException]", err);
+});
+process.on("unhandledRejection", (reason) => {
+    console.error("[WA Gateway unhandledRejection]", reason);
+});
+
 const WEBHOOK_URL =
     process.env.WA_WEBHOOK_URL ||
     "http://127.0.0.1:3000/api/whatsapp/webhook";
@@ -41,11 +71,6 @@ let connectionStatus: "disconnected" | "connecting" | "qr_ready" | "connected" =
 let currentQrCode: string | null = null;
 let currentQrDataUrl: string | null = null;
 let connectedUser: { id: string; name?: string } | null = null;
-
-// Ensure auth dir exists
-if (!fs.existsSync(AUTH_DIR)) {
-    fs.mkdirSync(AUTH_DIR, { recursive: true });
-}
 
 /**
  * Inisialisasi WhatsApp Baileys Socket
@@ -295,6 +320,6 @@ app.post("/api/send-document", async (req: Request, res: Response) => {
 app.listen(Number(PORT), "0.0.0.0", () => {
     logger.info(`WhatsApp Gateway Service berjalan pada port ${PORT}`);
     startWhatsAppSocket().catch((err) => {
-        logger.error("Gagal memulai WhatsApp socket:", err);
+        logger.error({ err }, "Gagal memulai WhatsApp socket");
     });
 });
