@@ -32,8 +32,33 @@ services:
       MISTRAL_OCR_ENDPOINT: ${MISTRAL_OCR_ENDPOINT:-https://api.mistral.ai/v1/ocr}
       MISTRAL_MAP_MODEL: ${MISTRAL_MAP_MODEL:-mistral-small-latest}
       CRON_SECRET: ${CRON_SECRET:-}
+      WA_GATEWAY_URL: ${WA_GATEWAY_URL:-http://one-chitra-wa-gateway:3001}
+      WA_GATEWAY_SECRET: ${WA_GATEWAY_SECRET:-och-wa-secret-token}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://9router.chitraparatama.com/v1}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-cx/gpt-5.6-luna}
     volumes:
       - /mnt/data/one-chitra/uploads:/app/uploads
+    networks:
+      - one-chitra-net
+
+  wa-gateway:
+    image: ghcr.io/annaskhadafi/one-chitra-wa-gateway:latest
+    pull_policy: always
+    container_name: one-chitra-wa-gateway
+    restart: unless-stopped
+    ports:
+      - "${WA_GATEWAY_PORT:-3001}:3001"
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      WA_GATEWAY_PORT: 3001
+      WA_AUTH_DIR: /app/baileys_auth
+      WA_WEBHOOK_URL: http://one-chitra-app:3000/api/whatsapp/webhook
+      WA_GATEWAY_SECRET: ${WA_GATEWAY_SECRET:-och-wa-secret-token}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-https://one.chitraparatama.com}
+    volumes:
+      - /mnt/data/one-chitra/baileys_auth:/app/baileys_auth
     networks:
       - one-chitra-net
 

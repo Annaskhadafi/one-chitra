@@ -300,3 +300,6 @@ export {
 // Quotation Approval Engine
 export * from "./approval-quotation-engine";
 
+// WhatsApp Center & Bot AI
+export * from "./whatsapp";
+

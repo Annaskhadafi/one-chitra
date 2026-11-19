@@ -13,6 +13,7 @@ import {
     Wrench,
     BookOpen,
     Scale,
+    MessageSquare,
     type LucideIcon
 } from "lucide-react"
 
@@ -627,6 +628,11 @@ export const navigationConfig: NavSection[] = [
                         title: "API Keys",
                         url: "/dashboard/admin/api-keys",
                         resource: "api-keys",
+                    },
+                    {
+                        title: "WhatsApp & Bot AI",
+                        url: "/dashboard/whatsapp",
+                        resource: "whatsapp",
                     },
                 ],
             },

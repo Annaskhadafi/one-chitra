@@ -15,6 +15,9 @@ uploads
 backups
 scratch
 graphify-out
+baileys_auth
+services/wa-gateway/node_modules
+services/wa-gateway/baileys_auth
 
 # Documentation and large binaries
 documentation

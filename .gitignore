@@ -59,4 +59,8 @@ next-env.d.ts
 # graphify cache
 graphify-out/cache/
 
+# WhatsApp session auth
+baileys_auth/
+**/baileys_auth/
+
 

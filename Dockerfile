@@ -49,13 +49,17 @@ RUN npm install -g drizzle-kit tsx
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-# Create uploads directory
-RUN mkdir -p /app/uploads /app/.config /app/.cache && chown -R nextjs:nodejs /app/uploads /app/.config /app/.cache
+# Create uploads and whatsapp auth directory
+RUN mkdir -p /app/uploads /app/baileys_auth /app/.config /app/.cache && chown -R nextjs:nodejs /app/uploads /app/baileys_auth /app/.config /app/.cache
 
 # Copy built files
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+# Copy WhatsApp Gateway microservice & install its production dependencies
+COPY --from=builder --chown=nextjs:nodejs /app/services/wa-gateway ./services/wa-gateway
+RUN cd ./services/wa-gateway && npm install --omit=dev && chown -R nextjs:nodejs ./node_modules
 
 # IMPORTANT: Copy the db folder (schema) and drizzle folder (migrations)
 COPY --from=builder --chown=nextjs:nodejs /app/db ./db
@@ -66,15 +70,19 @@ COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
 USER nextjs
 
 EXPOSE 3000
+EXPOSE 3001
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-# Shell script for more robust startup with better logging
+# Shell script for running migrations, WhatsApp gateway, and Next.js server
 CMD ["sh", "-c", " \
     echo 'Running database migrations...'; \
     if drizzle-kit push; then \
-        echo 'Migrations successful. Starting the server...'; \
+        echo 'Migrations successful.'; \
     else \
-        echo 'WARNING: Migrations failed. Check your database connection. Starting server anyway...'; \
+        echo 'WARNING: Migrations failed. Check your database connection.'; \
     fi; \
+    echo 'Starting WhatsApp Gateway on port 3001...'; \
+    (cd services/wa-gateway && tsx src/index.ts) & \
+    echo 'Starting Next.js Server on port 3000...'; \
     node server.js"]
