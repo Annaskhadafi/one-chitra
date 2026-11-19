@@ -245,8 +245,8 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                     .col-qty { width: 65px; text-align: center; }
                     .col-part { width: 115px; }
                     .serial-grid { width: 100%; border-collapse: collapse; margin-top: 4px; margin-bottom: 8px; border: 1px solid #000; }
-                    .serial-grid th { background-color: #f3f4f6; border: 1px solid #000; padding: 2px 4px; font-size: 7.5pt; text-align: center; }
-                    .serial-grid td { text-align: center; font-size: 7.5pt; padding: 2px 4px; border: 1px solid #000; }
+                    .serial-grid th { background-color: #f3f4f6; border: 1px solid #000; padding: 3px 4px; font-size: 8.5pt; font-weight: bold; text-align: center; letter-spacing: 0.5px; }
+                    .serial-grid td { text-align: center; font-size: 10pt; font-weight: bold; padding: 3px 4px; border: 1px solid #000; letter-spacing: 0.5px; }
                     .footer-section { margin-top: 18px; padding-top: 4px; }
                     .note-section { margin-top: 8px; margin-bottom: 12px; font-size: 8.5pt; }
                     .note-label { font-weight: bold; margin-bottom: 2px; }
@@ -452,8 +452,8 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                                             .pdf-wrapper .col-part { width: 115px; }
 
                                             .pdf-wrapper .serial-grid { width: 100%; border-collapse: collapse; margin-top: 4px; margin-bottom: 8px; border: 1px solid #000; }
-                                            .pdf-wrapper .serial-grid th { background-color: #f3f4f6; border: 1px solid #000; padding: 2px 4px; font-size: 7.5pt; text-align: center; }
-                                            .pdf-wrapper .serial-grid td { text-align: center; font-size: 7.5pt; padding: 2px 4px; border: 1px solid #000; }
+                                            .pdf-wrapper .serial-grid th { background-color: #f3f4f6; border: 1px solid #000; padding: 3px 4px; font-size: 8.5pt; font-weight: bold; text-align: center; letter-spacing: 0.5px; }
+                                            .pdf-wrapper .serial-grid td { text-align: center; font-size: 10pt; font-weight: bold; padding: 3px 4px; border: 1px solid #000; letter-spacing: 0.5px; }
                                             
                                             .pdf-wrapper .footer-section { margin-top: 18px; padding-top: 4px; }
                                             .pdf-wrapper .note-section { margin-top: 8px; margin-bottom: 12px; font-size: 8.5pt; }

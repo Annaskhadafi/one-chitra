@@ -75,8 +75,8 @@ export function estimateItemHeight(item: DeliveryPdfData["items"][0]): number {
 
     const snCount = Number(item.deliveredQuantity)
     const snRows = Math.ceil(snCount / 5)
-    const snHeaderHeight = 20
-    const snRowHeight = 18
+    const snHeaderHeight = 22
+    const snRowHeight = 22
     const snMargin = 10
 
     return baseRowHeight + snHeaderHeight + (snRows * snRowHeight) + snMargin
