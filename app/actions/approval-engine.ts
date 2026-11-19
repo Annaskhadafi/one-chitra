@@ -498,9 +498,9 @@ export async function evaluateQuotationMargin(
 
         const discountGapPercent = Math.max(0, STANDARD_MARGIN - marginPercent)
 
-        // Tentukan kategori: jika category mengandung "tyre" atau "tire" -> prime_tyre, selain itu pas
-        const catRaw = (item.category || "").toLowerCase()
-        const isTyre = catRaw.includes("tyre") || catRaw.includes("tire")
+        // Tentukan kategori: Prime Product HANYA untuk type TYRE, selainnya Product ACC & Service (PAS)
+        const catRaw = (item.category || "").trim().toUpperCase()
+        const isTyre = catRaw === "TYRE" || catRaw === "PRIME PRODUCT"
         const productCategory: "prime_tyre" | "pas" = isTyre ? "prime_tyre" : "pas"
 
         // Evaluasi tier untuk item ini

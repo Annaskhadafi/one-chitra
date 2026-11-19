@@ -588,9 +588,15 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                 const m = ((effectivePrice - cost) / cost) * 100
                 if (m < minMargin) minMargin = m
 
-                // Deteksi kategori: Prime Product (Tyre) vs Product ACC & Service (PAS)
-                const catDesc = `${it.product?.category || ""} ${it.description || ""} ${it.product?.materialDescription || ""}`.toLowerCase()
-                const isTyre = catDesc.includes("tyre") || catDesc.includes("tire") || catDesc.includes("ban")
+                // Ambil referensi produk dari master data products
+                const prodRef = it.productId
+                    ? products.find(p => p.id === it.productId)
+                    : (it.materialNumber ? products.find(p => p.materialNumber === it.materialNumber) : null)
+
+                // Kategori: Prime Product HANYA untuk product dengan type TYRE, selainnya Product ACC & Service
+                const rawCategory = (prodRef?.category || "").trim().toUpperCase()
+                const isTyre = rawCategory === "TYRE" || rawCategory === "PRIME PRODUCT"
+
                 if (isTyre) {
                     hasTyre = true
                     if (m < minTyreMargin) minTyreMargin = m
@@ -601,37 +607,61 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
             }
         })
 
-        const getRoutingLevel = (margin: number) => {
-            if (margin >= standardBaseline) return { level: 0, position: "Auto Approved (Standar)" }
-            if (margin >= 8.0) return { level: 2, position: "Supervisory / SPV" }
-            if (margin >= 5.0) return { level: 3, position: "Managerial / Sales Manager" }
-            if (margin >= 2.0) return { level: 4, position: "General Manager (GM)" }
-            return { level: 5, position: "Direksi / Director" }
+        // Matriks Batas Limit Margin untuk Prime Product (Tyre):
+        // >= 11.00%: Auto Approved
+        // 9.50% - 10.99%: Sales Engineer (Auto Approved)
+        // 8.00% - 9.49%: Supervisory / SPV (Level 2)
+        // 6.00% - 7.99%: Managerial / Sales Manager (Level 3)
+        // 1.00% - 5.99%: General Manager (GM) (Level 4)
+        // < 1.00%: Direksi / Director (Level 5)
+        const getTyreRoutingLevel = (margin: number) => {
+            if (margin >= standardBaseline) return { level: 0, position: "Auto Approved (Standar)", requiresApproval: false }
+            if (margin >= 9.5) return { level: 1, position: "Sales Engineer", requiresApproval: false }
+            if (margin >= 8.0) return { level: 2, position: "Supervisory / SPV", requiresApproval: true }
+            if (margin >= 6.0) return { level: 3, position: "Managerial / Sales Manager", requiresApproval: true }
+            if (margin >= 1.0) return { level: 4, position: "General Manager (GM)", requiresApproval: true }
+            return { level: 5, position: "Direksi / Director", requiresApproval: true }
         }
 
-        const tyreEval = hasTyre ? getRoutingLevel(minTyreMargin) : null
-        const pasEval = hasPas ? getRoutingLevel(minPasMargin) : null
+        // Matriks Batas Limit Margin untuk Product ACC & Service (PAS):
+        // >= 11.00%: Auto Approved
+        // 8.00% - 10.99%: Leader on Site (Level 1)
+        // 6.00% - 7.99%: Supervisory / SPV (Level 2)
+        // 1.00% - 5.99%: Managerial / Sales Manager (Level 3)
+        // -4.00% - 0.99%: General Manager (GM) (Level 4)
+        // < -4.00%: Direksi / Director (Level 5)
+        const getPasRoutingLevel = (margin: number) => {
+            if (margin >= standardBaseline) return { level: 0, position: "Auto Approved (Standar)", requiresApproval: false }
+            if (margin >= 8.0) return { level: 1, position: "Leader on Site", requiresApproval: true }
+            if (margin >= 6.0) return { level: 2, position: "Supervisory / SPV", requiresApproval: true }
+            if (margin >= 1.0) return { level: 3, position: "Managerial / Sales Manager", requiresApproval: true }
+            if (margin >= -4.0) return { level: 4, position: "General Manager (GM)", requiresApproval: true }
+            return { level: 5, position: "Direksi / Director", requiresApproval: true }
+        }
+
+        const tyreEval = hasTyre ? getTyreRoutingLevel(minTyreMargin) : null
+        const pasEval = hasPas ? getPasRoutingLevel(minPasMargin) : null
 
         let worstPosition = "Auto Approved"
         let worstLevel = 0
-        if (tyreEval && tyreEval.level > worstLevel) {
+        if (tyreEval && tyreEval.requiresApproval && tyreEval.level > worstLevel) {
             worstLevel = tyreEval.level
             worstPosition = tyreEval.position
         }
-        if (pasEval && pasEval.level > worstLevel) {
+        if (pasEval && pasEval.requiresApproval && pasEval.level > worstLevel) {
             worstLevel = pasEval.level
             worstPosition = pasEval.position
         }
 
         const routingDetails: string[] = []
-        if (hasTyre && tyreEval && tyreEval.level > 0) {
+        if (hasTyre && tyreEval && tyreEval.requiresApproval) {
             routingDetails.push(`Prime Product (Tyre) anda memiliki margin ${minTyreMargin.toFixed(2)}%, akan di-routing sampai level ${tyreEval.position} sesuai matrix.`)
         }
-        if (hasPas && pasEval && pasEval.level > 0) {
+        if (hasPas && pasEval && pasEval.requiresApproval) {
             routingDetails.push(`Product ACC & Service anda memiliki margin ${minPasMargin.toFixed(2)}%, akan di-routing sampai level ${pasEval.position} sesuai matrix.`)
         }
 
-        const overallRequiresApproval = hasItem && minMargin < standardBaseline
+        const overallRequiresApproval = worstLevel > 0
 
         return {
             minMargin: hasItem ? Number(minMargin.toFixed(2)) : standardBaseline,
@@ -644,7 +674,7 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
             worstLevel,
             routingDetails,
         }
-    }, [items, exchangeRate, standardBaseline])
+    }, [items, exchangeRate, standardBaseline, products])
     const [itemSortConfig, setItemSortConfig] = useState<{ key: ItemSortKey; direction: SortDirection }>({
         key: "index",
         direction: "asc",
