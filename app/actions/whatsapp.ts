@@ -5,6 +5,7 @@ import {
     whatsappRegisteredNumbers,
     whatsappMessages,
     whatsappNotificationLogs,
+    user,
 } from "@/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
@@ -72,10 +73,28 @@ export async function getRegisteredNumbersAction() {
     }
 }
 
+export async function getSystemUsersAction() {
+    try {
+        const users = await db
+            .select({
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                role: user.role,
+            })
+            .from(user)
+            .orderBy(user.name);
+        return { success: true, users };
+    } catch (err: any) {
+        return { success: false, error: err.message, users: [] };
+    }
+}
+
 export async function createRegisteredNumberAction(params: {
     phoneNumber: string;
     contactName: string;
     role: string;
+    userId?: string;
     canAccessRevenue?: boolean;
     canAccessStock?: boolean;
     canAccessQuotation?: boolean;
@@ -91,6 +110,7 @@ export async function createRegisteredNumberAction(params: {
                 phoneNumber: phone,
                 contactName: params.contactName.trim(),
                 role: params.role || "sales",
+                userId: params.userId || null,
                 canAccessRevenue: params.canAccessRevenue ?? false,
                 canAccessStock: params.canAccessStock ?? true,
                 canAccessQuotation: params.canAccessQuotation ?? false,
@@ -112,6 +132,7 @@ export async function updateRegisteredNumberAction(
     params: Partial<{
         contactName: string;
         role: string;
+        userId: string | null;
         canAccessRevenue: boolean;
         canAccessStock: boolean;
         canAccessQuotation: boolean;

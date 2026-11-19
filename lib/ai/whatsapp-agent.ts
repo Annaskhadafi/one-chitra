@@ -3,8 +3,10 @@ import {
     whatsappRegisteredNumbers,
     whatsappConversations,
     whatsappMessages,
+    quotations,
+    quotationApprovalProgress,
 } from "@/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 import {
     NineRouterClient,
     AiChatMessage,
@@ -15,7 +17,12 @@ import {
     getRevenueSummary,
     createSalesQuotation,
     generateQuotationPdfBuffer,
+    getPendingApprovals,
+    getQuotationDetail,
+    getCustomerInfo,
+    getDeliveryStatus,
 } from "@/lib/mcp/tools";
+import { notifySalesQuotationResult } from "@/lib/whatsapp/notifications";
 
 const WA_GATEWAY_URL = process.env.WA_GATEWAY_URL || "http://127.0.0.1:3001";
 
@@ -126,6 +133,7 @@ export async function processWhatsAppIncomingMessage(params: {
             .insert(whatsappConversations)
             .values({
                 phoneNumber: phone,
+                context: {},
                 lastMessageAt: new Date(),
             })
             .returning();
@@ -147,7 +155,212 @@ export async function processWhatsAppIncomingMessage(params: {
         status: "delivered",
     });
 
-    // Ambil histori pesan terakhir (multi-turn memory)
+    const contextObj = (conversation.context as any) || {};
+
+    // =========================================================================
+    // 3. FITUR UTAMA: INTERACTIVE TWO-WAY APPROVAL DENGAN DUA LANGKAH KONFIRMASI
+    // =========================================================================
+
+    // 3A. Tangani Jawaban Konfirmasi ("YA" atau "BATAL")
+    if (contextObj.pendingApproval) {
+        const pending = contextObj.pendingApproval;
+        const isExpired = Date.now() > (pending.expiresAt || 0);
+
+        if (isExpired) {
+            await db.update(whatsappConversations).set({ context: {} }).where(eq(whatsappConversations.id, conversation.id));
+            const expiredMsg = `⏱️ Sesi konfirmasi untuk penawaran *${pending.quotationNumber}* telah kedaluwarsa.\nSilakan ketik ulang perintah approval (contoh: *SETUJU ${pending.quotationNumber}*).`;
+            await sendWhatsAppMessage(phone, expiredMsg);
+            await db.insert(whatsappMessages).values({
+                conversationId: conversation.id,
+                phoneNumber: phone,
+                direction: "outbound",
+                content: expiredMsg,
+            });
+            return { success: true, processed: "approval_expired" };
+        }
+
+        const normalizedCmd = userText.toLowerCase().trim();
+        if (/^(ya|yes|ok|setuju|confirm|lanjut)$/i.test(normalizedCmd)) {
+            const isApproved = pending.action === "approve";
+            const newStatus = isApproved ? "approved" : "rejected";
+
+            // 1. Update quotation_approval_progress
+            await db
+                .update(quotationApprovalProgress)
+                .set({
+                    status: newStatus,
+                    actedAt: new Date(),
+                    comment: pending.comment || (isApproved ? "Disetujui via WhatsApp Bot" : "Ditolak via WhatsApp Bot"),
+                })
+                .where(eq(quotationApprovalProgress.id, pending.progressId));
+
+            // 2. Cek apakah seluruh langkah approval telah disetujui
+            if (isApproved) {
+                const remainingSteps = await db
+                    .select()
+                    .from(quotationApprovalProgress)
+                    .where(
+                        and(
+                            eq(quotationApprovalProgress.quotationId, pending.quotationId),
+                            eq(quotationApprovalProgress.status, "pending")
+                        )
+                    );
+
+                if (remainingSteps.length === 0) {
+                    await db
+                        .update(quotations)
+                        .set({
+                            status: "approved",
+                            approvedAt: new Date(),
+                            approvedBy: registered.userId || "whatsapp-bot",
+                        })
+                        .where(eq(quotations.id, pending.quotationId));
+                }
+            } else {
+                await db
+                    .update(quotations)
+                    .set({
+                        status: "rejected",
+                        rejectedAt: new Date(),
+                        rejectedBy: registered.userId || "whatsapp-bot",
+                        rejectionReason: pending.comment || "Ditolak via WhatsApp",
+                    })
+                    .where(eq(quotations.id, pending.quotationId));
+            }
+
+            // 3. Clear Context
+            await db.update(whatsappConversations).set({ context: {} }).where(eq(whatsappConversations.id, conversation.id));
+
+            // 4. Balas ke Approver
+            const successReply = isApproved
+                ? `✅ *BERHASIL DISETUJUI!*\n\nPenawaran *${pending.quotationNumber}* telah resmi disetujui.\n• Catatan: ${pending.comment || "-"}\n\nNotifikasi otomatis telah dikirimkan ke Sales terkait.`
+                : `❌ *PENAWARAN DITOLAK!*\n\nPenawaran *${pending.quotationNumber}* telah ditandai ditolak.\n• Alasan: ${pending.comment || "-"}\n\nSales terkait telah diberitahu untuk melakukan revisi.`;
+
+            await sendWhatsAppMessage(phone, successReply);
+            await db.insert(whatsappMessages).values({
+                conversationId: conversation.id,
+                phoneNumber: phone,
+                direction: "outbound",
+                content: successReply,
+            });
+
+            // 5. Trigger Notifikasi ke Sales Person via WhatsApp
+            await notifySalesQuotationResult({
+                quotationId: pending.quotationId,
+                status: isApproved ? "approved" : "rejected",
+                approverName: registered.contactName,
+                comment: pending.comment,
+            });
+
+            return { success: true, processed: "approval_executed" };
+        } else if (/^(batal|cancel|tidak|no|stop)$/i.test(normalizedCmd)) {
+            await db.update(whatsappConversations).set({ context: {} }).where(eq(whatsappConversations.id, conversation.id));
+            const cancelReply = `Tindakan approval untuk *${pending.quotationNumber}* telah *DIBATALKAN*. Status penawaran tidak berubah.`;
+            await sendWhatsAppMessage(phone, cancelReply);
+            await db.insert(whatsappMessages).values({
+                conversationId: conversation.id,
+                phoneNumber: phone,
+                direction: "outbound",
+                content: cancelReply,
+            });
+            return { success: true, processed: "approval_cancelled" };
+        }
+    }
+
+    // 3B. Tangani Perintah Awal Approval (contoh: "SETUJU QUO/2026/11/0001 diskon ok" atau "TOLAK QUO/...")
+    const approveMatch = userText.match(/^(?:approve|setuju|acc)\s+(quo\/[a-zA-Z0-9\/\-_]+|\d+)(.*)$/i);
+    const rejectMatch = userText.match(/^(?:reject|tolak)\s+(quo\/[a-zA-Z0-9\/\-_]+|\d+)(.*)$/i);
+
+    if (approveMatch || rejectMatch) {
+        const isApprove = !!approveMatch;
+        const match = (approveMatch || rejectMatch)!;
+        const targetQuery = match[1].trim();
+        const userComment = match[2].trim();
+
+        // Cari quotation detail
+        const quoRes = await getQuotationDetail({ quotationQuery: targetQuery });
+        if (!quoRes.found || !quoRes.quotation) {
+            const notFoundMsg = `Penawaran dengan nomor atau ID "*${targetQuery}*" tidak ditemukan di sistem.`;
+            await sendWhatsAppMessage(phone, notFoundMsg);
+            return { success: false, reason: "not_found" };
+        }
+
+        const quo = quoRes.quotation;
+
+        // Cari pending approval step aktif untuk quotation ini
+        const pendingStep = await db
+            .select()
+            .from(quotationApprovalProgress)
+            .where(
+                and(
+                    eq(quotationApprovalProgress.quotationId, quo.id),
+                    eq(quotationApprovalProgress.status, "pending")
+                )
+            )
+            .orderBy(quotationApprovalProgress.stepOrder)
+            .limit(1)
+            .then((r) => r[0]);
+
+        if (!pendingStep) {
+            const notPendingMsg = `Penawaran *${quo.quotationNumber}* saat ini berstatus *${quo.status}* dan tidak sedang menunggu approval.`;
+            await sendWhatsAppMessage(phone, notPendingMsg);
+            return { success: false, reason: "no_pending_step" };
+        }
+
+        // Validasi otoritas approver
+        const isAssigned = registered.userId && registered.userId === pendingStep.assignedUserId;
+        const isExecutive = registered.role === "management" || registered.role === "admin";
+
+        if (!isAssigned && !isExecutive) {
+            const deniedMsg = `Mohon maaf ${registered.contactName}, penawaran *${quo.quotationNumber}* ini saat ini sedang ditugaskan kepada PIC approval lain (${pendingStep.stepLabel}).`;
+            await sendWhatsAppMessage(phone, deniedMsg);
+            return { success: false, reason: "unauthorized" };
+        }
+
+        // Simpan sesi pending approval ke context untuk safety confirmation
+        const pendingData = {
+            quotationId: quo.id,
+            quotationNumber: quo.quotationNumber,
+            progressId: pendingStep.id,
+            action: isApprove ? "approve" : "reject",
+            comment: userComment || (isApprove ? "Disetujui via WhatsApp" : "Ditolak via WhatsApp"),
+            expiresAt: Date.now() + 10 * 60 * 1000, // 10 menit
+        };
+
+        await db
+            .update(whatsappConversations)
+            .set({ context: { ...contextObj, pendingApproval: pendingData } })
+            .where(eq(whatsappConversations.id, conversation.id));
+
+        // Kirim Ringkasan & Permintaan Konfirmasi Dua Langkah
+        const confirmPrompt = `⚠️ *KONFIRMASI ${isApprove ? "PERSETUJUAN" : "PENOLAKAN"} PENAWARAN*\n\n` +
+            `Mohon konfirmasi tindakan Anda:\n` +
+            `• *Nomor Quotation:* ${quo.quotationNumber}\n` +
+            `• *Customer:* ${quo.customerName}\n` +
+            `• *Sales Person:* ${quo.salesPersonName}\n` +
+            `• *Total Nilai:* ${quo.formattedTotal}\n` +
+            `• *Estimasi Margin:* ${quo.estimatedMarginPct}%\n` +
+            `• *Tahap Approval:* ${pendingStep.stepLabel}\n` +
+            `• *Tindakan:* ${isApprove ? "SETUJU (APPROVE)" : "TOLAK (REJECT)"}\n` +
+            `• *Catatan:* ${pendingData.comment}\n\n` +
+            `👉 Balas *YA* untuk memproses tindakan ini sekarang.\n` +
+            `👉 Balas *BATAL* untuk membatalkan.`;
+
+        await sendWhatsAppMessage(phone, confirmPrompt);
+        await db.insert(whatsappMessages).values({
+            conversationId: conversation.id,
+            phoneNumber: phone,
+            direction: "outbound",
+            content: confirmPrompt,
+        });
+
+        return { success: true, processed: "confirmation_requested" };
+    }
+
+    // =========================================================================
+    // 4. SUSUN MULTI-TURN HISTORY & TOOLS AI AGENT
+    // =========================================================================
+
     const recentMessages = await db
         .select()
         .from(whatsappMessages)
@@ -160,9 +373,9 @@ export async function processWhatsAppIncomingMessage(params: {
         content: m.content,
     }));
 
-    // 3. Susun Tools berdasarkan Hak Akses (RBAC)
     const availableTools: AiToolDefinition[] = [];
 
+    // Tool 1: Check Stock
     if (registered.canAccessStock) {
         availableTools.push({
             type: "function",
@@ -180,6 +393,7 @@ export async function processWhatsAppIncomingMessage(params: {
         });
     }
 
+    // Tool 2: Revenue Summary (Finansial)
     if (registered.canAccessRevenue) {
         availableTools.push({
             type: "function",
@@ -196,6 +410,7 @@ export async function processWhatsAppIncomingMessage(params: {
         });
     }
 
+    // Tool 3: Create Sales Quotation
     if (registered.canAccessQuotation) {
         availableTools.push({
             type: "function",
@@ -226,28 +441,95 @@ export async function processWhatsAppIncomingMessage(params: {
         });
     }
 
-    // 4. System Prompt
-    const systemPrompt = `Anda adalah ONE-CHITRA Assistant, AI bot cerdas terintegrasi ERP PT Chitra Paratama.
-Pengguna yang sedang chat:
+    // Tool 4: Pending Approvals (Untuk Management/Approver/Sales)
+    availableTools.push({
+        type: "function",
+        function: {
+            name: "get_pending_approvals",
+            description: "Melihat daftar penawaran harga (Quotation) yang sedang menunggu persetujuan (approval) dari user pengirim.",
+            parameters: {
+                type: "object",
+                properties: {},
+            },
+        },
+    });
+
+    // Tool 5: Quotation Detail & Margin
+    availableTools.push({
+        type: "function",
+        function: {
+            name: "get_quotation_detail",
+            description: "Melihat rincian barang, harga, estimasi margin %, serta progress rantai approval untuk suatu quotation.",
+            parameters: {
+                type: "object",
+                properties: {
+                    quotationQuery: { type: "string", description: "Nomor quotation (misal QUO/2026/11/0001) atau ID angka" },
+                },
+                required: ["quotationQuery"],
+            },
+        },
+    });
+
+    // Tool 6: Customer Info & History
+    availableTools.push({
+        type: "function",
+        function: {
+            name: "get_customer_info",
+            description: "Mencari profil pelanggan, alamat, kontak person, dan riwayat pesanan (Sales Orders) terakhir.",
+            parameters: {
+                type: "object",
+                properties: {
+                    query: { type: "string", description: "Nama pelanggan atau kode customer" },
+                },
+                required: ["query"],
+            },
+        },
+    });
+
+    // Tool 7: Delivery / DO Status
+    availableTools.push({
+        type: "function",
+        function: {
+            name: "get_delivery_status",
+            description: "Melacak status Surat Jalan pengiriman barang (DO), armada truk, nama supir, dan estimasi tiba.",
+            parameters: {
+                type: "object",
+                properties: {
+                    query: { type: "string", description: "Nomor Delivery / Surat Jalan, nomor DO SAP, atau nopol truk" },
+                },
+                required: ["query"],
+            },
+        },
+    });
+
+    // 5. System Prompt
+    const systemPrompt = `Anda adalah ONE-CHITRA Executive Assistant, AI bot cerdas terintegrasi ERP PT Chitra Paratama.
+Pengguna yang sedang berinteraksi:
 - Nama: ${registered.contactName}
 - Role: ${registered.role}
-- Akses Revenue: ${registered.canAccessRevenue ? "Diizinkan" : "TIDAK DIIZINKAN"}
-- Akses Stok: ${registered.canAccessStock ? "Diizinkan" : "TIDAK DIIZINKAN"}
-- Akses Quotation: ${registered.canAccessQuotation ? "Diizinkan" : "TIDAK DIIZINKAN"}
+- Nomor HP: ${phone}
+- Hak Akses: Revenue=${registered.canAccessRevenue}, Stok=${registered.canAccessStock}, Quotation=${registered.canAccessQuotation}
 
-Petunjuk Menjawab:
-1. Bersikaplah sopan, profesional, dan ringkas. Gunakan Bahasa Indonesia yang natural.
-2. Gunakan format WhatsApp: *tebal* untuk poin penting, bullet point (-) untuk daftar barang.
-3. JANGAN mengarang data stok atau omset! Selalu panggil tool fungsi yang tersedia untuk mengecek data aktual sistem.
-4. Jika pengguna bertanya omset/revenue tetapi hak aksesnya "TIDAK DIIZINKAN", tolak dengan sopan bahwa rolenya tidak memiliki kewenangan melihat laporan finansial.
-5. Saat membuat quotation baru, sistem akan otomatis mencetak dan mengirimkan file PDF penawaran ke chat ini. Jelaskan ringkasan penawaran, nomor quotation, dan beritahu bahwa file PDF resmi terlampir.`;
+Kemampuan Sistem Anda:
+1. Cek Stok Produk aktual di gudang (check_stock_inventory).
+2. Laporan Revenue & Omset penjualan perusahaan (get_revenue_summary) - jika diizinkan.
+3. Buat Quotation resmi & otomatis cetak kirim PDF ke WhatsApp (create_sales_quotation).
+4. Cek antrean Approval pending bagi Approver / Direksi (get_pending_approvals).
+5. Cek rincian penawaran & analisa margin keuntungan (get_quotation_detail).
+6. Cek data pelanggan, PIC, dan riwayat belanja (get_customer_info).
+7. Lacak status Surat Jalan (DO), supir, dan armada (get_delivery_status).
+8. Approval Cepat: Jelaskan bahwa approver bisa langsung mengetik *SETUJU [Nomor QUO] [catatan]* atau *TOLAK [Nomor QUO] [alasan]* untuk memproses approval dengan konfirmasi instan.
+
+Aturan Penting:
+- Jawablah dengan format WhatsApp yang rapi, profesional, dan padat: gunakan *tebal* untuk angka/status penting dan bullet (-) untuk daftar.
+- Selalu panggil tool fungsi aktual untuk mengecek fakta, dilarang menebak data.`;
 
     const messagesToSend: AiChatMessage[] = [
         { role: "system", content: systemPrompt },
         ...history,
     ];
 
-    // 5. Eksekusi AI Client (9Router / OpenAI)
+    // 6. Eksekusi AI Client (9Router / OpenAI)
     const client = new NineRouterClient();
     const response = await client.chatCompletion(messagesToSend, availableTools);
 
@@ -255,7 +537,6 @@ Petunjuk Menjawab:
     const executedToolCalls: any[] = [];
     let quotationToDeliver: { quotationId: number; quotationNumber: string } | null = null;
 
-    // Jika Model memanggil Tool
     if (response.message?.tool_calls && response.message.tool_calls.length > 0) {
         const toolCalls = response.message.tool_calls;
         messagesToSend.push(response.message);
@@ -295,6 +576,17 @@ Petunjuk Menjawab:
                         };
                     }
                 }
+            } else if (funcName === "get_pending_approvals") {
+                toolOutput = await getPendingApprovals({
+                    userId: registered.userId || undefined,
+                    phoneNumber: phone,
+                });
+            } else if (funcName === "get_quotation_detail") {
+                toolOutput = await getQuotationDetail(args);
+            } else if (funcName === "get_customer_info") {
+                toolOutput = await getCustomerInfo(args);
+            } else if (funcName === "get_delivery_status") {
+                toolOutput = await getDeliveryStatus(args);
             }
 
             executedToolCalls.push({ name: funcName, args, result: toolOutput });
@@ -307,18 +599,16 @@ Petunjuk Menjawab:
             });
         }
 
-        // Panggil kembali model setelah tool output terkumpul
         const secondTurn = await client.chatCompletion(messagesToSend);
         assistantReply = secondTurn.message?.content || "Selesai diproses.";
     }
 
-    // 6. Kirim Balasan ke WhatsApp User
+    // 7. Kirim Balasan ke WhatsApp User
     await sendWhatsAppMessage(phone, assistantReply);
 
-    // Jika ada pembuatan quotation, kirimkan PDF penawarannya secara langsung
+    // Kirim PDF jika membuat quotation
     if (quotationToDeliver) {
         try {
-            console.log(`[WA Agent] Menghasilkan PDF untuk Quotation #${quotationToDeliver.quotationId}`);
             const pdf = await generateQuotationPdfBuffer(quotationToDeliver.quotationId);
             await sendWhatsAppDocument(phone, {
                 base64Data: pdf.buffer.toString("base64"),
@@ -330,7 +620,7 @@ Petunjuk Menjawab:
         }
     }
 
-    // 7. Simpan Pesan Keluar Bot ke DB
+    // 8. Simpan Outbound Message ke DB
     await db.insert(whatsappMessages).values({
         conversationId: conversation.id,
         phoneNumber: phone,

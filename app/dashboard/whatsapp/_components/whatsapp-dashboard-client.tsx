@@ -69,12 +69,14 @@ interface WhatsAppDashboardClientProps {
     initialStatus: any;
     initialNumbers: any[];
     initialLogs: { messages: any[]; notifLogs: any[] };
+    systemUsers?: Array<{ id: string; name: string | null; email: string; role: string | null }>;
 }
 
 export function WhatsAppDashboardClient({
     initialStatus,
     initialNumbers,
     initialLogs,
+    systemUsers = [],
 }: WhatsAppDashboardClientProps) {
     const [status, setStatus] = useState<any>(initialStatus);
     const [numbers, setNumbers] = useState<any[]>(initialNumbers);
@@ -87,6 +89,7 @@ export function WhatsAppDashboardClient({
     const [addDialogOpen, setAddDialogOpen] = useState(false);
     const [newPhone, setNewPhone] = useState("");
     const [newName, setNewName] = useState("");
+    const [newUserId, setNewUserId] = useState("");
     const [newRole, setNewRole] = useState("sales");
     const [newCanRevenue, setNewCanRevenue] = useState(false);
     const [newCanStock, setNewCanStock] = useState(true);
@@ -169,6 +172,7 @@ export function WhatsAppDashboardClient({
                 phoneNumber: newPhone,
                 contactName: newName,
                 role: newRole,
+                userId: newUserId && newUserId !== "none" ? newUserId : undefined,
                 canAccessRevenue: newCanRevenue,
                 canAccessStock: newCanStock,
                 canAccessQuotation: newCanQuotation,
@@ -179,6 +183,7 @@ export function WhatsAppDashboardClient({
                 setAddDialogOpen(false);
                 setNewPhone("");
                 setNewName("");
+                setNewUserId("");
                 setNewRole("sales");
                 setNewCanRevenue(false);
                 setNewCanStock(true);
@@ -415,6 +420,35 @@ export function WhatsAppDashboardClient({
                                                         onChange={(e) => setNewName(e.target.value)}
                                                         required
                                                     />
+                                                </div>
+
+                                                <div className="space-y-1.5">
+                                                    <Label htmlFor="linkedUser">Tautkan ke Akun User ERP (Opsional)</Label>
+                                                    <Select
+                                                        value={newUserId}
+                                                        onValueChange={(val) => {
+                                                            setNewUserId(val);
+                                                            const u = systemUsers.find((x) => x.id === val);
+                                                            if (u && !newName) {
+                                                                setNewName(u.name || "");
+                                                            }
+                                                        }}
+                                                    >
+                                                        <SelectTrigger id="linkedUser">
+                                                            <SelectValue placeholder="Pilih Akun User (Opsional)" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="none">-- Tanpa Akun User --</SelectItem>
+                                                            {systemUsers.map((u) => (
+                                                                <SelectItem key={u.id} value={u.id}>
+                                                                    {u.name || "User"} ({u.email})
+                                                                </SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                    <p className="text-[11px] text-muted-foreground">
+                                                        Diperlukan agar bot mengenali hak persetujuan (*Approval*) saat approver membalas chat WA.
+                                                    </p>
                                                 </div>
 
                                                 <div className="space-y-1.5">

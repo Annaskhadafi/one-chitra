@@ -5,16 +5,18 @@ import {
     getGatewayStatusAction,
     getRegisteredNumbersAction,
     getWhatsAppLogsAction,
+    getSystemUsersAction,
 } from "@/app/actions/whatsapp";
 import { WhatsAppDashboardClient } from "./_components/whatsapp-dashboard-client";
 
 export const dynamic = "force-dynamic";
 
 export default async function WhatsAppCenterPage() {
-    const [statusRes, numbersRes, logsRes] = await Promise.all([
+    const [statusRes, numbersRes, logsRes, usersRes] = await Promise.all([
         getGatewayStatusAction(),
         getRegisteredNumbersAction(),
         getWhatsAppLogsAction(),
+        getSystemUsersAction(),
     ]);
 
     const initialStatus = statusRes;
@@ -22,6 +24,7 @@ export default async function WhatsAppCenterPage() {
     const initialLogs = logsRes.success
         ? { messages: logsRes.messages, notifLogs: logsRes.notifLogs }
         : { messages: [], notifLogs: [] };
+    const systemUsers = usersRes.success ? usersRes.users : [];
 
     return (
         <div className="flex flex-1 flex-col gap-6 p-4 md:p-8 lg:p-10">
@@ -38,6 +41,7 @@ export default async function WhatsAppCenterPage() {
                     initialStatus={initialStatus}
                     initialNumbers={initialNumbers}
                     initialLogs={initialLogs}
+                    systemUsers={systemUsers}
                 />
             </Suspense>
         </div>

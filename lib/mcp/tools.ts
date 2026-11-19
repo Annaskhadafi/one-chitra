@@ -9,6 +9,9 @@ import {
     salesOrders,
     salesOrderItems,
     user,
+    quotationApprovalProgress,
+    deliveries,
+    whatsappRegisteredNumbers,
 } from "@/db/schema";
 import { eq, ilike, or, and, sql, desc, gte, lte } from "drizzle-orm";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
@@ -532,5 +535,400 @@ export async function generateQuotationPdfBuffer(quotationId: number): Promise<{
     return {
         buffer: Buffer.from(pdfBytes),
         fileName,
+    };
+}
+
+/**
+ * 5. Get Pending Approvals for a User / Role
+ */
+export async function getPendingApprovals(params: {
+    userId?: string;
+    phoneNumber?: string;
+    role?: string;
+}): Promise<{
+    count: number;
+    items: Array<{
+        progressId: number;
+        quotationId: number;
+        quotationNumber: string;
+        customerName: string;
+        stepRole: string;
+        stepLabel: string;
+        requiredByMargin: string | null;
+        totalAmount: number;
+        formattedTotal: string;
+        createdAt: string;
+    }>;
+}> {
+    let targetUserId = params.userId;
+
+    if (!targetUserId && params.phoneNumber) {
+        const cleaned = params.phoneNumber.replace(/[^0-9]/g, "");
+        const reg = await db
+            .select()
+            .from(whatsappRegisteredNumbers)
+            .where(
+                or(
+                    eq(whatsappRegisteredNumbers.phoneNumber, cleaned),
+                    eq(whatsappRegisteredNumbers.phoneNumber, `62${cleaned.replace(/^0/, "")}`)
+                )
+            )
+            .limit(1)
+            .then((r) => r[0]);
+        targetUserId = reg?.userId || undefined;
+    }
+
+    const conditions = [eq(quotationApprovalProgress.status, "pending")];
+    if (targetUserId) {
+        conditions.push(eq(quotationApprovalProgress.assignedUserId, targetUserId));
+    }
+
+    const rows = await db
+        .select({
+            progressId: quotationApprovalProgress.id,
+            quotationId: quotationApprovalProgress.quotationId,
+            stepRole: quotationApprovalProgress.stepRole,
+            stepLabel: quotationApprovalProgress.stepLabel,
+            requiredByMargin: quotationApprovalProgress.requiredByMargin,
+            createdAt: quotationApprovalProgress.createdAt,
+            quotationNumber: quotations.quotationNumber,
+            customerId: quotations.customerId,
+            customerName: customers.name,
+        })
+        .from(quotationApprovalProgress)
+        .innerJoin(quotations, eq(quotationApprovalProgress.quotationId, quotations.id))
+        .leftJoin(customers, eq(quotations.customerId, customers.id))
+        .where(and(...conditions))
+        .orderBy(desc(quotationApprovalProgress.createdAt))
+        .limit(20);
+
+    const items = [];
+    for (const r of rows) {
+        const qItems = await db
+            .select({
+                quantity: quotationItems.quantity,
+                unitPrice: quotationItems.unitPrice,
+                discount: quotationItems.discount,
+            })
+            .from(quotationItems)
+            .where(eq(quotationItems.quotationId, r.quotationId));
+
+        let total = 0;
+        for (const qi of qItems) {
+            const qty = qi.quantity || 1;
+            const price = Number(qi.unitPrice) || 0;
+            const disc = Number(qi.discount) || 0;
+            total += Math.max(0, qty * price - disc);
+        }
+
+        items.push({
+            progressId: r.progressId,
+            quotationId: r.quotationId,
+            quotationNumber: r.quotationNumber || `QUO-${r.quotationId}`,
+            customerName: r.customerName || "Customer",
+            stepRole: r.stepRole,
+            stepLabel: r.stepLabel,
+            requiredByMargin: r.requiredByMargin ? `${Number(r.requiredByMargin).toFixed(1)}%` : null,
+            totalAmount: total,
+            formattedTotal: new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(total),
+            createdAt: r.createdAt ? new Date(r.createdAt).toLocaleString("id-ID") : "-",
+        });
+    }
+
+    return {
+        count: items.length,
+        items,
+    };
+}
+
+/**
+ * 6. Get Quotation Detail & Margin
+ */
+export async function getQuotationDetail(params: { quotationQuery: string }): Promise<{
+    found: boolean;
+    quotation?: {
+        id: number;
+        quotationNumber: string;
+        customerName: string;
+        salesPersonName: string;
+        quotationDate: string;
+        validUntil: string;
+        status: string;
+        clientNote: string | null;
+        totalAmount: number;
+        formattedTotal: string;
+        estimatedMarginPct: number;
+        items: Array<{
+            productName: string;
+            quantity: number;
+            unitPrice: number;
+            subtotal: number;
+        }>;
+        approvalSteps: Array<{
+            stepLabel: string;
+            status: string;
+            assigneeName: string;
+            actedAt: string | null;
+            comment: string | null;
+        }>;
+    };
+}> {
+    const qStr = params.quotationQuery.trim();
+    const isNum = !isNaN(Number(qStr));
+
+    const [quo] = await db
+        .select({
+            id: quotations.id,
+            quotationNumber: quotations.quotationNumber,
+            quotationDate: quotations.quotationDate,
+            validUntil: quotations.validUntil,
+            status: quotations.status,
+            clientNote: quotations.clientNote,
+            customerName: customers.name,
+            salesPersonId: quotations.salesPersonId,
+        })
+        .from(quotations)
+        .leftJoin(customers, eq(quotations.customerId, customers.id))
+        .where(
+            or(
+                ilike(quotations.quotationNumber, `%${qStr}%`),
+                ...(isNum ? [eq(quotations.id, Number(qStr))] : [])
+            )
+        )
+        .limit(1);
+
+    if (!quo) {
+        return { found: false };
+    }
+
+    // Sales person name
+    let salesName = "-";
+    if (quo.salesPersonId) {
+        const u = await db.select({ name: user.name }).from(user).where(eq(user.id, quo.salesPersonId)).limit(1).then((r) => r[0]);
+        salesName = u?.name || "-";
+    }
+
+    // Items
+    const items = await db
+        .select({
+            description: quotationItems.description,
+            quantity: quotationItems.quantity,
+            unitPrice: quotationItems.unitPrice,
+            discount: quotationItems.discount,
+            productId: quotationItems.productId,
+        })
+        .from(quotationItems)
+        .where(eq(quotationItems.quotationId, quo.id));
+
+    let grandTotal = 0;
+    let totalCost = 0;
+
+    const formattedItems = [];
+    for (const it of items) {
+        const qty = it.quantity || 1;
+        const price = Number(it.unitPrice) || 0;
+        const subtotal = qty * price;
+        grandTotal += subtotal;
+
+        // Cek cost SAP untuk estimasi margin
+        if (it.productId) {
+            const prod = await db.select({ costSap: products.costSap }).from(products).where(eq(products.id, it.productId)).limit(1).then((r) => r[0]);
+            const cost = Number(prod?.costSap?.replace(/[^0-9.]/g, "")) || price * 0.85;
+            totalCost += cost * qty;
+        } else {
+            totalCost += price * 0.85 * qty;
+        }
+
+        formattedItems.push({
+            productName: it.description || "Produk",
+            quantity: qty,
+            unitPrice: price,
+            subtotal,
+        });
+    }
+
+    const marginPct = grandTotal > 0 ? ((grandTotal - totalCost) / grandTotal) * 100 : 0;
+
+    // Approval Steps Progress
+    const steps = await db
+        .select({
+            stepLabel: quotationApprovalProgress.stepLabel,
+            status: quotationApprovalProgress.status,
+            actedAt: quotationApprovalProgress.actedAt,
+            comment: quotationApprovalProgress.comment,
+            assigneeId: quotationApprovalProgress.assignedUserId,
+        })
+        .from(quotationApprovalProgress)
+        .where(eq(quotationApprovalProgress.quotationId, quo.id))
+        .orderBy(quotationApprovalProgress.stepOrder);
+
+    const formattedSteps = [];
+    for (const s of steps) {
+        let assigneeName = "Staff";
+        if (s.assigneeId) {
+            const u = await db.select({ name: user.name }).from(user).where(eq(user.id, s.assigneeId)).limit(1).then((r) => r[0]);
+            assigneeName = u?.name || "Staff";
+        }
+        formattedSteps.push({
+            stepLabel: s.stepLabel,
+            status: s.status,
+            assigneeName,
+            actedAt: s.actedAt ? new Date(s.actedAt).toLocaleString("id-ID") : null,
+            comment: s.comment,
+        });
+    }
+
+    return {
+        found: true,
+        quotation: {
+            id: quo.id,
+            quotationNumber: quo.quotationNumber || `QUO-${quo.id}`,
+            customerName: quo.customerName || "Customer",
+            salesPersonName: salesName,
+            quotationDate: quo.quotationDate ? new Date(quo.quotationDate).toLocaleDateString("id-ID") : "-",
+            validUntil: quo.validUntil ? new Date(quo.validUntil).toLocaleDateString("id-ID") : "-",
+            status: quo.status,
+            clientNote: quo.clientNote,
+            totalAmount: grandTotal,
+            formattedTotal: new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(grandTotal),
+            estimatedMarginPct: Number(marginPct.toFixed(1)),
+            items: formattedItems,
+            approvalSteps: formattedSteps,
+        },
+    };
+}
+
+/**
+ * 7. Get Customer Information & Purchase History
+ */
+export async function getCustomerInfo(params: { query: string }): Promise<{
+    found: boolean;
+    customer?: {
+        id: number;
+        customerCode: string;
+        name: string;
+        contactName: string | null;
+        email: string | null;
+        address: string | null;
+        totalOrdersCount: number;
+        recentOrders: Array<{
+            invoiceNumber: string | null;
+            date: string;
+            totalAmount: string;
+            status: string;
+        }>;
+    };
+}> {
+    const qStr = params.query.trim();
+
+    const [c] = await db
+        .select()
+        .from(customers)
+        .where(or(ilike(customers.name, `%${qStr}%`), ilike(customers.customerCode, `%${qStr}%`)))
+        .limit(1);
+
+    if (!c) return { found: false };
+
+    // Ambil order history
+    const orders = await db
+        .select({
+            id: salesOrders.id,
+            invoiceNumber: salesOrders.invoiceNumber,
+            salesDate: salesOrders.salesDate,
+            status: salesOrders.status,
+        })
+        .from(salesOrders)
+        .where(eq(salesOrders.customerId, c.id))
+        .orderBy(desc(salesOrders.salesDate))
+        .limit(5);
+
+    const recentOrders = [];
+    for (const o of orders) {
+        const soItems = await db
+            .select({
+                quantity: salesOrderItems.quantity,
+                unitPrice: salesOrderItems.unitPrice,
+                discount: salesOrderItems.discount,
+            })
+            .from(salesOrderItems)
+            .where(eq(salesOrderItems.salesOrderId, o.id));
+
+        const total = soItems.reduce((acc, curr) => acc + (curr.quantity * Number(curr.unitPrice) - Number(curr.discount)), 0);
+
+        recentOrders.push({
+            invoiceNumber: o.invoiceNumber || `SO-${o.id}`,
+            date: o.salesDate ? new Date(o.salesDate).toLocaleDateString("id-ID") : "-",
+            totalAmount: new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(total),
+            status: o.status,
+        });
+    }
+
+    return {
+        found: true,
+        customer: {
+            id: c.id,
+            customerCode: c.customerCode,
+            name: c.name,
+            contactName: c.contactName,
+            email: c.email,
+            address: c.address1 || "-",
+            totalOrdersCount: orders.length,
+            recentOrders,
+        },
+    };
+}
+
+/**
+ * 8. Get Delivery / DO Status
+ */
+export async function getDeliveryStatus(params: { query: string }): Promise<{
+    found: boolean;
+    delivery?: {
+        id: number;
+        deliveryNumber: string | null;
+        doSap: string | null;
+        status: string;
+        scheduledDate: string;
+        deliveryDate: string | null;
+        driverName: string | null;
+        vehicleNumber: string | null;
+        vehicleType: string | null;
+        destination: string | null;
+        notes: string | null;
+    };
+}> {
+    const qStr = params.query.trim();
+
+    const [d] = await db
+        .select()
+        .from(deliveries)
+        .where(
+            or(
+                ilike(deliveries.deliveryNumber, `%${qStr}%`),
+                ilike(deliveries.doSap, `%${qStr}%`),
+                ilike(deliveries.driverName, `%${qStr}%`),
+                ilike(deliveries.vehicleNumber, `%${qStr}%`)
+            )
+        )
+        .orderBy(desc(deliveries.scheduledDate))
+        .limit(1);
+
+    if (!d) return { found: false };
+
+    return {
+        found: true,
+        delivery: {
+            id: d.id,
+            deliveryNumber: d.deliveryNumber || `DO-${d.id}`,
+            doSap: d.doSap,
+            status: d.status,
+            scheduledDate: d.scheduledDate ? new Date(d.scheduledDate).toLocaleDateString("id-ID") : "-",
+            deliveryDate: d.deliveryDate ? new Date(d.deliveryDate).toLocaleDateString("id-ID") : null,
+            driverName: d.driverName,
+            vehicleNumber: d.vehicleNumber,
+            vehicleType: d.vehicleType,
+            destination: d.tripDestination || d.shippingAddress || "-",
+            notes: d.notes,
+        },
     };
 }

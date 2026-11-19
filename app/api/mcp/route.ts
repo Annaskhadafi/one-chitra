@@ -4,6 +4,10 @@ import {
     getRevenueSummary,
     createSalesQuotation,
     generateQuotationPdfBuffer,
+    getPendingApprovals,
+    getQuotationDetail,
+    getCustomerInfo,
+    getDeliveryStatus,
 } from "@/lib/mcp/tools";
 
 export const dynamic = "force-dynamic";
@@ -73,6 +77,50 @@ const MCP_TOOLS = [
             },
         },
     },
+    {
+        name: "get_pending_approvals",
+        description: "Mengambil daftar pengajuan penawaran harga (Quotation) yang sedang menunggu persetujuan (approval) dari user atau nomor WA pengirim.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                userId: { type: "string", description: "ID user jika diketahui" },
+                phoneNumber: { type: "string", description: "Nomor WhatsApp pengirim untuk mencocokkan tugas approval" },
+            },
+        },
+    },
+    {
+        name: "get_quotation_detail",
+        description: "Melihat rincian lengkap penawaran harga, termasuk daftar barang, kuantitas, harga, kalkulasi estimasi margin %, serta progress status rantai approval.",
+        inputSchema: {
+            type: "object",
+            required: ["quotationQuery"],
+            properties: {
+                quotationQuery: { type: "string", description: "Nomor quotation (misal 'QUO/2026/11/0001') atau ID angka" },
+            },
+        },
+    },
+    {
+        name: "get_customer_info",
+        description: "Mencari profil pelanggan, alamat, kontak person (PIC), serta riwayat 5 transaksi pembelian terakhir.",
+        inputSchema: {
+            type: "object",
+            required: ["query"],
+            properties: {
+                query: { type: "string", description: "Nama pelanggan atau kode customer (misal 'PT Sumber Rejeki')" },
+            },
+        },
+    },
+    {
+        name: "get_delivery_status",
+        description: "Melacak status pengiriman barang (Surat Jalan / DO / SAP DO), estimasi kedatangan, armada truk, dan nama supir.",
+        inputSchema: {
+            type: "object",
+            required: ["query"],
+            properties: {
+                query: { type: "string", description: "Nomor Surat Jalan / Delivery Number, nomor DO SAP, atau nopol truk" },
+            },
+        },
+    },
 ];
 
 /**
@@ -136,6 +184,18 @@ export async function POST(req: NextRequest) {
                     };
                     break;
                 }
+                case "get_pending_approvals":
+                    toolResult = await getPendingApprovals(args || {});
+                    break;
+                case "get_quotation_detail":
+                    toolResult = await getQuotationDetail(args || {});
+                    break;
+                case "get_customer_info":
+                    toolResult = await getCustomerInfo(args || {});
+                    break;
+                case "get_delivery_status":
+                    toolResult = await getDeliveryStatus(args || {});
+                    break;
                 default:
                     return NextResponse.json({
                         jsonrpc: "2.0",
