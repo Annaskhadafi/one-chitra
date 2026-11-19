@@ -868,6 +868,11 @@ export async function getQuotations(options?: GetQuotationsOptions) {
             customer: true,
             salesPerson: true,
             createdByUser: true,
+            attachments: {
+                with: {
+                    uploadedByUser: true,
+                },
+            },
             items: {
                 with: {
                     product: true,
@@ -945,7 +950,7 @@ export async function getQuotations(options?: GetQuotationsOptions) {
 
         return {
             ...quotation,
-            attachments: [],
+            attachments: quotation.attachments || [],
             relatedDeliveries: quotation.salesOrderId ? (deliveryMap.get(quotation.salesOrderId) ?? []) : [],
             approvalInfo,
         }

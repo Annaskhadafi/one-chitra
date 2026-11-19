@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils"
 import { useMounted } from "@/hooks/use-mounted"
 import { SuccessAlertDialog } from "@/components/success-alert-dialog"
 import { PoPreviewDialog } from "@/components/po-preview-dialog"
-import { deleteQuotation, bulkDeleteQuotations, getQuotations, duplicateQuotation, updateQuotationStatus, bulkUpdateQuotationStatus, uploadQuotationCustomerPo } from "@/app/actions/quotation"
+import { deleteQuotation, bulkDeleteQuotations, getQuotations, getQuotation, duplicateQuotation, updateQuotationStatus, bulkUpdateQuotationStatus, uploadQuotationCustomerPo } from "@/app/actions/quotation"
 import { uploadFile } from "@/app/actions/upload"
 import {
     Table,
@@ -598,6 +598,19 @@ function QuotationTableInner({ data: initialData, currentUserId: serverUserId, a
     const [isCustomerPoPreviewOpen, setIsCustomerPoPreviewOpen] = useState(false)
     const [blockedDialog, setBlockedDialog] = useState<ActionBlockedDetails | null>(null)
     const [isProductSearchOpen, setIsProductSearchOpen] = useState(false)
+
+    const handleOpenPreview = useCallback(async (quotation: QuotationWithRelations) => {
+        setPreviewQuotation(quotation)
+        setIsPreviewOpen(true)
+        try {
+            const full = await getQuotation(quotation.id)
+            if (full) {
+                setPreviewQuotation(full as unknown as QuotationWithRelations)
+            }
+        } catch (err) {
+            console.error("Failed to load full quotation preview:", err)
+        }
+    }, [])
 
     const isFilteredToCurrentOnly = userFilters.length === 1 && userFilters[0] === currentUserId
     const isAllUsers = userFilters.length === 0
@@ -1679,10 +1692,7 @@ function QuotationTableInner({ data: initialData, currentUserId: serverUserId, a
             ),
             cell: ({ row }) => (
                 <button
-                    onClick={() => {
-                        setPreviewQuotation(row.original)
-                        setIsPreviewOpen(true)
-                    }}
+                    onClick={() => handleOpenPreview(row.original)}
                     className="font-mono text-sm font-medium text-primary hover:underline bg-transparent border-none p-0 cursor-pointer text-left"
                 >
                     {row.original.quotationNumber}
@@ -2718,10 +2728,7 @@ function QuotationTableInner({ data: initialData, currentUserId: serverUserId, a
                                                     <div className="flex flex-wrap items-start justify-between gap-2">
                                                         <div className="min-w-0">
                                                             <button
-                                                                onClick={() => {
-                                                                    setPreviewQuotation(quotation)
-                                                                    setIsPreviewOpen(true)
-                                                                }}
+                                                                onClick={() => handleOpenPreview(quotation)}
                                                                 className="inline-flex max-w-full items-center gap-2 bg-transparent p-0 text-left font-mono text-sm font-semibold text-primary underline underline-offset-4"
                                                                 title="Buka preview PDF quotation"
                                                             >
@@ -3279,8 +3286,7 @@ function QuotationTableInner({ data: initialData, currentUserId: serverUserId, a
                         onStatusChange={handleKanbanStatusChange}
                         onRefresh={() => { void refetch() }}
                         onQuickPrint={(quotation) => {
-                            setPreviewQuotation(quotation)
-                            setIsPreviewOpen(true)
+                            handleOpenPreview(quotation)
                         }}
                         onQuickDuplicate={handleKanbanDuplicate}
                         onQuickCancel={(quotation) => {
