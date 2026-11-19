@@ -403,6 +403,22 @@ export function QuotationApprovalTimeline({
                         </div>
                     </div>
                 )}
+
+                {/* READ-ONLY STATUS PANEL FOR NON-APPROVER / WAITING FOR ASSIGNED PIC */}
+                {isWaiting && !canActOnCurrentStep && activeStep && (
+                    <div className="rounded-xl border border-amber-200/80 bg-amber-50/60 dark:border-amber-900/40 dark:bg-amber-950/20 p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs">
+                        <div className="flex items-center gap-2 text-amber-900 dark:text-amber-200">
+                            <Clock className="h-4 w-4 text-amber-600 shrink-0" />
+                            <span>
+                                Tahap saat ini (<strong>{activeStep.stepLabel}</strong>) sedang menunggu tindakan persetujuan dari{" "}
+                                <strong className="underline underline-offset-2">{activeStep.assignedUser?.name || "Pejabat Terkait"}</strong>.
+                            </span>
+                        </div>
+                        <span className="text-[11px] text-muted-foreground font-medium shrink-0">
+                            Hanya approver yang ditugaskan yang dapat memproses tahap ini
+                        </span>
+                    </div>
+                )}
             </CardContent>
         </Card>
     )

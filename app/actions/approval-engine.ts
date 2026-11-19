@@ -608,13 +608,25 @@ export async function evaluateQuotationMargin(
             // Otomatis DILEWATI (SKIP) dan langsung ke approver berikutnya!
             const isUnassigned = !assignedUserId
 
+            // Proteksi Self-Approval (Four-Eyes Principle):
+            // Sales Person / Pembuat quotation TIDAK BOLEH menyetujui pengajuannya sendiri
+            const isSelfApproval = Boolean(
+                assignedUserId &&
+                salesPersonId &&
+                assignedUserId === salesPersonId
+            )
+
             // Logika Auto-Skip:
             // 1. Kolom bernilai "-" pada matriks -> auto-skip (dilewati langsung ke berikutnya)
             // 2. Approver sama persis dengan tahap sebelumnya -> auto-skip (PIC sama)
-            const isAutoSkip = isUnassigned || Boolean(assignedUserId && lastAssignedUserId && assignedUserId === lastAssignedUserId)
+            // 3. Approver adalah Sales Person pengaju sendiri -> auto-skip (Four-Eyes Principle)
+            const isSameApprover = Boolean(assignedUserId && lastAssignedUserId && assignedUserId === lastAssignedUserId)
+            const isAutoSkip = isUnassigned || isSameApprover || isSelfApproval
             const skipReason = isUnassigned
                 ? "Dilewati (Tidak ada approver pada matriks)"
-                : (isAutoSkip ? "Auto-approved (Same Approver as previous step)" : undefined)
+                : (isSelfApproval
+                    ? "Dilewati (Sales pengaju tidak dapat menyetujui pengajuannya sendiri)"
+                    : (isSameApprover ? "Auto-approved (Same Approver as previous step)" : undefined))
 
             approvalSteps.push({
                 stepOrder: currentOrder++,
@@ -857,10 +869,11 @@ export async function getQuotationApprovalDetail(quotationId: number) {
         const activeStep = progressSteps.find(s => s.status === "pending") || null
 
         // Apakah current user berhak approve/reject step aktif ini?
+        // Hanya user yang memang ditugaskan sebagai PIC di active step (dan bukan self-approval) yang berhak!
         const canActOnCurrentStep = Boolean(
             currentUser &&
             activeStep &&
-            (activeStep.assignedUserId === currentUser.id || currentUser.role === "Admin" || currentUser.role === "admin")
+            activeStep.assignedUserId === currentUser.id
         )
 
         return {
@@ -898,8 +911,8 @@ export async function processQuotationApprovalAction(input: {
             return { success: false as const, error: "Tidak ada langkah approval yang sedang menunggu tindakan." }
         }
 
-        if (!detail.canActOnCurrentStep) {
-            return { success: false as const, error: "Anda tidak memiliki wewenang untuk menyetujui langkah ini." }
+        if (!detail.canActOnCurrentStep || detail.activeStep.assignedUserId !== currentUser.id) {
+            return { success: false as const, error: "Anda tidak memiliki wewenang untuk menyetujui langkah ini. Hanya approver yang ditugaskan yang berhak memproses." }
         }
 
         const activeStep = detail.activeStep
@@ -1055,15 +1068,11 @@ export async function getApprovalInboxQuotations() {
             return { success: true as const, pendingItems: [] }
         }
 
-        // Cari seluruh progress yang pending dimana assignedUserId adalah user ini (atau admin)
-        const isUserAdmin = currentUser.role === "Admin" || currentUser.role === "admin"
-
-        const condition = isUserAdmin
-            ? eq(quotationApprovalProgress.status, "pending")
-            : and(
-                eq(quotationApprovalProgress.status, "pending"),
-                eq(quotationApprovalProgress.assignedUserId, currentUser.id)
-            )
+        // Inbox persetujuan hanya memuat tugas yang secara eksplisit ditugaskan kepada user yang sedang login
+        const condition = and(
+            eq(quotationApprovalProgress.status, "pending"),
+            eq(quotationApprovalProgress.assignedUserId, currentUser.id)
+        )
 
         const pendingSteps = await db.query.quotationApprovalProgress.findMany({
             where: condition,
