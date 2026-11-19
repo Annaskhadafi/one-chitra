@@ -602,18 +602,26 @@ export async function evaluateQuotationMargin(
             if (raw.roleKey === "secretary" && !raw.user) continue
 
             const assignedUserId = raw.user?.id || null
-            const assignedUserName = raw.user?.name || "Belum Ditetapkan"
+            const assignedUserName = raw.user?.name || "-"
 
-            // Logika Auto-Skip jika approver sama persis dengan tahap sebelumnya
-            const isAutoSkip = Boolean(assignedUserId && lastAssignedUserId && assignedUserId === lastAssignedUserId)
-            const skipReason = isAutoSkip ? "Auto-approved (Same Approver as previous step)" : undefined
+            // Jika di matriks bernilai "-" (tidak ada user yang di-assign):
+            // Otomatis DILEWATI (SKIP) dan langsung ke approver berikutnya!
+            const isUnassigned = !assignedUserId
+
+            // Logika Auto-Skip:
+            // 1. Kolom bernilai "-" pada matriks -> auto-skip (dilewati langsung ke berikutnya)
+            // 2. Approver sama persis dengan tahap sebelumnya -> auto-skip (PIC sama)
+            const isAutoSkip = isUnassigned || Boolean(assignedUserId && lastAssignedUserId && assignedUserId === lastAssignedUserId)
+            const skipReason = isUnassigned
+                ? "Dilewati (Tidak ada approver pada matriks)"
+                : (isAutoSkip ? "Auto-approved (Same Approver as previous step)" : undefined)
 
             approvalSteps.push({
                 stepOrder: currentOrder++,
                 roleKey: raw.roleKey,
                 label: raw.label,
                 assignedUserId,
-                assignedUserName,
+                assignedUserName: isUnassigned ? "-" : assignedUserName,
                 isAutoSkip,
                 skipReason,
             })
@@ -724,11 +732,12 @@ export async function submitQuotationForApproval(quotationId: number) {
             }
         }
 
-        // Jika butuh approval:
-        if (evaluation.approvalSteps.length === 0) {
+        // Jika butuh approval, pastikan ada minimal 1 approver aktif yang tidak dilewati
+        const hasActiveApprover = evaluation.approvalSteps.some(s => !s.isAutoSkip && s.assignedUserId)
+        if (evaluation.approvalSteps.length === 0 || !hasActiveApprover) {
             return {
                 success: false as const,
-                error: "Matriks approval untuk sales person belum dikonfigurasi di Settings > Approval Engine.",
+                error: "Matriks approval untuk sales person belum memiliki approver aktif yang ditetapkan.",
             }
         }
 

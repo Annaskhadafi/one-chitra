@@ -203,17 +203,33 @@ export function ApprovalEngineClient({
                                             { step: 5, title: "Director", name: selectedSalesMatrix.directorUser?.name },
                                         ]
                                             .filter(s => s.step <= (matchedTier?.stagingLevel || 1))
-                                            .map((s, idx, arr) => (
-                                                <div key={s.step} className="flex items-center gap-2">
-                                                    <div className="rounded-lg border bg-background px-3 py-2 text-xs shadow-sm">
-                                                        <div className="font-semibold text-primary">{s.title}</div>
-                                                        <div className="text-muted-foreground font-medium">{s.name || "Belum Ditetapkan"}</div>
+                                            .map((s, idx, arr) => {
+                                                const isSkipped = !s.name
+                                                return (
+                                                    <div key={s.step} className="flex items-center gap-2">
+                                                        <div className={`rounded-lg border px-3 py-2 text-xs shadow-sm transition-all ${
+                                                            isSkipped 
+                                                                ? "border-dashed border-muted-foreground/30 bg-muted/40 opacity-75" 
+                                                                : "bg-background border-border"
+                                                        }`}>
+                                                            <div className="flex items-center gap-1.5 font-semibold text-primary">
+                                                                <span>{s.title}</span>
+                                                                {isSkipped && (
+                                                                    <Badge variant="outline" className="border-muted text-[9px] px-1 py-0 text-muted-foreground font-mono">
+                                                                        Skip (-)
+                                                                    </Badge>
+                                                                )}
+                                                            </div>
+                                                            <div className="text-muted-foreground font-medium">
+                                                                {s.name || <span className="italic text-muted-foreground/70">- (Dilewati)</span>}
+                                                            </div>
+                                                        </div>
+                                                        {idx < arr.length - 1 && (
+                                                            <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                                                        )}
                                                     </div>
-                                                    {idx < arr.length - 1 && (
-                                                        <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                                                    )}
-                                                </div>
-                                            ))}
+                                                )
+                                            })}
                                     </div>
                                 </div>
                             )}

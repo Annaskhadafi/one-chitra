@@ -276,7 +276,11 @@ export function QuotationApprovalTimeline({
 
                                         <div className="text-[11px] text-muted-foreground flex items-center gap-1">
                                             <UserCheck className="h-3 w-3 shrink-0" />
-                                            <span className="truncate">{step.assignedUser?.name || "Belum Ditugaskan"}</span>
+                                            <span className="truncate">
+                                                {isStepSkipped && step.comment?.includes("Tidak ada")
+                                                    ? <span className="italic text-muted-foreground/70">- (Dilewati)</span>
+                                                    : (step.assignedUser?.name || "Belum Ditugaskan")}
+                                            </span>
                                         </div>
                                     </div>
 
