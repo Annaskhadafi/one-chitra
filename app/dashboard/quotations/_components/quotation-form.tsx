@@ -574,7 +574,12 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
 
     const liveMarginSummary = useMemo(() => {
         let minMargin = 9999
+        let minTyreMargin = 9999
+        let minPasMargin = 9999
         let hasItem = false
+        let hasTyre = false
+        let hasPas = false
+
         items.forEach(it => {
             const cost = resolveItemCostIdr(it, exchangeRate)
             if (cost > 0) {
@@ -582,11 +587,62 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                 const effectivePrice = Math.max(0, it.unitPrice - (it.discount || 0))
                 const m = ((effectivePrice - cost) / cost) * 100
                 if (m < minMargin) minMargin = m
+
+                // Deteksi kategori: Prime Product (Tyre) vs Product ACC & Service (PAS)
+                const catDesc = `${it.product?.category || ""} ${it.description || ""} ${it.product?.materialDescription || ""}`.toLowerCase()
+                const isTyre = catDesc.includes("tyre") || catDesc.includes("tire") || catDesc.includes("ban")
+                if (isTyre) {
+                    hasTyre = true
+                    if (m < minTyreMargin) minTyreMargin = m
+                } else {
+                    hasPas = true
+                    if (m < minPasMargin) minPasMargin = m
+                }
             }
         })
+
+        const getRoutingLevel = (margin: number) => {
+            if (margin >= standardBaseline) return { level: 0, position: "Auto Approved (Standar)" }
+            if (margin >= 8.0) return { level: 2, position: "Supervisory / SPV" }
+            if (margin >= 5.0) return { level: 3, position: "Managerial / Sales Manager" }
+            if (margin >= 2.0) return { level: 4, position: "General Manager (GM)" }
+            return { level: 5, position: "Direksi / Director" }
+        }
+
+        const tyreEval = hasTyre ? getRoutingLevel(minTyreMargin) : null
+        const pasEval = hasPas ? getRoutingLevel(minPasMargin) : null
+
+        let worstPosition = "Auto Approved"
+        let worstLevel = 0
+        if (tyreEval && tyreEval.level > worstLevel) {
+            worstLevel = tyreEval.level
+            worstPosition = tyreEval.position
+        }
+        if (pasEval && pasEval.level > worstLevel) {
+            worstLevel = pasEval.level
+            worstPosition = pasEval.position
+        }
+
+        const routingDetails: string[] = []
+        if (hasTyre && tyreEval && tyreEval.level > 0) {
+            routingDetails.push(`Prime Product (Tyre) anda memiliki margin ${minTyreMargin.toFixed(2)}%, akan di-routing sampai level ${tyreEval.position} sesuai matrix.`)
+        }
+        if (hasPas && pasEval && pasEval.level > 0) {
+            routingDetails.push(`Product ACC & Service anda memiliki margin ${minPasMargin.toFixed(2)}%, akan di-routing sampai level ${pasEval.position} sesuai matrix.`)
+        }
+
+        const overallRequiresApproval = hasItem && minMargin < standardBaseline
+
         return {
             minMargin: hasItem ? Number(minMargin.toFixed(2)) : standardBaseline,
-            requiresApproval: hasItem && minMargin < standardBaseline,
+            requiresApproval: overallRequiresApproval,
+            hasTyre,
+            hasPas,
+            minTyreMargin: hasTyre ? Number(minTyreMargin.toFixed(2)) : null,
+            minPasMargin: hasPas ? Number(minPasMargin.toFixed(2)) : null,
+            worstPosition,
+            worstLevel,
+            routingDetails,
         }
     }, [items, exchangeRate, standardBaseline])
     const [itemSortConfig, setItemSortConfig] = useState<{ key: ItemSortKey; direction: SortDirection }>({
@@ -2069,12 +2125,30 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                                 <Badge variant={liveMarginSummary.requiresApproval ? "destructive" : "outline"} className={!liveMarginSummary.requiresApproval ? "bg-emerald-100 text-emerald-800 border-emerald-300 font-mono text-[10px]" : "font-mono text-[10px]"}>
                                     Margin Minimal: {liveMarginSummary.minMargin}%
                                 </Badge>
+                                {liveMarginSummary.requiresApproval && (
+                                    <Badge variant="outline" className="bg-amber-100 text-amber-900 border-amber-300 text-[10px] font-semibold">
+                                        Target: {liveMarginSummary.worstPosition}
+                                    </Badge>
+                                )}
                             </div>
-                            <p className="text-[11px] text-muted-foreground mt-0.5">
-                                {liveMarginSummary.requiresApproval
-                                    ? `Margin di bawah standar ${standardBaseline.toFixed(2)}%. Quotation ini akan otomatis masuk ke antrean Approval saat Anda menyimpan.`
-                                    : `Margin memenuhi standar default (>= ${standardBaseline.toFixed(2)}%). Approval berjenjang tidak diperlukan.`}
-                            </p>
+                            <div className="text-[11px] text-muted-foreground mt-1 space-y-0.5">
+                                {liveMarginSummary.requiresApproval ? (
+                                    <>
+                                        {liveMarginSummary.routingDetails.map((msg, idx) => (
+                                            <p key={idx} className="font-medium text-amber-900 dark:text-amber-200">
+                                                • {msg}
+                                            </p>
+                                        ))}
+                                        <p className="text-[10px] opacity-80 pt-0.5">
+                                            Quotation ini akan otomatis masuk ke antrean Approval saat Anda menyimpan.
+                                        </p>
+                                    </>
+                                ) : (
+                                    <p>
+                                        Margin memenuhi standar default (&ge; {standardBaseline.toFixed(2)}%). Approval berjenjang tidak diperlukan.
+                                    </p>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>

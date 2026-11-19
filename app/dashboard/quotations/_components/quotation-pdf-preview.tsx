@@ -743,9 +743,13 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                                                                     src={resolvedUrl}
                                                                     alt={attachment.title}
                                                                     style={{
-                                                                        width: "100%",
-                                                                        height: "100%",
-                                                                        objectFit: "contain"
+                                                                        maxWidth: "100%",
+                                                                        maxHeight: "100%",
+                                                                        width: "auto",
+                                                                        height: "auto",
+                                                                        objectFit: "contain",
+                                                                        display: "block",
+                                                                        margin: "auto",
                                                                     }}
                                                                     onError={(e) => {
                                                                         const el = e.currentTarget

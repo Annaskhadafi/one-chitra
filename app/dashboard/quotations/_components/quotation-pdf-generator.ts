@@ -793,7 +793,34 @@ export async function generateQuotationPdf(
                     if (imgDataUrl) {
                         try {
                             const pad = 2
-                            doc.addImage(imgDataUrl, 'JPEG', 15 + pad, itemY + pad, imageWidth - pad * 2, rowHeight - pad * 2, undefined, 'FAST')
+                            const targetWidth = imageWidth - pad * 2
+                            const targetHeight = rowHeight - pad * 2
+
+                            // Hitung aspect ratio asli gambar agar selalu proporsional (contain) tanpa terdistorsi/penyet
+                            const imgProps = (doc as any).getImageProperties ? (doc as any).getImageProperties(imgDataUrl) : null
+                            let renderW = targetWidth
+                            let renderH = targetHeight
+                            let renderX = 15 + pad
+                            let renderY = itemY + pad
+
+                            if (imgProps && imgProps.width && imgProps.height) {
+                                const imgRatio = imgProps.width / imgProps.height
+                                const boxRatio = targetWidth / targetHeight
+
+                                if (imgRatio > boxRatio) {
+                                    // Gambar lebih lebar dari kotak -> fit to width, center vertically
+                                    renderW = targetWidth
+                                    renderH = targetWidth / imgRatio
+                                    renderY += (targetHeight - renderH) / 2
+                                } else {
+                                    // Gambar lebih tinggi dari kotak (portrait) -> fit to height, center horizontally
+                                    renderH = targetHeight
+                                    renderW = targetHeight * imgRatio
+                                    renderX += (targetWidth - renderW) / 2
+                                }
+                            }
+
+                            doc.addImage(imgDataUrl, 'JPEG', renderX, renderY, renderW, renderH, undefined, 'FAST')
                         } catch (err) {
                             console.error("Failed to add image to PDF:", err)
                         }
@@ -858,12 +885,18 @@ export async function generateQuotationPdf(
             })
         }
 
-        const includedAttachments = quotation.attachments?.filter((attachment) => attachment.includeInPdf) ?? []
+        // Hanya dokumen PDF eksternal yang di-merge di akhir dokumen.
+        // File gambar (JPG/PNG) sudah terwakili secara terstruktur pada halaman "Lampiran Spesifikasi & Gambar Pendukung" di atas.
+        const externalPdfAttachments = quotation.attachments?.filter((attachment) => {
+            if (!attachment.includeInPdf || !attachment.fileUrl) return false
+            const ext = (attachment.fileName || "").toLowerCase()
+            return ext.endsWith(".pdf") || attachment.mimeType?.includes("pdf")
+        }) ?? []
 
         const basePdfBytes = doc.output("arraybuffer")
         const outputFilename = `Quotation_${sanitizeFilenamePart(quotation.quotationNumber)}.pdf`
 
-        if (!shouldMergeAttachments || includedAttachments.length === 0 || includedAttachments.every((attachment) => !attachment.fileUrl)) {
+        if (!shouldMergeAttachments || externalPdfAttachments.length === 0) {
             downloadBlob(new Blob([basePdfBytes], { type: "application/pdf" }), outputFilename)
             toast.success(
                 shouldMergeAttachments
@@ -876,12 +909,8 @@ export async function generateQuotationPdf(
         const { PDFDocument } = await import("pdf-lib")
         const mergedPdf = await PDFDocument.load(basePdfBytes)
         const skippedAttachments: string[] = []
-        const A4_WIDTH = 595.28
-        const A4_HEIGHT = 841.89
-        const PAGE_MARGIN = 24
-        const TITLE_SPACE = 24
 
-        for (const attachment of includedAttachments) {
+        for (const attachment of externalPdfAttachments) {
             const attachmentUrl = resolveUploadDocumentUrl(attachment.fileUrl)
 
             if (!attachmentUrl) {
@@ -908,36 +937,6 @@ export async function generateQuotationPdf(
                     copiedPages.forEach((page) => mergedPdf.addPage(page))
                     continue
                 }
-
-                if (detectedMimeType.includes("png") || detectedMimeType.includes("jpeg") || detectedMimeType.includes("jpg")) {
-                    const image = detectedMimeType.includes("png")
-                        ? await mergedPdf.embedPng(attachmentBytes)
-                        : await mergedPdf.embedJpg(attachmentBytes)
-
-                    const page = mergedPdf.addPage([A4_WIDTH, A4_HEIGHT])
-                    const availableWidth = A4_WIDTH - PAGE_MARGIN * 2
-                    const availableHeight = A4_HEIGHT - PAGE_MARGIN * 2 - TITLE_SPACE
-                    const scale = Math.min(availableWidth / image.width, availableHeight / image.height, 1)
-                    const imageWidth = image.width * scale
-                    const imageHeight = image.height * scale
-                    const x = (A4_WIDTH - imageWidth) / 2
-                    const y = PAGE_MARGIN + Math.max((availableHeight - imageHeight) / 2, 0)
-
-                    page.drawText(attachment.title || attachment.fileName, {
-                        x: PAGE_MARGIN,
-                        y: A4_HEIGHT - PAGE_MARGIN - 4,
-                        size: 12,
-                    })
-                    page.drawImage(image, {
-                        x,
-                        y,
-                        width: imageWidth,
-                        height: imageHeight,
-                    })
-                    continue
-                }
-
-                skippedAttachments.push(`${attachment.title}: format ${attachment.fileName.split(".").pop()?.toUpperCase() || "file"} belum didukung untuk merge`)
             } catch (attachmentError) {
                 console.error(`Failed to merge attachment ${attachment.fileName}:`, attachmentError)
                 skippedAttachments.push(`${attachment.title}: gagal digabung`)
