@@ -1178,6 +1178,14 @@ function QuotationTableInner({ data: initialData, currentUserId: serverUserId, a
     }
 
     const handleKanbanStatusChange = async (id: number, status: string) => {
+        if (status === "approved") {
+            const quote = quotations.find(q => q.id === id)
+            const isPending = quote?.status === "waiting_approval" || Boolean(quote?.approvalInfo?.activeStep)
+            if (isPending) {
+                toast.error("Quotation belum disetujui / persetujuan sedang berjalan. Anda tidak dapat mengubah status menjadi Approved sendiri.")
+                return { success: false, error: "Perlu persetujuan Approval Engine" }
+            }
+        }
         const result = await updateQuotationStatus(id, status)
         if (!result.success) {
             return { success: false, error: result.error || "Gagal update status" }
@@ -1762,12 +1770,23 @@ function QuotationTableInner({ data: initialData, currentUserId: serverUserId, a
             cell: ({ row }) => {
                 const status = row.original.status
                 const id = row.original.id
+                const approvalInfo = row.original.approvalInfo
+                // Jika quotation sedang waiting_approval atau memiliki langkah approval yang belum tuntas disetujui
+                const isApprovalPending = status === "waiting_approval" || Boolean(approvalInfo?.activeStep)
+                const isNotFullyApproved = Boolean(approvalInfo && approvalInfo.totalSteps > 0 && approvalInfo.approvedSteps < approvalInfo.totalSteps)
+                const cannotSelfApprove = isApprovalPending || isNotFullyApproved
+
                 if (!mounted) return <Badge variant={statusVariants[status] || "secondary"}>{status}</Badge>
 
                 return canEdit ? (
                     <Select
                         defaultValue={status}
+                        value={status}
                         onValueChange={async (value) => {
+                            if (value === "approved" && cannotSelfApprove) {
+                                toast.error("Quotation belum disetujui / persetujuan sedang berjalan. Anda tidak dapat mengubah status menjadi Approved sendiri.")
+                                return
+                            }
                             const result = await updateQuotationStatus(id, value)
                             if (result.success) {
                                 setSuccessMessage(`Status kuotasi berhasil diubah menjadi ${value}`)
@@ -1796,7 +1815,13 @@ function QuotationTableInner({ data: initialData, currentUserId: serverUserId, a
                             <SelectItem value="draft">Draft</SelectItem>
                             <SelectItem value="waiting_approval">Waiting Approval</SelectItem>
                             <SelectItem value="sent">Sent</SelectItem>
-                            <SelectItem value="approved">Approved</SelectItem>
+                            {cannotSelfApprove ? (
+                                <SelectItem value="approved" disabled className="opacity-50 cursor-not-allowed">
+                                    Approved (Perlu Approval)
+                                </SelectItem>
+                            ) : (
+                                <SelectItem value="approved">Approved</SelectItem>
+                            )}
                             <SelectItem value="rejected">Rejected</SelectItem>
                             <SelectItem value="expired">Expired</SelectItem>
                             <SelectItem value="converted">Converted</SelectItem>
@@ -1937,6 +1962,13 @@ function QuotationTableInner({ data: initialData, currentUserId: serverUserId, a
     const handleBulkStatusUpdate = async () => {
         const status = prompt("Enter new status (draft/sent/approved/rejected/expired/converted):")
         if (status) {
+            if (status.toLowerCase().trim() === "approved") {
+                const hasPending = quotations.some(q => selectedIds.includes(q.id) && (q.status === "waiting_approval" || Boolean(q.approvalInfo?.activeStep)))
+                if (hasPending) {
+                    toast.error("Terdapat quotation yang belum disetujui / persetujuan sedang berjalan. Status 'Approved' tidak dapat diberikan sendiri.")
+                    return
+                }
+            }
             const result = await bulkUpdateQuotationStatus(selectedIds, status)
             if (result.success) {
                 toast.success("Statuses updated")

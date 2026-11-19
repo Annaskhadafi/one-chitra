@@ -1689,6 +1689,39 @@ export async function updateQuotationStatus(id: number, status: string) {
     try {
         const userId = await getAuthenticatedUserId()
 
+        // Validasi proteksi approval: jika belum diapprove / approval lagi berjalan, user tidak boleh mengubah menjadi approved sendiri
+        if (status === "approved") {
+            const existingQuote = await db.query.quotations.findFirst({
+                where: eq(quotations.id, id),
+            })
+
+            if (!existingQuote) {
+                return { success: false as const, error: "Quotation tidak ditemukan." }
+            }
+
+            if (existingQuote.status === "waiting_approval") {
+                return {
+                    success: false as const,
+                    error: "Quotation sedang dalam proses persetujuan (Waiting Approval). Status 'Approved' hanya dapat diberikan melalui Approval Engine.",
+                }
+            }
+
+            // Periksa apakah quotation memiliki antrean approval yang masih pending
+            const pendingSteps = await db.query.quotationApprovalProgress.findMany({
+                where: and(
+                    eq(quotationApprovalProgress.quotationId, id),
+                    eq(quotationApprovalProgress.status, "pending")
+                ),
+            })
+
+            if (pendingSteps.length > 0) {
+                return {
+                    success: false as const,
+                    error: "Quotation belum disetujui oleh seluruh approver. Status 'Approved' tidak dapat diberikan secara manual.",
+                }
+            }
+        }
+
         await db.transaction(async (tx) => {
             await tx.update(quotations)
                 .set({
@@ -1713,6 +1746,37 @@ export async function updateQuotationStatus(id: number, status: string) {
 export async function bulkUpdateQuotationStatus(ids: number[], status: string) {
     try {
         const userId = await getAuthenticatedUserId()
+
+        if (status === "approved") {
+            // Periksa apakah ada quotation yang sedang waiting_approval atau memiliki pending steps
+            const invalidQuotes = await db.query.quotations.findMany({
+                where: and(
+                    inArray(quotations.id, ids),
+                    eq(quotations.status, "waiting_approval")
+                ),
+            })
+
+            if (invalidQuotes.length > 0) {
+                return {
+                    success: false as const,
+                    error: `Terdapat ${invalidQuotes.length} quotation yang sedang dalam proses Waiting Approval. Status 'Approved' tidak dapat diubah secara manual.`,
+                }
+            }
+
+            const pendingApprovalQuotes = await db.query.quotationApprovalProgress.findMany({
+                where: and(
+                    inArray(quotationApprovalProgress.quotationId, ids),
+                    eq(quotationApprovalProgress.status, "pending")
+                ),
+            })
+
+            if (pendingApprovalQuotes.length > 0) {
+                return {
+                    success: false as const,
+                    error: "Terdapat quotation yang belum disetujui oleh seluruh approver. Status 'Approved' tidak dapat diberikan secara manual.",
+                }
+            }
+        }
 
         await db.transaction(async (tx) => {
             for (const id of ids) {
