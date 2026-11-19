@@ -76,8 +76,10 @@ export function TiersTab({ tiers, initialStandardMargin = 11, onRefresh }: Tiers
                             <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white font-mono">Auto Approved</Badge>
                         </div>
                         <p className="text-xs text-muted-foreground mt-1">
-                            Setiap Quotation yang memiliki margin &ge; {Number(standardMargin).toFixed(2)}% disetujui secara otomatis tanpa memerlukan persetujuan berjenjang.
-                            Jika salah satu item memiliki margin di bawah {Number(standardMargin).toFixed(2)}%, alur berjenjang diaktifkan sesuai limit kategori produk masing-masing.
+                            Setiap penawaran (Quotation) dengan margin di dalam batas otoritas Sales berstatus <strong>Auto Approved</strong> tanpa memerlukan persetujuan berjenjang:
+                            kategori <strong>PAS / Non-Tyre</strong> batas bawahnya adalah <strong>{(Number(standardMargin) - 3).toFixed(2)}%</strong> (diskon max 3.00% sama seperti Leader on Site),
+                            dan kategori <strong>Tyre</strong> batas bawahnya adalah <strong>{(Number(standardMargin) - 1.5).toFixed(2)}%</strong> (diskon &lt; 1.50% sama seperti Sales Engineer).
+                            Jika margin berada di bawah batas tersebut, sistem mengaktifkan alur persetujuan berjenjang (Supervisory s.d. Director).
                         </p>
                     </div>
                 </div>
@@ -134,9 +136,9 @@ export function TiersTab({ tiers, initialStandardMargin = 11, onRefresh }: Tiers
                                 <TableRow className="bg-emerald-500/5 hover:bg-emerald-500/10 border-b">
                                     <TableCell className="font-semibold text-emerald-800 dark:text-emerald-300">Standard</TableCell>
                                     <TableCell className="font-medium">Semua Sales</TableCell>
-                                    <TableCell className="text-center font-mono text-xs font-bold text-emerald-700 dark:text-emerald-400">{Number(standardMargin).toFixed(2)}%</TableCell>
+                                    <TableCell className="text-center font-mono text-xs font-bold text-emerald-700 dark:text-emerald-400">{(Number(standardMargin) - 1.5).toFixed(2)}%</TableCell>
                                     <TableCell className="text-center font-mono text-xs">9999%</TableCell>
-                                    <TableCell className="text-center font-mono text-xs">0%</TableCell>
+                                    <TableCell className="text-center font-mono text-xs">1.50%</TableCell>
                                     <TableCell className="text-center">
                                         <Badge variant="outline" className="bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/50 dark:text-emerald-300">
                                             Auto Approved
@@ -237,13 +239,13 @@ export function TiersTab({ tiers, initialStandardMargin = 11, onRefresh }: Tiers
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {/* Standard Row Reference */}
+                                {/* Standard Row Reference for PAS */}
                                 <TableRow className="bg-emerald-500/5 hover:bg-emerald-500/10 border-b">
                                     <TableCell className="font-semibold text-emerald-800 dark:text-emerald-300">Standard</TableCell>
                                     <TableCell className="font-medium">Semua Sales</TableCell>
-                                    <TableCell className="text-center font-mono text-xs font-bold text-emerald-700 dark:text-emerald-400">{Number(standardMargin).toFixed(2)}%</TableCell>
+                                    <TableCell className="text-center font-mono text-xs font-bold text-emerald-700 dark:text-emerald-400">{(Number(standardMargin) - 3).toFixed(2)}%</TableCell>
                                     <TableCell className="text-center font-mono text-xs">9999%</TableCell>
-                                    <TableCell className="text-center font-mono text-xs">0%</TableCell>
+                                    <TableCell className="text-center font-mono text-xs">3.00%</TableCell>
                                     <TableCell className="text-center">
                                         <Badge variant="outline" className="bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/50 dark:text-emerald-300">
                                             Auto Approved

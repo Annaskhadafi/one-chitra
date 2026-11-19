@@ -43,6 +43,44 @@ describe("Quotation Approval Engine - Business Rules & Margin Evaluation", () =>
         expect(result.itemResults[0].productCategory).toBe("prime_tyre")
         expect(result.itemResults[0].isAutoApproved).toBe(true)
         expect(result.itemResults[0].requiresApproval).toBe(false)
+        expect(result.requiresApproval).toBe(false)
+    })
+
+    it("should trigger Level 1 (Leader on Site / Auto Approved) for PAS when discount <= 3% (margin >= 8%)", async () => {
+        const items = [
+            {
+                category: "ACC",
+                materialDescription: "Flap 12.00R20",
+                unitPrice: 109000,
+                costIdr: 100000, // Margin = 9.00% (GAP 2.0% from 11%, wewenang Leader on Site s.d. 3%)
+                quantity: 2,
+            },
+        ]
+
+        const result = await evaluateQuotationMargin(items)
+        expect(result.worstCaseLevel).toBe(1)
+        expect(result.worstCasePosition).toBe("Leader on Site")
+        expect(result.itemResults[0].productCategory).toBe("pas")
+        expect(result.itemResults[0].isAutoApproved).toBe(true)
+        expect(result.itemResults[0].requiresApproval).toBe(false)
+        expect(result.requiresApproval).toBe(false)
+    })
+
+    it("should trigger Level 2 (Supervisory) for PAS when margin is 7% (discount 4%, > 3% and <= 5%)", async () => {
+        const items = [
+            {
+                category: "ACC",
+                materialDescription: "Tire Valve Special",
+                unitPrice: 107000,
+                costIdr: 100000, // Margin = 7.00% (GAP 4.0% from 11%)
+                quantity: 5,
+            },
+        ]
+
+        const result = await evaluateQuotationMargin(items)
+        expect(result.worstCaseLevel).toBe(2)
+        expect(result.worstCasePosition).toBe("Supervisory")
+        expect(result.requiresApproval).toBe(true)
     })
 
     it("should trigger Level 3 (Managerial) for Prime Tyre when margin is 7% (GAP 4%)", async () => {

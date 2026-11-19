@@ -66,8 +66,8 @@ async function seedQuotationApprovalTiers() {
             minMargin: "8.0000",
             maxMargin: "10.9999",
             maxDiscountGap: "3.0000",
-            isAutoApproved: false,
-            description: "PAS (Non-Tyre) - Diskon Max 3% / Margin 8.00% - 10.99%",
+            isAutoApproved: true,
+            description: "PAS (Non-Tyre) - Diskon Max 3% / Margin 8.00% - 10.99% (Auto Approved)",
         },
         {
             productCategory: "pas",
