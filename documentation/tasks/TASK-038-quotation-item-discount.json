@@ -1,0 +1,10 @@
+{
+  "id": "TASK-038",
+  "title": "Quotation Item-Level Discount and Real-Time Margin Rule Integration",
+  "status": "completed",
+  "description": "Move discount input from quotation grand total to item-level (per part) with flexible %/Rp selection. Integrate item-level discounts directly into real-time margin evaluation and approval engine so sub-standard margins correctly trigger tiered approvals.",
+  "assigned_to": "agent",
+  "completion_notes": "1. Updated app/dashboard/quotations/_components/quotation-form.tsx: added Discount column to TableHeader and TableRows (Desktop & Mobile) with flexible % / Rp selection per part; removed manual discount input from grand total; Totals Summary displays auto-calculated Total Discount; updated liveMarginSummary to calculate net effective price per item.\n2. Updated app/actions/approval-engine.ts: evaluateQuotationMargin, submitQuotationForApproval, and getQuotationApprovalDetail now take item discount into account when computing effective unit price and margin percent.\n3. Updated app/dashboard/quotations/_components/quotation-pdf-preview.tsx and quotation-pdf-generator.ts: item rows show line discounts and amounts reflect net discounted amounts; totals section correctly formats gross Sub Total and item-level discount accumulation.\n4. Verified with vitest: 11 tests in quotation-approval-engine.test.ts passing including new discount-margin tests.",
+  "created_at": "2026-11-20T15:42:00.000Z",
+  "updated_at": "2026-11-20T15:50:30.000Z"
+}

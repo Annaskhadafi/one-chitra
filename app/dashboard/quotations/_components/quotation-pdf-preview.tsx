@@ -135,20 +135,24 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
     const ITEMS_FIRST_PAGE = 5
     const ITEMS_SUBSEQUENT_PAGES = 5
 
-    const itemsSubtotal = quotation.items.reduce((sum, item) => {
-        return sum + (item.quantity * Number(item.unitPrice) - Number(item.discount || 0))
+    const grossItemsSubtotal = quotation.items.reduce((sum, item) => {
+        return sum + (item.quantity * Number(item.unitPrice))
     }, 0)
+    const itemsDiscountTotal = quotation.items.reduce((sum, item) => {
+        return sum + Number(item.discount || 0)
+    }, 0)
+    const discountAmount = itemsDiscountTotal > 0
+        ? itemsDiscountTotal
+        : (
+            quotation.discountType === "percent"
+                ? (grossItemsSubtotal * Number(quotation.discount)) / 100
+                : Number(quotation.discount)
+        )
 
-
-    const discountAmount = quotation.discountType === "percent"
-        ? (itemsSubtotal * Number(quotation.discount)) / 100
-        : Number(quotation.discount)
-
-
-    const subtotalAfterDiscount = itemsSubtotal - discountAmount
+    const subtotalAfterDiscount = grossItemsSubtotal - discountAmount
     const itemTaxTotal = quotation.items.reduce((sum, item) => sum + Number(item.tax || 0), 0)
     const taxAmount = itemTaxTotal > 0
-        ? (itemTaxTotal / itemsSubtotal) * subtotalAfterDiscount
+        ? (itemTaxTotal / (grossItemsSubtotal || 1)) * subtotalAfterDiscount
         : (Number(quotation.tax) > 0 ? subtotalAfterDiscount * 0.11 : 0)
     const grandTotal = subtotalAfterDiscount + taxAmount + Number(quotation.shipping)
     const recipientAddressLines = [
@@ -520,7 +524,7 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                                                 </thead>
                                                 <tbody>
                                                     {pageItems.map((item, idx) => {
-                                                        const lineAmount = item.quantity * Number(item.unitPrice)
+                                                        const lineAmount = (item.quantity * Number(item.unitPrice)) - Number(item.discount || 0)
                                                         const globalIndex = itemStartIndex + idx + 1
                                                         const itemPhotoUrl = item.imageUrl || item.product?.imageUrl
 
@@ -555,6 +559,11 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                                                                             {item.longDescription}
                                                                         </div>
                                                                     ) : null}
+                                                                    {Number(item.discount || 0) > 0 && (
+                                                                        <div style={{ fontSize: "7.5pt", color: "#ef4444", fontWeight: 600, marginTop: "0.5mm font-mono" }}>
+                                                                            (Disc: -{formatCurrency(Number(item.discount), quotation.currency)})
+                                                                        </div>
+                                                                    )}
                                                                 </td>
                                                                 <td style={{ padding: "2.5mm 3mm", fontSize: "8.5pt", color: "#0f172a", textAlign: "center", borderBottom: "1px solid #e2e8f0" }}>{item.quantity}</td>
                                                                 <td style={{ padding: "2.5mm 4mm", fontSize: "8.5pt", color: "#0f172a", textAlign: "right", borderBottom: "1px solid #e2e8f0" }}>{formatNumber(Number(item.unitPrice))}</td>
@@ -573,11 +582,11 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                                                     <div style={{ width: "65mm" }}>
                                                         <div style={{ display: "flex", justifyContent: "space-between", fontSize: "8.5pt", fontWeight: 700, color: "#475569", marginBottom: "1.5mm" }}>
                                                             <span>Sub Total</span>
-                                                            <span>{formatCurrency(itemsSubtotal, quotation.currency)}</span>
+                                                            <span>{formatCurrency(grossItemsSubtotal, quotation.currency)}</span>
                                                         </div>
                                                         {discountAmount > 0 ? (
                                                             <div style={{ display: "flex", justifyContent: "space-between", fontSize: "8.5pt", color: "#475569", marginBottom: "1.5mm" }}>
-                                                                <span>Discount {quotation.discountType === "percent" ? `(${quotation.discount}%)` : ""}</span>
+                                                                <span>Discount</span>
                                                                 <span style={{ color: "#ef4444" }}>-{formatCurrency(discountAmount, quotation.currency)}</span>
                                                             </div>
                                                         ) : null}

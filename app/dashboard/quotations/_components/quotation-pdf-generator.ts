@@ -519,8 +519,11 @@ export async function generateQuotationPdf(
 
         const tableBody = quotation.items.map((item, index) => {
             const lineTitle = getItemLabel(item)
-            const combinedContent = lineTitle
-            const amount = item.quantity * Number(item.unitPrice)
+            const itemDisc = Number(item.discount || 0)
+            const combinedContent = itemDisc > 0
+                ? `${lineTitle}\n(Disc: -${formatCurrency(itemDisc, quotation.currency)})`
+                : lineTitle
+            const amount = (item.quantity * Number(item.unitPrice)) - itemDisc
             
             if (hasAnyItemImage) {
                 return [
@@ -659,14 +662,19 @@ export async function generateQuotationPdf(
         finalY = (mutableDoc.lastAutoTable?.finalY ?? currentY) + 10
 
         // Subtotals
-        const itemsSubtotal = quotation.items.reduce((sum, item) => sum + (item.quantity * Number(item.unitPrice) - Number(item.discount || 0)), 0)
-        const discountAmount = quotation.discountType === "percent"
-            ? (itemsSubtotal * Number(quotation.discount)) / 100
-            : Number(quotation.discount)
-        const subtotalAfterDiscount = itemsSubtotal - discountAmount
+        const grossItemsSubtotal = quotation.items.reduce((sum, item) => sum + (item.quantity * Number(item.unitPrice)), 0)
+        const itemsDiscountTotal = quotation.items.reduce((sum, item) => sum + Number(item.discount || 0), 0)
+        const discountAmount = itemsDiscountTotal > 0
+            ? itemsDiscountTotal
+            : (
+                quotation.discountType === "percent"
+                    ? (grossItemsSubtotal * Number(quotation.discount)) / 100
+                    : Number(quotation.discount)
+            )
+        const subtotalAfterDiscount = grossItemsSubtotal - discountAmount
         const itemTaxTotal = quotation.items.reduce((sum, item) => sum + Number(item.tax || 0), 0)
         const taxAmount = itemTaxTotal > 0
-            ? (itemTaxTotal / itemsSubtotal) * subtotalAfterDiscount
+            ? (itemTaxTotal / (grossItemsSubtotal || 1)) * subtotalAfterDiscount
             : (Number(quotation.tax) > 0 ? subtotalAfterDiscount * 0.11 : 0)
         const grandTotal = subtotalAfterDiscount + taxAmount + Number(quotation.shipping)
 
@@ -679,12 +687,12 @@ export async function generateQuotationPdf(
         doc.setTextColor(grayText[0], grayText[1], grayText[2])
         doc.text("Sub Total", totalsXLabel, finalY)
         doc.setTextColor(darkText[0], darkText[1], darkText[2])
-        doc.text(formatCurrency(itemsSubtotal, quotation.currency), totalsXValue, finalY, { align: "right" })
+        doc.text(formatCurrency(grossItemsSubtotal, quotation.currency), totalsXValue, finalY, { align: "right" })
         finalY += 7
 
         if (discountAmount > 0) {
             doc.setTextColor(grayText[0], grayText[1], grayText[2])
-            doc.text(`Discount ${quotation.discountType === "percent" ? `(${quotation.discount}%)` : ""}`, totalsXLabel, finalY)
+            doc.text("Discount", totalsXLabel, finalY)
             doc.setTextColor(239, 68, 68) // Red
             doc.text(`-${formatCurrency(discountAmount, quotation.currency)}`, totalsXValue, finalY, { align: "right" })
             finalY += 7

@@ -490,11 +490,16 @@ export async function evaluateQuotationMargin(
             : (Number(item.costIdr) || 0)
 
         const unitPrice = Number(item.unitPrice) || 0
+        const quantity = Number(item.quantity) || 1
+        const discount = Number(item.discount) || 0
 
-        // Margin calculation: ((UnitPrice - CostIdr) / CostIdr) * 100
+        // Harga jual efektif per unit setelah dikurangi diskon per part
+        const effectiveUnitPrice = Math.max(0, unitPrice - (quantity > 0 ? discount / quantity : discount))
+
+        // Margin calculation berdasarkan harga efektif setelah diskon: ((EffectiveUnitPrice - CostIdr) / CostIdr) * 100
         const marginPercent = costIdr > 0
-            ? ((unitPrice - costIdr) / costIdr) * 100
-            : (unitPrice > 0 ? 100 : 0)
+            ? ((effectiveUnitPrice - costIdr) / costIdr) * 100
+            : (effectiveUnitPrice > 0 ? 100 : 0)
 
         const discountGapPercent = Math.max(0, STANDARD_MARGIN - marginPercent)
 
@@ -710,6 +715,7 @@ export async function submitQuotationForApproval(quotationId: number, justificat
             category: it.product?.category,
             materialDescription: it.description || it.product?.materialDescription,
             unitPrice: Number(it.unitPrice),
+            discount: Number(it.discount || 0),
             quantity: it.quantity,
             costSap: it.product?.costSap ? Number(it.product.costSap) : null,
             costIdr: (it as any).costIdr ? Number((it as any).costIdr) : (it.product?.costSap ? Number(it.product.costSap) : null),
@@ -863,6 +869,7 @@ export async function getQuotationApprovalDetail(quotationId: number) {
             category: it.product?.category,
             materialDescription: it.description || it.product?.materialDescription,
             unitPrice: Number(it.unitPrice),
+            discount: Number(it.discount || 0),
             quantity: it.quantity,
             costSap: it.product?.costSap ? Number(it.product.costSap) : null,
             costIdr: (it as any).costIdr ? Number((it as any).costIdr) : (it.product?.costSap ? Number(it.product.costSap) : null),

@@ -101,6 +101,8 @@ interface QuotationItemRow {
     unitPrice: number
     vendorBasePrice?: number | null
     discount: number
+    discountType?: "percent" | "fixed"
+    discountValue?: number
     tax: number
     costIdr?: number
     costSap?: number
@@ -111,7 +113,7 @@ interface QuotationItemRow {
     imageUrl?: string | null
 }
 
-type ItemSortKey = "index" | "description" | "quantity" | "unitPrice" | "tax" | "amount"
+type ItemSortKey = "index" | "description" | "quantity" | "unitPrice" | "discount" | "tax" | "amount"
 type SortDirection = "asc" | "desc"
 
 interface SortedQuotationItemEntry {
@@ -162,6 +164,8 @@ function buildSortedQuotationItemEntries(
                 return (left.item.quantity - right.item.quantity) * direction
             case "unitPrice":
                 return (left.item.unitPrice - right.item.unitPrice) * direction
+            case "discount":
+                return (left.item.discount - right.item.discount) * direction
             case "tax":
                 return (left.item.tax - right.item.tax) * direction
             case "amount":
@@ -564,7 +568,9 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
             quantity: item.quantity,
             unitPrice: Number(item.unitPrice),
             vendorBasePrice: null,
-            discount: Number(item.discount),
+            discount: Number(item.discount || 0),
+            discountType: "fixed" as const,
+            discountValue: Number(item.discount || 0),
             tax: Number(item.tax),
             costIdr: Number(item.product?.costSap || 0) * 1, // Will be updated by useEffect if needed
             costSap: Number(item.product?.costSap || 0),
@@ -624,7 +630,8 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
             const cost = resolveItemCostIdr(it, exchangeRate)
             if (cost > 0) {
                 hasItem = true
-                const effectivePrice = Math.max(0, it.unitPrice - (it.discount || 0))
+                const itemQty = Math.max(1, it.quantity || 1)
+                const effectivePrice = Math.max(0, it.unitPrice - ((it.discount || 0) / itemQty))
                 const m = ((effectivePrice - cost) / cost) * 100
                 if (m < minMargin) minMargin = m
 
@@ -1159,6 +1166,8 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                 unitPrice: unitPrice,
                 vendorBasePrice: null,
                 discount: 0,
+                discountType: "percent" as const,
+                discountValue: 0,
                 tax: 0,
                 costIdr: costIdr,
                 costSap: costSap,
@@ -1180,6 +1189,8 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
             unitPrice: 0,
             vendorBasePrice: null,
             discount: 0,
+            discountType: "percent" as const,
+            discountValue: 0,
             tax: 0,
             costIdr: 0,
             costSap: 0,
@@ -1285,7 +1296,7 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                 return prev
             }
 
-            if (targetItem.bundleRole === "child" && (field === "quantity" || field === "unitPrice" || field === "tax")) {
+            if (targetItem.bundleRole === "child" && (field === "quantity" || field === "unitPrice" || field === "tax" || field === "discount" || field === "discountValue" || field === "discountType")) {
                 return prev
             }
 
@@ -1294,10 +1305,18 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
 
                 return prev.map((item, itemIndex) => {
                     if (itemIndex === index) {
+                        const dType = item.discountType || "percent"
+                        const dVal = item.discountValue ?? 0
+                        const calculatedDiscount = dType === "percent"
+                            ? (nextQuantity * item.unitPrice * dVal) / 100
+                            : item.discount
+                        const taxableBase = Math.max(0, (nextQuantity * item.unitPrice) - calculatedDiscount)
+
                         return {
                             ...item,
                             quantity: nextQuantity,
-                            tax: item.tax > 0 ? item.unitPrice * nextQuantity * 0.11 : item.tax,
+                            discount: calculatedDiscount,
+                            tax: item.tax > 0 ? taxableBase * 0.11 : item.tax,
                         }
                     }
 
@@ -1310,6 +1329,7 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                             ...item,
                             quantity: bundleComponentQuantity * nextQuantity,
                             unitPrice: 0,
+                            discount: 0,
                             tax: 0,
                         }
                     }
@@ -1328,10 +1348,28 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                     [field]: value,
                 }
 
-                if ((field === "quantity" || field === "unitPrice") && nextItem.tax > 0) {
+                const dType = (field === "discountType" ? (value as "percent" | "fixed") : (item.discountType || "percent"))
+                const dVal = (field === "discountValue" ? Math.max(0, Number(value) || 0) : (item.discountValue ?? (item.discount || 0)))
+                const uPrice = (field === "unitPrice" ? Math.max(0, Number(value) || 0) : item.unitPrice)
+                const qty = (field === "quantity" ? Math.max(1, Number(value) || 1) : item.quantity)
+
+                if (field === "discountValue" || field === "discountType" || field === "unitPrice" || field === "quantity") {
+                    let calculatedDiscount = 0
+                    if (dType === "percent") {
+                        calculatedDiscount = (qty * uPrice * dVal) / 100
+                    } else {
+                        calculatedDiscount = dVal
+                    }
+                    nextItem.discount = Math.max(0, calculatedDiscount)
+                    nextItem.discountType = dType
+                    nextItem.discountValue = dVal
+                }
+
+                if ((field === "quantity" || field === "unitPrice" || field === "discountValue" || field === "discountType") && nextItem.tax > 0) {
+                    const taxableBase = Math.max(0, (nextItem.quantity * nextItem.unitPrice) - nextItem.discount)
                     return {
                         ...nextItem,
-                        tax: Number(nextItem.quantity) * Number(nextItem.unitPrice) * 0.11,
+                        tax: taxableBase * 0.11,
                     }
                 }
 
@@ -1394,31 +1432,33 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
     }, [sortedItemEntries, sortedItemIds])
 
     // Calculations
-    const subTotal = useMemo(() => {
+    const grossSubTotal = useMemo(() => {
         return items.reduce((sum, item) => {
-            return sum + (item.quantity * item.unitPrice - item.discount)
+            return sum + (item.quantity * item.unitPrice)
         }, 0)
     }, [items])
 
+    const totalItemDiscount = useMemo(() => {
+        return items.reduce((sum, item) => {
+            return sum + (item.discount || 0)
+        }, 0)
+    }, [items])
+
+    const subTotal = useMemo(() => {
+        return grossSubTotal - totalItemDiscount
+    }, [grossSubTotal, totalItemDiscount])
+
     const quotationTax = useMemo(() => {
-        const itemTaxTotal = items.reduce((sum, item) => sum + item.tax, 0)
+        const itemTaxTotal = items.reduce((sum, item) => sum + (item.tax || 0), 0)
         if (itemTaxTotal > 0) {
-            // If items have individual tax, calculate tax after discount
-            const discAmount = discountType === "percent" ? (subTotal * discount) / 100 : discount
-            const subtotalAfterDiscount = subTotal - discAmount
-            // Recalculate tax proportionally based on subtotal after discount
-            return (itemTaxTotal / subTotal) * subtotalAfterDiscount
+            return itemTaxTotal
         }
-        // If using global tax, calculate from subtotal after discount
-        const discAmount = discountType === "percent" ? (subTotal * discount) / 100 : discount
-        const subtotalAfterDiscount = subTotal - discAmount
-        return tax > 0 ? (subtotalAfterDiscount * 0.11) : 0
-    }, [items, tax, subTotal, discount, discountType])
+        return tax > 0 ? (subTotal * 0.11) : 0
+    }, [items, tax, subTotal])
 
     const grandTotal = useMemo(() => {
-        const discAmount = discountType === "percent" ? (subTotal * discount) / 100 : discount
-        return subTotal - discAmount + quotationTax + shipping
-    }, [subTotal, discount, discountType, quotationTax, shipping])
+        return subTotal + quotationTax + shipping
+    }, [subTotal, quotationTax, shipping])
 
     const calculatorPriceAfterMargin = useMemo(() => {
         return calculatorBasePrice > 0
@@ -1620,13 +1660,13 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                 referenceNumber: referenceNumber || undefined,
                 adminNote: adminNote || undefined,
                 clientNote: clientNote || undefined,
-                discountType: discountType,
+                discountType: "fixed",
                 attachmentLayoutRows,
                 status: targetStatus as "draft" | "sent" | "approved" | "rejected" | "expired" | "converted",
                 paymentTerms: paymentTerms || undefined,
                 termsConditions: termsConditions || undefined,
                 notes: notes || undefined,
-                discount,
+                discount: totalItemDiscount,
                 tax: quotationTax,
                 shipping,
                 items: items.map(item => ({
@@ -1741,13 +1781,13 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                 referenceNumber: referenceNumber || undefined,
                 adminNote: adminNote || undefined,
                 clientNote: clientNote || undefined,
-                discountType: discountType,
+                discountType: "fixed",
                 attachmentLayoutRows,
                 status: targetStatus as "draft" | "sent" | "approved" | "rejected" | "expired" | "converted",
                 paymentTerms: paymentTerms || undefined,
                 termsConditions: termsConditions || undefined,
                 notes: notes || undefined,
-                discount,
+                discount: totalItemDiscount,
                 tax: quotationTax,
                 shipping,
                 items: items.map(item => ({
@@ -2473,10 +2513,37 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                                                                     />
                                                                 </div>
                                                             </div>
-                                                            <div className="grid grid-cols-2 gap-4 items-center border-t pt-3 mt-1">
+                                                            <div className="grid grid-cols-2 gap-4 mt-2">
+                                                                <div className="space-y-1">
+                                                                    <Label className="text-xs text-muted-foreground">Discount</Label>
+                                                                    <div className="flex items-center gap-1">
+                                                                        <Input
+                                                                            type="number"
+                                                                            min={0}
+                                                                            placeholder="0"
+                                                                            value={item.discountValue ?? (item.discount || "")}
+                                                                            onChange={(e) => updateItem(index, "discountValue", Number(e.target.value))}
+                                                                            className="h-9 font-mono text-xs text-right"
+                                                                            disabled={item.bundleRole === "child"}
+                                                                        />
+                                                                        <Select
+                                                                            value={item.discountType || "percent"}
+                                                                            onValueChange={(v) => updateItem(index, "discountType", v as "percent" | "fixed")}
+                                                                            disabled={item.bundleRole === "child"}
+                                                                        >
+                                                                            <SelectTrigger className="w-14 h-9 text-xs px-1.5">
+                                                                                <SelectValue />
+                                                                            </SelectTrigger>
+                                                                            <SelectContent>
+                                                                                <SelectItem value="percent">%</SelectItem>
+                                                                                <SelectItem value="fixed">Rp</SelectItem>
+                                                                            </SelectContent>
+                                                                        </Select>
+                                                                    </div>
+                                                                </div>
                                                                 <div className="space-y-1">
                                                                     <Label className="text-xs text-muted-foreground">Tax</Label>
-                                                                    <Select value={item.tax > 0 ? "11" : "0"} onValueChange={(v) => updateItem(index, "tax", v === "11" ? (item.quantity * item.unitPrice * 0.11) : 0)}>
+                                                                    <Select value={item.tax > 0 ? "11" : "0"} onValueChange={(v) => updateItem(index, "tax", v === "11" ? Math.max(0, (item.quantity * item.unitPrice) - item.discount) * 0.11 : 0)}>
                                                                         <SelectTrigger className="h-9" disabled={item.bundleRole === "child"}>
                                                                             <SelectValue />
                                                                         </SelectTrigger>
@@ -2486,7 +2553,16 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                                                                         </SelectContent>
                                                                     </Select>
                                                                 </div>
-                                                                <div className="space-y-1 text-right">
+                                                            </div>
+                                                            <div className="flex items-center justify-between border-t pt-3 mt-2">
+                                                                <div className="text-xs text-muted-foreground">
+                                                                    {Number(item.discount) > 0 && (
+                                                                        <span className="text-destructive font-mono font-medium">
+                                                                            Disc: -{formatCurrency(item.discount)}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                                <div className="text-right">
                                                                     <Label className="text-xs text-muted-foreground block">Amount</Label>
                                                                     <span className="font-bold text-blue-700 text-sm block">{formatCurrency(lineSubtotal)}</span>
                                                                 </div>
@@ -2518,7 +2594,7 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                                                 <TableHead className="w-[85px] text-white text-center">Foto</TableHead>
                                                 <TableHead className="text-white">{renderItemSortHeader("Description", "description")}</TableHead>
                                                 <TableHead className="w-[100px] text-white">{renderItemSortHeader("Qty", "quantity")}</TableHead>
-                                                <TableHead className="w-[200px] text-white">
+                                                <TableHead className="w-[180px] text-white">
                                                     {renderItemSortHeader(
                                                         <span className="flex items-center gap-1">
                                                             <BadgeDollarSign className="h-3.5 w-3.5" />
@@ -2527,6 +2603,7 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                                                         "unitPrice"
                                                     )}
                                                 </TableHead>
+                                                <TableHead className="w-[160px] text-white">{renderItemSortHeader("Discount", "discount")}</TableHead>
                                                 <TableHead className="w-[120px] text-white">{renderItemSortHeader("Tax", "tax")}</TableHead>
                                                 <TableHead className="w-[140px] text-white">{renderItemSortHeader("Amount", "amount")}</TableHead>
                                                 <TableHead className="w-[60px] text-white">Action</TableHead>
@@ -2535,7 +2612,7 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                                         <TableBody>
                                             {items.length === 0 ? (
                                                 <TableRow>
-                                                    <TableCell colSpan={8} className="h-32 text-center">
+                                                    <TableCell colSpan={9} className="h-32 text-center">
                                                         <div className="flex flex-col items-center gap-2 text-muted-foreground">
                                                             <Package className="h-10 w-10 opacity-30" />
                                                             <p>No data</p>
@@ -2642,7 +2719,38 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                                                                         />
                                                                     </TableCell>
                                                                     <TableCell>
-                                                                        <Select value={item.tax > 0 ? "11" : "0"} onValueChange={(v) => updateItem(index, "tax", v === "11" ? (item.quantity * item.unitPrice * 0.11) : 0)}>
+                                                                        <div className="flex items-center gap-1">
+                                                                            <Input
+                                                                                type="number"
+                                                                                min={0}
+                                                                                placeholder="0"
+                                                                                value={item.discountValue ?? (item.discount || "")}
+                                                                                onChange={(e) => updateItem(index, "discountValue", Number(e.target.value))}
+                                                                                className="w-20 h-9 font-mono text-xs text-right"
+                                                                                disabled={item.bundleRole === "child"}
+                                                                            />
+                                                                            <Select
+                                                                                value={item.discountType || "percent"}
+                                                                                onValueChange={(v) => updateItem(index, "discountType", v as "percent" | "fixed")}
+                                                                                disabled={item.bundleRole === "child"}
+                                                                            >
+                                                                                <SelectTrigger className="w-14 h-9 text-xs px-1.5">
+                                                                                    <SelectValue />
+                                                                                </SelectTrigger>
+                                                                                <SelectContent>
+                                                                                    <SelectItem value="percent">%</SelectItem>
+                                                                                    <SelectItem value="fixed">Rp</SelectItem>
+                                                                                </SelectContent>
+                                                                            </Select>
+                                                                        </div>
+                                                                        {item.discountType === "percent" && Number(item.discount) > 0 && (
+                                                                            <span className="text-[10px] text-destructive block text-right mt-0.5 font-mono">
+                                                                                -{formatCurrency(item.discount)}
+                                                                            </span>
+                                                                        )}
+                                                                    </TableCell>
+                                                                    <TableCell>
+                                                                        <Select value={item.tax > 0 ? "11" : "0"} onValueChange={(v) => updateItem(index, "tax", v === "11" ? Math.max(0, (item.quantity * item.unitPrice) - item.discount) * 0.11 : 0)}>
                                                                             <SelectTrigger className="w-24" disabled={item.bundleRole === "child"}>
                                                                                 <SelectValue />
                                                                             </SelectTrigger>
@@ -2686,34 +2794,16 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                             <div className="mt-6 flex flex-col items-end gap-2 border-t pt-4 md:pe-4 pb-4 w-full">
                                 <div className="flex items-center justify-between md:justify-end w-full md:w-[400px] gap-4">
                                     <span className="text-sm font-medium text-muted-foreground">Sub Total :</span>
-                                    <span className="text-sm font-bold md:w-32 text-right">{formatCurrency(subTotal)}</span>
+                                    <span className="text-sm font-bold md:w-32 text-right">{formatCurrency(grossSubTotal)}</span>
                                 </div>
-                                <div className="flex items-center justify-between md:justify-end w-full md:w-[400px] gap-4 mt-2">
-                                    <span className="text-sm font-medium text-muted-foreground hidden md:inline">Discount :</span>
-                                    <div className="flex items-center justify-between md:justify-end w-full md:w-auto flex-1 gap-2">
-                                        <span className="text-sm font-medium text-muted-foreground md:hidden w-16">Disc :</span>
-                                        <div className="flex items-center gap-1 flex-1 md:flex-none justify-end md:justify-start">
-                                            <Input
-                                                type="number"
-                                                value={discount}
-                                                onChange={(e) => setDiscount(Number(e.target.value))}
-                                                className="w-20 md:w-20 h-8 text-right font-mono text-xs"
-                                            />
-                                            <Select value={discountType} onValueChange={(v) => setDiscountType(v as "percent" | "fixed")}>
-                                                <SelectTrigger className="w-16 h-8 text-xs">
-                                                    <SelectValue />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="percent">%</SelectItem>
-                                                    <SelectItem value="fixed">Rp</SelectItem>
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
+                                {totalItemDiscount > 0 && (
+                                    <div className="flex items-center justify-between md:justify-end w-full md:w-[400px] gap-4 mt-1">
+                                        <span className="text-sm font-medium text-muted-foreground">Total Discount :</span>
+                                        <span className="text-sm font-bold md:w-32 text-right text-destructive font-mono">
+                                            -{formatCurrency(totalItemDiscount)}
+                                        </span>
                                     </div>
-                                    <span className="text-sm font-bold md:w-32 text-right text-destructive shrink-0 overflow-hidden text-ellipsis">
-                                        -{formatCurrency(discountType === "percent" ? (subTotal * discount) / 100 : discount)}
-                                    </span>
-                                </div>
+                                )}
                                 <div className="flex items-center justify-between md:justify-end w-full md:w-[400px] gap-4 mt-1">
                                     <span className="text-sm font-medium text-muted-foreground">Delivery :</span>
                                     <Input

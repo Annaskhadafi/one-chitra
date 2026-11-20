@@ -177,4 +177,44 @@ describe("Quotation Approval Engine - Business Rules & Margin Evaluation", () =>
             expect(result.itemResults[0].productCategory).toBe("pas")
         }
     })
+
+    it("should evaluate item-level discount correctly reducing margin and requiring approval if below 11%", async () => {
+        // Test item: Unit Price 12.000.000, Cost 10.000.000 (Margin awal 20%)
+        // Diskon 1.500.000 per part -> Harga efektif 10.500.000 -> Margin = 5% (< 11%)
+        const items = [
+            {
+                category: "TYRE",
+                materialDescription: "Tire 12.00R20 with Part Discount",
+                unitPrice: 12000000,
+                discount: 1500000,
+                costIdr: 10000000,
+                quantity: 1,
+            },
+        ]
+
+        const result = await evaluateQuotationMargin(items)
+        expect(result.minItemMargin).toBe(5)
+        expect(result.requiresApproval).toBe(true)
+        expect(result.worstCaseLevel).toBeGreaterThan(0)
+    })
+
+    it("should auto-approve item with part discount if net margin remains >= 11%", async () => {
+        // Test item: Unit Price 15.000.000, Cost 10.000.000 (Margin awal 50%)
+        // Diskon 1.000.000 per part -> Harga efektif 14.000.000 -> Margin = 40% (>= 11%)
+        const items = [
+            {
+                category: "TYRE",
+                materialDescription: "Tire 12.00R20 with Safe Discount",
+                unitPrice: 15000000,
+                discount: 1000000,
+                costIdr: 10000000,
+                quantity: 1,
+            },
+        ]
+
+        const result = await evaluateQuotationMargin(items)
+        expect(result.minItemMargin).toBe(40)
+        expect(result.requiresApproval).toBe(false)
+        expect(result.worstCaseLevel).toBe(0)
+    })
 })
