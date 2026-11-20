@@ -1,0 +1,10 @@
+{
+  "id": "TASK-037",
+  "title": "Quotation Auto-Approval for Standard Margin (>= 11%)",
+  "status": "completed",
+  "description": "Fix Quote Approval Engine logic so that quotations with margin >= 11% (standard baseline) are automatically saved and converted to 'approved' status instead of remaining as 'draft'. Ensure saved and downloaded PDFs do not show [ DRAFT ] watermarks, and auto-approve existing qualifying draft quotations.",
+  "assigned_to": "agent",
+  "completion_notes": "1. Updated quotation-form.tsx: targetStatus is set to 'approved' when margin >= 11% (liveMarginSummary.requiresApproval is false), both for Save and Save & Download PDF.\n2. Updated app/actions/quotation.ts: createQuotation and updateQuotation persist approvedAt and approvedBy when status is 'approved'.\n3. Updated app/actions/approval-engine.ts: getQuotationApprovalDetail self-heals any qualifying draft quotation to approved status.\n4. Ran migration scripts/fix-auto-approved-quotations.ts: updated 43 existing draft quotations with margin >= 11% (including QUO/CP/54807/11/2026) to 'approved'.\n5. Verified with automated unit tests (quotation-auto-approval-status.test.ts, quotation-approval-engine.test.ts, quotation-approval-chain.test.ts) all passing.",
+  "created_at": "2026-11-20T11:15:00.000Z",
+  "updated_at": "2026-11-20T11:25:00.000Z"
+}

@@ -870,6 +870,25 @@ export async function getQuotationApprovalDetail(quotationId: number) {
 
         const evaluation = await evaluateQuotationMargin(evaluationItems, quotation.salesPersonId || quotation.createdBy)
 
+        // Jika quotation masih berstatus 'draft' padahal margin memenuhi standar (tidak butuh persetujuan berjenjang),
+        // otomatis sinkronkan statusnya di database menjadi 'approved' (Auto Approved)
+        if (quotation.status === "draft" && !evaluation.requiresApproval && quotation.items.length > 0) {
+            const approveTime = new Date()
+            const approverId = quotation.approvedBy || quotation.salesPersonId || quotation.createdBy || currentUser?.id || "system"
+            await db.update(quotations)
+                .set({
+                    status: "approved",
+                    approvedAt: quotation.approvedAt || approveTime,
+                    approvedBy: approverId,
+                    updatedAt: approveTime,
+                })
+                .where(eq(quotations.id, quotationId))
+
+            quotation.status = "approved"
+            quotation.approvedAt = quotation.approvedAt || approveTime
+            quotation.approvedBy = approverId
+        }
+
         // Cari active step (pending pertama yang tidak skipped)
         const activeStep = progressSteps.find(s => s.status === "pending") || null
 

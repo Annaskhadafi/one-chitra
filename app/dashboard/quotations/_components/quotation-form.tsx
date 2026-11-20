@@ -1601,6 +1601,10 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
 
         setIsSubmitting(true)
         try {
+            const targetStatus = liveMarginSummary.requiresApproval
+                ? "waiting_approval"
+                : (status === "draft" || !isEdit || status === "waiting_approval" ? "approved" : status)
+
             const payload = {
                 quotationNumber: quotationNumber || undefined,
                 customerId: customerId,
@@ -1618,7 +1622,7 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                 clientNote: clientNote || undefined,
                 discountType: discountType,
                 attachmentLayoutRows,
-                status: (liveMarginSummary.requiresApproval ? "waiting_approval" : status) as "draft" | "sent" | "approved" | "rejected" | "expired" | "converted",
+                status: targetStatus as "draft" | "sent" | "approved" | "rejected" | "expired" | "converted",
                 paymentTerms: paymentTerms || undefined,
                 termsConditions: termsConditions || undefined,
                 notes: notes || undefined,
@@ -1662,6 +1666,8 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                 if (savedId && liveMarginSummary.requiresApproval) {
                     await submitQuotationForApproval(savedId)
                     toast.info("Quotation otomatis diajukan ke Approval Engine karena margin di bawah 11%.")
+                } else if (savedId && !liveMarginSummary.requiresApproval && targetStatus === "approved") {
+                    toast.success("Margin memenuhi standar (≥ 11%). Quotation berstatus Auto Approved.")
                 }
 
                 navigateToQuotationList(savedId)
@@ -1716,6 +1722,10 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
 
         setIsSubmitting(true)
         try {
+            const targetStatus = liveMarginSummary.requiresApproval
+                ? "waiting_approval"
+                : (status === "draft" || !isEdit || status === "waiting_approval" ? "approved" : status)
+
             const payload = {
                 quotationNumber: quotationNumber || undefined,
                 customerId,
@@ -1733,7 +1743,7 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                 clientNote: clientNote || undefined,
                 discountType: discountType,
                 attachmentLayoutRows,
-                status: (liveMarginSummary.requiresApproval ? "waiting_approval" : status) as "draft" | "sent" | "approved" | "rejected" | "expired" | "converted",
+                status: targetStatus as "draft" | "sent" | "approved" | "rejected" | "expired" | "converted",
                 paymentTerms: paymentTerms || undefined,
                 termsConditions: termsConditions || undefined,
                 notes: notes || undefined,
@@ -1780,6 +1790,8 @@ export function QuotationForm({ customers, products, users, vendorQuotations, cu
                 if (qId && liveMarginSummary.requiresApproval) {
                     await submitQuotationForApproval(qId)
                     toast.info("Quotation otomatis diajukan ke Approval Engine karena margin di bawah 11%.")
+                } else if (qId && !liveMarginSummary.requiresApproval && targetStatus === "approved") {
+                    toast.success("Margin memenuhi standar (≥ 11%). Quotation berstatus Auto Approved.")
                 }
 
                 await downloadSavedQuotationPdf(qId)

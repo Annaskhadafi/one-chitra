@@ -1070,6 +1070,7 @@ export async function createQuotation(data: QuotationInput) {
         const userId = session?.user?.id || "system"
         const quotationNumber = data.quotationNumber || await generateQuotationNumber()
         const now = new Date()
+        const isApprovedStatus = data.status === "approved"
 
         const result = await db.transaction(async (tx) => {
             const insertedQuotationRows = await tx.insert(quotations)
@@ -1083,6 +1084,8 @@ export async function createQuotation(data: QuotationInput) {
                     attn: normalizeText(data.attn),
                     createdBy: userId,
                     status: data.status,
+                    approvedAt: isApprovedStatus ? now : null,
+                    approvedBy: isApprovedStatus ? userId : null,
                     paymentTerms: normalizeText(data.paymentTerms),
                     termsConditions: normalizeText(data.termsConditions),
                     notes: normalizeText(data.notes),
@@ -1194,6 +1197,8 @@ export async function updateQuotation(id: number, data: QuotationInput) {
 
             await ensureInitialRevision(tx, id, userId)
             const previousSnapshot = buildQuotationSnapshot(originalQuotation, originalQuotation.items, originalQuotation.attachments)
+            const isApprovedStatus = data.status === "approved"
+            const now = new Date()
 
             await tx.update(quotations)
                 .set({
@@ -1205,6 +1210,8 @@ export async function updateQuotation(id: number, data: QuotationInput) {
                     salesPersonId: normalizeText(data.salesPersonId),
                     attn: normalizeText(data.attn),
                     status: data.status,
+                    approvedAt: isApprovedStatus ? (originalQuotation.approvedAt || now) : (data.status === "waiting_approval" || data.status === "draft" ? null : originalQuotation.approvedAt),
+                    approvedBy: isApprovedStatus ? (originalQuotation.approvedBy || userId) : (data.status === "waiting_approval" || data.status === "draft" ? null : originalQuotation.approvedBy),
                     paymentTerms: normalizeText(data.paymentTerms),
                     termsConditions: normalizeText(data.termsConditions),
                     notes: normalizeText(data.notes),
